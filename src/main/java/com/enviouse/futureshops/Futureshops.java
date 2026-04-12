@@ -4,9 +4,11 @@ import com.enviouse.futureshops.init.ModBlockEntities;
 import com.enviouse.futureshops.init.ModBlocks;
 import com.enviouse.futureshops.init.ModItems;
 import com.enviouse.futureshops.network.ShopPackets;
+import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.mojang.logging.LogUtils;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.server.ServerStartingEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModLoadingContext;
@@ -50,8 +52,14 @@ public class Futureshops {
     // You can use SubscribeEvent and let the Event Bus discover methods to call
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
-        // Do something when the server starts
+        BalanceManager.initialize(event.getServer());
         LOGGER.info("FutureShops server starting.");
+    }
+
+    @SubscribeEvent
+    public void onServerStopping(ServerStoppingEvent event) {
+        BalanceManager.clear();
+        LOGGER.info("FutureShops server stopping.");
     }
 
     // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent

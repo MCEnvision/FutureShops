@@ -4,8 +4,7 @@
   "tooltip.futureshops.coin_value": "Value: %s.%s",
   "command.futureshops.player_only": "Only players can run this command.",
   "command.futureshops.shop.stub": "Shop UI is not wired yet. Foundation systems are loaded.",
-  "command.futureshops.balance.stub": "Balance service is not wired yet.",
+  "command.futureshops.balance.value": "Balance: %s %s",
   "command.futureshops.withdraw.stub": "Withdraw flow is not wired yet.",
   "command.futureshops.deposit.stub": "Deposit flow is not wired yet."
 }
-
