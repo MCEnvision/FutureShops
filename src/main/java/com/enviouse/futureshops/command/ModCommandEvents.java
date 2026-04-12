@@ -14,8 +14,9 @@ public final class ModCommandEvents {
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         ShopCommand.register(event.getDispatcher());
         BalanceCommand.register(event.getDispatcher());
+        PayCommand.register(event.getDispatcher());
+        BalTopCommand.register(event.getDispatcher());
         WithdrawCommand.register(event.getDispatcher());
         DepositCommand.register(event.getDispatcher());
     }
 }
-

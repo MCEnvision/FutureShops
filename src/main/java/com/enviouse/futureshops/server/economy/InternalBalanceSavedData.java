@@ -5,6 +5,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.level.saveddata.SavedData;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -53,5 +54,9 @@ public class InternalBalanceSavedData extends SavedData {
     public void setBalance(UUID playerUUID, long amountMinorUnits) {
         balances.put(playerUUID, amountMinorUnits);
         setDirty();
+    }
+
+    public Map<UUID, Long> snapshotBalances() {
+        return Collections.unmodifiableMap(new HashMap<>(balances));
     }
 }

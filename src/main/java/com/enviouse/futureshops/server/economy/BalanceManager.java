@@ -2,6 +2,7 @@ package com.enviouse.futureshops.server.economy;
 
 import net.minecraft.server.MinecraftServer;
 
+import java.util.List;
 import java.util.UUID;
 
 public final class BalanceManager {
@@ -31,5 +32,12 @@ public final class BalanceManager {
         }
         return provider;
     }
-}
 
+    public static TransactionResult transfer(UUID fromPlayerUUID, UUID toPlayerUUID, long amountMinorUnits) {
+        return getProvider().transfer(fromPlayerUUID, toPlayerUUID, amountMinorUnits);
+    }
+
+    public static List<BalanceEntry> getTopBalances(int page, int pageSize) {
+        return getProvider().getTopBalances(page, pageSize);
+    }
+}

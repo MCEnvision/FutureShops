@@ -5,6 +5,7 @@ import com.enviouse.futureshops.init.ModBlocks;
 import com.enviouse.futureshops.init.ModItems;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.server.economy.BalanceManager;
+import com.enviouse.futureshops.server.session.ShopSessionManager;
 import com.mojang.logging.LogUtils;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.server.ServerStartingEvent;
@@ -58,6 +59,7 @@ public class Futureshops {
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
+        ShopSessionManager.clear();
         BalanceManager.clear();
         LOGGER.info("FutureShops server stopping.");
     }

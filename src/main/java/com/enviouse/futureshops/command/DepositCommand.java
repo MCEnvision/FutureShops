@@ -1,5 +1,7 @@
 package com.enviouse.futureshops.command;
 
+import com.enviouse.futureshops.coin.CoinValidationResult;
+import com.enviouse.futureshops.coin.CoinValidationService;
 import com.enviouse.futureshops.init.ModItems;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
@@ -44,6 +46,11 @@ public final class DepositCommand {
         EconomyProvider provider = BalanceManager.getProvider();
         Item coinItem = ModItems.COIN_ITEM.get();
         long denomination = ModItems.COIN_DENOMINATION_MINOR_UNITS;
+
+        int invalidDestroyed = destroyInvalidCoins(player, coinItem);
+        if (invalidDestroyed > 0) {
+            player.sendSystemMessage(Component.translatable("command.futureshops.deposit.invalid_destroyed", invalidDestroyed));
+        }
 
         long availableCoins = countCoins(player, coinItem);
         if (availableCoins <= 0L) {
@@ -103,7 +110,7 @@ public final class DepositCommand {
     private static long countCoins(ServerPlayer player, Item coinItem) {
         long total = 0L;
         for (ItemStack stack : allCoinContainers(player)) {
-            if (stack.getItem() == coinItem) {
+            if (stack.getItem() == coinItem && CoinValidationService.validate(stack).valid()) {
                 total += stack.getCount();
             }
         }
@@ -120,12 +127,32 @@ public final class DepositCommand {
                 continue;
             }
 
+            CoinValidationResult validation = CoinValidationService.validate(stack);
+            if (!validation.valid()) {
+                continue;
+            }
+
             int taken = (int) Math.min((long) stack.getCount(), remaining);
             stack.shrink(taken);
             remaining -= taken;
         }
 
         return remaining == 0L;
+    }
+
+    private static int destroyInvalidCoins(ServerPlayer player, Item coinItem) {
+        int destroyed = 0;
+        for (ItemStack stack : allCoinContainers(player)) {
+            if (stack.getItem() != coinItem) {
+                continue;
+            }
+
+            if (!CoinValidationService.validate(stack).valid()) {
+                destroyed += stack.getCount();
+                stack.setCount(0);
+            }
+        }
+        return destroyed;
     }
 
     private static List<ItemStack> allCoinContainers(ServerPlayer player) {

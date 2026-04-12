@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.command;
 
+import com.enviouse.futureshops.coin.CoinMintService;
 import com.enviouse.futureshops.init.ModItems;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
@@ -71,22 +72,10 @@ public final class WithdrawCommand {
     }
 
     private static boolean hasSpaceForCoins(ServerPlayer player, Item coinItem, long coinCount) {
-        long remaining = coinCount;
         int maxStack = coinItem.getMaxStackSize();
-
-        for (ItemStack stack : allDepositTargets(player)) {
-            if (stack.isEmpty()) {
-                remaining -= maxStack;
-            } else if (stack.getItem() == coinItem) {
-                remaining -= (maxStack - stack.getCount());
-            }
-
-            if (remaining <= 0L) {
-                return true;
-            }
-        }
-
-        return false;
+        long stacksNeeded = (coinCount + maxStack - 1L) / maxStack;
+        long emptySlots = allDepositTargets(player).stream().filter(ItemStack::isEmpty).count();
+        return emptySlots >= stacksNeeded;
     }
 
     private static boolean giveCoins(ServerPlayer player, Item coinItem, long coinCount) {
@@ -95,7 +84,7 @@ public final class WithdrawCommand {
 
         while (remaining > 0L) {
             int count = (int) Math.min(remaining, maxStack);
-            ItemStack stack = new ItemStack(coinItem, count);
+            ItemStack stack = CoinMintService.mintStack(player, count, ModItems.COIN_DENOMINATION_MINOR_UNITS);
             if (!player.getInventory().add(stack)) {
                 return false;
             }

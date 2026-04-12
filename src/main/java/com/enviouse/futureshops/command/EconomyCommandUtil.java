@@ -46,10 +46,10 @@ public final class EconomyCommandUtil {
             case "INVALID_AMOUNT" -> "command.futureshops.error.invalid_amount";
             case "INSUFFICIENT_FUNDS" -> "command.futureshops.error.insufficient_funds";
             case "MAX_BALANCE_EXCEEDED" -> "command.futureshops.error.max_balance_exceeded";
+            case "INVALID_TARGET" -> "command.futureshops.pay.self";
             default -> "command.futureshops.error.server";
         };
 
         player.sendSystemMessage(Component.translatable(key));
     }
 }
-

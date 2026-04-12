@@ -47,6 +47,18 @@ public class Config {
         .comment("Whether balances are allowed to go below zero")
         .define("economy.allow_negative", false);
 
+    private static final ForgeConfigSpec.ConfigValue<String> COIN_CHECKSUM_SALT = BUILDER
+        .comment("Server-side salt used for CoinItem checksum generation")
+        .define("coins.checksum_salt", "change-me-before-production");
+
+    private static final ForgeConfigSpec.ConfigValue<String> COIN_MINT_SERVER_ID = BUILDER
+        .comment("Identifier embedded in CoinItem mint metadata")
+        .define("coins.mint_server_id", "futureshops-dev");
+
+    private static final ForgeConfigSpec.IntValue COIN_MAX_AGE_DAYS = BUILDER
+        .comment("Maximum age for valid CoinItems")
+        .defineInRange("coins.max_age_days", 365, 1, 3650);
+
     static final ForgeConfigSpec SPEC = BUILDER.build();
 
     public static boolean logDirtBlock;
@@ -59,6 +71,10 @@ public class Config {
     public static long economyStartingBalanceMinorUnits;
     public static long economyMaxBalanceMinorUnits;
     public static boolean economyAllowNegative;
+
+    public static String coinChecksumSalt;
+    public static String coinMintServerId;
+    public static int coinMaxAgeDays;
 
     private static boolean validateItemName(final Object obj) {
         return obj instanceof final String itemName && ForgeRegistries.ITEMS.containsKey(ResourceLocation.parse(itemName));
@@ -78,5 +94,9 @@ public class Config {
         economyStartingBalanceMinorUnits = ECONOMY_STARTING_BALANCE_MINOR_UNITS.get();
         economyMaxBalanceMinorUnits = ECONOMY_MAX_BALANCE_MINOR_UNITS.get();
         economyAllowNegative = ECONOMY_ALLOW_NEGATIVE.get();
+
+        coinChecksumSalt = COIN_CHECKSUM_SALT.get();
+        coinMintServerId = COIN_MINT_SERVER_ID.get();
+        coinMaxAgeDays = COIN_MAX_AGE_DAYS.get();
     }
 }
