@@ -5,6 +5,15 @@
   "command.futureshops.player_only": "Only players can run this command.",
   "command.futureshops.shop.stub": "Shop UI is not wired yet. Foundation systems are loaded.",
   "command.futureshops.balance.value": "Balance: %s %s",
-  "command.futureshops.withdraw.stub": "Withdraw flow is not wired yet.",
-  "command.futureshops.deposit.stub": "Deposit flow is not wired yet."
+  "command.futureshops.withdraw.success": "Withdrew %s %s. New balance: %s",
+  "command.futureshops.withdraw.invalid_denomination": "Amount must be a multiple of coin denomination (%s).",
+  "command.futureshops.withdraw.no_inventory_space": "Not enough inventory space for minted coins.",
+  "command.futureshops.deposit.success": "Deposited %s %s. New balance: %s",
+  "command.futureshops.deposit.no_coins": "You do not have any coins to deposit.",
+  "command.futureshops.deposit.not_enough_coins": "You do not have enough coins for that deposit amount.",
+  "command.futureshops.deposit.invalid_denomination": "Deposit amount must be a multiple of coin denomination (%s).",
+  "command.futureshops.error.invalid_amount": "Invalid amount. Use a positive number.",
+  "command.futureshops.error.insufficient_funds": "Insufficient funds.",
+  "command.futureshops.error.max_balance_exceeded": "Deposit rejected because it exceeds max balance.",
+  "command.futureshops.error.server": "Operation failed due to a server-side state change. Please retry."
 }
