@@ -39,8 +39,12 @@
 - High-risk areas in the spec that must be server-authoritative: packet validation, transaction atomicity, CoinItem anti-dupe checks, and storage-link integrity checks.
 - Prefer implementing spec modules incrementally in package domains (client/server/network/data) rather than monolithic classes.
 
+## Agent execution policy
+- Do not pause to ask for approval before routine implementation work; complete the requested coding changes first.
+- After finishing edits and validation, ask concise follow-up questions about what to do next (scope expansion, refinements, extra checks, or next feature).
+- Ask clarifying questions before coding only when requirements are materially ambiguous or blocked by missing information.
+
 ## Before opening a PR or commit
 - Verify compile/build after edits (`./gradlew.bat build`).
 - If you touched registries/resources, also run `./gradlew.bat runClient` at least once.
 - If you touched datagen inputs/providers, run `./gradlew.bat runData` and include generated outputs as needed.
-
