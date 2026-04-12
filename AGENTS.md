@@ -43,6 +43,7 @@
 - Do not pause to ask for approval before routine implementation work; complete the requested coding changes first.
 - After finishing edits and validation, ask concise follow-up questions about what to do next (scope expansion, refinements, extra checks, or next feature).
 - Ask clarifying questions before coding only when requirements are materially ambiguous or blocked by missing information.
+- End implementation responses with a short numbered list of concrete next-step options (typically 2-3 choices).
 
 ## Before opening a PR or commit
 - Verify compile/build after edits (`./gradlew.bat build`).
