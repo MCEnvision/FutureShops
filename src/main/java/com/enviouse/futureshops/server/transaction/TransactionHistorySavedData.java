@@ -164,5 +164,11 @@ public final class TransactionHistorySavedData extends SavedData {
                 .count();
         return Math.max(1, (int) Math.ceil((double) count / safePageSize));
     }
+
+    public Map<UUID, List<TransactionHistoryEntry>> snapshotEntriesByPlayer() {
+        Map<UUID, List<TransactionHistoryEntry>> snapshot = new HashMap<>();
+        entriesByPlayer.forEach((uuid, entries) -> snapshot.put(uuid, List.copyOf(entries)));
+        return snapshot;
+    }
 }
 

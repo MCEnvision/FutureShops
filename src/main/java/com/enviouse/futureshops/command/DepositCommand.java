@@ -19,6 +19,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 public final class DepositCommand {
@@ -47,7 +48,6 @@ public final class DepositCommand {
     private static int deposit(ServerPlayer player, String requestedAmount) {
         EconomyProvider provider = BalanceManager.getProvider();
         Item coinItem = ModItems.COIN_ITEM.get();
-        long denomination = ModItems.COIN_DENOMINATION_MINOR_UNITS;
         SpentMintsSavedData mintData = SpentMintsSavedData.get(player.getServer());
 
         // Phase 1: Destroy coins that fail checksum OR whose mint ID is consumed/unknown.
@@ -56,36 +56,24 @@ public final class DepositCommand {
             player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable("command.futureshops.deposit.invalid_destroyed", invalidDestroyed)));
         }
 
-        // Phase 2: Count coins that are fully valid (checksum + unconsumed mint ID).
-        long availableCoins = countValidCoins(player, coinItem, mintData);
-        if (availableCoins <= 0L) {
+        // Phase 2: Collect valid coin stacks with their per-stack value.
+        List<CoinStackInfo> validStacks = collectValidStacks(player, coinItem, mintData);
+        if (validStacks.isEmpty()) {
             player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable("command.futureshops.deposit.no_coins")));
             return 0;
         }
 
-        long coinsToDeposit = availableCoins;
-        long amountMinorUnits;
-        try {
-            amountMinorUnits = Math.multiplyExact(availableCoins, denomination);
-        } catch (ArithmeticException ex) {
-            player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable("command.futureshops.error.server")));
-            return 0;
-        }
+        long totalAvailableMinor = validStacks.stream().mapToLong(CoinStackInfo::totalValue).sum();
 
+        long amountMinorUnits = totalAvailableMinor;
         if (requestedAmount != null) {
             try {
                 long requestedMinorUnits = EconomyCommandUtil.parseAmountToMinorUnits(requestedAmount, provider.getDecimalPlaces());
-                if (requestedMinorUnits % denomination != 0L) {
-                    String denomText = EconomyCommandUtil.formatMinorUnits(denomination, provider.getDecimalPlaces());
-                    player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable("command.futureshops.deposit.invalid_denomination", denomText)));
-                    return 0;
-                }
-                if (requestedMinorUnits > amountMinorUnits) {
+                if (requestedMinorUnits > totalAvailableMinor) {
                     player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable("command.futureshops.deposit.not_enough_coins")));
                     return 0;
                 }
                 amountMinorUnits = requestedMinorUnits;
-                coinsToDeposit = requestedMinorUnits / denomination;
             } catch (IllegalArgumentException ex) {
                 player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable("command.futureshops.error.invalid_amount")));
                 return 0;
@@ -99,16 +87,15 @@ public final class DepositCommand {
             return 0;
         }
 
-        // Phase 4: Remove physical coins and collect their mint IDs for consumption.
+        // Phase 4: Remove physical coins (greedy, largest denomination first) and collect mint IDs.
         List<String> toConsume = new ArrayList<>();
-        if (!removeCoinsAndCollectMintIds(player, coinItem, coinsToDeposit, mintData, toConsume)) {
-            // Rollback the balance credit if we couldn't physically remove the coins.
+        if (!removeCoinsForAmount(player, coinItem, amountMinorUnits, mintData, toConsume)) {
             provider.withdraw(player.getUUID(), amountMinorUnits);
             player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable("command.futureshops.error.server")));
             return 0;
         }
 
-        // Phase 5: Mark mints consumed — prevents future double-deposit of these coins.
+        // Phase 5: Mark mints consumed.
         mintData.consumeMints(toConsume);
 
         String depositedText = EconomyCommandUtil.formatMinorUnits(amountMinorUnits, provider.getDecimalPlaces());
@@ -122,10 +109,6 @@ public final class DepositCommand {
     // Helpers
     // -------------------------------------------------------------------------
 
-    /**
-     * Destroys coins that fail the checksum validation OR whose mint ID is
-     * unknown / already consumed.  Returns the total count of destroyed items.
-     */
     private static int destroyInvalidCoins(ServerPlayer player, Item coinItem, SpentMintsSavedData mintData) {
         int destroyed = 0;
         for (ItemStack stack : allCoinContainers(player)) {
@@ -134,7 +117,6 @@ public final class DepositCommand {
             boolean invalid = !CoinValidationService.validate(stack).valid();
 
             if (!invalid) {
-                // Secondary check: is the mint ID registered and not yet consumed?
                 CompoundTag coinData = stack.getTag().getCompound(CoinNbtKeys.ROOT);
                 String mintId = coinData.getString(CoinNbtKeys.MINT_ID);
                 invalid = !mintData.isKnownAndUnconsumed(mintId);
@@ -148,57 +130,69 @@ public final class DepositCommand {
         return destroyed;
     }
 
-    /** Counts coins that pass both checksum and mint-registry validation. */
-    private static long countValidCoins(ServerPlayer player, Item coinItem, SpentMintsSavedData mintData) {
-        long total = 0L;
-        for (ItemStack stack : allCoinContainers(player)) {
-            if (stack.getItem() != coinItem) continue;
-            CoinValidationResult validation = CoinValidationService.validate(stack);
-            if (!validation.valid()) continue;
-            CompoundTag coinData = stack.getTag().getCompound(CoinNbtKeys.ROOT);
-            String mintId = coinData.getString(CoinNbtKeys.MINT_ID);
-            if (mintData.isKnownAndUnconsumed(mintId)) {
-                total += stack.getCount();
-            }
-        }
-        return total;
-    }
-
     /**
-     * Removes {@code coinsToRemove} valid coin items from the player's inventory
-     * and collects the unique mint IDs of every touched stack.
-     *
-     * @param consumed output list — unique mint IDs of removed stacks
-     * @return {@code true} if the exact count was removed
+     * Collects info about each valid coin stack: denomination, count, and total value.
      */
-    private static boolean removeCoinsAndCollectMintIds(
-            ServerPlayer player, Item coinItem, long coinsToRemove,
-            SpentMintsSavedData mintData, List<String> consumed) {
-        long remaining = coinsToRemove;
+    private static List<CoinStackInfo> collectValidStacks(ServerPlayer player, Item coinItem, SpentMintsSavedData mintData) {
+        List<CoinStackInfo> result = new ArrayList<>();
         for (ItemStack stack : allCoinContainers(player)) {
-            if (remaining <= 0L) break;
             if (stack.getItem() != coinItem) continue;
-
             CoinValidationResult validation = CoinValidationService.validate(stack);
             if (!validation.valid()) continue;
-
             CompoundTag coinData = stack.getTag().getCompound(CoinNbtKeys.ROOT);
             String mintId = coinData.getString(CoinNbtKeys.MINT_ID);
             if (!mintData.isKnownAndUnconsumed(mintId)) continue;
+            long denomination = coinData.getLong(CoinNbtKeys.DENOMINATION);
+            result.add(new CoinStackInfo(stack, mintId, denomination, stack.getCount(), denomination * stack.getCount()));
+        }
+        // Sort by denomination descending so we consume largest bills first
+        result.sort(Comparator.comparingLong(CoinStackInfo::denomination).reversed());
+        return result;
+    }
 
-            int taken = (int) Math.min((long) stack.getCount(), remaining);
-            stack.shrink(taken);
-            remaining -= taken;
-            if (!consumed.contains(mintId)) {
-                consumed.add(mintId);
+    /**
+     * Removes coins from the player's inventory to cover the target amount.
+     * Uses a greedy approach: consumes largest-denomination stacks first.
+     * Supports partial consumption of a stack when only some coins are needed.
+     */
+    private static boolean removeCoinsForAmount(
+            ServerPlayer player, Item coinItem, long targetMinor,
+            SpentMintsSavedData mintData, List<String> consumed) {
+        long remaining = targetMinor;
+        // Build a sorted list of valid stacks (largest denomination first)
+        List<CoinStackInfo> stacks = collectValidStacks(player, coinItem, mintData);
+
+        for (CoinStackInfo info : stacks) {
+            if (remaining <= 0L) break;
+
+            // How many coins from this stack do we need?
+            long coinsNeeded = (remaining + info.denomination - 1L) / info.denomination;
+            int toTake = (int) Math.min(coinsNeeded, info.count);
+
+            long valueRemoved = info.denomination * toTake;
+            // Don't overshoot — if taking toTake would exceed remaining, take fewer
+            if (valueRemoved > remaining && toTake > 1) {
+                toTake = (int) (remaining / info.denomination);
+                valueRemoved = info.denomination * toTake;
+            }
+            if (toTake <= 0) continue;
+
+            info.stack.shrink(toTake);
+            remaining -= valueRemoved;
+            if (!consumed.contains(info.mintId)) {
+                consumed.add(info.mintId);
             }
         }
-        return remaining == 0L;
+        // Allow a small tolerance: if we couldn't reach exact zero due to denomination granularity, fail
+        return remaining <= 0L;
     }
 
     private static List<ItemStack> allCoinContainers(ServerPlayer player) {
         return java.util.stream.Stream
                 .concat(player.getInventory().items.stream(), player.getInventory().offhand.stream())
                 .toList();
+    }
+
+    private record CoinStackInfo(ItemStack stack, String mintId, long denomination, int count, long totalValue) {
     }
 }

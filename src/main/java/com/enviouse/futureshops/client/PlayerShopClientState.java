@@ -1,20 +1,22 @@
 package com.enviouse.futureshops.client;
 
+import com.enviouse.futureshops.data.PlayerShopListingData;
 import com.enviouse.futureshops.data.SettlementHistoryRow;
 import net.minecraft.core.BlockPos;
 
 import java.util.List;
+import java.util.UUID;
 
 public final class PlayerShopClientState {
     private static BlockPos shopPos = BlockPos.ZERO;
     private static boolean owner = false;
+    private static UUID ownerUuid = new UUID(0L, 0L);
     private static String ownerName = "";
-    private static String listedItemId = "";
-    private static String tradeMode = "MONEY";
-    private static long moneyPriceMinor = 100L;
-    private static String barterItemId = "";
-    private static int barterItemCount = 1;
-    private static int stock = 0;
+    private static String shopName = "";
+    private static boolean singleItemMode = false;
+    private static boolean barterStorageSame = true;
+    private static List<PlayerShopListingData> listings = List.of();
+    private static int selectedListingIndex = 0;
     private static boolean linked = false;
     private static long pendingSettlementMinor = 0L;
     private static long lifetimeRevenueMinor = 0L;
@@ -27,20 +29,20 @@ public final class PlayerShopClientState {
     private PlayerShopClientState() {
     }
 
-    public static void apply(BlockPos pos, boolean ownerFlag, String ownerNameValue, String listedItemIdValue,
-                             String tradeModeValue, long moneyPriceMinorValue, String barterItemIdValue,
-                             int barterItemCountValue, int stockValue, boolean linkedValue,
+    public static void apply(BlockPos pos, boolean ownerFlag, UUID ownerUuidValue, String ownerNameValue,
+                             List<PlayerShopListingData> listingsValue, boolean linkedValue,
                              long pendingSettlementMinorValue, long lifetimeRevenueMinorValue,
-                             List<String> recentRevenueRowsValue) {
+                             List<String> recentRevenueRowsValue,
+                             String shopNameValue, boolean singleItemModeValue, boolean barterStorageSameValue) {
         shopPos = pos;
         owner = ownerFlag;
+        ownerUuid = ownerUuidValue;
         ownerName = ownerNameValue;
-        listedItemId = listedItemIdValue;
-        tradeMode = tradeModeValue;
-        moneyPriceMinor = moneyPriceMinorValue;
-        barterItemId = barterItemIdValue;
-        barterItemCount = barterItemCountValue;
-        stock = stockValue;
+        shopName = shopNameValue == null ? "" : shopNameValue;
+        singleItemMode = singleItemModeValue;
+        barterStorageSame = barterStorageSameValue;
+        listings = List.copyOf(listingsValue);
+        selectedListingIndex = Math.max(0, Math.min(selectedListingIndex, Math.max(0, listings.size() - 1)));
         linked = linkedValue;
         pendingSettlementMinor = pendingSettlementMinorValue;
         lifetimeRevenueMinor = lifetimeRevenueMinorValue;
@@ -49,13 +51,12 @@ public final class PlayerShopClientState {
 
     public static BlockPos shopPos() { return shopPos; }
     public static boolean owner() { return owner; }
+    public static UUID ownerUuid() { return ownerUuid; }
     public static String ownerName() { return ownerName; }
-    public static String listedItemId() { return listedItemId; }
-    public static String tradeMode() { return tradeMode; }
-    public static long moneyPriceMinor() { return moneyPriceMinor; }
-    public static String barterItemId() { return barterItemId; }
-    public static int barterItemCount() { return barterItemCount; }
-    public static int stock() { return stock; }
+    public static String shopName() { return shopName; }
+    public static boolean singleItemMode() { return singleItemMode; }
+    public static boolean barterStorageSame() { return barterStorageSame; }
+    public static List<PlayerShopListingData> listings() { return listings; }
     public static boolean linked() { return linked; }
     public static long pendingSettlementMinor() { return pendingSettlementMinor; }
     public static long lifetimeRevenueMinor() { return lifetimeRevenueMinor; }
@@ -63,6 +64,15 @@ public final class PlayerShopClientState {
     public static List<SettlementHistoryRow> settlementHistoryRows() { return settlementHistoryRows; }
     public static int settlementHistoryPage() { return settlementHistoryPage; }
     public static int settlementHistoryTotalPages() { return settlementHistoryTotalPages; }
+    public static int selectedListingIndex() { return selectedListingIndex; }
+
+    public static PlayerShopListingData selectedListing() {
+        return selectedListingIndex >= 0 && selectedListingIndex < listings.size() ? listings.get(selectedListingIndex) : null;
+    }
+
+    public static void setSelectedListingIndex(int index) {
+        selectedListingIndex = Math.max(0, Math.min(index, Math.max(0, listings.size() - 1)));
+    }
 
     public static void applySettlementHistory(int page, int totalPages, List<SettlementHistoryRow> rows) {
         settlementHistoryPage = Math.max(1, page);
@@ -78,4 +88,3 @@ public final class PlayerShopClientState {
         resultCode = resultCodeValue;
     }
 }
-

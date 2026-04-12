@@ -5,7 +5,8 @@ import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.CatalogBarterRecipe;
 import com.enviouse.futureshops.data.CatalogCategory;
 import com.enviouse.futureshops.data.CatalogItem;
-import com.mojang.math.Axis;
+import com.enviouse.futureshops.network.ShopPackets;
+import com.enviouse.futureshops.network.packets.C2SOpenBalanceUiPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -13,516 +14,432 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-/**
- * ShopMainScreen — spec §5.
- *
- * <p>Layout summary (GUI-scaled pixels, 340 × 230 container):
- * <pre>
- *  ┌──────────────────────────────────────────────────┐  y=0
- *  │  HEADER BAR (340 × 22)                           │  y=22
- *  ├────────┬─────────────────────────────────────────┤
- *  │        │                                         │
- *  │ SIDEBAR│       ITEM GRID (278 × 170)             │
- *  │  62px  │                         [scrollbar 6px] │  y=192
- *  │        ├─────────────────────────────────────────┤
- *  │        │  INVENTORY STRIP (278 × 26)             │  y=218
- *  ├────────┴─────────────────────────────────────────┤
- *  │  FOOTER BAR (340 × 12)                           │  y=230
- *  └──────────────────────────────────────────────────┘
- * </pre>
- *
- * <p>Item cards: 58 × 56 px, 4 columns, 4 px gap, centred in the 272 px grid content area.
- */
 public class ShopMainScreen extends Screen implements ShopScreenMarker {
-
-    // ─── Container dimensions ────────────────────────────────────────────────
-    private static final int GUI_W  = 340;
-    private static final int GUI_H  = 230;
-
-    // ─── Zone dimensions ─────────────────────────────────────────────────────
-    private static final int HEADER_H   = 22;
-    private static final int SIDEBAR_W  = 62;   // 60 content + 2px right divider
-    private static final int FOOTER_H   = 12;
-    /** Height of the scrollable grid zone. */
-    private static final int GRID_H     = 170;
-    /** Height of the inventory/balance strip below the grid. */
-    private static final int STRIP_H    = GUI_H - HEADER_H - FOOTER_H - GRID_H; // 26
-    /** Width of the right pane (sidebar to right edge). */
-    private static final int RIGHT_W    = GUI_W - SIDEBAR_W; // 278
-    /** Width of the scrollbar rail. */
-    private static final int SCROLLBAR_W = 6;
-    /** Width of the scrollable grid content (excluding scrollbar). */
-    private static final int GRID_CONTENT_W = RIGHT_W - SCROLLBAR_W; // 272
-
-    // ─── Card dimensions ─────────────────────────────────────────────────────
-    private static final int CARD_W        = 58;
-    private static final int CARD_H        = 56;
-    private static final int CARD_GAP      = 4;
-    private static final int CARDS_PER_ROW = 4;
-
-    // Horizontal padding to centre the 4-column grid inside GRID_CONTENT_W
-    // 4*58 + 3*4 = 244 px of cards; (272 - 244) / 2 = 14
-    private static final int GRID_PAD_X    = (GRID_CONTENT_W - (CARDS_PER_ROW * CARD_W + (CARDS_PER_ROW - 1) * CARD_GAP)) / 2;
-
-    // ─── Runtime state ───────────────────────────────────────────────────────
-    private int guiLeft, guiTop;
+    private int guiLeft;
+    private int guiTop;
+    private int guiW;
+    private int guiH;
+    private int headerH;
+    private int footerH;
+    private int sidebarW;
+    private int stripH;
+    private int gridScrollRows;
+    private int sidebarScrollIdx;
+    private int selectedCategoryIdx;
+    private boolean barterMode;
+    private String searchQuery = "";
 
     private EditBox searchField;
-    private Button  closeBtn, cartBtn, historyBtn, modeBtn, sortBtn;
-
-    private boolean barterMode          = false;
-    private int     gridScrollPx        = 0;   // vertical scroll in pixels
-    private int     sidebarScrollIdx    = 0;   // first visible tab index
-    private int     selectedCategoryIdx = 0;   // 0 = "All"
-    private String  searchQuery         = "";
+    private Button cartBtn;
+    private Button historyBtn;
+    private Button modeBtn;
 
     private List<CatalogItem> filteredItems = List.of();
-    private List<Component> barterBadgeTooltip = List.of();
-    private List<PromoBadgeOverlay> promoBadgeOverlays = List.of();
-
-    // ─── Constructor ─────────────────────────────────────────────────────────
+    private List<Component> tooltipLines = List.of();
 
     public ShopMainScreen() {
         super(Component.translatable("gui.futureshops.shop.title"));
     }
 
-    // ─── Screen lifecycle ────────────────────────────────────────────────────
-
     @Override
     protected void init() {
-        guiLeft = (this.width  - GUI_W) / 2;
-        guiTop  = (this.height - GUI_H) / 2;
+        guiW = Math.min(640, Math.max(400, this.width - 20));
+        guiH = Math.min(400, Math.max(280, this.height - 20));
+        guiLeft = (this.width - guiW) / 2;
+        guiTop = (this.height - guiH) / 2;
+        headerH = 44;
+        footerH = 36;
+        stripH = 26;
+        sidebarW = Math.min(130, Math.max(100, guiW / 5));
 
         rebuildFilteredItems();
 
-        // -- Search field (centered in the header) ---------------------------
-        int sfX = guiLeft + 80;
-        int sfY = guiTop  + 4;
-        searchField = new EditBox(this.font, sfX, sfY, 90, 14,
+        // ═══ Top bar: Search + buttons all at same height ═══
+        int topBarY = guiTop + 14;
+        int topBarH = 16;
+        int closeW = 20;
+        int closePad = 4;
+        // Buttons from right to left: Close | History | Cart | Mode | Search
+        int btnRightEdge = guiLeft + guiW - 8;
+
+        // Close button (rightmost)
+        addRenderableWidget(Button.builder(Component.literal("§c✕"), button -> onClose())
+                .bounds(btnRightEdge - closeW, topBarY - 2, closeW, closeW)
+                .build());
+        btnRightEdge -= closeW + closePad;
+
+        // History button
+        historyBtn = addRenderableWidget(Button.builder(Component.literal("History"), button -> this.minecraft.setScreen(new TransactionHistoryScreen(this)))
+                .bounds(btnRightEdge - 58, topBarY, 58, topBarH)
+                .build());
+        btnRightEdge -= 58 + closePad;
+
+        // Cart button
+        cartBtn = addRenderableWidget(Button.builder(Component.literal("Cart"), button -> this.minecraft.setScreen(new CartScreen(this)))
+                .bounds(btnRightEdge - 58, topBarY, 58, topBarH)
+                .build());
+        btnRightEdge -= 58 + closePad;
+
+        // Mode toggle
+        modeBtn = addRenderableWidget(Button.builder(Component.literal(barterMode ? "§d⚒ Barter" : "§a$ Buy"), button -> {
+                    barterMode = !barterMode;
+                    if (!barterMode && isBarterTabSelected()) {
+                        selectedCategoryIdx = 0;
+                    }
+                    button.setMessage(Component.literal(barterMode ? "§d⚒ Barter" : "§a$ Buy"));
+                    gridScrollRows = 0;
+                    rebuildFilteredItems();
+                })
+                .bounds(btnRightEdge - 56, topBarY, 56, topBarH)
+                .build());
+        btnRightEdge -= 56 + closePad;
+
+        // Search field fills remaining space
+        int searchX = guiLeft + sidebarW + 24;
+        int searchW = Math.max(80, btnRightEdge - searchX - closePad);
+        searchField = new EditBox(this.font, searchX, topBarY, searchW, topBarH,
                 Component.translatable("gui.futureshops.shop.search"));
         searchField.setMaxLength(32);
-        searchField.setBordered(true);
-        searchField.setTextColor(ShopColors.TEXT_PRIMARY);
-        searchField.setResponder(q -> {
-            this.searchQuery = q.toLowerCase();
-            this.gridScrollPx = 0;
+        searchField.setResponder(query -> {
+            searchQuery = query.toLowerCase(Locale.ROOT);
+            gridScrollRows = 0;
             rebuildFilteredItems();
         });
         addRenderableWidget(searchField);
-
-        // -- Mode toggle (Buy / Barter) ----------------------------------------
-        modeBtn = Button.builder(Component.literal(barterMode ? "Barter" : "Buy"), btn -> {
-            barterMode = !barterMode;
-            if (!barterMode && isBarterTabSelected()) {
-                selectedCategoryIdx = 0;
-            }
-            btn.setMessage(Component.literal(barterMode ? "Barter" : "Buy"));
-            rebuildFilteredItems();
-        }).bounds(guiLeft + 176, guiTop + 4, 40, 14).build();
-        addRenderableWidget(modeBtn);
-
-        // -- Cart button -------------------------------------------------------
-        cartBtn = Button.builder(Component.literal("Cart"), btn -> this.minecraft.setScreen(new CartScreen(this)))
-                .bounds(guiLeft + 220, guiTop + 4, 44, 14).build();
-        addRenderableWidget(cartBtn);
-
-        // -- History button ----------------------------------------------------
-        historyBtn = Button.builder(Component.literal("Log"), btn -> this.minecraft.setScreen(new TransactionHistoryScreen(this)))
-                .bounds(guiLeft + 266, guiTop + 4, 26, 14).build();
-        addRenderableWidget(historyBtn);
-
-        // -- Close button ------------------------------------------------------
-        closeBtn = Button.builder(Component.literal("×"), btn -> this.onClose())
-                .bounds(guiLeft + GUI_W - 16, guiTop + 4, 14, 14).build();
-        addRenderableWidget(closeBtn);
-
-        // -- Footer sort button ------------------------------------------------
-        sortBtn = Button.builder(Component.literal("Sort"), btn -> {
-            // TODO: cycle sort order
-        }).bounds(guiLeft + 2, guiTop + GUI_H - FOOTER_H + 1, 28, 10).build();
-        addRenderableWidget(sortBtn);
     }
 
     private void rebuildFilteredItems() {
-        List<CatalogCategory> cats  = ShopClientState.getCatalogCategories();
-        List<CatalogItem>     all   = ShopClientState.getCatalogItems();
-
-        String activeCatId = null;
+        List<CatalogCategory> cats = ShopClientState.getCatalogCategories();
+        List<CatalogItem> all = ShopClientState.getCatalogItems();
+        String activeCategoryId = null;
         if (selectedCategoryIdx > 0 && selectedCategoryIdx <= cats.size()) {
-            activeCatId = cats.get(selectedCategoryIdx - 1).id();
+            activeCategoryId = cats.get(selectedCategoryIdx - 1).id();
         }
-
-        final String catFilter = activeCatId;
-        boolean barterFilterOnly = barterMode || isBarterTabSelected();
+        final String categoryFilter = activeCategoryId;
+        boolean barterOnly = barterMode || isBarterTabSelected();
         filteredItems = all.stream()
-                .filter(item -> !barterFilterOnly || item.hasBarterRecipes())
-                .filter(item -> catFilter == null || catFilter.equals(item.categoryId()))
-                .filter(item -> searchQuery.isEmpty()
-                        || item.displayName().toLowerCase().contains(searchQuery)
-                        || item.itemId().toLowerCase().contains(searchQuery))
+                .filter(item -> !barterOnly || item.hasBarterRecipes())
+                .filter(item -> categoryFilter == null || categoryFilter.equals(item.categoryId()))
+                .filter(item -> searchQuery.isBlank()
+                        || item.displayName().toLowerCase(Locale.ROOT).contains(searchQuery)
+                        || item.itemId().toLowerCase(Locale.ROOT).contains(searchQuery))
                 .collect(Collectors.toList());
     }
 
-    // ─── Rendering ───────────────────────────────────────────────────────────
-
     @Override
-    public void render(GuiGraphics g, int mx, int my, float pt) {
-        barterBadgeTooltip = List.of();
-        promoBadgeOverlays = new java.util.ArrayList<>();
-
-        // Full-screen dimming
-        g.fill(0, 0, this.width, this.height, ShopColors.BG_PRIMARY);
-
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        tooltipLines = List.of();
+        // Full-screen dim
+        graphics.fill(0, 0, this.width, this.height, ShopColors.BG_PRIMARY);
         // Main panel
-        g.fill(guiLeft, guiTop, guiLeft + GUI_W, guiTop + GUI_H, ShopColors.BG_PANEL);
-        ShopUiUtil.drawBorder(g, guiLeft, guiTop, GUI_W, GUI_H, ShopColors.BORDER_DEFAULT);
+        ShopUiUtil.renderAccentPanel(graphics, guiLeft, guiTop, guiW, guiH,
+                ShopColors.BG_PANEL, ShopColors.BORDER_DEFAULT, ShopColors.ACCENT_CYAN);
 
-        // Header divider
-        g.fill(guiLeft, guiTop + HEADER_H, guiLeft + GUI_W, guiTop + HEADER_H + 1, ShopColors.BORDER_DEFAULT);
-
-        renderTitle(g);
-        renderSidebar(g, mx, my);
-        renderItemGrid(g, mx, my);
-        renderInventoryStrip(g);
-        renderFooter(g);
-        renderPromoBadgeOverlays(g);
-
+        renderHeader(graphics);
+        renderSidebar(graphics, mouseX, mouseY);
+        renderGrid(graphics, mouseX, mouseY);
+        renderStrip(graphics);
+        renderFooter(graphics, mouseX, mouseY);
         cartBtn.setMessage(Component.literal("Cart (" + ShopClientState.getCartLineCount() + ")"));
 
-        // Vanilla widgets (buttons, edit box) render on top
-        super.render(g, mx, my, pt);
-        if (!barterBadgeTooltip.isEmpty()) {
-            g.renderTooltip(this.font, barterBadgeTooltip, Optional.empty(), mx, my);
+        super.render(graphics, mouseX, mouseY, partialTick);
+        if (!tooltipLines.isEmpty()) {
+            graphics.renderTooltip(this.font, tooltipLines, Optional.empty(), mouseX, mouseY);
         }
     }
 
-    // ── Header title (1.5× scaled) ────────────────────────────────────────────
+    private void renderHeader(GuiGraphics graphics) {
+        int hx = guiLeft + 8;
+        int hy = guiTop + 6;
+        int hw = guiW - 16;
+        // Gradient header bar
+        ShopUiUtil.drawGradientH(graphics, hx, hy, hw, headerH - 10, ShopColors.HEADER_GRADIENT_L, ShopColors.HEADER_GRADIENT_R);
+        ShopUiUtil.drawBorder(graphics, hx, hy, hw, headerH - 10, ShopColors.BORDER_DEFAULT);
 
-    private void renderTitle(GuiGraphics g) {
-        String shopName = ShopClientState.getActiveShopId().isBlank()
-                ? "Server Shop"
-                : prettyName(ShopClientState.getActiveShopId());
-        g.pose().pushPose();
-        g.pose().translate(guiLeft + 6f, guiTop + 7f, 0f);
-        g.pose().scale(1.5f, 1.5f, 1f);
-        g.drawString(this.font, shopName, 0, 0, ShopColors.TEXT_PRIMARY, true);
-        g.pose().popPose();
+        String shopTitle = prettyName(ShopClientState.getActiveShopId());
+        // Truncate & wrap shop title
+        graphics.drawString(this.font, this.font.plainSubstrByWidth(shopTitle, sidebarW - 10), hx + 10, hy + 6, ShopColors.TEXT_PRIMARY, true);
+        String subtitle = barterMode ? "§d⚒ Barter catalog" : "§7Browse the storefront";
+        graphics.drawString(this.font, this.font.plainSubstrByWidth(subtitle, sidebarW - 10), hx + 10, hy + 18, ShopColors.TEXT_SECONDARY, false);
     }
 
-    // ── Category sidebar ──────────────────────────────────────────────────────
-
-    private void renderSidebar(GuiGraphics g, int mx, int my) {
-        int sx = guiLeft;
-        int sy = guiTop + HEADER_H + 1;
-        int sw = SIDEBAR_W;
-        int sh = GUI_H - HEADER_H - FOOTER_H - 1;
-
-        g.fill(sx, sy, sx + sw - 1, sy + sh, ShopColors.BG_CARD);
-        g.fill(sx + sw - 1, sy, sx + sw, sy + sh, ShopColors.BORDER_DEFAULT);
+    private void renderSidebar(GuiGraphics graphics, int mouseX, int mouseY) {
+        int x = guiLeft + 8;
+        int y = guiTop + headerH + 2;
+        int h = guiH - headerH - stripH - footerH - 14;
+        ShopUiUtil.renderAccentPanel(graphics, x, y, sidebarW, h,
+                ShopColors.BG_CARD, ShopColors.BORDER_DEFAULT, ShopColors.ACCENT_PURPLE);
+        graphics.drawString(this.font, "§lDepartments", x + 8, y + 6, ShopColors.TEXT_PRIMARY, false);
 
         List<CatalogCategory> cats = ShopClientState.getCatalogCategories();
         int tabCount = cats.size() + 1 + (hasBarterTab() ? 1 : 0);
-        int tabH     = 20;
-        int tabGap   = 2;
-        int maxVisible = sh / (tabH + tabGap);
-
-        sidebarScrollIdx = Math.max(0, Math.min(sidebarScrollIdx, tabCount - maxVisible));
-
-        int tabY = sy + 2;
-        for (int i = sidebarScrollIdx; i < tabCount && tabY + tabH <= sy + sh - 2; i++) {
-            boolean selected = (selectedCategoryIdx == i);
-            boolean hovered  = mx >= sx + 1 && mx < sx + sw - 2
-                    && my >= tabY && my < tabY + tabH;
-
-            int bg = (selected || hovered) ? ShopColors.BG_CARD_HOVER : ShopColors.BG_CARD;
-            g.fill(sx + 1, tabY, sx + sw - 2, tabY + tabH, bg);
+        int tabHeight = 18;
+        int maxVisible = Math.max(1, (h - 24) / tabHeight);
+        sidebarScrollIdx = Math.max(0, Math.min(sidebarScrollIdx, Math.max(0, tabCount - maxVisible)));
+        int drawY = y + 22;
+        for (int i = sidebarScrollIdx; i < tabCount && i < sidebarScrollIdx + maxVisible; i++) {
+            boolean selected = i == selectedCategoryIdx;
+            boolean hovered = mouseX >= x + 4 && mouseX <= x + sidebarW - 4 && mouseY >= drawY && mouseY <= drawY + tabHeight - 2;
+            int tabBg = selected ? ShopColors.BG_CARD_HOVER : (hovered ? 0xFF222222 : ShopColors.BG_PANEL);
+            graphics.fill(x + 4, drawY, x + sidebarW - 4, drawY + tabHeight - 2, tabBg);
             if (selected) {
-                // Active: 2 px left accent bar
-                g.fill(sx + 1, tabY, sx + 3, tabY + tabH, ShopColors.BORDER_ACCENT);
+                graphics.fill(x + 4, drawY, x + 7, drawY + tabHeight - 2, ShopColors.ACCENT_CYAN);
             }
-
-            String label;
-            if (i == 0) {
-                label = "All";
-            } else if (isBarterTabIndex(i, cats.size())) {
-                label = "Barter";
-            } else {
-                label = cats.get(i - 1).displayName();
-            }
-            String display = this.font.plainSubstrByWidth(label, sw - 8);
-            g.drawString(this.font, display, sx + 5, tabY + (tabH - 8) / 2, ShopColors.TEXT_PRIMARY, false);
-
-            tabY += tabH + tabGap;
-        }
-
-        // Scroll indicator when there are more tabs than visible
-        if (tabCount > maxVisible) {
-            int trackH  = sh - 4;
-            int thumbH  = Math.max(10, trackH * maxVisible / tabCount);
-            int thumbY  = sy + 2 + (trackH - thumbH) * sidebarScrollIdx / Math.max(1, tabCount - maxVisible);
-            g.fill(sx + sw - 3, sy + 2, sx + sw - 1, sy + 2 + trackH, ShopColors.BORDER_DEFAULT & 0x4DFFFFFF);
-            g.fill(sx + sw - 3, thumbY, sx + sw - 1, thumbY + thumbH, ShopColors.TEXT_SECONDARY);
+            String label = this.font.plainSubstrByWidth(labelForTab(i, cats.size()), sidebarW - 22);
+            graphics.drawString(this.font, label, x + 12, drawY + 4, selected ? ShopColors.TEXT_PRIMARY : ShopColors.TEXT_SECONDARY, false);
+            drawY += tabHeight;
         }
     }
 
-    // ── Item grid ─────────────────────────────────────────────────────────────
-
-    private void renderItemGrid(GuiGraphics g, int mx, int my) {
-        int gx = guiLeft + SIDEBAR_W;
-        int gy = guiTop  + HEADER_H + 1;
-        int gw = RIGHT_W;
-        int gh = GRID_H;
-
-        g.fill(gx, gy, gx + gw, gy + gh, ShopColors.BG_PANEL);
+    private void renderGrid(GuiGraphics graphics, int mouseX, int mouseY) {
+        int gridX = guiLeft + sidebarW + 16;
+        int gridY = guiTop + headerH + 2;
+        int gridW = guiW - sidebarW - 24;
+        int gridH = guiH - headerH - stripH - footerH - 14;
+        ShopUiUtil.renderPanel(graphics, gridX, gridY, gridW, gridH, ShopColors.BG_CARD, ShopColors.BORDER_DEFAULT);
 
         if (filteredItems.isEmpty()) {
-            String msg = "No items found";
-            g.drawCenteredString(this.font, msg,
-                    gx + GRID_CONTENT_W / 2, gy + gh / 2 - 8, ShopColors.TEXT_SECONDARY);
-            g.drawCenteredString(this.font, "Try a different search or category",
-                    gx + GRID_CONTENT_W / 2, gy + gh / 2 + 2, ShopColors.TEXT_SECONDARY);
+            graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.shop.no_items"), gridX + gridW / 2, gridY + gridH / 2 - 8, ShopColors.TEXT_SECONDARY);
+            graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.shop.no_items_hint"), gridX + gridW / 2, gridY + gridH / 2 + 6, ShopColors.TEXT_SECONDARY);
             return;
         }
 
-        int totalRows  = (filteredItems.size() + CARDS_PER_ROW - 1) / CARDS_PER_ROW;
-        int totalH     = totalRows * (CARD_H + CARD_GAP);
-        int maxScroll  = Math.max(0, totalH - gh + CARD_GAP);
-        gridScrollPx   = Math.max(0, Math.min(gridScrollPx, maxScroll));
+        int contentX = gridX + 8;
+        int contentY = gridY + 8;
+        int contentW = gridW - 16;
+        int contentH = gridH - 16;
+        int gap = 6;
+        int columns = Math.max(2, Math.min(5, (contentW + gap) / 88));
+        int cardW = Math.max(76, Math.min(100, (contentW - gap * (columns - 1)) / columns));
+        int cardH = 82;
+        int visibleRows = Math.max(1, (contentH + gap) / (cardH + gap));
+        int totalRows = (filteredItems.size() + columns - 1) / columns;
+        gridScrollRows = Math.max(0, Math.min(gridScrollRows, Math.max(0, totalRows - visibleRows)));
 
-        // Scissor-clip the grid content
-        g.enableScissor(gx, gy, gx + GRID_CONTENT_W, gy + gh);
-
-        int baseX = gx + GRID_PAD_X;
-        int baseY = gy + 2 - gridScrollPx;
-
-        for (int i = 0; i < filteredItems.size(); i++) {
-            int col = i % CARDS_PER_ROW;
-            int row = i / CARDS_PER_ROW;
-            int cx  = baseX + col * (CARD_W + CARD_GAP);
-            int cy  = baseY + row * (CARD_H + CARD_GAP);
-
-            if (cy + CARD_H < gy || cy > gy + gh) continue; // off-screen
-            renderItemCard(g, filteredItems.get(i), cx, cy, mx, my);
-        }
-
-        g.disableScissor();
-
-        // Vertical scrollbar
-        if (maxScroll > 0) {
-            int tx = gx + GRID_CONTENT_W;
-            int thumbH = Math.max(10, gh * gh / totalH);
-            int thumbY = gy + (int) ((long) gridScrollPx * (gh - thumbH) / maxScroll);
-            // track
-            g.fill(tx, gy, tx + SCROLLBAR_W, gy + gh, ShopColors.BORDER_DEFAULT & 0x4DFFFFFF);
-            // thumb
-            g.fill(tx + 1, thumbY, tx + SCROLLBAR_W - 1, thumbY + thumbH, ShopColors.TEXT_SECONDARY);
+        for (int index = 0; index < filteredItems.size(); index++) {
+            int row = index / columns;
+            if (row < gridScrollRows || row >= gridScrollRows + visibleRows) {
+                continue;
+            }
+            int visibleRow = row - gridScrollRows;
+            int col = index % columns;
+            int cardX = contentX + col * (cardW + gap);
+            int cardY = contentY + visibleRow * (cardH + gap);
+            renderItemCard(graphics, filteredItems.get(index), cardX, cardY, cardW, cardH, mouseX, mouseY);
         }
     }
 
-    // ── Single item card ──────────────────────────────────────────────────────
+    private void renderItemCard(GuiGraphics graphics, CatalogItem item, int x, int y, int width, int height, int mouseX, int mouseY) {
+        boolean hovered = mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height;
+        boolean outOfStock = !item.unlimited() && item.stock() <= 0;
+        int borderColor = hovered ? ShopColors.ACCENT_CYAN : ShopColors.BORDER_DEFAULT;
+        ShopUiUtil.renderPanel(graphics, x, y, width, height,
+                hovered ? ShopColors.BG_CARD_HOVER : ShopColors.BG_PANEL, borderColor);
 
-    private void renderItemCard(GuiGraphics g, CatalogItem item, int x, int y, int mx, int my) {
-        boolean hovered    = mx >= x && mx < x + CARD_W && my >= y && my < y + CARD_H;
-        boolean outOfStock = !item.unlimited() && item.stock() == 0;
+        // Item icon
+        ShopUiUtil.renderItemIcon(graphics, this.font, item.itemId(), x + (width - 16) / 2, y + 6);
 
-        // Background + border
-        int bg     = (hovered && !outOfStock) ? ShopColors.BG_CARD_HOVER : ShopColors.BG_CARD;
-        int border = (hovered && !outOfStock) ? ShopColors.BORDER_ACCENT  : ShopColors.BORDER_DEFAULT;
-        g.fill(x, y, x + CARD_W, y + CARD_H, bg);
-        ShopUiUtil.drawBorder(g, x, y, CARD_W, CARD_H, border);
+        // Name — truncated to fit
+        String name = this.font.plainSubstrByWidth(item.displayName(), width - 8);
+        graphics.drawCenteredString(this.font, name, x + width / 2, y + 28, ShopColors.TEXT_PRIMARY);
 
-        // Barter left-strip (spec §5.4)
-        if (item.hasBarterRecipes()) {
-            g.fill(x, y, x + 2, y + CARD_H, ShopColors.BTN_BARTER);
-        }
-
-        // ── Item icon (top 28 px, centred) ────────────────────────────────
-        int iconX = x + (CARD_W - 16) / 2;
-        int iconY = y + 6;
-        ShopUiUtil.renderItemIcon(g, this.font, item.itemId(), iconX, iconY);
-
-        // ── Item name (0.85×, below icon, truncated) ─────────────────────
-        int maxNameW = (int) ((CARD_W - 4) / 0.85f);
-        String name  = this.font.plainSubstrByWidth(item.displayName(), maxNameW);
-        g.pose().pushPose();
-        g.pose().translate(x + 2f, y + 28f, 0f);
-        g.pose().scale(0.85f, 0.85f, 1f);
-        g.drawString(this.font, name, 0, 0, ShopColors.TEXT_PRIMARY, false);
-        g.pose().popPose();
-
-        // ── Price row (bottom 14 px) ──────────────────────────────────────
-        int priceY = y + CARD_H - 13;
+        // Price
         long price = item.hasPromo() ? item.promoPrice() : item.buyPrice();
         String priceStr = ShopUiUtil.formatMinorUnits(price);
+        graphics.drawCenteredString(this.font, "§a" + priceStr, x + width / 2, y + 42, ShopColors.TEXT_PRICE);
 
-        // 4×4 gold coin indicator
-        g.fill(x + 2, priceY + 1, x + 6, priceY + 5, ShopColors.ACCENT_GOLD);
+        // Stock line — truncated
+        String stockStr = item.unlimited() ? "∞ Stock" : item.stock() + " left";
+        graphics.drawCenteredString(this.font, stockStr, x + width / 2, y + 56,
+                outOfStock ? ShopColors.ERROR : ShopColors.TEXT_SECONDARY);
 
-        g.pose().pushPose();
-        g.pose().translate(x + 8f, priceY + 0.5f, 0f);
-        g.pose().scale(0.85f, 0.85f, 1f);
-        g.drawString(this.font, priceStr, 0, 0, ShopColors.TEXT_PRICE, false);
-        g.pose().popPose();
-
-        // ── Sale badge (top-right corner, spec §5.4) ──────────────────────
+        // Animated discount badge
         if (item.hasPromo()) {
-            int promoPercent = ShopUiUtil.computePromoPercent(item.buyPrice(), item.promoPrice());
-            if (promoPercent > 0) {
-                promoBadgeOverlays.add(new PromoBadgeOverlay(x, y, promoPercent));
+            int percent = ShopUiUtil.computePromoPercent(item.buyPrice(), item.promoPrice());
+            if (percent > 0) {
+                ShopUiUtil.renderAnimatedDiscountBadge(graphics, this.font, x + width - 6, y + 8, "-" + percent + "%");
             }
+        } else if (item.hasBarterRecipes()) {
+            ShopUiUtil.drawChip(graphics, this.font, x + width - 44, y + height - 14, "⚒ Barter",
+                    ShopColors.BG_PANEL, ShopColors.TEXT_BARTER, ShopColors.TEXT_BARTER);
         }
 
-        List<CatalogBarterRecipe> recipes = ShopClientState.getBarterRecipesForItem(item.itemId());
-        int recipeCount = recipes.size();
-        if (recipeCount > 0) {
-            int badgeX1 = x + 1;
-            int badgeY1 = y + 1;
-            int badgeX2 = x + 20;
-            int badgeY2 = y + 9;
-            g.fill(badgeX1, badgeY1, badgeX2, badgeY2, (ShopColors.BTN_BARTER & 0x00FFFFFF) | 0xCC000000);
-            g.drawString(this.font, "B" + recipeCount, x + 4, y + 2, ShopColors.TEXT_PRIMARY, false);
-
-            boolean badgeHovered = mx >= badgeX1 && mx < badgeX2 && my >= badgeY1 && my < badgeY2;
-            if (badgeHovered) {
-                barterBadgeTooltip = List.of(
-                        Component.translatable("gui.futureshops.shop.badge.barter.tooltip.title", recipeCount),
-                        ShopUiUtil.buildFirstIngredientSummary(recipes));
+        // Tooltip on hover
+        if (hovered && !outOfStock) {
+            List<Component> lines = new ArrayList<>();
+            lines.add(Component.literal("§f" + item.displayName()));
+            if (item.hasPromo()) {
+                lines.add(Component.literal("§cPromo: " + ShopUiUtil.formatMinorUnits(item.promoPrice())));
             }
+            List<CatalogBarterRecipe> recipes = ShopClientState.getBarterRecipesForItem(item.itemId());
+            if (!recipes.isEmpty()) {
+                lines.add(ShopUiUtil.buildFirstIngredientSummary(recipes));
+            }
+            tooltipLines = lines;
         }
 
-        // ── 3 px promo strip at very bottom ──────────────────────────────
-        if (item.hasPromo()) {
-            g.fill(x, y + CARD_H - 3, x + CARD_W, y + CARD_H, ShopColors.PROMO_BANNER);
-        }
-
-        // ── Out-of-stock overlay ──────────────────────────────────────────
+        // Out of stock overlay
         if (outOfStock) {
-            g.fill(x, y, x + CARD_W, y + CARD_H, 0x99000000);
-            g.drawCenteredString(this.font, "OUT", x + CARD_W / 2, y + CARD_H / 2 - 4, ShopColors.ERROR);
+            graphics.fill(x, y, x + width, y + height, 0x88000000);
+            graphics.drawCenteredString(this.font, "§cSold Out", x + width / 2, y + height / 2 - 4, ShopColors.ERROR);
         }
     }
 
-    // ── Inventory / balance strip ─────────────────────────────────────────────
+    private void renderStrip(GuiGraphics graphics) {
+        int x = guiLeft + 8;
+        int y = guiTop + guiH - footerH - stripH - 2;
+        int w = guiW - 16;
+        ShopUiUtil.renderPanel(graphics, x, y, w, stripH, ShopColors.BG_CARD, ShopColors.BORDER_DEFAULT);
 
-    private void renderInventoryStrip(GuiGraphics g) {
-        int sx = guiLeft + SIDEBAR_W;
-        int sy = guiTop  + HEADER_H + 1 + GRID_H;
-        int sw = RIGHT_W;
+        // Balance with coin icon
+        String balance = "§6⛃ §a" + ShopUiUtil.formatMinorUnits(ShopClientState.getCurrentBalanceMinorUnits());
+        graphics.drawString(this.font, balance, x + 8, y + 9, ShopColors.TEXT_PRICE, false);
 
-        g.fill(sx, sy, sx + sw, sy + STRIP_H, ShopColors.BG_CARD);
-        g.fill(sx, sy, sx + sw, sy + 1,       ShopColors.BORDER_DEFAULT);
+        // Item count & cart info — truncated
+        String info = filteredItems.size() + " items • " + ShopClientState.getCartTotalQuantity() + " in cart";
+        String clipped = this.font.plainSubstrByWidth(info, w / 3);
+        graphics.drawString(this.font, clipped, x + w - this.font.width(clipped) - 8, y + 9, ShopColors.TEXT_SECONDARY, false);
 
-        // Balance (left)
-        long   bal     = ShopClientState.getCurrentBalanceMinorUnits();
-        String balStr  = ShopUiUtil.formatMinorUnits(bal);
-        g.fill(sx + 4, sy + STRIP_H / 2 - 2, sx + 8, sy + STRIP_H / 2 + 2, ShopColors.ACCENT_GOLD);
-        g.drawString(this.font, balStr, sx + 11, sy + (STRIP_H - 8) / 2, ShopColors.TEXT_PRICE, true);
+        // Status panel in middle
+        ShopUiUtil.renderStatusPanel(graphics, this.font, x + 160, y + 4, Math.max(80, w - 320));
+    }
 
-        // Page info (right)
-        int total = filteredItems.size();
-        if (total > 0) {
-            int visRows  = GRID_H / (CARD_H + CARD_GAP);
-            int startRow = gridScrollPx / (CARD_H + CARD_GAP);
-            int fromIdx  = startRow * CARDS_PER_ROW + 1;
-            int toIdx    = Math.min(total, (startRow + visRows) * CARDS_PER_ROW);
-            String info  = fromIdx + "–" + toIdx + " of " + total;
-            int iw       = this.font.width(info);
-            g.drawString(this.font, info, sx + sw - iw - 4, sy + (STRIP_H - 8) / 2, ShopColors.TEXT_SECONDARY, false);
+    private void renderFooter(GuiGraphics graphics, int mouseX, int mouseY) {
+        int x = guiLeft + 8;
+        int y = guiTop + guiH - footerH;
+        int w = guiW - 16;
+        ShopUiUtil.renderPanel(graphics, x, y, w, footerH - 4, ShopColors.BG_CARD, ShopColors.BORDER_DEFAULT);
+
+        // Help text
+        String footerText = barterMode ? "§d⚒ Barter mode active" : "§7Left click for details • Right click to quick-add";
+        String clippedFooter = this.font.plainSubstrByWidth(footerText, w - 120);
+        graphics.drawString(this.font, clippedFooter, x + 10, y + 6, ShopColors.TEXT_SECONDARY, false);
+
+        // ═══ Profile button (bottom right) ═══
+        int profileW = 108;
+        int profileH = footerH - 8;
+        int profileX = x + w - profileW - 4;
+        int profileY = y + 2;
+        boolean profileHovered = mouseX >= profileX && mouseX <= profileX + profileW && mouseY >= profileY && mouseY <= profileY + profileH;
+
+        ShopUiUtil.renderPanel(graphics, profileX, profileY, profileW, profileH,
+                profileHovered ? ShopColors.BG_CARD_HOVER : ShopColors.PROFILE_BG,
+                profileHovered ? ShopColors.ACCENT_CYAN : ShopColors.PROFILE_BORDER);
+
+        // Player head
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null) {
+            ShopUiUtil.renderPlayerFace(graphics, mc.player.getUUID(), profileX + 3, profileY + 3, profileH - 6);
+            // Player name — truncated
+            String playerName = this.font.plainSubstrByWidth(mc.player.getGameProfile().getName(), profileW - profileH - 10);
+            graphics.drawString(this.font, playerName, profileX + profileH, profileY + 3, ShopColors.TEXT_PRIMARY, false);
+            // Balance
+            String bal = "§a" + ShopUiUtil.formatMinorUnits(ShopClientState.getCurrentBalanceMinorUnits());
+            String clippedBal = this.font.plainSubstrByWidth(bal, profileW - profileH - 10);
+            graphics.drawString(this.font, clippedBal, profileX + profileH, profileY + 14, ShopColors.TEXT_PRICE, false);
         }
     }
-
-    // ── Footer bar ────────────────────────────────────────────────────────────
-
-    private void renderFooter(GuiGraphics g) {
-        int fx = guiLeft;
-        int fy = guiTop + GUI_H - FOOTER_H;
-        g.fill(fx, fy, fx + GUI_W, fy + FOOTER_H, ShopColors.BG_CARD);
-        g.fill(fx, fy, fx + GUI_W, fy + 1, ShopColors.BORDER_DEFAULT);
-
-        String mode = barterMode ? "▸ BARTER MODE" : "▸ BUY MODE";
-        g.drawCenteredString(this.font, mode, fx + GUI_W / 2, fy + 2, ShopColors.TEXT_SECONDARY);
-    }
-
-    // ─── Input handling ───────────────────────────────────────────────────────
 
     @Override
-    public boolean mouseScrolled(double mx, double my, double delta) {
-        // Grid scrolling
-        int gx = guiLeft + SIDEBAR_W;
-        int gy = guiTop  + HEADER_H + 1;
-        if (mx >= gx && mx < gx + GRID_CONTENT_W && my >= gy && my < gy + GRID_H) {
-            gridScrollPx -= (int) (delta * (CARD_H + CARD_GAP));
-            return true;
-        }
-        // Sidebar scrolling
-        if (mx >= guiLeft && mx < guiLeft + SIDEBAR_W && my >= guiTop + HEADER_H + 1) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        int sidebarX = guiLeft + 8;
+        int contentY = guiTop + headerH + 2;
+        int contentH = guiH - headerH - stripH - footerH - 14;
+        if (mouseX >= sidebarX && mouseX <= sidebarX + sidebarW && mouseY >= contentY && mouseY <= contentY + contentH) {
             sidebarScrollIdx = Math.max(0, sidebarScrollIdx - (int) delta);
             return true;
         }
-        return super.mouseScrolled(mx, my, delta);
+        int gridX = guiLeft + sidebarW + 16;
+        int gridW = guiW - sidebarW - 24;
+        if (mouseX >= gridX && mouseX <= gridX + gridW && mouseY >= contentY && mouseY <= contentY + contentH) {
+            gridScrollRows = Math.max(0, gridScrollRows - (int) delta);
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
     @Override
-    public boolean mouseClicked(double mx, double my, int btn) {
-        // Sidebar tab click
-        int sx   = guiLeft;
-        int sy   = guiTop + HEADER_H + 1;
-        int sw   = SIDEBAR_W - 1;
-        int sh   = GUI_H - HEADER_H - FOOTER_H - 1;
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // ═══ Profile button click ═══
+        int footerX = guiLeft + 8;
+        int footerY = guiTop + guiH - footerH;
+        int footerW = guiW - 16;
+        int profileW = 108;
+        int profileH = footerH - 8;
+        int profileX = footerX + footerW - profileW - 4;
+        int profileY = footerY + 2;
+        if (mouseX >= profileX && mouseX <= profileX + profileW && mouseY >= profileY && mouseY <= profileY + profileH) {
+            ShopPackets.CHANNEL.sendToServer(new C2SOpenBalanceUiPacket());
+            return true;
+        }
 
-        if (mx >= sx + 1 && mx < sx + sw) {
+        // Sidebar clicks
+        int sidebarX = guiLeft + 8;
+        int sidebarY = guiTop + headerH + 2;
+        int sidebarH = guiH - headerH - stripH - footerH - 14;
+        if (mouseX >= sidebarX && mouseX <= sidebarX + sidebarW && mouseY >= sidebarY + 22 && mouseY <= sidebarY + sidebarH) {
             List<CatalogCategory> cats = ShopClientState.getCatalogCategories();
-            int tabCount  = cats.size() + 1 + (hasBarterTab() ? 1 : 0);
-            int tabH = 20, tabGap = 2;
-            int maxVis    = sh / (tabH + tabGap);
-            int start     = Math.max(0, Math.min(sidebarScrollIdx, tabCount - maxVis));
-            int tabY      = sy + 2;
-            for (int i = start; i < tabCount && tabY + tabH <= sy + sh - 2; i++) {
-                if (my >= tabY && my < tabY + tabH) {
+            int tabCount = cats.size() + 1 + (hasBarterTab() ? 1 : 0);
+            int tabHeight = 18;
+            int maxVisible = Math.max(1, (sidebarH - 24) / tabHeight);
+            for (int i = sidebarScrollIdx; i < tabCount && i < sidebarScrollIdx + maxVisible; i++) {
+                int y = sidebarY + 22 + (i - sidebarScrollIdx) * tabHeight;
+                if (mouseY >= y && mouseY <= y + tabHeight - 2) {
                     selectedCategoryIdx = i;
                     if (isBarterTabIndex(i, cats.size())) {
                         barterMode = true;
-                        modeBtn.setMessage(Component.literal("Barter"));
+                        modeBtn.setMessage(Component.literal("§d⚒ Barter"));
                     }
-                    gridScrollPx = 0;
+                    gridScrollRows = 0;
                     rebuildFilteredItems();
                     return true;
                 }
-                tabY += tabH + tabGap;
             }
         }
 
-        // Item card click (left-click = detail, right-click = quick add to cart)
-        int gx = guiLeft + SIDEBAR_W;
-        int gy = guiTop  + HEADER_H + 1;
-        int gw = GRID_CONTENT_W;
-        int gh = GRID_H;
+        // Grid clicks
+        int gridX = guiLeft + sidebarW + 16;
+        int gridY = guiTop + headerH + 2;
+        int gridW = guiW - sidebarW - 24;
+        int gridH = guiH - headerH - stripH - footerH - 14;
+        int contentX = gridX + 8;
+        int contentY = gridY + 8;
+        int contentW = gridW - 16;
+        int contentH = gridH - 16;
+        int gap = 6;
+        int columns = Math.max(2, Math.min(5, (contentW + gap) / 88));
+        int cardW = Math.max(76, Math.min(100, (contentW - gap * (columns - 1)) / columns));
+        int cardH = 82;
+        int visibleRows = Math.max(1, (contentH + gap) / (cardH + gap));
 
-        if (mx >= gx && mx < gx + gw && my >= gy && my < gy + gh) {
-            int baseX = gx + GRID_PAD_X;
-            int baseY = gy + 2 - gridScrollPx;
-            for (int i = 0; i < filteredItems.size(); i++) {
-                int col = i % CARDS_PER_ROW;
-                int row = i / CARDS_PER_ROW;
-                int cx  = baseX + col * (CARD_W + CARD_GAP);
-                int cy  = baseY + row * (CARD_H + CARD_GAP);
-                if (mx >= cx && mx < cx + CARD_W && my >= cy && my < cy + CARD_H) {
-                    CatalogItem selectedItem = filteredItems.get(i);
-                    if (btn == 0) {
-                        Minecraft.getInstance().setScreen(new ItemDetailScreen(this, selectedItem.itemId()));
-                    } else if (btn == 1 && selectedItem.buyPrice() > 0L) {
-                        ShopClientState.addToCart(selectedItem.itemId(), 1);
+        if (mouseX >= gridX && mouseX <= gridX + gridW && mouseY >= gridY && mouseY <= gridY + gridH) {
+            for (int index = 0; index < filteredItems.size(); index++) {
+                int row = index / columns;
+                if (row < gridScrollRows || row >= gridScrollRows + visibleRows) {
+                    continue;
+                }
+                int visibleRow = row - gridScrollRows;
+                int col = index % columns;
+                int x = contentX + col * (cardW + gap);
+                int y = contentY + visibleRow * (cardH + gap);
+                if (mouseX >= x && mouseX <= x + cardW && mouseY >= y && mouseY <= y + cardH) {
+                    CatalogItem item = filteredItems.get(index);
+                    if (button == 0) {
+                        Minecraft.getInstance().setScreen(new ItemDetailScreen(this, item.itemId()));
+                    } else if (button == 1 && item.buyPrice() > 0L) {
+                        ShopClientState.addToCart(item.itemId(), 1);
                     }
                     return true;
                 }
             }
         }
-
-        return super.mouseClicked(mx, my, btn);
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
@@ -535,44 +452,31 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
     }
 
     private boolean isBarterTabSelected() {
-        int categoryCount = ShopClientState.getCatalogCategories().size();
-        return hasBarterTab() && isBarterTabIndex(selectedCategoryIdx, categoryCount);
+        return hasBarterTab() && isBarterTabIndex(selectedCategoryIdx, ShopClientState.getCatalogCategories().size());
     }
 
     private boolean isBarterTabIndex(int index, int categoryCount) {
         return hasBarterTab() && index == categoryCount + 1;
     }
 
-    private void renderPromoBadgeOverlays(GuiGraphics g) {
-        if (promoBadgeOverlays.isEmpty()) {
-            return;
+    private String labelForTab(int index, int categoryCount) {
+        if (index == 0) {
+            return "All";
         }
-
-        int gx = guiLeft + SIDEBAR_W;
-        int gy = guiTop + HEADER_H + 1;
-        g.enableScissor(gx, gy, gx + GRID_CONTENT_W, gy + GRID_H);
-        for (PromoBadgeOverlay badge : promoBadgeOverlays) {
-            float pulse = 1.0f + 0.08f * (float) Math.sin((System.currentTimeMillis() + badge.x() * 11L) / 170.0d);
-            g.pose().pushPose();
-            g.pose().translate(badge.x() + CARD_W - 2f, badge.y() + 4f, 300f);
-            g.pose().mulPose(Axis.ZP.rotationDegrees(45f));
-            g.pose().scale(pulse, pulse, 1f);
-            g.fill(-16, -5, 16, 5, 0xF0D31728);
-            g.drawString(this.font, "-" + badge.percentOff() + "%", -13, -4, ShopColors.PROMO_TEXT, false);
-            g.pose().popPose();
+        if (isBarterTabIndex(index, categoryCount)) {
+            return "⚒ Barter";
         }
-        g.disableScissor();
+        return ShopClientState.getCatalogCategories().get(index - 1).displayName();
     }
 
     private String prettyName(String raw) {
         if (raw == null || raw.isBlank()) {
             return "Server Shop";
         }
-        String normalized = raw.replace('_', ' ').replace('-', ' ').trim();
-        String[] parts = normalized.split("\\s+");
+        String[] parts = raw.replace('_', ' ').replace('-', ' ').split("\\s+");
         StringBuilder builder = new StringBuilder();
         for (String part : parts) {
-            if (part.isEmpty()) {
+            if (part.isBlank()) {
                 continue;
             }
             if (!builder.isEmpty()) {
@@ -580,17 +484,9 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
             }
             builder.append(Character.toUpperCase(part.charAt(0)));
             if (part.length() > 1) {
-                builder.append(part.substring(1).toLowerCase(java.util.Locale.ROOT));
+                builder.append(part.substring(1).toLowerCase(Locale.ROOT));
             }
         }
         return builder.isEmpty() ? "Server Shop" : builder.toString();
     }
-
-    private record PromoBadgeOverlay(int x, int y, int percentOff) {
-    }
-
-    // ─── Rendering helpers ────────────────────────────────────────────────────
 }
-
-
-

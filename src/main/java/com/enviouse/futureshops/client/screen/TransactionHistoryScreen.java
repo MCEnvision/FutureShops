@@ -19,26 +19,23 @@ import java.util.List;
 import java.util.Map;
 
 public class TransactionHistoryScreen extends Screen implements ShopScreenMarker {
-    private static final int GUI_W = 260;
-    private static final int GUI_H = 200;
     private static final int PAGE_SIZE = 10;
-
     private static final DateTimeFormatter TS_FORMAT =
             DateTimeFormatter.ofPattern("MM-dd HH:mm").withZone(ZoneId.systemDefault());
 
     private final Screen parent;
+    private final Map<TransactionHistoryEntry.HistoryFilter, Button> filterButtons =
+            new EnumMap<>(TransactionHistoryEntry.HistoryFilter.class);
 
     private int guiLeft;
     private int guiTop;
+    private int guiW;
+    private int guiH;
     private int page = 1;
     private int totalPages = 1;
     private TransactionHistoryEntry.HistoryFilter activeFilter = TransactionHistoryEntry.HistoryFilter.ALL;
     private TransactionHistoryEntry.SortOrder sortOrder = TransactionHistoryEntry.SortOrder.NEWEST;
     private TransactionHistoryEntry.TimeWindow timeWindow = TransactionHistoryEntry.TimeWindow.ALL;
-
-    private final Map<TransactionHistoryEntry.HistoryFilter, Button> filterButtons =
-            new EnumMap<>(TransactionHistoryEntry.HistoryFilter.class);
-
     private EditBox searchBox;
 
     public TransactionHistoryScreen(Screen parent) {
@@ -48,16 +45,30 @@ public class TransactionHistoryScreen extends Screen implements ShopScreenMarker
 
     @Override
     protected void init() {
-        guiLeft = (this.width - GUI_W) / 2;
-        guiTop = (this.height - GUI_H) / 2;
+        guiW = Math.min(520, Math.max(360, this.width - 24));
+        guiH = Math.min(320, Math.max(240, this.height - 24));
+        guiLeft = (this.width - guiW) / 2;
+        guiTop = (this.height - guiH) / 2;
 
-        addRenderableWidget(Button.builder(Component.literal("<-"), button -> onClose())
-                .bounds(guiLeft + 6, guiTop + 6, 18, 16)
+        addRenderableWidget(Button.builder(Component.literal("Back"), button -> onClose())
+                .bounds(guiLeft + 10, guiTop + guiH - 24, 48, 18)
+                .build());
+        addRenderableWidget(Button.builder(Component.literal("<"), button -> {
+                    page = Math.max(1, page - 1);
+                    requestPage();
+                })
+                .bounds(guiLeft + guiW - 104, guiTop + guiH - 24, 18, 18)
+                .build());
+        addRenderableWidget(Button.builder(Component.literal(">"), button -> {
+                    page = Math.min(totalPages, page + 1);
+                    requestPage();
+                })
+                .bounds(guiLeft + guiW - 82, guiTop + guiH - 24, 18, 18)
                 .build());
 
-        searchBox = new EditBox(this.font, guiLeft + 30, guiTop + 8, 110, 14,
+        searchBox = new EditBox(this.font, guiLeft + 10, guiTop + 34, Math.max(120, guiW - 304), 18,
                 Component.translatable("gui.futureshops.shop.search"));
-        searchBox.setMaxLength(30);
+        searchBox.setMaxLength(32);
         searchBox.setResponder(ignored -> {
             page = 1;
             requestPage();
@@ -72,9 +83,8 @@ public class TransactionHistoryScreen extends Screen implements ShopScreenMarker
                     page = 1;
                     requestPage();
                 })
-                .bounds(guiLeft + 144, guiTop + 8, 54, 14)
+                .bounds(guiLeft + guiW - 186, guiTop + 34, 84, 18)
                 .build());
-
         addRenderableWidget(Button.builder(windowLabel(), button -> {
                     timeWindow = switch (timeWindow) {
                         case ALL -> TransactionHistoryEntry.TimeWindow.DAY;
@@ -86,70 +96,77 @@ public class TransactionHistoryScreen extends Screen implements ShopScreenMarker
                     page = 1;
                     requestPage();
                 })
-                .bounds(guiLeft + 202, guiTop + 8, 52, 14)
+                .bounds(guiLeft + guiW - 96, guiTop + 34, 78, 18)
                 .build());
 
-        addRenderableWidget(Button.builder(Component.literal("<"), button -> {
-                    page = Math.max(1, page - 1);
-                    requestPage();
-                })
-                .bounds(guiLeft + 80, guiTop + GUI_H - 20, 16, 14)
-                .build());
-        addRenderableWidget(Button.builder(Component.literal(">"), button -> {
-                    page = Math.min(totalPages, page + 1);
-                    requestPage();
-                })
-                .bounds(guiLeft + GUI_W - 96, guiTop + GUI_H - 20, 16, 14)
-                .build());
-
-        addFilterButton(TransactionHistoryEntry.HistoryFilter.ALL, "gui.futureshops.history.filter.all", guiLeft + 30);
-        addFilterButton(TransactionHistoryEntry.HistoryFilter.BUY, "gui.futureshops.history.filter.buy", guiLeft + 88);
-        addFilterButton(TransactionHistoryEntry.HistoryFilter.SELL, "gui.futureshops.history.filter.sell", guiLeft + 146);
-        addFilterButton(TransactionHistoryEntry.HistoryFilter.BARTER, "gui.futureshops.history.filter.barter", guiLeft + 204);
+        int buttonX = guiLeft + 10;
+        for (TransactionHistoryEntry.HistoryFilter filter : TransactionHistoryEntry.HistoryFilter.values()) {
+            Button button = Button.builder(Component.translatable(labelKey(filter)), ignored -> {
+                        activeFilter = filter;
+                        page = 1;
+                        refreshFilterButtons();
+                        requestPage();
+                    })
+                    .bounds(buttonX, guiTop + 60, 70, 18)
+                    .build();
+            filterButtons.put(filter, button);
+            addRenderableWidget(button);
+            buttonX += 74;
+        }
         refreshFilterButtons();
-
         requestPage();
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        graphics.fill(0, 0, this.width, this.height, 0x88000000);
-        graphics.fill(guiLeft, guiTop, guiLeft + GUI_W, guiTop + GUI_H, ShopColors.BG_PANEL);
-        ShopUiUtil.drawBorder(graphics, guiLeft, guiTop, GUI_W, GUI_H, ShopColors.BORDER_DEFAULT);
+        graphics.fill(0, 0, this.width, this.height, ShopColors.BG_PRIMARY);
+        ShopUiUtil.renderPanel(graphics, guiLeft, guiTop, guiW, guiH, ShopColors.BG_PANEL, ShopColors.BORDER_DEFAULT);
+        renderHeader(graphics);
+        renderRows(graphics);
+        renderFooter(graphics);
+        super.render(graphics, mouseX, mouseY, partialTick);
+    }
 
-        graphics.drawCenteredString(this.font, this.title, guiLeft + GUI_W / 2, guiTop + 28, ShopColors.TEXT_PRIMARY);
-        graphics.drawString(this.font, Component.translatable("gui.futureshops.history.filter.label"),
-                guiLeft + 30, guiTop + 46, ShopColors.TEXT_SECONDARY, false);
+    private void renderHeader(GuiGraphics graphics) {
+        graphics.drawString(this.font, this.title, guiLeft + 10, guiTop + 16, ShopColors.TEXT_PRIMARY, false);
+        graphics.drawString(this.font, "Filter, search, and inspect every buy, sell, and barter event.", guiLeft + 10, guiTop + 26, ShopColors.TEXT_SECONDARY, false);
+    }
+
+    private void renderRows(GuiGraphics graphics) {
+        int tableX = guiLeft + 10;
+        int tableY = guiTop + 90;
+        int tableW = guiW - 20;
+        int tableH = guiH - 126;
+        ShopUiUtil.renderPanel(graphics, tableX, tableY, tableW, tableH, ShopColors.BG_CARD, ShopColors.BORDER_DEFAULT);
+        graphics.drawString(this.font, "Type", tableX + 10, tableY + 8, ShopColors.TEXT_SECONDARY, false);
+        graphics.drawString(this.font, "Item", tableX + 74, tableY + 8, ShopColors.TEXT_SECONDARY, false);
+        graphics.drawString(this.font, "Qty", tableX + tableW - 168, tableY + 8, ShopColors.TEXT_SECONDARY, false);
+        graphics.drawString(this.font, "Value", tableX + tableW - 118, tableY + 8, ShopColors.TEXT_SECONDARY, false);
+        graphics.drawString(this.font, "When", tableX + tableW - 58, tableY + 8, ShopColors.TEXT_SECONDARY, false);
 
         List<TransactionHistoryEntry> entries = ShopClientState.getTransactionHistory();
         if (entries.isEmpty()) {
-            graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.history.empty"),
-                    guiLeft + GUI_W / 2, guiTop + 105, ShopColors.TEXT_SECONDARY);
-        } else {
-            int rowY = guiTop + 62;
-            for (int i = 0; i < Math.min(entries.size(), 6); i++) {
-                TransactionHistoryEntry entry = entries.get(i);
-                int y = rowY + i * 20;
-                int bg = i % 2 == 0 ? ShopColors.BG_CARD : ShopColors.BG_PANEL;
-                graphics.fill(guiLeft + 6, y, guiLeft + GUI_W - 6, y + 18, bg);
-                ShopUiUtil.drawBorder(graphics, guiLeft + 6, y, GUI_W - 12, 18, ShopColors.BORDER_DEFAULT);
-
-                String left = entry.type() + " " + ShopUiUtil.getItemDisplayName(entry.itemId()) + " x" + entry.quantity();
-                String right = entry.totalMinorUnits() > 0L ? ShopUiUtil.formatMinorUnits(entry.totalMinorUnits()) : "-";
-                graphics.drawString(this.font, this.font.plainSubstrByWidth(left, 152), guiLeft + 10, y + 5, ShopColors.TEXT_PRIMARY, false);
-                graphics.drawString(this.font, right, guiLeft + 168, y + 5,
-                        entry.type().equals("SELL") ? ShopColors.SUCCESS : ShopColors.TEXT_PRICE, false);
-
-                String ts = TS_FORMAT.format(Instant.ofEpochSecond(entry.timestampEpochSeconds()));
-                graphics.drawString(this.font, ts, guiLeft + GUI_W - 52, y + 5, ShopColors.TEXT_SECONDARY, false);
-            }
+            graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.history.empty"), tableX + tableW / 2, tableY + tableH / 2 - 8, ShopColors.TEXT_SECONDARY);
+            return;
         }
 
-        graphics.drawCenteredString(this.font,
-                Component.translatable("gui.futureshops.history.page", page, totalPages),
-                guiLeft + GUI_W / 2, guiTop + GUI_H - 16, ShopColors.TEXT_SECONDARY);
+        int rowY = tableY + 26;
+        int rowH = 20;
+        int maxRows = Math.min(10, (tableH - 34) / rowH);
+        for (int i = 0; i < Math.min(entries.size(), maxRows); i++) {
+            TransactionHistoryEntry entry = entries.get(i);
+            int y = rowY + i * rowH;
+            graphics.fill(tableX + 8, y, tableX + tableW - 8, y + 18, i % 2 == 0 ? ShopColors.BG_PANEL : ShopColors.BG_CARD_HOVER);
+            graphics.drawString(this.font, entry.type(), tableX + 10, y + 5, colorForType(entry.type()), false);
+            graphics.drawString(this.font, this.font.plainSubstrByWidth(ShopUiUtil.getItemDisplayName(entry.itemId()), tableW - 250), tableX + 74, y + 5, ShopColors.TEXT_PRIMARY, false);
+            graphics.drawString(this.font, Integer.toString(entry.quantity()), tableX + tableW - 168, y + 5, ShopColors.TEXT_SECONDARY, false);
+            graphics.drawString(this.font, entry.totalMinorUnits() > 0L ? ShopUiUtil.formatMinorUnits(entry.totalMinorUnits()) : "—", tableX + tableW - 118, y + 5, ShopColors.TEXT_PRICE, false);
+            graphics.drawString(this.font, TS_FORMAT.format(Instant.ofEpochSecond(entry.timestampEpochSeconds())), tableX + tableW - 58, y + 5, ShopColors.TEXT_SECONDARY, false);
+        }
+    }
 
-        super.render(graphics, mouseX, mouseY, partialTick);
+    private void renderFooter(GuiGraphics graphics) {
+        graphics.drawString(this.font, "Page " + page + " / " + totalPages, guiLeft + guiW - 168, guiTop + guiH - 20, ShopColors.TEXT_SECONDARY, false);
     }
 
     public boolean applyHistoryResponse(int responsePage, int responseTotalPages,
@@ -173,22 +190,6 @@ public class TransactionHistoryScreen extends Screen implements ShopScreenMarker
                 timeWindow));
     }
 
-    private void addFilterButton(TransactionHistoryEntry.HistoryFilter filter, String labelKey, int x) {
-        Button button = Button.builder(Component.translatable(labelKey), ignored -> {
-                    if (activeFilter == filter) {
-                        return;
-                    }
-                    activeFilter = filter;
-                    page = 1;
-                    refreshFilterButtons();
-                    requestPage();
-                })
-                .bounds(x, guiTop + 44, 54, 14)
-                .build();
-        filterButtons.put(filter, button);
-        addRenderableWidget(button);
-    }
-
     private void refreshFilterButtons() {
         filterButtons.forEach((filter, button) -> button.active = filter != activeFilter);
     }
@@ -199,11 +200,29 @@ public class TransactionHistoryScreen extends Screen implements ShopScreenMarker
 
     private Component windowLabel() {
         return Component.literal(switch (timeWindow) {
-            case ALL -> "All";
+            case ALL -> "All time";
             case DAY -> "24h";
             case WEEK -> "7d";
             case MONTH -> "30d";
         });
+    }
+
+    private String labelKey(TransactionHistoryEntry.HistoryFilter filter) {
+        return switch (filter) {
+            case ALL -> "gui.futureshops.history.filter.all";
+            case BUY -> "gui.futureshops.history.filter.buy";
+            case SELL -> "gui.futureshops.history.filter.sell";
+            case BARTER -> "gui.futureshops.history.filter.barter";
+        };
+    }
+
+    private int colorForType(String type) {
+        return switch (type.toUpperCase()) {
+            case "BUY" -> ShopColors.TEXT_PRICE;
+            case "SELL" -> ShopColors.SUCCESS;
+            case "BARTER" -> ShopColors.TEXT_BARTER;
+            default -> ShopColors.TEXT_PRIMARY;
+        };
     }
 
     @Override

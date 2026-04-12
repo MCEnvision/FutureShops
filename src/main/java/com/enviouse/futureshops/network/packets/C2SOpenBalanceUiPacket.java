@@ -1,8 +1,6 @@
 package com.enviouse.futureshops.network.packets;
 
-import com.enviouse.futureshops.network.ShopPackets;
-import com.enviouse.futureshops.server.economy.BalanceManager;
-import com.enviouse.futureshops.server.economy.EconomyProvider;
+import com.enviouse.futureshops.server.shop.MarketplaceAnalyticsService;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
@@ -24,13 +22,10 @@ public record C2SOpenBalanceUiPacket() {
             if (player == null) {
                 return;
             }
-            EconomyProvider provider = BalanceManager.getProvider();
-            ShopPackets.sendToPlayer(player, new S2CBalanceUiPacket(
-                    provider.getBalance(player.getUUID()),
-                    provider.getCurrencyName(),
-                    provider.getDecimalPlaces()));
+            MarketplaceAnalyticsService.sendDashboard(player);
         });
         context.setPacketHandled(true);
     }
 }
+
 

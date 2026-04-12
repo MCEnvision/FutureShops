@@ -1,7 +1,6 @@
 package com.enviouse.futureshops.client;
 
 import com.enviouse.futureshops.client.screen.PlayerShopBlockScreen;
-import com.enviouse.futureshops.client.screen.CartScreen;
 import com.enviouse.futureshops.client.screen.BalTopOverviewScreen;
 import com.enviouse.futureshops.client.screen.BalanceOverviewScreen;
 import com.enviouse.futureshops.client.screen.ShopMainScreen;
@@ -43,9 +42,7 @@ public final class ShopClientPacketHandler {
                     packet.promos(),
                     packet.barterRecipes());
             ShopPackets.CHANNEL.sendToServer(new com.enviouse.futureshops.network.packets.C2SInventorySyncPacket(packet.shopId()));
-            if (!(mc.screen instanceof ShopScreenMarker)) {
-                mc.setScreen(new ShopMainScreen());
-            }
+            mc.setScreen(new ShopMainScreen());
         });
     }
 
@@ -62,16 +59,38 @@ public final class ShopClientPacketHandler {
     public static void handleBalanceUi(S2CBalanceUiPacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> mc.setScreen(new BalanceOverviewScreen(
+                packet.playerUuid(),
+                packet.playerName(),
                 packet.balanceMinorUnits(),
                 packet.currencyName(),
-                packet.currencyDecimals())));
+                packet.currencyDecimals(),
+                packet.totalRevenueMinor(),
+                packet.pendingSettlementMinor(),
+                packet.shopCount(),
+                packet.listingCount(),
+                packet.totalStock(),
+                packet.lowSupplyCount(),
+                packet.shopSummaries(),
+                packet.alerts())));
     }
 
     public static void handleBalTopUi(S2CBalTopUiPacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
             if (mc.screen instanceof BalTopOverviewScreen screen) {
-                screen.updatePage(packet.page(), packet.totalPages(), packet.entries());
+                screen.updatePage(
+                        packet.page(),
+                        packet.totalPages(),
+                        packet.entries(),
+                        packet.activityLeaderUuid(),
+                        packet.activityLeaderName(),
+                        packet.activityLeaderCount(),
+                        packet.topSellerUuid(),
+                        packet.topSellerName(),
+                        packet.topSellerCount(),
+                        packet.popularItemId(),
+                        packet.popularItemTrades(),
+                        packet.popularItemQuantity());
                 return;
             }
             mc.setScreen(new BalTopOverviewScreen(
@@ -79,7 +98,16 @@ public final class ShopClientPacketHandler {
                     packet.totalPages(),
                     packet.entries(),
                     packet.currencyName(),
-                    packet.currencyDecimals()));
+                    packet.currencyDecimals(),
+                    packet.activityLeaderUuid(),
+                    packet.activityLeaderName(),
+                    packet.activityLeaderCount(),
+                    packet.topSellerUuid(),
+                    packet.topSellerName(),
+                    packet.topSellerCount(),
+                    packet.popularItemId(),
+                    packet.popularItemTrades(),
+                    packet.popularItemQuantity()));
         });
     }
 
@@ -104,17 +132,16 @@ public final class ShopClientPacketHandler {
             PlayerShopClientState.apply(
                     packet.shopPos(),
                     packet.owner(),
+                    packet.ownerUuid(),
                     packet.ownerName(),
-                    packet.listedItemId(),
-                    packet.tradeMode(),
-                    packet.moneyPriceMinor(),
-                    packet.barterItemId(),
-                    packet.barterItemCount(),
-                    packet.stock(),
+                    packet.listings(),
                     packet.linked(),
                     packet.pendingSettlementMinor(),
                     packet.lifetimeRevenueMinor(),
-                    packet.recentRevenueRows());
+                    packet.recentRevenueRows(),
+                    packet.shopName(),
+                    packet.singleItemMode(),
+                    packet.barterStorageSame());
             if (!(mc.screen instanceof PlayerShopBlockScreen)) {
                 mc.setScreen(new PlayerShopBlockScreen());
             }

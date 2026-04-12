@@ -33,7 +33,7 @@ public final class CoinValidationService {
         }
 
         long denomination = coinData.getLong(CoinNbtKeys.DENOMINATION);
-        if (denomination <= 0L || denomination != ModItems.COIN_DENOMINATION_MINOR_UNITS) {
+        if (denomination <= 0L) {
             return CoinValidationResult.error("BAD_DENOMINATION");
         }
 

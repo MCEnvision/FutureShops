@@ -11,6 +11,7 @@ import com.enviouse.futureshops.network.packets.C2SOpenBalanceUiPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenShopPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopActionPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuyPacket;
+import com.enviouse.futureshops.network.packets.C2SPlayerShopConfigPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopPromoPacket;
 import com.enviouse.futureshops.network.packets.C2SSellRequestPacket;
 import com.enviouse.futureshops.network.packets.S2CBalTopUiPacket;
@@ -33,7 +34,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ShopPackets {
-    private static final String PROTOCOL_VERSION = "10";
+    private static final String PROTOCOL_VERSION = "12";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))
@@ -126,6 +127,12 @@ public final class ShopPackets {
             .decoder(C2SPlayerShopPromoPacket::decode)
             .encoder(C2SPlayerShopPromoPacket::encode)
             .consumerMainThread(C2SPlayerShopPromoPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SPlayerShopConfigPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SPlayerShopConfigPacket::decode)
+            .encoder(C2SPlayerShopConfigPacket::encode)
+            .consumerMainThread(C2SPlayerShopConfigPacket::handle)
             .add();
 
         CHANNEL.messageBuilder(S2CBuyResponsePacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)

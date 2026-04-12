@@ -73,5 +73,34 @@ public final class ShopColors {
     public static final int INVENTORY_HIGHLIGHT = 0x4455AA77;
     /** Storage link status indicator. */
     public static final int STORAGE_LINKED      = 0xFF8AB4FF;
-}
 
+    // ─── Modern UI Accents ────────────────────────────────────────────────────
+    /** Vibrant cyan accent for highlighted UI elements. */
+    public static final int ACCENT_CYAN         = 0xFF00E5FF;
+    /** Purple accent for special badges. */
+    public static final int ACCENT_PURPLE       = 0xFFBB86FC;
+    /** Orange accent for warnings/attention. */
+    public static final int ACCENT_ORANGE       = 0xFFFF9100;
+    /** Full red for discount badges. */
+    public static final int DISCOUNT_BG         = 0xFFFF1744;
+    /** White text on discount badges. */
+    public static final int DISCOUNT_TEXT        = 0xFFFFFFFF;
+    /** Profile panel background. */
+    public static final int PROFILE_BG          = 0xFF1A1A2E;
+    /** Profile panel border accent. */
+    public static final int PROFILE_BORDER      = 0xFF00E5FF;
+    /** Owner mode background tint. */
+    public static final int OWNER_BG            = 0xFF1A1A28;
+    /** Owner mode accent. */
+    public static final int OWNER_ACCENT        = 0xFFBB86FC;
+    /** Config panel background. */
+    public static final int CONFIG_BG           = 0xFF181828;
+    /** Active toggle on. */
+    public static final int TOGGLE_ON           = 0xFF00E676;
+    /** Active toggle off. */
+    public static final int TOGGLE_OFF          = 0xFF666666;
+    /** Gradient highlight for section headers. */
+    public static final int HEADER_GRADIENT_L   = 0xFF1A1A3E;
+    /** Gradient highlight end. */
+    public static final int HEADER_GRADIENT_R   = 0xFF0A0A1E;
+}

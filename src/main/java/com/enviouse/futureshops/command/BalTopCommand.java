@@ -3,9 +3,7 @@ package com.enviouse.futureshops.command;
 import com.enviouse.futureshops.server.economy.BalanceEntry;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
-import com.enviouse.futureshops.network.ShopPackets;
-import com.enviouse.futureshops.network.packets.S2CBalTopUiPacket;
-import com.enviouse.futureshops.data.BalanceTopEntry;
+import com.enviouse.futureshops.server.shop.MarketplaceAnalyticsService;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.commands.CommandSourceStack;
@@ -24,7 +22,7 @@ public final class BalTopCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("baltop")
-            .executes(context -> run(context.getSource(), 1))
+            .executes(context -> runUi(context.getSource(), 1))
             .then(Commands.literal("ui")
                 .executes(context -> runUi(context.getSource(), 1))
                 .then(Commands.argument("page", IntegerArgumentType.integer(1))
@@ -38,13 +36,7 @@ public final class BalTopCommand {
             source.sendFailure(EconomyCommandUtil.error(Component.translatable("command.futureshops.player_only")));
             return 0;
         }
-        EconomyProvider provider = BalanceManager.getProvider();
-        int safePage = Math.max(1, page);
-        List<BalanceTopEntry> rows = BalanceManager.getTopBalances(safePage, PAGE_SIZE).stream()
-                .map(entry -> new BalanceTopEntry(resolvePlayerName(player, entry.playerUUID()), entry.balanceMinorUnits()))
-                .toList();
-        int totalPages = rows.isEmpty() && safePage > 1 ? safePage : Math.max(1, safePage + (rows.size() == PAGE_SIZE ? 1 : 0));
-        ShopPackets.sendToPlayer(player, new S2CBalTopUiPacket(safePage, totalPages, rows, provider.getCurrencyName(), provider.getDecimalPlaces()));
+        MarketplaceAnalyticsService.sendLeaderboard(player, page);
         return 1;
     }
 

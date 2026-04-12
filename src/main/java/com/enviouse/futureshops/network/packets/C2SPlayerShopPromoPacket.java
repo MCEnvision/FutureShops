@@ -10,6 +10,7 @@ import java.util.function.Supplier;
 
 public record C2SPlayerShopPromoPacket(
         BlockPos shopPos,
+        int listingIndex,
         boolean clear,
         String promoType,
         double promoValue,
@@ -20,6 +21,7 @@ public record C2SPlayerShopPromoPacket(
         boolean flash) {
     public static void encode(C2SPlayerShopPromoPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.shopPos());
+        buffer.writeVarInt(packet.listingIndex());
         buffer.writeBoolean(packet.clear());
         buffer.writeUtf(packet.promoType());
         buffer.writeDouble(packet.promoValue());
@@ -33,6 +35,7 @@ public record C2SPlayerShopPromoPacket(
     public static C2SPlayerShopPromoPacket decode(FriendlyByteBuf buffer) {
         return new C2SPlayerShopPromoPacket(
                 buffer.readBlockPos(),
+                buffer.readVarInt(),
                 buffer.readBoolean(),
                 buffer.readUtf(),
                 buffer.readDouble(),
@@ -51,6 +54,7 @@ public record C2SPlayerShopPromoPacket(
                 PlayerShopBlockService.applyPromoAction(
                         player,
                         packet.shopPos(),
+                        packet.listingIndex(),
                         packet.clear(),
                         packet.promoType(),
                         packet.promoValue(),

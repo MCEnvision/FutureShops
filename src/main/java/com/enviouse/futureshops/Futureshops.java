@@ -3,6 +3,7 @@ package com.enviouse.futureshops;
 import com.enviouse.futureshops.catalog.ShopCatalog;
 import com.enviouse.futureshops.init.ModBlockEntities;
 import com.enviouse.futureshops.init.ModBlocks;
+import com.enviouse.futureshops.init.ModCreativeTabs;
 import com.enviouse.futureshops.init.ModItems;
 import com.enviouse.futureshops.coin.SpentMintsSavedData;
 import com.enviouse.futureshops.network.ShopPackets;
@@ -39,6 +40,7 @@ public class Futureshops {
         ModBlocks.BLOCKS.register(modEventBus);
         ModItems.ITEMS.register(modEventBus);
         ModBlockEntities.BLOCK_ENTITY_TYPES.register(modEventBus);
+        ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
 
         // Register ourselves for server and other game events we are interested in
         MinecraftForge.EVENT_BUS.register(this);

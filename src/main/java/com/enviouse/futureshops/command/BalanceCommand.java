@@ -3,6 +3,7 @@ package com.enviouse.futureshops.command;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
 import com.enviouse.futureshops.network.ShopPackets;
+import com.enviouse.futureshops.server.shop.MarketplaceAnalyticsService;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
@@ -28,7 +29,7 @@ public final class BalanceCommand {
                     return 0;
                 }
 
-                sendBalance(player, player);
+                MarketplaceAnalyticsService.sendDashboard(player);
                 return 1;
             })
             .then(Commands.literal("ui")
@@ -37,10 +38,7 @@ public final class BalanceCommand {
                         context.getSource().sendFailure(EconomyCommandUtil.error(Component.translatable("command.futureshops.player_only")));
                         return 0;
                     }
-                    ShopPackets.sendToPlayer(player, new com.enviouse.futureshops.network.packets.S2CBalanceUiPacket(
-                            BalanceManager.getProvider().getBalance(player.getUUID()),
-                            BalanceManager.getProvider().getCurrencyName(),
-                            BalanceManager.getProvider().getDecimalPlaces()));
+                    MarketplaceAnalyticsService.sendDashboard(player);
                     return 1;
                 }))
             .then(Commands.argument("target", EntityArgument.player())

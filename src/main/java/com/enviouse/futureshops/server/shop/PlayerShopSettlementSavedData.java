@@ -237,6 +237,33 @@ public final class PlayerShopSettlementSavedData extends SavedData {
         }
     }
 
+    public synchronized Map<UUID, Long> snapshotLifetimeMinorByOwner() {
+        Map<UUID, Long> totals = new HashMap<>();
+        for (ShopSettlement settlement : settlementsByShopPos.values()) {
+            totals.merge(settlement.owner(), Math.max(0L, settlement.lifetimeMinor()), Long::sum);
+        }
+        return totals;
+    }
+
+    public synchronized Map<UUID, Integer> snapshotSaleCountByOwner() {
+        Map<UUID, Integer> counts = new HashMap<>();
+        rowsByOwner.forEach((owner, rows) -> {
+            int total = (int) rows.stream().filter(row -> "SALE".equalsIgnoreCase(row.type())).count();
+            if (total > 0) {
+                counts.put(owner, total);
+            }
+        });
+        return counts;
+    }
+
+    public synchronized Map<Long, Snapshot> snapshotByShop() {
+        Map<Long, Snapshot> snapshot = new HashMap<>();
+        settlementsByShopPos.forEach((shopPos, settlement) -> snapshot.put(
+                shopPos,
+                new Snapshot(settlement.pendingMinor(), settlement.lifetimeMinor(), List.of())));
+        return snapshot;
+    }
+
     private record ShopSettlement(UUID owner, long pendingMinor, long lifetimeMinor) {
     }
 

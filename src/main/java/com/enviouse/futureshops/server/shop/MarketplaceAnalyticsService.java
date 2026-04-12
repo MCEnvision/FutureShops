@@ -109,6 +109,10 @@ public final class MarketplaceAnalyticsService {
                 continue;
             }
 
+            if (shop.getLinkedStoragePos() == null) {
+                alerts.add("Unlinked storage at " + displayDimension(ref.dimension()) + " " + formatPos(pos));
+            }
+
             int shopListingCount = shop.getListings().size();
             int shopTotalStock = 0;
             int shopLowCount = 0;

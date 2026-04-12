@@ -48,9 +48,11 @@ A server-authoritative economy that keeps your server fair.
 ### 🪙 Physical Currency (CoinItem)
 Hold your wealth in your hands — or trade it in person.
 
+- 🖱️ **Right-click to deposit** — simply right-click any coin in your hand to instantly deposit its full value into your balance. No commands needed!
 - 🔐 **Anti-dupe protection** — every coin is minted with a unique ID, cryptographic checksum, and server-side spent-mint tracking
 - 📝 **NBT-based denominations** — coins show their value on hover
-- ♻️ **Deposit validation** — previously spent mint IDs are permanently rejected
+- ♻️ **Deposit validation** — previously spent mint IDs are permanently rejected and destroyed
+- 🗑️ **Invalid coin auto-destroy** — tampered or duplicated coins are automatically destroyed on use
 
 ### ⚒️ Bartering System
 Not everything has to be about money.
@@ -162,6 +164,84 @@ FutureShops takes server integrity seriously:
 3. Launch the game — shop catalog and config files auto-generate
 4. Configure your shops in `config/futureshops/shops/`
 5. Use `/shop` in-game to open the storefront — you're in business! 🎉
+
+---
+
+## 🪙 Coin System — Full Documentation
+
+FutureShops features a **physical currency system** that lets players hold, trade, and manage wealth as real items in their inventory.
+
+### How Coins Work
+
+Coins are special items with **no crafting recipe** — the only way to create them is through the `/withdraw` command. Each coin carries hidden NBT data that makes it unique and tamper-proof.
+
+### Getting Coins
+
+| Method | How |
+|---|---|
+| **Withdraw from balance** | `/withdraw <amount>` or `/withdraw <amount> yes` |
+| **Single large coin** | `/withdraw <amount> no` — one coin worth the full amount |
+
+**Smart denomination breakdown** (`/withdraw 132 yes`):
+
+| Bill | Count |
+|---|---|
+| $100 | ×1 |
+| $20 | ×1 |
+| $10 | ×1 |
+| $1 | ×2 |
+
+Available denominations: **$1, $5, $10, $20, $50, $100, $1,000**
+
+### Depositing Coins
+
+There are **two ways** to deposit coins back into your digital balance:
+
+| Method | How | Details |
+|---|---|---|
+| 🖱️ **Right-click** | Hold a coin and right-click | Instantly deposits the entire stack in your hand. The fastest way! |
+| ⌨️ **Command** | `/deposit` | Deposits **all** valid coins in your inventory at once |
+| ⌨️ **Partial command** | `/deposit <amount>` | Deposits only the specified amount, consuming largest bills first |
+
+### Coin Tooltip
+
+When you hover over a coin in your inventory, you'll see:
+- 🟡 **Value: $X.XX** — the denomination of this coin
+- ⬜ **Right-click to deposit** — a reminder of the quick-deposit feature
+
+### Anti-Dupe Security
+
+Every coin minted by FutureShops contains hidden security data:
+
+| NBT Field | Purpose |
+|---|---|
+| `mint_id` | Unique UUID — no two coins share the same ID |
+| `denomination` | The coin's value in minor units |
+| `mint_timestamp` | When the coin was created |
+| `mint_player` | UUID of the player who withdrew it |
+| `mint_server` | Server identity hash |
+| `checksum` | Cryptographic integrity check |
+
+**What happens to invalid coins:**
+
+| Scenario | Result |
+|---|---|
+| Tampered NBT (edited checksum/value) | ❌ Coin destroyed on use |
+| Duplicated coin (same mint ID used twice) | ❌ Second copy destroyed on deposit |
+| Already-deposited coin (mint ID consumed) | ❌ Coin destroyed, player warned |
+| Missing coin data | ❌ Coin destroyed silently |
+
+### Coin Behavior Rules
+
+| Interaction | Behavior |
+|---|---|
+| **Right-click (use)** | ✅ Instantly deposits into balance |
+| **Drop on ground** | ✅ Allowed — 5-minute despawn |
+| **Player death** | ✅ Drops like normal items (respects `keepInventory`) |
+| **Store in chests/barrels** | ✅ Allowed — validated when extracted |
+| **Crafting** | ❌ Cannot be used in recipes |
+| **Anvil renaming** | ❌ Blocked by the server |
+| **Hopper extraction** | ❌ Blocked by default (configurable) |
 
 ---
 

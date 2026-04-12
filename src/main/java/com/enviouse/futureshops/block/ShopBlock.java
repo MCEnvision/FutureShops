@@ -1,7 +1,9 @@
 package com.enviouse.futureshops.block;
 
 import com.enviouse.futureshops.server.shop.PlayerShopBlockService;
+import com.enviouse.futureshops.server.shop.PlayerShopRegistrySavedData;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
@@ -43,8 +45,19 @@ public class ShopBlock extends BaseEntityBlock {
         if (placer instanceof Player player && level.getBlockEntity(pos) instanceof ShopBlockEntity shop) {
             if (shop.getOwnerUuid() == null) {
                 shop.setOwnerUuid(player.getUUID());
+                if (!level.isClientSide && level.getServer() != null) {
+                    PlayerShopRegistrySavedData.get(level.getServer()).register(player.getUUID(), level.dimension().location(), pos.asLong());
+                }
             }
         }
+    }
+
+    @Override
+    public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
+        if (!state.is(newState.getBlock()) && !level.isClientSide && level.getServer() != null) {
+            PlayerShopRegistrySavedData.get(level.getServer()).remove(level.dimension().location(), pos.asLong());
+        }
+        super.onRemove(state, level, pos, newState, isMoving);
     }
 
     @Override
@@ -59,6 +72,9 @@ public class ShopBlock extends BaseEntityBlock {
 
         if (shop.getOwnerUuid() == null) {
             shop.setOwnerUuid(player.getUUID());
+            if (level.getServer() != null) {
+                PlayerShopRegistrySavedData.get(level.getServer()).register(player.getUUID(), level.dimension().location(), pos.asLong());
+            }
         }
 
         if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {

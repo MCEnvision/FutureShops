@@ -89,7 +89,8 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.drawBorder(graphics, guiLeft, guiTop, 256, 166, ShopColors.BORDER_DEFAULT);
 
         graphics.drawString(this.font, "Promo Editor", guiLeft + 8, guiTop + 8, ShopColors.TEXT_PRIMARY, false);
-        String itemName = PlayerShopClientState.listedItemId().isBlank() ? "(none)" : ShopUiUtil.getItemDisplayName(PlayerShopClientState.listedItemId());
+        String itemId = PlayerShopClientState.selectedListing() == null ? "" : PlayerShopClientState.selectedListing().itemId();
+        String itemName = itemId.isBlank() ? "(none)" : ShopUiUtil.getItemDisplayName(itemId);
         graphics.drawString(this.font, this.font.plainSubstrByWidth("Item: " + itemName, 244), guiLeft + 8, guiTop + 16, ShopColors.TEXT_SECONDARY, false);
 
         drawLabel(graphics, "Type", guiTop + 29);
@@ -106,11 +107,12 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
     }
 
     private void applyPromo() {
-        if (PlayerShopClientState.listedItemId().isBlank()) {
+        if (PlayerShopClientState.selectedListing() == null || PlayerShopClientState.selectedListing().itemId().isBlank()) {
             return;
         }
         ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopPromoPacket(
                 PlayerShopClientState.shopPos(),
+                PlayerShopClientState.selectedListingIndex(),
                 false,
                 typeBox.getValue().trim(),
                 parseDouble(valueBox.getValue(), 0.0D),
@@ -122,11 +124,12 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
     }
 
     private void clearPromo() {
-        if (PlayerShopClientState.listedItemId().isBlank()) {
+        if (PlayerShopClientState.selectedListing() == null || PlayerShopClientState.selectedListing().itemId().isBlank()) {
             return;
         }
         ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopPromoPacket(
                 PlayerShopClientState.shopPos(),
+                PlayerShopClientState.selectedListingIndex(),
                 true,
                 "",
                 0.0D,

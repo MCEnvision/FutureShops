@@ -1,7 +1,8 @@
 package com.enviouse.futureshops.server.shop;
 
 import com.enviouse.futureshops.block.ShopBlockEntity;
-import com.enviouse.futureshops.catalog.ShopCatalog;
+import com.enviouse.futureshops.data.PlayerShopListingData;
+import com.enviouse.futureshops.data.PlayerShopPromoData;
 import com.enviouse.futureshops.data.SettlementHistoryRow;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopDataPacket;
@@ -11,6 +12,7 @@ import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
 import com.enviouse.futureshops.server.economy.TransactionResult;
 import com.enviouse.futureshops.server.transaction.ShopTransactionUtil;
+import com.enviouse.futureshops.server.transaction.TransactionHistoryService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -30,6 +32,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -50,36 +53,59 @@ public final class PlayerShopBlockService {
             return;
         }
         boolean owner = !forceVisitorView && shop.getOwnerUuid() != null && shop.getOwnerUuid().equals(player.getUUID());
-        int stock = countStock(player.level(), shop, pos);
         PlayerShopSettlementSavedData.Snapshot settlement = player.getServer() == null
                 ? new PlayerShopSettlementSavedData.Snapshot(0L, 0L, List.of())
                 : PlayerShopSettlementSavedData.get(player.getServer()).snapshot(
-                        shop.getOwnerUuid() == null ? player.getUUID() : shop.getOwnerUuid(),
-                        pos.asLong(),
-                        6);
-        String ownerName = shop.getOwnerUuid() == null
-                ? "Unowned"
-                : Optional.ofNullable(player.server.getPlayerList().getPlayer(shop.getOwnerUuid()))
-                .map(p -> p.getName().getString())
-                .orElse(shop.getOwnerUuid().toString().substring(0, 8));
+                shop.getOwnerUuid() == null ? player.getUUID() : shop.getOwnerUuid(),
+                pos.asLong(),
+                6);
+        UUID ownerUuid = shop.getOwnerUuid() == null ? new UUID(0L, 0L) : shop.getOwnerUuid();
+        String ownerName = resolveOwnerName(player, ownerUuid);
+        List<PlayerShopListingData> listings = shop.getListings().stream()
+                .map(listing -> toData(player.level(), shop, pos, listing))
+                .toList();
 
         ShopPackets.sendToPlayer(player, new S2CPlayerShopDataPacket(
                 pos,
                 owner,
+                ownerUuid,
                 ownerName,
-                shop.getListedItemId(),
-                shop.getTradeMode().name(),
-                shop.getMoneyPriceMinor(),
-                shop.getBarterItemId(),
-                shop.getBarterItemCount(),
-                stock,
+                listings,
                 shop.getLinkedStoragePos() != null,
                 settlement.pendingMinor(),
                 settlement.lifetimeMinor(),
-                settlement.rows()));
+                settlement.rows(),
+                shop.getShopName(),
+                shop.isSingleItemMode(),
+                shop.isBarterStorageSame()));
     }
 
-    public static void applyOwnerAction(ServerPlayer player, BlockPos pos, String action, int amount) {
+    public static void applyConfig(ServerPlayer player, BlockPos pos, String shopName, boolean singleItemMode, boolean barterStorageSame) {
+        if (!(player.level().getBlockEntity(pos) instanceof ShopBlockEntity shop)) {
+            return;
+        }
+        if (shop.getOwnerUuid() == null || !shop.getOwnerUuid().equals(player.getUUID())) {
+            sendResult(player, false, "NOT_OWNER");
+            return;
+        }
+        String safeName = shopName == null ? "" : shopName.trim();
+        if (safeName.length() > 32) {
+            safeName = safeName.substring(0, 32);
+        }
+        shop.setShopName(safeName);
+        shop.setSingleItemMode(singleItemMode);
+        shop.setBarterStorageSame(barterStorageSame);
+        if (singleItemMode && shop.getListings().size() > 1) {
+            while (shop.getListings().size() > 1) {
+                shop.removeListing(shop.getListings().size() - 1);
+            }
+        }
+        shop.setChanged();
+        openFor(player, pos);
+        sendResult(player, true, "CONFIG_SAVED");
+    }
+
+    public static void applyOwnerAction(ServerPlayer player, BlockPos pos, String action, int listingIndex, int amount) {
         if (!(player.level().getBlockEntity(pos) instanceof ShopBlockEntity shop)) {
             return;
         }
@@ -88,25 +114,64 @@ public final class PlayerShopBlockService {
             return;
         }
 
+        ShopBlockEntity.Listing listing = shop.getListing(listingIndex);
         switch (action) {
-            case "SET_LISTING_MAINHAND" -> {
+            case "ADD_LISTING_MAINHAND" -> {
                 ItemStack held = player.getMainHandItem();
                 if (held.isEmpty()) {
                     sendResult(player, false, "HOLD_ITEM");
                     return;
                 }
                 ResourceLocation key = ForgeRegistries.ITEMS.getKey(held.getItem());
-                if (key != null) {
-                    shop.setListedItemId(key.toString());
+                if (key == null || shop.addOrSelectListing(key.toString()) < 0) {
+                    sendResult(player, false, "LISTING_LIMIT");
+                    return;
                 }
             }
-            case "CLEAR_LISTING" -> shop.clearListing();
-            case "TOGGLE_MODE" -> shop.setTradeMode(shop.getTradeMode() == ShopBlockEntity.TradeMode.MONEY
-                    ? ShopBlockEntity.TradeMode.BARTER
-                    : ShopBlockEntity.TradeMode.MONEY);
-            case "PRICE_UP" -> shop.setMoneyPriceMinor(shop.getMoneyPriceMinor() + Math.max(1, amount));
-            case "PRICE_DOWN" -> shop.setMoneyPriceMinor(Math.max(1L, shop.getMoneyPriceMinor() - Math.max(1, amount)));
+            case "REMOVE_LISTING", "CLEAR_LISTING" -> {
+                if (!shop.removeListing(listingIndex)) {
+                    sendResult(player, false, "NO_LISTING");
+                    return;
+                }
+            }
+            case "TOGGLE_MODE" -> {
+                if (listing == null) {
+                    sendResult(player, false, "NO_LISTING");
+                    return;
+                }
+                // Cycle: MONEY → BARTER → BOTH → MONEY
+                listing.setTradeMode(switch (listing.tradeMode()) {
+                    case MONEY -> ShopBlockEntity.TradeMode.BARTER;
+                    case BARTER -> ShopBlockEntity.TradeMode.BOTH;
+                    case BOTH -> ShopBlockEntity.TradeMode.MONEY;
+                });
+            }
+            case "SET_PRICE" -> {
+                if (listing == null) {
+                    sendResult(player, false, "NO_LISTING");
+                    return;
+                }
+                listing.setMoneyPriceMinor(Math.max(1L, amount));
+            }
+            case "PRICE_UP" -> {
+                if (listing == null) {
+                    sendResult(player, false, "NO_LISTING");
+                    return;
+                }
+                listing.setMoneyPriceMinor(listing.moneyPriceMinor() + Math.max(1, amount));
+            }
+            case "PRICE_DOWN" -> {
+                if (listing == null) {
+                    sendResult(player, false, "NO_LISTING");
+                    return;
+                }
+                listing.setMoneyPriceMinor(Math.max(1L, listing.moneyPriceMinor() - Math.max(1, amount)));
+            }
             case "SET_BARTER_MAINHAND" -> {
+                if (listing == null) {
+                    sendResult(player, false, "NO_LISTING");
+                    return;
+                }
                 ItemStack held = player.getMainHandItem();
                 if (held.isEmpty()) {
                     sendResult(player, false, "HOLD_ITEM");
@@ -114,16 +179,29 @@ public final class PlayerShopBlockService {
                 }
                 ResourceLocation key = ForgeRegistries.ITEMS.getKey(held.getItem());
                 if (key != null) {
-                    shop.setBarterItemId(key.toString());
-                    shop.setBarterItemCount(Math.max(1, amount));
+                    listing.setBarterItemId(key.toString());
+                    listing.setBarterItemCount(Math.max(1, amount));
                 }
+            }
+            case "SET_BARTER_COUNT" -> {
+                if (listing == null) {
+                    sendResult(player, false, "NO_LISTING");
+                    return;
+                }
+                listing.setBarterItemCount(amount);
             }
             case "LINK_LOOKING" -> {
                 PlayerShopLinkService.begin(player, pos);
                 sendResult(player, true, "LINK_PENDING");
                 return;
             }
+            case "LINK_BARTER_LOOKING" -> {
+                PlayerShopLinkService.beginBarter(player, pos);
+                sendResult(player, true, "BARTER_LINK_PENDING");
+                return;
+            }
             case "UNLINK" -> shop.setLinkedStoragePos(null);
+            case "UNLINK_BARTER" -> shop.setBarterStoragePos(null);
             case "CLAIM_SETTLEMENT" -> {
                 if (player.getServer() == null) {
                     sendResult(player, false, "SERVER_ERROR");
@@ -151,7 +229,7 @@ public final class PlayerShopBlockService {
         sendResult(player, true, "OK");
     }
 
-    public static void applyPromoAction(ServerPlayer player, BlockPos pos, boolean clear, String promoType, double promoValue,
+    public static void applyPromoAction(ServerPlayer player, BlockPos pos, int listingIndex, boolean clear, String promoType, double promoValue,
                                         int buyX, int buyY, int startsInMinutes, int durationMinutes, boolean flash) {
         if (!(player.level().getBlockEntity(pos) instanceof ShopBlockEntity shop)) {
             return;
@@ -160,28 +238,41 @@ public final class PlayerShopBlockService {
             sendResult(player, false, "NOT_OWNER");
             return;
         }
-        if (shop.getListedItemId().isBlank()) {
+        ShopBlockEntity.Listing listing = shop.getListing(listingIndex);
+        if (listing == null || listing.itemId().isBlank()) {
             sendResult(player, false, "UNCONFIGURED");
             return;
         }
 
-        boolean ok = clear
-                ? ShopCatalog.clearRuntimePromo(shop.getShopId(), shop.getListedItemId())
-                : ShopCatalog.setRuntimePromo(
-                        shop.getShopId(),
-                        shop.getListedItemId(),
-                        promoType,
-                        promoValue,
-                        buyX,
-                        buyY,
-                        startsInMinutes,
-                        durationMinutes,
-                        flash);
+        if (clear) {
+            listing.promo().clear();
+            shop.setChanged();
+            openFor(player, pos);
+            sendResult(player, true, "PROMO_CLEARED");
+            return;
+        }
 
-        sendResult(player, ok, ok ? (clear ? "PROMO_CLEARED" : "PROMO_SET") : "PROMO_FAILED");
+        String normalizedType = promoType == null ? "" : promoType.trim().toUpperCase(java.util.Locale.ROOT);
+        boolean valid = switch (normalizedType) {
+            case "PERCENTAGE", "FLAT", "FLASH" -> promoValue > 0.0D;
+            case "BUY_X_GET_Y" -> buyX > 0 && buyY > 0;
+            default -> false;
+        };
+        if (!valid) {
+            sendResult(player, false, "PROMO_FAILED");
+            return;
+        }
+
+        long now = System.currentTimeMillis() / 1000L;
+        long startEpoch = startsInMinutes <= 0 ? now : now + (long) startsInMinutes * 60L;
+        long endEpoch = durationMinutes <= 0 ? 0L : startEpoch + (long) durationMinutes * 60L;
+        listing.promo().configure(flash ? "FLASH" : normalizedType, promoValue, buyX, buyY, startEpoch, endEpoch, flash);
+        shop.setChanged();
+        openFor(player, pos);
+        sendResult(player, true, "PROMO_SET");
     }
 
-    public static void buy(ServerPlayer buyer, BlockPos pos, int quantity) {
+    public static void buy(ServerPlayer buyer, BlockPos pos, int listingIndex, int quantity) {
         if (!(buyer.level().getBlockEntity(pos) instanceof ShopBlockEntity shop)) {
             return;
         }
@@ -189,13 +280,14 @@ public final class PlayerShopBlockService {
         ReentrantLock lock = SHOP_LOCKS.computeIfAbsent(pos.asLong(), ignored -> new ReentrantLock());
         lock.lock();
         try {
-            int qty = Math.max(1, Math.min(64, quantity));
-            if (shop.getOwnerUuid() == null || shop.getListedItemId().isBlank()) {
+            int qty = Math.max(1, quantity); // No hard 64 cap — excess drops on floor
+            ShopBlockEntity.Listing listing = shop.getListing(listingIndex);
+            if (shop.getOwnerUuid() == null || listing == null || listing.itemId().isBlank()) {
                 sendResult(buyer, false, "UNCONFIGURED");
                 return;
             }
 
-            Item saleItem = ShopTransactionUtil.resolveItem(shop.getListedItemId());
+            Item saleItem = ShopTransactionUtil.resolveItem(listing.itemId());
             if (saleItem == null || saleItem == Items.AIR) {
                 sendResult(buyer, false, "INVALID_ITEM");
                 return;
@@ -207,41 +299,54 @@ public final class PlayerShopBlockService {
                 return;
             }
 
-            List<ItemStack> saleStacks = splitStacks(saleItem, qty);
-            if (!ShopTransactionUtil.canFit(buyer.getInventory(), saleStacks)) {
-                sendResult(buyer, false, "INVENTORY_FULL");
-                return;
-            }
             if (!canExtract(linkedStorage.handler(), saleItem, qty)) {
                 sendResult(buyer, false, "OUT_OF_STOCK");
                 return;
             }
 
             EconomyProvider provider = BalanceManager.getProvider();
-            long cost = shop.getMoneyPriceMinor() * qty;
+            long cost = Math.max(0L, listing.calculatePrice(qty));
             boolean withdrewFromBuyer = false;
-            boolean depositedToOwner = false;
+            boolean recordedSale = false;
             Item barterItem = null;
             int barterAmount = 0;
             List<ItemStack> insertedPayment = List.of();
 
-            if (shop.getTradeMode() == ShopBlockEntity.TradeMode.MONEY) {
+            // Determine trade path: BOTH mode tries money first, falls back to barter
+            boolean barterTrade;
+            if (listing.tradeMode() == ShopBlockEntity.TradeMode.BOTH) {
+                // Try money first: if buyer has enough balance, use money
+                long balance = provider.getBalance(buyer.getUUID());
+                barterTrade = balance < cost; // Fall back to barter if not enough money
+            } else {
+                barterTrade = listing.tradeMode() == ShopBlockEntity.TradeMode.BARTER;
+            }
+
+            if (!barterTrade) {
                 TransactionResult withdraw = provider.withdraw(buyer.getUUID(), cost);
                 if (!withdraw.success()) {
-                    sendResult(buyer, false, "NO_MONEY");
-                    return;
+                    // If BOTH mode, try barter as fallback
+                    if (listing.tradeMode() == ShopBlockEntity.TradeMode.BOTH) {
+                        barterTrade = true;
+                    } else {
+                        sendResult(buyer, false, "NO_MONEY");
+                        return;
+                    }
+                } else {
+                    withdrewFromBuyer = true;
+                    if (buyer.getServer() == null) {
+                        provider.deposit(buyer.getUUID(), cost);
+                        sendResult(buyer, false, "SERVER_ERROR");
+                        return;
+                    }
+                    PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), cost);
+                    recordedSale = true;
                 }
-                withdrewFromBuyer = true;
-                if (buyer.getServer() == null) {
-                    provider.deposit(buyer.getUUID(), cost);
-                    sendResult(buyer, false, "SERVER_ERROR");
-                    return;
-                }
-                PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), cost);
-                depositedToOwner = true;
-            } else {
-                barterItem = ShopTransactionUtil.resolveItem(shop.getBarterItemId());
-                barterAmount = shop.getBarterItemCount() * qty;
+            }
+
+            if (barterTrade) {
+                barterItem = ShopTransactionUtil.resolveItem(listing.barterItemId());
+                barterAmount = listing.barterItemCount() * qty;
                 if (barterItem == null || barterItem == Items.AIR || ShopTransactionUtil.countItems(buyer.getInventory(), barterItem) < barterAmount) {
                     sendResult(buyer, false, "MISSING_BARTER_ITEMS");
                     return;
@@ -261,15 +366,16 @@ public final class PlayerShopBlockService {
                     return;
                 }
                 insertedPayment = paymentStacks;
+                if (buyer.getServer() != null) {
+                    PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), 0L);
+                    recordedSale = true;
+                }
             }
 
             List<ItemStack> extracted = extract(linkedStorage.handler(), saleItem, qty);
-            if (extracted.isEmpty() || !ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), extracted)) {
-                if (!extracted.isEmpty()) {
-                    insertAll(linkedStorage.handler(), extracted);
-                }
-                if (shop.getTradeMode() == ShopBlockEntity.TradeMode.MONEY) {
-                    if (depositedToOwner && buyer.getServer() != null) {
+            if (extracted.isEmpty()) {
+                if (!barterTrade) {
+                    if (recordedSale && buyer.getServer() != null) {
                         PlayerShopSettlementSavedData.get(buyer.getServer()).rollbackPending(shop.getOwnerUuid(), pos.asLong(), cost);
                     }
                     if (withdrewFromBuyer) {
@@ -282,6 +388,26 @@ public final class PlayerShopBlockService {
                 return;
             }
 
+            // Try to insert into inventory; any overflow drops on the floor
+            if (!ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), extracted)) {
+                // Drop remaining items at buyer's feet
+                for (ItemStack stack : extracted) {
+                    if (!stack.isEmpty()) {
+                        buyer.drop(stack, false);
+                    }
+                }
+            }
+
+            if (buyer.getServer() != null) {
+                TransactionHistoryService.record(
+                        buyer,
+                        shop.getShopId(),
+                        barterTrade ? "BARTER" : "BUY",
+                        listing.itemId(),
+                        qty,
+                        barterTrade ? 0L : cost,
+                        barterTrade ? "PLAYER_SHOP_BARTER" : "PLAYER_SHOP");
+            }
             openFor(buyer, pos);
             sendResult(buyer, true, "BOUGHT");
         } finally {
@@ -309,7 +435,11 @@ public final class PlayerShopBlockService {
             sendResult(player, false, "BAD_LINK_TARGET");
             return 0;
         }
-        shop.setLinkedStoragePos(target);
+        if (pending.barterLink()) {
+            shop.setBarterStoragePos(target);
+        } else {
+            shop.setLinkedStoragePos(target);
+        }
         shop.setChanged();
         openFor(player, shopPos);
         sendResult(player, true, "LINKED");
@@ -335,6 +465,58 @@ public final class PlayerShopBlockService {
         ShopPackets.sendToPlayer(player, new S2CSettlementHistoryPacket(shopPos, safePage, totalPages, rows));
     }
 
+    public static int countStock(Level level, ShopBlockEntity shop, BlockPos shopPos) {
+        return shop.getListings().stream().mapToInt(listing -> countStock(level, shop, shopPos, listing)).sum();
+    }
+
+    public static int countStock(Level level, ShopBlockEntity shop, BlockPos shopPos, ShopBlockEntity.Listing listing) {
+        Item item = listing == null ? null : ShopTransactionUtil.resolveItem(listing.itemId());
+        if (item == null || item == Items.AIR) {
+            return 0;
+        }
+        LinkedStorage linkedStorage = resolveLinkedStorage(level, shop, shopPos);
+        if (linkedStorage == null) {
+            return 0;
+        }
+        int total = 0;
+        IItemHandler handler = linkedStorage.handler();
+        for (int i = 0; i < handler.getSlots(); i++) {
+            ItemStack stack = handler.getStackInSlot(i);
+            if (stack.getItem() == item) {
+                total += stack.getCount();
+            }
+        }
+        return total;
+    }
+
+    private static PlayerShopListingData toData(Level level, ShopBlockEntity shop, BlockPos shopPos, ShopBlockEntity.Listing listing) {
+        ShopBlockEntity.Promo promo = listing.promo();
+        return new PlayerShopListingData(
+                listing.itemId(),
+                listing.tradeMode().name(),
+                listing.moneyPriceMinor(),
+                listing.effectiveUnitPriceMinor(),
+                listing.barterItemId(),
+                listing.barterItemCount(),
+                countStock(level, shop, shopPos, listing),
+                promo.configured()
+                        ? new PlayerShopPromoData(promo.active(), promo.promoType(), promo.promoValue(), promo.buyX(), promo.buyY(), promo.flash())
+                        : PlayerShopPromoData.NONE);
+    }
+
+    private static String resolveOwnerName(ServerPlayer viewer, UUID ownerUuid) {
+        if (ownerUuid == null || ownerUuid.equals(new UUID(0L, 0L))) {
+            return "Unowned";
+        }
+        ServerPlayer online = viewer.server.getPlayerList().getPlayer(ownerUuid);
+        if (online != null) {
+            return online.getGameProfile().getName();
+        }
+        return viewer.server.getProfileCache().get(ownerUuid)
+                .map(profile -> profile.getName())
+                .orElse(ownerUuid.toString().substring(0, 8));
+    }
+
     private static void rollbackBarterPayment(IItemHandler handler, ServerPlayer buyer, Item barterItem, int barterAmount, List<ItemStack> insertedPayment) {
         if (barterItem == null || insertedPayment.isEmpty()) {
             return;
@@ -356,26 +538,6 @@ public final class PlayerShopBlockService {
             remaining -= taken.getCount();
         }
         return amount - remaining;
-    }
-
-    public static int countStock(Level level, ShopBlockEntity shop, BlockPos shopPos) {
-        Item item = ShopTransactionUtil.resolveItem(shop.getListedItemId());
-        if (item == null || item == Items.AIR) {
-            return 0;
-        }
-        LinkedStorage linkedStorage = resolveLinkedStorage(level, shop, shopPos);
-        if (linkedStorage == null) {
-            return 0;
-        }
-        int total = 0;
-        IItemHandler handler = linkedStorage.handler();
-        for (int i = 0; i < handler.getSlots(); i++) {
-            ItemStack stack = handler.getStackInSlot(i);
-            if (stack.getItem() == item) {
-                total += stack.getCount();
-            }
-        }
-        return total;
     }
 
     private static LinkedStorage resolveLinkedStorage(Level level, ShopBlockEntity shop, BlockPos shopPos) {

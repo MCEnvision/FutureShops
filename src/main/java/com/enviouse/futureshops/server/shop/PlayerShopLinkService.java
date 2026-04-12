@@ -9,17 +9,26 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class PlayerShopLinkService {
     private static final long EXPIRES_MS = 30_000L;
     private static final Map<UUID, PendingLink> PENDING = new ConcurrentHashMap<>();
+    private static final Map<UUID, PendingLink> PENDING_BARTER = new ConcurrentHashMap<>();
 
     private PlayerShopLinkService() {
     }
 
     public static void begin(net.minecraft.server.level.ServerPlayer player, BlockPos shopPos) {
-        PENDING.put(player.getUUID(), new PendingLink(shopPos, System.currentTimeMillis() + EXPIRES_MS));
+        PENDING.put(player.getUUID(), new PendingLink(shopPos, System.currentTimeMillis() + EXPIRES_MS, false));
         player.sendSystemMessage(net.minecraft.network.chat.Component.translatable("command.futureshops.link.start"));
+    }
+
+    public static void beginBarter(net.minecraft.server.level.ServerPlayer player, BlockPos shopPos) {
+        PENDING_BARTER.put(player.getUUID(), new PendingLink(shopPos, System.currentTimeMillis() + EXPIRES_MS, true));
+        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Look at a chest and right-click to link barter storage."));
     }
 
     public static PendingLink consume(UUID uuid) {
         PendingLink pending = PENDING.remove(uuid);
+        if (pending == null) {
+            pending = PENDING_BARTER.remove(uuid);
+        }
         if (pending == null) {
             return null;
         }
@@ -29,7 +38,7 @@ public final class PlayerShopLinkService {
         return pending;
     }
 
-    public record PendingLink(BlockPos shopPos, long expiresAtMs) {
+    public record PendingLink(BlockPos shopPos, long expiresAtMs, boolean barterLink) {
     }
 }
 

@@ -42,8 +42,11 @@ public final class ShopBuyService {
                 result.totalCost()));
 
         if (result.success() && player.getServer() != null) {
-            TransactionHistoryService.record(player, result.shopId(), "BUY", packet.cartCheckout() ? "cart" : packet.lineItems().get(0).itemId(),
-                    result.totalQuantity(), result.totalCost(), packet.cartCheckout() ? "CART" : "DETAIL");
+            for (PreparedLine line : result.lines()) {
+                long lineCost = ShopCatalog.calculateLineCost(result.shopId(), line.itemId(), line.quantity());
+                TransactionHistoryService.record(player, result.shopId(), "BUY", line.itemId(), line.quantity(), lineCost,
+                        packet.cartCheckout() ? "CART" : "DETAIL");
+            }
             InventorySyncService.sendOwnedCounts(player, result.shopId());
             ShopDataService.resendSessionsViewingShop(player.getServer(), result.shopId());
         }
@@ -148,7 +151,7 @@ public final class ShopBuyService {
 
             inventory.setChanged();
             player.inventoryMenu.broadcastChanges();
-            return BuyResult.success(shopId, withdrawal.resultingBalance(), totalCost, totalQuantity);
+            return BuyResult.success(shopId, withdrawal.resultingBalance(), totalCost, totalQuantity, List.copyOf(preparedLines));
         } finally {
             lock.unlock();
         }
@@ -168,13 +171,14 @@ public final class ShopBuyService {
     private record PreparedLine(String itemId, int quantity) {
     }
 
-    private record BuyResult(boolean success, String shopId, String errorCode, long resultingBalance, long totalCost, int totalQuantity) {
-        private static BuyResult success(String shopId, long resultingBalance, long totalCost, int totalQuantity) {
-            return new BuyResult(true, shopId, "", resultingBalance, totalCost, totalQuantity);
+    private record BuyResult(boolean success, String shopId, String errorCode, long resultingBalance, long totalCost, int totalQuantity,
+                             List<PreparedLine> lines) {
+        private static BuyResult success(String shopId, long resultingBalance, long totalCost, int totalQuantity, List<PreparedLine> lines) {
+            return new BuyResult(true, shopId, "", resultingBalance, totalCost, totalQuantity, lines);
         }
 
         private static BuyResult error(String shopId, long resultingBalance, String errorCode) {
-            return new BuyResult(false, shopId, errorCode, resultingBalance, 0L, 0);
+            return new BuyResult(false, shopId, errorCode, resultingBalance, 0L, 0, List.of());
         }
     }
 }
