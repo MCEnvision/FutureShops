@@ -59,6 +59,14 @@ public class Config {
         .comment("Maximum age for valid CoinItems")
         .defineInRange("coins.max_age_days", 365, 1, 3650);
 
+    private static final ForgeConfigSpec.IntValue SESSION_MAX_DISTANCE_BLOCKS = BUILDER
+        .comment("Distance (in blocks) a player may move from the shop block before the session auto-closes. 0 = disabled.")
+        .defineInRange("session.max_distance_blocks", 8, 0, 256);
+
+    private static final ForgeConfigSpec.BooleanValue SESSION_CLOSE_ON_DAMAGE = BUILDER
+        .comment("Whether taking any damage while a shop session is open will force-close the GUI.")
+        .define("session.close_on_damage", false);
+
     static final ForgeConfigSpec SPEC = BUILDER.build();
 
     public static boolean logDirtBlock;
@@ -75,6 +83,9 @@ public class Config {
     public static String coinChecksumSalt;
     public static String coinMintServerId;
     public static int coinMaxAgeDays;
+
+    public static int sessionMaxDistanceBlocks;
+    public static boolean sessionCloseOnDamage;
 
     private static boolean validateItemName(final Object obj) {
         return obj instanceof final String itemName && ForgeRegistries.ITEMS.containsKey(ResourceLocation.parse(itemName));
@@ -98,5 +109,8 @@ public class Config {
         coinChecksumSalt = COIN_CHECKSUM_SALT.get();
         coinMintServerId = COIN_MINT_SERVER_ID.get();
         coinMaxAgeDays = COIN_MAX_AGE_DAYS.get();
+
+        sessionMaxDistanceBlocks = SESSION_MAX_DISTANCE_BLOCKS.get();
+        sessionCloseOnDamage = SESSION_CLOSE_ON_DAMAGE.get();
     }
 }

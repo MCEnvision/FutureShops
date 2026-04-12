@@ -1,8 +1,10 @@
 package com.enviouse.futureshops;
 
+import com.enviouse.futureshops.catalog.ShopCatalog;
 import com.enviouse.futureshops.init.ModBlockEntities;
 import com.enviouse.futureshops.init.ModBlocks;
 import com.enviouse.futureshops.init.ModItems;
+import com.enviouse.futureshops.coin.SpentMintsSavedData;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
@@ -54,12 +56,17 @@ public class Futureshops {
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
         BalanceManager.initialize(event.getServer());
+        // Eagerly load (or create) the coin-mint registry from disk.
+        SpentMintsSavedData.get(event.getServer());
+        // Load shop catalog from config/futureshops/shops/*.json (spec §24).
+        ShopCatalog.reload(event.getServer());
         LOGGER.info("FutureShops server starting.");
     }
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
-        ShopSessionManager.clear();
+        // Force-close every open shop session so clients can dismiss their GUIs.
+        ShopSessionManager.closeAllAndForceClose(event.getServer(), "SERVER_STOPPING");
         BalanceManager.clear();
         LOGGER.info("FutureShops server stopping.");
     }

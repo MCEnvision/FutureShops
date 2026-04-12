@@ -49,3 +49,8 @@
 - Verify compile/build after edits (`./gradlew.bat build`).
 - If you touched registries/resources, also run `./gradlew.bat runClient` at least once.
 - If you touched datagen inputs/providers, run `./gradlew.bat runData` and include generated outputs as needed.
+
+## Audit maintenance policy
+- After every feature implementation or modification pass, update `Mod Implementation/mod-status-audit.md` to reflect: implemented scope, remaining gaps, and any changed priorities.
+- Treat `mod-status-audit.md` as the live progress ledger tied to `shop-mod-complete-specification.md`.
+

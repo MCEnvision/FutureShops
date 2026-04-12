@@ -18,5 +18,7 @@ public final class ModCommandEvents {
         BalTopCommand.register(event.getDispatcher());
         WithdrawCommand.register(event.getDispatcher());
         DepositCommand.register(event.getDispatcher());
+        ShopAdminCommand.register(event.getDispatcher());
+        LinkCommand.register(event.getDispatcher());
     }
 }

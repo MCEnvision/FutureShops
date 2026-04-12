@@ -1,7 +1,9 @@
 package com.enviouse.futureshops.command;
 
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.ChatFormatting;
 
 import java.math.BigDecimal;
 import java.util.Locale;
@@ -50,6 +52,22 @@ public final class EconomyCommandUtil {
             default -> "command.futureshops.error.server";
         };
 
-        player.sendSystemMessage(Component.translatable(key));
+        player.sendSystemMessage(error(Component.translatable(key)));
+    }
+
+    public static MutableComponent info(Component component) {
+        return component.copy().withStyle(ChatFormatting.GRAY);
+    }
+
+    public static MutableComponent success(Component component) {
+        return component.copy().withStyle(ChatFormatting.GREEN);
+    }
+
+    public static MutableComponent warning(Component component) {
+        return component.copy().withStyle(ChatFormatting.GOLD);
+    }
+
+    public static MutableComponent error(Component component) {
+        return component.copy().withStyle(ChatFormatting.RED);
     }
 }

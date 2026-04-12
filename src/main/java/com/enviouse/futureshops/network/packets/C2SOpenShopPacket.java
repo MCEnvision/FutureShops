@@ -1,13 +1,9 @@
 package com.enviouse.futureshops.network.packets;
 
-import com.enviouse.futureshops.network.ShopPackets;
-import com.enviouse.futureshops.server.economy.BalanceManager;
-import com.enviouse.futureshops.server.economy.EconomyProvider;
-import com.enviouse.futureshops.server.session.ShopSessionManager;
+import com.enviouse.futureshops.server.shop.ShopDataService;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
-import net.minecraftforge.network.PacketDistributor;
 
 import java.util.function.Supplier;
 
@@ -28,12 +24,7 @@ public record C2SOpenShopPacket(String shopId) {
                 return;
             }
 
-            String targetShopId = packet.shopId.isBlank() ? "default" : packet.shopId;
-            ShopSessionManager.open(player.getUUID(), targetShopId);
-
-            EconomyProvider provider = BalanceManager.getProvider();
-            long balance = provider.getBalance(player.getUUID());
-            ShopPackets.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new S2CShopDataPacket(targetShopId, balance, provider.getCurrencyName(), provider.getDecimalPlaces()));
+            ShopDataService.openShop(player, packet.shopId);
         });
         context.setPacketHandled(true);
     }

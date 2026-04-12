@@ -1,10 +1,6 @@
 package com.enviouse.futureshops.command;
 
-import com.enviouse.futureshops.network.ShopPackets;
-import com.enviouse.futureshops.network.packets.S2CShopDataPacket;
-import com.enviouse.futureshops.server.economy.BalanceManager;
-import com.enviouse.futureshops.server.economy.EconomyProvider;
-import com.enviouse.futureshops.server.session.ShopSessionManager;
+import com.enviouse.futureshops.server.shop.ShopDataService;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
@@ -20,7 +16,7 @@ public final class ShopCommand {
         dispatcher.register(Commands.literal("shop")
             .executes(context -> {
                 if (!(context.getSource().getEntity() instanceof ServerPlayer player)) {
-                    context.getSource().sendFailure(Component.translatable("command.futureshops.player_only"));
+                    context.getSource().sendFailure(EconomyCommandUtil.error(Component.translatable("command.futureshops.player_only")));
                     return 0;
                 }
 
@@ -30,7 +26,7 @@ public final class ShopCommand {
             .then(Commands.argument("shopId", StringArgumentType.word())
                 .executes(context -> {
                     if (!(context.getSource().getEntity() instanceof ServerPlayer player)) {
-                        context.getSource().sendFailure(Component.translatable("command.futureshops.player_only"));
+                        context.getSource().sendFailure(EconomyCommandUtil.error(Component.translatable("command.futureshops.player_only")));
                         return 0;
                     }
 
@@ -40,13 +36,8 @@ public final class ShopCommand {
     }
 
     private static void openShop(ServerPlayer player, String requestedShopId) {
-        String shopId = requestedShopId == null || requestedShopId.isBlank() ? "default" : requestedShopId;
-        ShopSessionManager.open(player.getUUID(), shopId);
-
-        EconomyProvider provider = BalanceManager.getProvider();
-        long balance = provider.getBalance(player.getUUID());
-        ShopPackets.sendToPlayer(player, new S2CShopDataPacket(shopId, balance, provider.getCurrencyName(), provider.getDecimalPlaces()));
-
-        player.sendSystemMessage(Component.translatable("command.futureshops.shop.opened", shopId));
+        String resolvedShopId = ShopDataService.resolveShopId(requestedShopId);
+        ShopDataService.openShop(player, resolvedShopId);
+        player.sendSystemMessage(EconomyCommandUtil.success(Component.translatable("command.futureshops.shop.opened", resolvedShopId)));
     }
 }

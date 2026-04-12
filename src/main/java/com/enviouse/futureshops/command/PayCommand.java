@@ -21,13 +21,13 @@ public final class PayCommand {
                 .then(Commands.argument("amount", StringArgumentType.word())
                     .executes(context -> {
                         if (!(context.getSource().getEntity() instanceof ServerPlayer payer)) {
-                            context.getSource().sendFailure(Component.translatable("command.futureshops.player_only"));
+                            context.getSource().sendFailure(EconomyCommandUtil.error(Component.translatable("command.futureshops.player_only")));
                             return 0;
                         }
 
                         ServerPlayer target = EntityArgument.getPlayer(context, "target");
                         if (payer.getUUID().equals(target.getUUID())) {
-                            payer.sendSystemMessage(Component.translatable("command.futureshops.pay.self"));
+                            payer.sendSystemMessage(EconomyCommandUtil.error(Component.translatable("command.futureshops.pay.self")));
                             return 0;
                         }
 
@@ -36,7 +36,7 @@ public final class PayCommand {
                         try {
                             amountMinorUnits = EconomyCommandUtil.parseAmountToMinorUnits(StringArgumentType.getString(context, "amount"), provider.getDecimalPlaces());
                         } catch (IllegalArgumentException ex) {
-                            payer.sendSystemMessage(Component.translatable("command.futureshops.error.invalid_amount"));
+                            payer.sendSystemMessage(EconomyCommandUtil.error(Component.translatable("command.futureshops.error.invalid_amount")));
                             return 0;
                         }
 
@@ -48,10 +48,10 @@ public final class PayCommand {
 
                         String amountText = EconomyCommandUtil.formatMinorUnits(amountMinorUnits, provider.getDecimalPlaces());
                         String payerBalanceText = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
-                        payer.sendSystemMessage(Component.translatable("command.futureshops.pay.success.sender", amountText, provider.getCurrencyName(), target.getName(), payerBalanceText));
+                        payer.sendSystemMessage(EconomyCommandUtil.success(Component.translatable("command.futureshops.pay.success.sender", amountText, provider.getCurrencyName(), target.getName(), payerBalanceText)));
 
                         String targetBalanceText = EconomyCommandUtil.formatMinorUnits(provider.getBalance(target.getUUID()), provider.getDecimalPlaces());
-                        target.sendSystemMessage(Component.translatable("command.futureshops.pay.success.target", payer.getName(), amountText, provider.getCurrencyName(), targetBalanceText));
+                        target.sendSystemMessage(EconomyCommandUtil.success(Component.translatable("command.futureshops.pay.success.target", payer.getName(), amountText, provider.getCurrencyName(), targetBalanceText)));
                         return 1;
                     }))));
     }
