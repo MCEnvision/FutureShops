@@ -6,7 +6,6 @@ import com.enviouse.futureshops.data.CatalogBarterIngredient;
 import com.enviouse.futureshops.data.CatalogBarterRecipe;
 import com.enviouse.futureshops.data.CatalogItem;
 import com.enviouse.futureshops.network.ShopPackets;
-import com.enviouse.futureshops.network.packets.C2SBarterRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SInventorySyncPacket;
 import com.enviouse.futureshops.network.packets.C2SSellRequestPacket;
@@ -16,26 +15,33 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import java.util.List;
+
 /**
  * Item detail view scaffolded against spec §6.
  * Uses the authoritative CatalogItem from ShopClientState and sends buy requests to the server.
  */
 public class ItemDetailScreen extends Screen implements ShopScreenMarker {
-    private static final int GUI_W = 270;
-    private static final int GUI_H = 200;
+    private static final int DEFAULT_GUI_W = 324;
+    private static final int DEFAULT_GUI_H = 236;
+    private static final int PREVIEW_W = 124;
 
     private final Screen parent;
     private final String itemId;
 
     private int guiLeft;
     private int guiTop;
+    private int guiW;
+    private int guiH;
+    private int quantityRowY;
+    private int previewPanelY;
+    private int previewPanelH;
+
     private EditBox quantityBox;
     private Button buyButton;
     private Button sellButton;
     private Button barterButton;
     private Button addToCartButton;
-    private int quantityRowY;
-    private int actionRowY;
 
     public ItemDetailScreen(Screen parent, String itemId) {
         super(Component.translatable("gui.futureshops.detail.title"));
@@ -45,17 +51,21 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
 
     @Override
     protected void init() {
-        guiLeft = (this.width - GUI_W) / 2;
-        guiTop = (this.height - GUI_H) / 2;
-        quantityRowY = guiTop + GUI_H - 56;
-        actionRowY = guiTop + GUI_H - 34;
+        guiW = Math.min(DEFAULT_GUI_W, this.width - 16);
+        guiH = Math.min(DEFAULT_GUI_H, this.height - 16);
+        guiLeft = (this.width - guiW) / 2;
+        guiTop = (this.height - guiH) / 2;
+        previewPanelY = guiTop + 24;
+        previewPanelH = guiH - 48;
+        quantityRowY = guiTop + guiH - 58;
+
         ShopPackets.CHANNEL.sendToServer(new C2SInventorySyncPacket(ShopClientState.getActiveShopId()));
 
         addRenderableWidget(Button.builder(Component.literal("←"), button -> onClose())
                 .bounds(guiLeft + 6, guiTop + 6, 18, 16)
                 .build());
 
-        quantityBox = new EditBox(this.font, guiLeft + 157, quantityRowY, 30, 14,
+        quantityBox = new EditBox(this.font, guiLeft + 46, quantityRowY, 32, 14,
                 Component.translatable("gui.futureshops.detail.quantity"));
         quantityBox.setValue("1");
         quantityBox.setMaxLength(2);
@@ -64,8 +74,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                 return;
             }
             try {
-                int quantity = Integer.parseInt(value);
-                String clamped = Integer.toString(clampQuantity(quantity));
+                String clamped = Integer.toString(clampQuantity(Integer.parseInt(value)));
                 if (!clamped.equals(value)) {
                     quantityBox.setValue(clamped);
                 }
@@ -78,13 +87,13 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         addRenderableWidget(quantityBox);
 
         addRenderableWidget(Button.builder(Component.literal("-"), button -> setQuantity(getQuantity() - 1))
-                .bounds(guiLeft + 140, quantityRowY, 14, 14)
+                .bounds(guiLeft + 28, quantityRowY, 14, 14)
                 .build());
         addRenderableWidget(Button.builder(Component.literal("+"), button -> setQuantity(getQuantity() + 1))
-                .bounds(guiLeft + 190, quantityRowY, 14, 14)
+                .bounds(guiLeft + 82, quantityRowY, 14, 14)
                 .build());
         addRenderableWidget(Button.builder(Component.literal("Max"), button -> setQuantity(resolveMaxQuantity()))
-                .bounds(guiLeft + 208, quantityRowY, 28, 14)
+                .bounds(guiLeft + 100, quantityRowY, 28, 14)
                 .build());
 
         addToCartButton = Button.builder(Component.translatable("gui.futureshops.detail.add_to_cart"), button -> {
@@ -93,7 +102,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                         ShopClientState.addToCart(item.itemId(), getQuantity());
                     }
                 })
-                .bounds(guiLeft + 108, actionRowY, 70, 16)
+                .bounds(guiLeft + 12, guiTop + guiH - 38, 108, 16)
                 .build();
         addRenderableWidget(addToCartButton);
 
@@ -106,7 +115,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                                 getQuantity()));
                     }
                 })
-                .bounds(guiLeft + 182, actionRowY, 24, 16)
+                .bounds(guiLeft + 132, guiTop + guiH - 24, 54, 16)
                 .build();
         addRenderableWidget(buyButton);
 
@@ -119,25 +128,17 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                                 getQuantity()));
                     }
                 })
-                .bounds(guiLeft + 210, actionRowY, 24, 16)
+                .bounds(guiLeft + 190, guiTop + guiH - 24, 54, 16)
                 .build();
         addRenderableWidget(sellButton);
 
         barterButton = Button.builder(Component.translatable("gui.futureshops.detail.barter"), button -> {
                     CatalogItem item = currentItem();
                     if (item != null) {
-                        if (ShopClientState.getBarterRecipesForItem(item.itemId()).size() == 1) {
-                            CatalogBarterRecipe recipe = ShopClientState.getBarterRecipesForItem(item.itemId()).get(0);
-                            ShopPackets.CHANNEL.sendToServer(new C2SBarterRequestPacket(
-                                    ShopClientState.getActiveShopId(),
-                                    recipe.recipeId(),
-                                    getQuantity()));
-                        } else {
-                            this.minecraft.setScreen(new BarterScreen(this, item.itemId()));
-                        }
+                        this.minecraft.setScreen(new BarterScreen(this, item.itemId()));
                     }
                 })
-                .bounds(guiLeft + 238, actionRowY, 24, 16)
+                .bounds(guiLeft + 248, guiTop + guiH - 24, 60, 16)
                 .build();
         addRenderableWidget(barterButton);
     }
@@ -150,118 +151,140 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
             return;
         }
 
-        this.buyButton.active = item.buyPrice() > 0L && (item.unlimited() || item.stock() > 0);
-        this.sellButton.active = item.sellPrice() > 0L && ShopUiUtil.countPlayerInventory(item.itemId()) > 0;
-        this.barterButton.visible = item.hasBarterRecipes();
-        this.barterButton.active = item.hasBarterRecipes();
-        this.addToCartButton.active = this.buyButton.active;
+        buyButton.active = item.buyPrice() > 0L && (item.unlimited() || item.stock() > 0);
+        sellButton.active = item.sellPrice() > 0L && ShopUiUtil.countPlayerInventory(item.itemId()) > 0;
+        barterButton.visible = item.hasBarterRecipes();
+        barterButton.active = item.hasBarterRecipes();
+        addToCartButton.active = buyButton.active;
 
         graphics.fill(0, 0, this.width, this.height, 0x88000000);
-        graphics.fill(guiLeft, guiTop, guiLeft + GUI_W, guiTop + GUI_H, ShopColors.BG_PANEL);
-        ShopUiUtil.drawBorder(graphics, guiLeft, guiTop, GUI_W, GUI_H, ShopColors.BORDER_DEFAULT);
+        graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + guiH, ShopColors.BG_PANEL);
+        ShopUiUtil.drawBorder(graphics, guiLeft, guiTop, guiW, guiH, ShopColors.BORDER_DEFAULT);
 
         renderPreviewPanel(graphics, item);
         renderInfoPanel(graphics, item);
-        ShopUiUtil.renderStatusPanel(graphics, this.font, guiLeft, Math.max(4, guiTop - 22), GUI_W);
+        ShopUiUtil.renderStatusPanel(graphics, this.font, guiLeft, Math.max(4, guiTop - 22), guiW);
 
         super.render(graphics, mouseX, mouseY, partialTick);
     }
 
     private void renderPreviewPanel(GuiGraphics graphics, CatalogItem item) {
         int leftX = guiLeft + 10;
-        int panelY = guiTop + 24;
-        graphics.fill(leftX, panelY, leftX + 90, panelY + 150, ShopColors.BG_CARD);
-        ShopUiUtil.drawBorder(graphics, leftX, panelY, 90, 150, ShopColors.BORDER_DEFAULT);
+        graphics.fill(leftX, previewPanelY, leftX + PREVIEW_W, previewPanelY + previewPanelH, ShopColors.BG_CARD);
+        ShopUiUtil.drawBorder(graphics, leftX, previewPanelY, PREVIEW_W, previewPanelH, ShopColors.BORDER_DEFAULT);
 
-        graphics.pose().pushPose();
-        graphics.pose().translate(leftX + 21f, panelY + 18f, 0f);
-        graphics.pose().scale(3.0f, 3.0f, 1f);
-        ShopUiUtil.renderItemIcon(graphics, this.font, item.itemId(), 0, 0);
-        graphics.pose().popPose();
+        ShopUiUtil.renderLargeItemPreview(graphics, this.font, item.itemId(), leftX, previewPanelY + 6, PREVIEW_W);
 
-        graphics.drawCenteredString(this.font, this.font.plainSubstrByWidth(item.displayName(), 84), leftX + 45, panelY + 82,
+        graphics.drawCenteredString(this.font,
+                this.font.plainSubstrByWidth(item.displayName(), PREVIEW_W - 10),
+                leftX + PREVIEW_W / 2,
+                previewPanelY + 92,
                 ShopColors.TEXT_PRIMARY);
         graphics.drawCenteredString(this.font,
                 Component.translatable("gui.futureshops.detail.you_own", ShopUiUtil.countPlayerInventory(item.itemId())),
-                leftX + 45, panelY + 98, ShopColors.TEXT_SECONDARY);
+                leftX + PREVIEW_W / 2,
+                previewPanelY + 108,
+                ShopColors.TEXT_SECONDARY);
+
+        graphics.drawCenteredString(this.font,
+                Component.translatable("gui.futureshops.detail.quantity"),
+                leftX + PREVIEW_W / 2,
+                quantityRowY - 10,
+                ShopColors.TEXT_SECONDARY);
     }
 
     private void renderInfoPanel(GuiGraphics graphics, CatalogItem item) {
-        int infoX = guiLeft + 108;
+        int infoX = guiLeft + PREVIEW_W + 20;
         int infoY = guiTop + 24;
-        int infoW = 150;
+        int infoW = guiW - PREVIEW_W - 30;
         long effectiveBuyPrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
-        int promoPercent = item.buyPrice() > 0L && item.hasPromo()
-                ? (int) Math.round((1.0d - (double) item.promoPrice() / (double) item.buyPrice()) * 100.0d)
-                : 0;
+        int promoPercent = ShopUiUtil.computePromoPercent(item.buyPrice(), item.promoPrice());
 
         graphics.pose().pushPose();
         graphics.pose().translate(infoX, infoY, 0);
-        graphics.pose().scale(1.25f, 1.25f, 1f);
-        graphics.drawString(this.font, this.font.plainSubstrByWidth(item.displayName(), 110), 0, 0, ShopColors.TEXT_PRIMARY, true);
+        graphics.pose().scale(1.2f, 1.2f, 1f);
+        graphics.drawString(this.font, this.font.plainSubstrByWidth(item.displayName(), (int) ((infoW - 8) / 1.2f)), 0, 0, ShopColors.TEXT_PRIMARY, true);
         graphics.pose().popPose();
 
         graphics.drawString(this.font, Component.translatable("gui.futureshops.detail.no_description"),
-                infoX, infoY + 22, ShopColors.TEXT_SECONDARY, false);
+                infoX, infoY + 20, ShopColors.TEXT_SECONDARY, false);
 
-        int nextY = infoY + 40;
-        if (item.hasPromo()) {
+        int nextY = infoY + 36;
+        if (item.hasPromo() && promoPercent > 0) {
             graphics.fill(infoX, nextY, infoX + infoW, nextY + 16, 0xFFD11A2A);
             graphics.drawCenteredString(this.font,
                     Component.translatable("gui.futureshops.detail.promo_active.percent", promoPercent),
-                    infoX + infoW / 2, nextY + 4, ShopColors.PROMO_TEXT);
+                    infoX + infoW / 2,
+                    nextY + 4,
+                    ShopColors.PROMO_TEXT);
             nextY += 22;
         }
 
         graphics.fill(infoX, nextY, infoX + infoW, nextY + 1, ShopColors.BORDER_DEFAULT);
         nextY += 8;
 
-        graphics.drawString(this.font, Component.translatable("gui.futureshops.detail.buy_price"), infoX, nextY, ShopColors.TEXT_SECONDARY, false);
-        graphics.drawString(this.font, ShopUiUtil.formatMinorUnits(effectiveBuyPrice), infoX + 90, nextY, ShopColors.TEXT_PRICE, true);
+        drawInfoLine(graphics, Component.translatable("gui.futureshops.detail.buy_price").getString(),
+                ShopUiUtil.formatMinorUnits(effectiveBuyPrice), infoX, infoW, nextY, ShopColors.TEXT_PRICE);
         nextY += 14;
-
-        graphics.drawString(this.font, Component.translatable("gui.futureshops.detail.sell_price"), infoX, nextY, ShopColors.TEXT_SECONDARY, false);
-        graphics.drawString(this.font,
+        drawInfoLine(graphics, Component.translatable("gui.futureshops.detail.sell_price").getString(),
                 item.sellPrice() > 0L ? ShopUiUtil.formatMinorUnits(item.sellPrice()) : "—",
-                infoX + 90, nextY, item.sellPrice() > 0L ? ShopColors.TEXT_PRICE : ShopColors.TEXT_SECONDARY, false);
+                infoX, infoW, nextY,
+                item.sellPrice() > 0L ? ShopColors.TEXT_PRICE : ShopColors.TEXT_SECONDARY);
         nextY += 14;
 
         graphics.drawString(this.font,
                 item.unlimited()
                         ? Component.translatable("gui.futureshops.detail.stock.unlimited")
                         : Component.translatable("gui.futureshops.detail.stock.remaining", item.stock()),
-                infoX, nextY, ShopColors.TEXT_SECONDARY, false);
-        nextY += 16;
+                infoX,
+                nextY,
+                ShopColors.TEXT_SECONDARY,
+                false);
+        nextY += 18;
 
         if (item.hasBarterRecipes()) {
             graphics.drawString(this.font, Component.translatable("gui.futureshops.detail.barter_available"), infoX, nextY,
                     ShopColors.TEXT_BARTER, false);
             nextY += 12;
-            CatalogBarterRecipe previewRecipe = ShopClientState.getBarterRecipesForItem(item.itemId()).stream().findFirst().orElse(null);
-            if (previewRecipe != null) {
-                int shown = 0;
-                for (CatalogBarterIngredient ingredient : previewRecipe.ingredients()) {
-                    if (shown >= 3 || nextY > quantityRowY - 18) {
-                        graphics.drawString(this.font, "...", infoX, nextY, ShopColors.TEXT_SECONDARY, false);
-                        break;
-                    }
-                    int owned = ShopUiUtil.countPlayerInventory(ingredient.itemId());
-                    int needed = ingredient.count() * getQuantity();
-                    int color = owned >= needed ? ShopColors.SUCCESS : ShopColors.ERROR;
-                    String label = ShopUiUtil.getItemDisplayName(ingredient.itemId()) + " ×" + needed;
-                    graphics.drawString(this.font, this.font.plainSubstrByWidth(label, 110), infoX, nextY,
-                            ShopColors.TEXT_BARTER, false);
-                    graphics.drawString(this.font, "(have: " + owned + ")", infoX + 84, nextY, color, false);
-                    nextY += 10;
-                    shown++;
-                }
-            }
+            renderBarterPreview(graphics, item, infoX, infoW, nextY, quantityRowY - 22);
         }
 
-        graphics.drawString(this.font, Component.translatable("gui.futureshops.detail.quantity"), infoX, quantityRowY - 4, ShopColors.TEXT_SECONDARY, false);
         graphics.drawString(this.font,
-                Component.translatable("gui.futureshops.detail.total", ShopUiUtil.formatMinorUnits((long) effectiveBuyPrice * getQuantity())),
-                infoX, actionRowY - 6, ShopColors.TEXT_PRICE, true);
+                Component.translatable("gui.futureshops.detail.total", ShopUiUtil.formatMinorUnits(effectiveBuyPrice * getQuantity())),
+                infoX,
+                guiTop + guiH - 44,
+                ShopColors.TEXT_PRICE,
+                true);
+    }
+
+    private void renderBarterPreview(GuiGraphics graphics, CatalogItem item, int infoX, int infoW, int startY, int maxY) {
+        CatalogBarterRecipe previewRecipe = ShopClientState.getBarterRecipesForItem(item.itemId()).stream().findFirst().orElse(null);
+        if (previewRecipe == null) {
+            return;
+        }
+
+        int nextY = startY;
+        List<CatalogBarterIngredient> ingredients = previewRecipe.ingredients();
+        int shown = 0;
+        for (CatalogBarterIngredient ingredient : ingredients) {
+            if (shown >= 4 || nextY > maxY) {
+                graphics.drawString(this.font, "...", infoX, nextY, ShopColors.TEXT_SECONDARY, false);
+                break;
+            }
+            int owned = ShopUiUtil.countPlayerInventory(ingredient.itemId());
+            int needed = ingredient.count() * getQuantity();
+            int color = owned >= needed ? ShopColors.SUCCESS : ShopColors.ERROR;
+            String label = ShopUiUtil.getItemDisplayName(ingredient.itemId()) + " ×" + needed;
+            graphics.drawString(this.font, this.font.plainSubstrByWidth(label, infoW - 54), infoX, nextY, ShopColors.TEXT_BARTER, false);
+            graphics.drawString(this.font, this.font.plainSubstrByWidth("have " + owned, 48), infoX + infoW - 48, nextY, color, false);
+            nextY += 10;
+            shown++;
+        }
+    }
+
+    private void drawInfoLine(GuiGraphics graphics, String label, String value, int infoX, int infoW, int y, int valueColor) {
+        graphics.drawString(this.font, label, infoX, y, ShopColors.TEXT_SECONDARY, false);
+        graphics.drawString(this.font, this.font.plainSubstrByWidth(value, 74), infoX + Math.max(70, infoW - 74), y, valueColor, false);
     }
 
     private CatalogItem currentItem() {
@@ -305,8 +328,3 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         return false;
     }
 }
-
-
-
-
-

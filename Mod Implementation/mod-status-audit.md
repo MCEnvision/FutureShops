@@ -96,6 +96,12 @@
               - dedicated paged `SettlementHistoryScreen`
               - new settlement history packets and structured row DTOs
               - localized settlement row rendering keys and labels added to `en_us.json`
+                        - Latest UI refinement pass:
+                          - `ShopMainScreen` promo ribbon now renders as a high-layer red rotated `-X%` badge instead of generic PROMO text
+                          - `ItemDetailScreen` quantity controls moved under the preview column so the info panel remains text-only without barter overlap
+                          - `ItemDetailScreen` barter button now always routes into the dedicated `BarterScreen`
+                          - `PlayerShopBlockScreen` visitor mode now uses item-preview/detail presentation instead of a text-only button list
+                          - `PlayerShopBarterScreen` added so player-owned barter shops open a dedicated trade-confirm flow
 
 ## Next implementation targets (requested)
 1. Finish responsive scaling pass for all screens (`ShopMainScreen`, `CartScreen`, `BarterScreen`, `Balance/BalTop`, player shop screens) under extreme GUI scales.

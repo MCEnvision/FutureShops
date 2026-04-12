@@ -82,6 +82,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
 
     private List<CatalogItem> filteredItems = List.of();
     private List<Component> barterBadgeTooltip = List.of();
+    private List<PromoBadgeOverlay> promoBadgeOverlays = List.of();
 
     // ─── Constructor ─────────────────────────────────────────────────────────
 
@@ -171,6 +172,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
     @Override
     public void render(GuiGraphics g, int mx, int my, float pt) {
         barterBadgeTooltip = List.of();
+        promoBadgeOverlays = new java.util.ArrayList<>();
 
         // Full-screen dimming
         g.fill(0, 0, this.width, this.height, ShopColors.BG_PRIMARY);
@@ -187,6 +189,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         renderItemGrid(g, mx, my);
         renderInventoryStrip(g);
         renderFooter(g);
+        renderPromoBadgeOverlays(g);
 
         cartBtn.setMessage(Component.literal("Cart (" + ShopClientState.getCartLineCount() + ")"));
 
@@ -367,14 +370,10 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
 
         // ── Sale badge (top-right corner, spec §5.4) ──────────────────────
         if (item.hasPromo()) {
-            float pulse = 1.0f + 0.08f * (float) Math.sin(System.currentTimeMillis() / 170.0d);
-            g.pose().pushPose();
-            g.pose().translate(x + CARD_W - 2f, y + 3f, 0f);
-            g.pose().mulPose(Axis.ZP.rotationDegrees(45f));
-            g.pose().scale(pulse, pulse, 1f);
-            g.fill(-17, -5, 17, 5, 0xE0C1121F);
-            g.drawString(this.font, "PROMO", -14, -4, ShopColors.PROMO_TEXT, false);
-            g.pose().popPose();
+            int promoPercent = ShopUiUtil.computePromoPercent(item.buyPrice(), item.promoPrice());
+            if (promoPercent > 0) {
+                promoBadgeOverlays.add(new PromoBadgeOverlay(x, y, promoPercent));
+            }
         }
 
         List<CatalogBarterRecipe> recipes = ShopClientState.getBarterRecipesForItem(item.itemId());
@@ -544,6 +543,27 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         return hasBarterTab() && index == categoryCount + 1;
     }
 
+    private void renderPromoBadgeOverlays(GuiGraphics g) {
+        if (promoBadgeOverlays.isEmpty()) {
+            return;
+        }
+
+        int gx = guiLeft + SIDEBAR_W;
+        int gy = guiTop + HEADER_H + 1;
+        g.enableScissor(gx, gy, gx + GRID_CONTENT_W, gy + GRID_H);
+        for (PromoBadgeOverlay badge : promoBadgeOverlays) {
+            float pulse = 1.0f + 0.08f * (float) Math.sin((System.currentTimeMillis() + badge.x() * 11L) / 170.0d);
+            g.pose().pushPose();
+            g.pose().translate(badge.x() + CARD_W - 2f, badge.y() + 4f, 300f);
+            g.pose().mulPose(Axis.ZP.rotationDegrees(45f));
+            g.pose().scale(pulse, pulse, 1f);
+            g.fill(-16, -5, 16, 5, 0xF0D31728);
+            g.drawString(this.font, "-" + badge.percentOff() + "%", -13, -4, ShopColors.PROMO_TEXT, false);
+            g.pose().popPose();
+        }
+        g.disableScissor();
+    }
+
     private String prettyName(String raw) {
         if (raw == null || raw.isBlank()) {
             return "Server Shop";
@@ -564,6 +584,9 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
             }
         }
         return builder.isEmpty() ? "Server Shop" : builder.toString();
+    }
+
+    private record PromoBadgeOverlay(int x, int y, int percentOff) {
     }
 
     // ─── Rendering helpers ────────────────────────────────────────────────────

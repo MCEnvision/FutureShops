@@ -7,17 +7,23 @@ import com.enviouse.futureshops.network.packets.C2SPlayerShopActionPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuyPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
+import java.util.Locale;
 
 public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
-    private static final int GUI_W = 266;
-    private static final int GUI_H = 188;
+    private static final int DEFAULT_GUI_W = 324;
+    private static final int DEFAULT_GUI_H = 228;
+    private static final int PREVIEW_W = 124;
 
     private int guiLeft;
     private int guiTop;
+    private int guiW;
+    private int guiH;
+    private EditBox quantityBox;
 
     public PlayerShopBlockScreen() {
         super(Component.literal("Player Shop"));
@@ -25,112 +31,217 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
     @Override
     protected void init() {
-        guiLeft = (this.width - GUI_W) / 2;
-        guiTop = (this.height - GUI_H) / 2;
+        guiW = Math.min(DEFAULT_GUI_W, this.width - 16);
+        guiH = Math.min(DEFAULT_GUI_H, this.height - 16);
+        guiLeft = (this.width - guiW) / 2;
+        guiTop = (this.height - guiH) / 2;
 
         addRenderableWidget(Button.builder(Component.literal("Close"), button -> onClose())
-                .bounds(guiLeft + GUI_W - 58, guiTop + 8, 50, 14)
+                .bounds(guiLeft + guiW - 58, guiTop + 8, 50, 14)
                 .build());
 
         if (PlayerShopClientState.owner()) {
-            addRenderableWidget(Button.builder(Component.literal("Set Item"), button -> sendAction("SET_LISTING_MAINHAND", 0))
-                    .bounds(guiLeft + 8, guiTop + 94, 62, 14)
-                    .build());
-            addRenderableWidget(Button.builder(Component.literal("Clear"), button -> sendAction("CLEAR_LISTING", 0))
-                    .bounds(guiLeft + 74, guiTop + 94, 48, 14)
-                    .build());
-            addRenderableWidget(Button.builder(Component.literal("Mode"), button -> sendAction("TOGGLE_MODE", 0))
-                    .bounds(guiLeft + 126, guiTop + 94, 48, 14)
-                    .build());
-            addRenderableWidget(Button.builder(Component.literal("Promo"), button -> this.minecraft.setScreen(new PromoEditorModalScreen(this)))
-                    .bounds(guiLeft + 178, guiTop + 94, 48, 14)
-                    .build());
-            addRenderableWidget(Button.builder(Component.literal("Claim"), button -> sendAction("CLAIM_SETTLEMENT", 0))
-                    .bounds(guiLeft + 230, guiTop + 94, 28, 14)
-                    .build());
-            addRenderableWidget(Button.builder(Component.literal("History"), button -> this.minecraft.setScreen(new SettlementHistoryScreen(this)))
-                    .bounds(guiLeft + 176, guiTop + 130, 52, 14)
-                    .build());
-
-            addRenderableWidget(Button.builder(Component.literal("Price +"), button -> sendAction("PRICE_UP", 100))
-                    .bounds(guiLeft + 8, guiTop + 112, 56, 14)
-                    .build());
-            addRenderableWidget(Button.builder(Component.literal("Price -"), button -> sendAction("PRICE_DOWN", 100))
-                    .bounds(guiLeft + 68, guiTop + 112, 56, 14)
-                    .build());
-            addRenderableWidget(Button.builder(Component.literal("Barter=Hand"), button -> sendAction("SET_BARTER_MAINHAND", 1))
-                    .bounds(guiLeft + 128, guiTop + 112, 70, 14)
-                    .build());
-            addRenderableWidget(Button.builder(Component.literal("Link Look"), button -> sendAction("LINK_LOOKING", 0))
-                    .bounds(guiLeft + 202, guiTop + 112, 56, 14)
-                    .build());
-
-            addRenderableWidget(Button.builder(Component.literal("Unlink"), button -> sendAction("UNLINK", 0))
-                    .bounds(guiLeft + 230, guiTop + 130, 28, 14)
-                    .build());
+            initOwnerWidgets();
         } else {
-            addRenderableWidget(Button.builder(Component.literal("Buy x1"), button -> buy(1))
-                    .bounds(guiLeft + 8, guiTop + 156, 80, 16)
-                    .build());
-            addRenderableWidget(Button.builder(Component.literal("Buy x8"), button -> buy(8))
-                    .bounds(guiLeft + 92, guiTop + 156, 80, 16)
-                    .build());
-            addRenderableWidget(Button.builder(Component.literal("Buy x16"), button -> buy(16))
-                    .bounds(guiLeft + 176, guiTop + 156, 82, 16)
-                    .build());
+            initVisitorWidgets();
         }
+    }
+
+    private void initOwnerWidgets() {
+        addRenderableWidget(Button.builder(Component.literal("Set Item"), button -> sendAction("SET_LISTING_MAINHAND", 0))
+                .bounds(guiLeft + 10, guiTop + 110, 62, 14)
+                .build());
+        addRenderableWidget(Button.builder(Component.literal("Clear"), button -> sendAction("CLEAR_LISTING", 0))
+                .bounds(guiLeft + 76, guiTop + 110, 48, 14)
+                .build());
+        addRenderableWidget(Button.builder(Component.literal("Mode"), button -> sendAction("TOGGLE_MODE", 0))
+                .bounds(guiLeft + 128, guiTop + 110, 48, 14)
+                .build());
+        addRenderableWidget(Button.builder(Component.literal("Promo"), button -> this.minecraft.setScreen(new PromoEditorModalScreen(this)))
+                .bounds(guiLeft + 180, guiTop + 110, 50, 14)
+                .build());
+        addRenderableWidget(Button.builder(Component.literal("Claim"), button -> sendAction("CLAIM_SETTLEMENT", 0))
+                .bounds(guiLeft + 234, guiTop + 110, 42, 14)
+                .build());
+        addRenderableWidget(Button.builder(Component.literal("History"), button -> this.minecraft.setScreen(new SettlementHistoryScreen(this)))
+                .bounds(guiLeft + 280, guiTop + 110, 34, 14)
+                .build());
+
+        addRenderableWidget(Button.builder(Component.literal("Price +"), button -> sendAction("PRICE_UP", 100))
+                .bounds(guiLeft + 128, guiTop + 128, 56, 14)
+                .build());
+        addRenderableWidget(Button.builder(Component.literal("Price -"), button -> sendAction("PRICE_DOWN", 100))
+                .bounds(guiLeft + 188, guiTop + 128, 56, 14)
+                .build());
+        addRenderableWidget(Button.builder(Component.literal("Barter = Hand"), button -> sendAction("SET_BARTER_MAINHAND", 1))
+                .bounds(guiLeft + 128, guiTop + 146, 90, 14)
+                .build());
+        addRenderableWidget(Button.builder(Component.literal("Start Link"), button -> sendAction("LINK_LOOKING", 0))
+                .bounds(guiLeft + 222, guiTop + 146, 54, 14)
+                .build());
+        addRenderableWidget(Button.builder(Component.literal("Unlink"), button -> sendAction("UNLINK", 0))
+                .bounds(guiLeft + 280, guiTop + 146, 34, 14)
+                .build());
+    }
+
+    private void initVisitorWidgets() {
+        int quantityY = guiTop + guiH - 56;
+        quantityBox = new EditBox(this.font, guiLeft + 46, quantityY, 32, 14, Component.literal("Quantity"));
+        quantityBox.setValue("1");
+        quantityBox.setMaxLength(2);
+        quantityBox.setResponder(value -> {
+            if (value.isBlank()) {
+                return;
+            }
+            try {
+                String clamped = Integer.toString(clampQuantity(Integer.parseInt(value)));
+                if (!clamped.equals(value)) {
+                    quantityBox.setValue(clamped);
+                }
+            } catch (NumberFormatException ignored) {
+                if (!"1".equals(value)) {
+                    quantityBox.setValue("1");
+                }
+            }
+        });
+        addRenderableWidget(quantityBox);
+
+        addRenderableWidget(Button.builder(Component.literal("-"), button -> setQuantity(getQuantity() - 1))
+                .bounds(guiLeft + 28, quantityY, 14, 14)
+                .build());
+        addRenderableWidget(Button.builder(Component.literal("+"), button -> setQuantity(getQuantity() + 1))
+                .bounds(guiLeft + 82, quantityY, 14, 14)
+                .build());
+        addRenderableWidget(Button.builder(Component.literal("Max"), button -> setQuantity(resolveMaxQuantity()))
+                .bounds(guiLeft + 100, quantityY, 28, 14)
+                .build());
+
+        String cta = "MONEY".equalsIgnoreCase(PlayerShopClientState.tradeMode()) ? "Buy" : "Barter";
+        addRenderableWidget(Button.builder(Component.literal(cta), button -> {
+                    if ("MONEY".equalsIgnoreCase(PlayerShopClientState.tradeMode())) {
+                        buy(getQuantity());
+                    } else if (this.minecraft != null) {
+                        this.minecraft.setScreen(new PlayerShopBarterScreen(this));
+                    }
+                })
+                .bounds(guiLeft + 12, guiTop + guiH - 36, 108, 16)
+                .build());
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         graphics.fill(0, 0, this.width, this.height, ShopColors.BG_PRIMARY);
-        graphics.fill(guiLeft, guiTop, guiLeft + GUI_W, guiTop + GUI_H, ShopColors.BG_PANEL);
-        ShopUiUtil.drawBorder(graphics, guiLeft, guiTop, GUI_W, GUI_H, ShopColors.BORDER_DEFAULT);
+        graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + guiH, ShopColors.BG_PANEL);
+        ShopUiUtil.drawBorder(graphics, guiLeft, guiTop, guiW, guiH, ShopColors.BORDER_DEFAULT);
 
-        graphics.drawString(this.font, "Player Shop", guiLeft + 8, guiTop + 10, ShopColors.TEXT_PRIMARY, false);
-        drawRow(graphics, "Owner", PlayerShopClientState.ownerName(), guiTop + 28, ShopColors.TEXT_SECONDARY);
-        drawRow(graphics, "Item", PlayerShopClientState.listedItemId().isBlank() ? "(none)" : ShopUiUtil.getItemDisplayName(PlayerShopClientState.listedItemId()),
-                guiTop + 40, ShopColors.TEXT_PRIMARY);
-        drawRow(graphics, "Stock", PlayerShopClientState.stock() + "   Linked: " + (PlayerShopClientState.linked() ? "Yes" : "No"),
-                guiTop + 52, ShopColors.TEXT_SECONDARY);
+        graphics.drawString(this.font, PlayerShopClientState.owner() ? "Manage Player Shop" : "Player Shop", guiLeft + 8, guiTop + 10, ShopColors.TEXT_PRIMARY, false);
 
-        if ("MONEY".equalsIgnoreCase(PlayerShopClientState.tradeMode())) {
-            drawRow(graphics, "Cost", ShopUiUtil.formatMinorUnits(PlayerShopClientState.moneyPriceMinor()) + " coins",
-                    guiTop + 64, ShopColors.TEXT_PRICE);
-        } else {
-            String barterName = PlayerShopClientState.barterItemId().isBlank()
-                    ? "(unset)"
-                    : ShopUiUtil.getItemDisplayName(PlayerShopClientState.barterItemId());
-            drawRow(graphics, "Cost", PlayerShopClientState.barterItemCount() + "x " + barterName,
-                    guiTop + 64, ShopColors.TEXT_BARTER);
-        }
+        renderPreview(graphics);
+        renderInfoPanel(graphics);
 
-        drawRow(graphics, "Pending", ShopUiUtil.formatMinorUnits(PlayerShopClientState.pendingSettlementMinor()) + " coins",
-                guiTop + 76, ShopColors.TEXT_PRICE);
-        drawRow(graphics, "Lifetime", ShopUiUtil.formatMinorUnits(PlayerShopClientState.lifetimeRevenueMinor()) + " coins",
-                guiTop + 88, ShopColors.TEXT_SECONDARY);
-
-        int historyY = guiTop + 130;
-        graphics.drawString(this.font, "Revenue", guiLeft + 8, historyY, ShopColors.TEXT_PRIMARY, false);
-        List<String> rows = PlayerShopClientState.recentRevenueRows();
-        for (int i = 0; i < Math.min(2, rows.size()); i++) {
-            String clipped = this.font.plainSubstrByWidth(rows.get(i), GUI_W - 16);
-            graphics.drawString(this.font, clipped, guiLeft + 8, historyY + 10 + i * 10, ShopColors.TEXT_SECONDARY, false);
+        if (PlayerShopClientState.owner()) {
+            renderRevenueSummary(graphics);
         }
 
         if (!PlayerShopClientState.resultCode().isBlank()) {
             String status = this.font.plainSubstrByWidth(
                     Component.translatable("gui.futureshops.player_shop.status", localizeResultCode(PlayerShopClientState.resultCode())).getString(),
-                    GUI_W - 16);
-            graphics.drawString(this.font, status, guiLeft + 8, guiTop + GUI_H - 14, ShopColors.TEXT_SECONDARY, false);
+                    guiW - 16);
+            graphics.drawString(this.font, status, guiLeft + 8, guiTop + guiH - 14, ShopColors.TEXT_SECONDARY, false);
         }
 
         super.render(graphics, mouseX, mouseY, partialTick);
     }
 
-    private void drawRow(GuiGraphics graphics, String label, String value, int y, int valueColor) {
-        graphics.drawString(this.font, label + ":", guiLeft + 8, y, ShopColors.TEXT_SECONDARY, false);
-        graphics.drawString(this.font, this.font.plainSubstrByWidth(value, GUI_W - 58), guiLeft + 46, y, valueColor, false);
+    private void renderPreview(GuiGraphics graphics) {
+        int leftX = guiLeft + 10;
+        int panelY = guiTop + 24;
+        int panelH = guiH - 48;
+        graphics.fill(leftX, panelY, leftX + PREVIEW_W, panelY + panelH, ShopColors.BG_CARD);
+        ShopUiUtil.drawBorder(graphics, leftX, panelY, PREVIEW_W, panelH, ShopColors.BORDER_DEFAULT);
+
+        if (!PlayerShopClientState.listedItemId().isBlank()) {
+            ShopUiUtil.renderLargeItemPreview(graphics, this.font, PlayerShopClientState.listedItemId(), leftX, panelY + 6, PREVIEW_W);
+        }
+        graphics.drawCenteredString(this.font,
+                this.font.plainSubstrByWidth(displayItemName(), PREVIEW_W - 10),
+                leftX + PREVIEW_W / 2,
+                panelY + 92,
+                ShopColors.TEXT_PRIMARY);
+        graphics.drawCenteredString(this.font,
+                "Owner: " + PlayerShopClientState.ownerName(),
+                leftX + PREVIEW_W / 2,
+                panelY + 108,
+                ShopColors.TEXT_SECONDARY);
+
+        if (!PlayerShopClientState.owner() && quantityBox != null) {
+            graphics.drawCenteredString(this.font, "Quantity", leftX + PREVIEW_W / 2, guiTop + guiH - 66, ShopColors.TEXT_SECONDARY);
+        }
+    }
+
+    private void renderInfoPanel(GuiGraphics graphics) {
+        int infoX = guiLeft + PREVIEW_W + 20;
+        int infoY = guiTop + 26;
+        int infoW = guiW - PREVIEW_W - 30;
+
+        drawInfoRow(graphics, "Item", displayItemName(), infoX, infoW, infoY, ShopColors.TEXT_PRIMARY);
+        drawInfoRow(graphics, "Stock", Integer.toString(PlayerShopClientState.stock()), infoX, infoW, infoY + 14, ShopColors.TEXT_SECONDARY);
+        drawInfoRow(graphics, "Linked", PlayerShopClientState.linked() ? "Connected" : "Not Linked", infoX, infoW, infoY + 28, ShopColors.TEXT_SECONDARY);
+        drawInfoRow(graphics, "Mode", prettyMode(PlayerShopClientState.tradeMode()), infoX, infoW, infoY + 42,
+                "MONEY".equalsIgnoreCase(PlayerShopClientState.tradeMode()) ? ShopColors.TEXT_PRICE : ShopColors.TEXT_BARTER);
+
+        if ("MONEY".equalsIgnoreCase(PlayerShopClientState.tradeMode())) {
+            drawInfoRow(graphics, "Price", ShopUiUtil.formatMinorUnits(PlayerShopClientState.moneyPriceMinor()) + " coins",
+                    infoX, infoW, infoY + 58, ShopColors.TEXT_PRICE);
+            if (!PlayerShopClientState.owner()) {
+                graphics.drawString(this.font, "This shop sells directly for balance currency.", infoX, infoY + 78, ShopColors.TEXT_SECONDARY, false);
+            }
+        } else {
+            String barterName = PlayerShopClientState.barterItemId().isBlank()
+                    ? "(unset)"
+                    : ShopUiUtil.getItemDisplayName(PlayerShopClientState.barterItemId());
+            drawInfoRow(graphics, "Trade", PlayerShopClientState.barterItemCount() + "x " + barterName,
+                    infoX, infoW, infoY + 58, ShopColors.TEXT_BARTER);
+            if (!PlayerShopClientState.owner()) {
+                graphics.drawString(this.font, "Open barter to review the trade and confirm quantity.", infoX, infoY + 78, ShopColors.TEXT_SECONDARY, false);
+            }
+        }
+    }
+
+    private void renderRevenueSummary(GuiGraphics graphics) {
+        int infoX = guiLeft + PREVIEW_W + 20;
+        int baseY = guiTop + 118;
+        int infoW = guiW - PREVIEW_W - 30;
+
+        drawInfoRow(graphics, "Pending", ShopUiUtil.formatMinorUnits(PlayerShopClientState.pendingSettlementMinor()) + " coins",
+                infoX, infoW, baseY, ShopColors.TEXT_PRICE);
+        drawInfoRow(graphics, "Lifetime", ShopUiUtil.formatMinorUnits(PlayerShopClientState.lifetimeRevenueMinor()) + " coins",
+                infoX, infoW, baseY + 14, ShopColors.TEXT_SECONDARY);
+
+        graphics.drawString(this.font, "Recent Revenue", infoX, baseY + 34, ShopColors.TEXT_PRIMARY, false);
+        List<String> rows = PlayerShopClientState.recentRevenueRows();
+        for (int i = 0; i < Math.min(3, rows.size()); i++) {
+            graphics.drawString(this.font, this.font.plainSubstrByWidth(rows.get(i), infoW), infoX, baseY + 46 + i * 10, ShopColors.TEXT_SECONDARY, false);
+        }
+    }
+
+    private void drawInfoRow(GuiGraphics graphics, String label, String value, int x, int width, int y, int valueColor) {
+        graphics.drawString(this.font, label + ":", x, y, ShopColors.TEXT_SECONDARY, false);
+        graphics.drawString(this.font, this.font.plainSubstrByWidth(value, width - 48), x + 48, y, valueColor, false);
+    }
+
+    private String displayItemName() {
+        return PlayerShopClientState.listedItemId().isBlank()
+                ? "No Item Configured"
+                : ShopUiUtil.getItemDisplayName(PlayerShopClientState.listedItemId());
+    }
+
+    private String prettyMode(String mode) {
+        if (mode == null || mode.isBlank()) {
+            return "Money";
+        }
+        String lower = mode.toLowerCase(Locale.ROOT);
+        return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
     }
 
     private void sendAction(String action, int amount) {
@@ -141,9 +252,38 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopBuyPacket(PlayerShopClientState.shopPos(), quantity));
     }
 
+    private int getQuantity() {
+        try {
+            return clampQuantity(Integer.parseInt(quantityBox.getValue()));
+        } catch (Exception ignored) {
+            return 1;
+        }
+    }
+
+    private void setQuantity(int quantity) {
+        if (quantityBox != null) {
+            quantityBox.setValue(Integer.toString(clampQuantity(quantity)));
+        }
+    }
+
+    private int resolveMaxQuantity() {
+        return Math.max(1, Math.min(64, PlayerShopClientState.stock()));
+    }
+
+    private int clampQuantity(int quantity) {
+        return Math.max(1, Math.min(resolveMaxQuantity(), quantity));
+    }
+
     private String localizeResultCode(String code) {
-        String key = "gui.futureshops.player_shop.result." + code.toLowerCase(java.util.Locale.ROOT);
+        String key = "gui.futureshops.player_shop.result." + code.toLowerCase(Locale.ROOT);
         return Component.translatable(key).getString();
+    }
+
+    @Override
+    public void onClose() {
+        if (this.minecraft != null) {
+            this.minecraft.setScreen(null);
+        }
     }
 
     @Override

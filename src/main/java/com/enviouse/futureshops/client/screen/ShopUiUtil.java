@@ -61,6 +61,21 @@ public final class ShopUiUtil {
         return item.getDescription().getString();
     }
 
+    public static int computePromoPercent(long basePrice, long promoPrice) {
+        if (basePrice <= 0L || promoPrice <= 0L || promoPrice >= basePrice) {
+            return 0;
+        }
+        return (int) Math.max(1L, Math.round((1.0D - (double) promoPrice / (double) basePrice) * 100.0D));
+    }
+
+    public static void renderLargeItemPreview(GuiGraphics graphics, Font font, String itemId, int panelX, int panelY, int panelW) {
+        graphics.pose().pushPose();
+        graphics.pose().translate(panelX + (panelW / 2f) - 24f, panelY + 10f, 0f);
+        graphics.pose().scale(3.0f, 3.0f, 1f);
+        renderItemIcon(graphics, font, itemId, 0, 0);
+        graphics.pose().popPose();
+    }
+
     public static Component buildFirstIngredientSummary(List<CatalogBarterRecipe> recipes) {
         if (recipes.isEmpty() || recipes.get(0).ingredients().isEmpty()) {
             return Component.translatable("gui.futureshops.shop.badge.barter.tooltip.summary.none");
