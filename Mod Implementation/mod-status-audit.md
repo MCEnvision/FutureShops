@@ -873,6 +873,20 @@ Magenta (`ACCENT_PROMO_HI`) was being used as a generic "decorative accent" acro
 ## Verification
 - `./gradlew.bat build` BUILD SUCCESSFUL (`-Dnet.minecraftforge.gradle.check.certs=false`).
 
+## Latest pass — §-code text colors aligned to new palette (2026-04-18)
+
+Structural ARGB accents were already recolored, but Minecraft `§` color codes embedded in widget labels, chat strings, and summaries still rendered as legacy pink (`§d`). That caused the same screens to be simultaneously cyan/amber (via ARGB) and pink (via `§d`). This pass aligns the `§` codes:
+
+- **Barter context → `§9`** (blue, matches `TEXT_BARTER_SOFT`): mode buttons, barter item names, "You Give" panel titles, "§d⟶" arrows, "§dM+B" badges that were barter-leaning, chat `barter storage link` message.
+- **Owner action buttons / owner screen titles → `§6`** (gold, matches `ACCENT_CURRENCY`): Q-/Q+ qty buttons, Dept button, B.Lnk / B.Ulk barter link buttons, Sep./Separate storage toggle, "Manage Shop" / "Manage Your Shop" titles, `MONEY_AND_BARTER` "M+B" mode badge.
+- **Generic picker title → `§b`** (aqua, matches `ACCENT_PRIMARY`): DepartmentPickerScreen "📦 Department Picker".
+- **Kept `§d`**: `PromoEditorModalScreen` title only — magenta's only remaining job.
+
+Files touched: `LocalShopBrowserScreen`, `DepartmentPickerScreen`, `BarterScreen`, `ItemDetailScreen`, `ShopMainScreen`, `PlayerShopBarterScreen`, `PlayerShopBlockScreen`, `PlayerShopCartScreen`, `PlayerShopLinkService` (server-side chat message).
+
+## Verification
+- `./gradlew.bat build` BUILD SUCCESSFUL (`-Dnet.minecraftforge.gradle.check.certs=false`).
+
 ---
 
 

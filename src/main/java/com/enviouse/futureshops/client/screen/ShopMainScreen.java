@@ -111,12 +111,12 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         btnRightEdge -= cartW + pad;
 
         // Mode toggle
-        modeBtn = addRenderableWidget(Button.builder(Component.literal(tight ? (barterMode ? "§d⚒" : "§a$") : (barterMode ? "§d⚒ Barter" : "§a$ Buy")), button -> {
+        modeBtn = addRenderableWidget(Button.builder(Component.literal(tight ? (barterMode ? "§9⚒" : "§a$") : (barterMode ? "§9⚒ Barter" : "§a$ Buy")), button -> {
                     barterMode = !barterMode;
                     if (!barterMode && isBarterTabSelected()) {
                         selectedCategoryIdx = 0;
                     }
-                    button.setMessage(Component.literal(tight ? (barterMode ? "§d⚒" : "§a$") : (barterMode ? "§d⚒ Barter" : "§a$ Buy")));
+                    button.setMessage(Component.literal(tight ? (barterMode ? "§9⚒" : "§a$") : (barterMode ? "§9⚒ Barter" : "§a$ Buy")));
                     gridScrollRows = 0;
                     rebuildFilteredItems();
                 })
@@ -226,7 +226,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
 
         String shopTitle = prettyName(ShopClientState.getActiveShopId());
         graphics.drawString(this.font, this.font.plainSubstrByWidth(shopTitle, sidebarW - 10), hx + 12, hy + 6, ShopColors.TEXT_STRONG, true);
-        String subtitle = barterMode ? "§d⚒ Barter catalog" : "§7Browse the storefront";
+        String subtitle = barterMode ? "§9⚒ Barter catalog" : "§7Browse the storefront";
         graphics.drawString(this.font, this.font.plainSubstrByWidth(subtitle, sidebarW - 10), hx + 12, hy + 18, ShopColors.TEXT_MUTED, false);
     }
 
@@ -528,7 +528,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.renderCard(graphics, x, y, w, footerH - 4);
 
         // Help text
-        String footerText = barterMode ? "§d⚒ Barter mode active" : "§7Left click for details • Right click to quick-add";
+        String footerText = barterMode ? "§9⚒ Barter mode active" : "§7Left click for details • Right click to quick-add";
         String clippedFooter = this.font.plainSubstrByWidth(footerText, w - 120);
         graphics.drawString(this.font, clippedFooter, x + 10, y + 6, ShopColors.TEXT_MUTED, false);
 
@@ -612,7 +612,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                     nearbyMode = isNearbyTabIndex(i, cats.size());
                     if (isBarterTabIndex(i, cats.size())) {
                         barterMode = true;
-                        modeBtn.setMessage(Component.literal("§d⚒ Barter"));
+                        modeBtn.setMessage(Component.literal("§9⚒ Barter"));
                     } else if (!nearbyMode) {
                         barterMode = false;
                         modeBtn.setMessage(Component.literal("§a$ Buy"));
@@ -814,7 +814,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                 selectedCategoryIdx = 0;
             }
             if (modeBtn != null) {
-                modeBtn.setMessage(Component.literal(barterMode ? "§d⚒ Barter" : "§a$ Buy"));
+                modeBtn.setMessage(Component.literal(barterMode ? "§9⚒ Barter" : "§a$ Buy"));
             }
             gridScrollRows = 0;
             rebuildFilteredItems();

@@ -125,7 +125,7 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
                 } else {
                     modeBadge = switch (entry.tradeMode().toUpperCase(java.util.Locale.ROOT)) {
                         case "BARTER" -> "§9B";
-                        case "MONEY_AND_BARTER" -> "§dM+B";
+                        case "MONEY_AND_BARTER" -> "§6M+B";
                         default -> "§a$";
                     };
                 }
@@ -247,7 +247,7 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
             sb.append(" §f+ ");
         }
         if (hasBarter) {
-            sb.append("§dBarter");
+            sb.append("§9Barter");
         }
         if (!hasMoney && !hasBarter) {
             sb.append("§7—");

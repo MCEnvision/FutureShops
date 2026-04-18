@@ -139,7 +139,7 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
         int arrowX = guiLeft + guiW / 2;
         int arrowY = contentY + contentH / 2;
         graphics.drawCenteredString(this.font, "§6⟵", arrowX, arrowY - 6, ShopColors.ACCENT_CURRENCY);
-        graphics.drawCenteredString(this.font, "§d⟶", arrowX, arrowY + 6, ShopColors.TEXT_BARTER_SOFT);
+        graphics.drawCenteredString(this.font, "§9⟶", arrowX, arrowY + 6, ShopColors.TEXT_BARTER_SOFT);
 
         // ═══ Right: You Give ═══
         renderGivePanel(graphics, guiLeft + guiW - halfW - 10, contentY, halfW, contentH, listing, mouseX, mouseY);
@@ -217,7 +217,7 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
     private void renderGivePanel(GuiGraphics graphics, int x, int y, int w, int h, PlayerShopListingData listing, int mouseX, int mouseY) {
         ShopUiUtil.renderCard(graphics, x, y, w, h);
         graphics.fill(x, y, x + w, y + 2, ShopColors.TEXT_BARTER_SOFT);
-        graphics.drawString(this.font, "§l§dYOU GIVE", x + 8, y + 6, ShopColors.TEXT_BARTER_SOFT, false);
+        graphics.drawString(this.font, "§l§9YOU GIVE", x + 8, y + 6, ShopColors.TEXT_BARTER_SOFT, false);
 
         String barterId = listing.barterItemId();
         if (barterId == null || barterId.isBlank()) {
@@ -260,7 +260,7 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
             stackY += 14;
         }
 
-        graphics.drawCenteredString(this.font, "§d×" + needed, x + w / 2, stackY, ShopColors.TEXT_BARTER_SOFT);
+        graphics.drawCenteredString(this.font, "§9×" + needed, x + w / 2, stackY, ShopColors.TEXT_BARTER_SOFT);
         stackY += 14;
 
         String ownedStr = "Have " + owned;

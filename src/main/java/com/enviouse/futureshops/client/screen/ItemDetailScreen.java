@@ -167,7 +167,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         addRenderableWidget(sellButton);
 
         // LGB#23: Barter at bottom alongside other actions
-        barterButton = Button.builder(Component.literal("§d⚒ Barter"), button -> {
+        barterButton = Button.builder(Component.literal("§9⚒ Barter"), button -> {
                     CatalogItem item = currentItem();
                     if (item != null) this.minecraft.setScreen(new BarterScreen(this, item.itemId()));
                 })

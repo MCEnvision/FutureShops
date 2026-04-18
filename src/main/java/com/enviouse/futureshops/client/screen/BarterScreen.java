@@ -177,7 +177,7 @@ public class BarterScreen extends Screen implements ShopScreenMarker {
         int arrowX = guiLeft + guiW / 2;
         int arrowY = contentY + contentH / 2;
         graphics.drawCenteredString(this.font, "§6⟵", arrowX, arrowY - 6, ShopColors.ACCENT_GOLD);
-        graphics.drawCenteredString(this.font, "§d⟶", arrowX, arrowY + 6, ShopColors.TEXT_BARTER);
+        graphics.drawCenteredString(this.font, "§9⟶", arrowX, arrowY + 6, ShopColors.TEXT_BARTER);
 
         // ═══ Right panel: You Give ═══
         renderGivePanel(graphics, guiLeft + guiW - halfW - 10, contentY, halfW, contentH, recipe, mouseX, mouseY);
@@ -253,7 +253,7 @@ public class BarterScreen extends Screen implements ShopScreenMarker {
     private void renderGivePanel(GuiGraphics graphics, int x, int y, int w, int h, CatalogBarterRecipe recipe, int mouseX, int mouseY) {
         ShopUiUtil.renderCard(graphics, x, y, w, h);
         graphics.fill(x, y, x + w, y + 2, ShopColors.TEXT_BARTER_SOFT);
-        graphics.drawString(this.font, "§dYou Give", x + 8, y + 6, ShopColors.TEXT_BARTER_SOFT, false);
+        graphics.drawString(this.font, "§9You Give", x + 8, y + 6, ShopColors.TEXT_BARTER_SOFT, false);
 
         List<CatalogBarterIngredient> ingredients = recipe.ingredients();
         int rowY = y + 22;

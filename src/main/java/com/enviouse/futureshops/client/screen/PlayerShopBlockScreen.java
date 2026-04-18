@@ -187,11 +187,11 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         int barterToggleX = toggleX + singleMultiW + 4;
         int barterToggleW = compact ? 36 : 52;
         barterStorageButton = addRenderableWidget(Button.builder(
-                        Component.literal(same ? (compact ? "§7Same" : "§7Same Chest") : (compact ? "§dSep." : "§dSeparate")),
+                        Component.literal(same ? (compact ? "§7Same" : "§7Same Chest") : (compact ? "§9Sep." : "§9Separate")),
                         button -> {
                             boolean nowSame = button.getMessage().getString().contains("Same");
                             button.setMessage(Component.literal(nowSame
-                                    ? (compact ? "§dSep." : "§dSeparate")
+                                    ? (compact ? "§9Sep." : "§9Separate")
                                     : (compact ? "§7Same" : "§7Same Chest")));
                         })
                 .tooltip(Tooltip.create(Component.literal("Same chest or separate for barter items")))
@@ -295,7 +295,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         int ctrlY3 = configSecY + (compact ? 14 : 18);
         cx = ownerInfoX + 4;
         int qLabelW = Math.max(18, this.font.width("Q-") + 6);
-        qtyMinusButton = addRenderableWidget(Button.builder(Component.literal("§dQ-"), button -> adjustBaseQty(-1))
+        qtyMinusButton = addRenderableWidget(Button.builder(Component.literal("§6Q-"), button -> adjustBaseQty(-1))
                 .tooltip(Tooltip.create(Component.literal("Decrease base quantity")))
                 .bounds(cx, ctrlY3, qLabelW, bh).build());
         cx += qLabelW + 1;
@@ -306,7 +306,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         baseQtyBox.setResponder(value -> baseQtyEditTimestamp = System.currentTimeMillis());
         addRenderableWidget(baseQtyBox);
         cx += bqBoxW + 1;
-        qtyPlusButton = addRenderableWidget(Button.builder(Component.literal("§dQ+"), button -> adjustBaseQty(1))
+        qtyPlusButton = addRenderableWidget(Button.builder(Component.literal("§6Q+"), button -> adjustBaseQty(1))
                 .tooltip(Tooltip.create(Component.literal("Increase base quantity")))
                 .bounds(cx, ctrlY3, qLabelW, bh).build());
         cx += qLabelW + gap + 2;
@@ -362,7 +362,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         actionRowButtons.add(historyButton);
 
         int deptBtnW = this.font.width("Dept") + 12;
-        deptButton = addRenderableWidget(Button.builder(Component.literal("§dDept"), button -> this.minecraft.setScreen(new DepartmentPickerScreen(this)))
+        deptButton = addRenderableWidget(Button.builder(Component.literal("§6Dept"), button -> this.minecraft.setScreen(new DepartmentPickerScreen(this)))
                 .tooltip(Tooltip.create(Component.literal("Set department category for selected listing")))
                 .bounds(bx, actionRowY, deptBtnW, bh).build());
         actionRowButtons.add(deptButton);
@@ -409,13 +409,13 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         linkRowButtons.add(unlinkButton);
 
         int blnkBtnW = this.font.width("B.Lnk") + 12;
-        linkBarterButton = addRenderableWidget(Button.builder(Component.literal("§dB.Lnk"), button -> sendAction("LINK_BARTER_LOOKING", 0))
+        linkBarterButton = addRenderableWidget(Button.builder(Component.literal("§6B.Lnk"), button -> sendAction("LINK_BARTER_LOOKING", 0))
                 .tooltip(Tooltip.create(Component.literal("Link barter storage — look at a chest first")))
                 .bounds(bx, linkRowY, blnkBtnW, bh).build());
         linkRowButtons.add(linkBarterButton);
 
         int bulkBtnW = this.font.width("B.Ulk") + 12;
-        unlinkBarterButton = addRenderableWidget(Button.builder(Component.literal("§dB.Ulk"), button -> sendAction("UNLINK_BARTER", 0))
+        unlinkBarterButton = addRenderableWidget(Button.builder(Component.literal("§6B.Ulk"), button -> sendAction("UNLINK_BARTER", 0))
                 .tooltip(Tooltip.create(Component.literal("Unlink barter storage")))
                 .bounds(bx, linkRowY, bulkBtnW, bh).build());
         linkRowButtons.add(unlinkBarterButton);
@@ -565,7 +565,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         if (compact) {
             // Compact header: single row — face + title + link status
             ShopUiUtil.renderPlayerFace(graphics, PlayerShopClientState.ownerUuid(), hx + 4, hy + 4, hh - 8);
-            String title = PlayerShopClientState.owner() ? "§d⚡ Manage Shop" : "§fPlayer Shop";
+            String title = PlayerShopClientState.owner() ? "§6⚡ Manage Shop" : "§fPlayer Shop";
             graphics.drawString(this.font, title, hx + hh, hy + 4, ShopColors.TEXT_PRIMARY, false);
             String shopName = PlayerShopClientState.shopName().isBlank()
                     ? PlayerShopClientState.ownerName() + "'s Shop"
@@ -593,7 +593,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         } else {
             // Normal header: face + two-line title + franchise/desc mid | link chip + revenue right
             ShopUiUtil.renderPlayerFace(graphics, PlayerShopClientState.ownerUuid(), hx + 8, hy + 8, 34);
-            String title = PlayerShopClientState.owner() ? "§d⚡ Manage Your Shop" : "§fBrowse Player Shop";
+            String title = PlayerShopClientState.owner() ? "§6⚡ Manage Your Shop" : "§fBrowse Player Shop";
             String shopName = PlayerShopClientState.shopName().isBlank()
                     ? PlayerShopClientState.ownerName() + "'s Shop"
                     : PlayerShopClientState.shopName();
@@ -926,7 +926,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                     // Barter item icon preview — only render if it fits within the pricing panel with margin
                     if (py + 18 <= pricePanelY + panelH - 4) {
                         ShopUiUtil.renderItemIcon(graphics, this.font, listing.barterItemId(), infoX + 4, py);
-                        String barterName = this.font.plainSubstrByWidth("§d" + ShopUiUtil.getItemDisplayName(listing.barterItemId()), infoW - 28);
+                        String barterName = this.font.plainSubstrByWidth("§9" + ShopUiUtil.getItemDisplayName(listing.barterItemId()), infoW - 28);
                         graphics.drawString(this.font, barterName, infoX + 24, py + 4, ShopColors.TEXT_BARTER, false);
                         // Hover detection for barter item icon
                         if (mouseX >= infoX + 4 && mouseX <= infoX + 20 && mouseY >= py && mouseY <= py + 16) {
@@ -945,7 +945,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                     graphics.drawString(this.font, "§lTRADE", infoX + 4, summaryY + 4, ShopColors.TEXT_FAINT, false);
 
                     if ("MONEY_AND_BARTER".equalsIgnoreCase(listing.tradeMode())) {
-                        ShopUiUtil.drawWrappedString(graphics, this.font, Component.literal("§6Pay coins §7AND §dbarter."),
+                        ShopUiUtil.drawWrappedString(graphics, this.font, Component.literal("§6Pay coins §7AND §9barter."),
                                 infoX + 4, summaryY + 16, infoW - 8, ShopColors.TEXT_PRIMARY, 10);
                     } else if ("BOTH".equalsIgnoreCase(listing.tradeMode())) {
                         ShopUiUtil.drawWrappedString(graphics, this.font, Component.literal("Coins or barter items."),
@@ -1106,7 +1106,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                     nextY += 12;
                 }
                 String barterText = listing.barterItemCount() + " × " + ShopUiUtil.getItemDisplayName(barterId);
-                graphics.drawString(this.font, this.font.plainSubstrByWidth("§d⚒ " + barterText, infoW - 16),
+                graphics.drawString(this.font, this.font.plainSubstrByWidth("§9⚒ " + barterText, infoW - 16),
                         infoX + 8, nextY, ShopColors.TEXT_BARTER, false);
                 nextY += 12;
                 int ownedBarter = ShopUiUtil.countPlayerInventory(barterId);
@@ -1118,7 +1118,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                 int maxInfoY = detailY + detailH - 40;
                 if (nextY + 18 <= maxInfoY) {
                     ShopUiUtil.renderItemIcon(graphics, this.font, barterId, infoX + 8, nextY);
-                    String barterName = this.font.plainSubstrByWidth("§d" + ShopUiUtil.getItemDisplayName(barterId), infoW - 32);
+                    String barterName = this.font.plainSubstrByWidth("§9" + ShopUiUtil.getItemDisplayName(barterId), infoW - 32);
                     graphics.drawString(this.font, barterName, infoX + 28, nextY + 4, ShopColors.TEXT_BARTER, false);
                     // Hover detection for barter item icon
                     if (mouseX >= infoX + 8 && mouseX <= infoX + 24 && mouseY >= nextY && mouseY <= nextY + 16) {
@@ -1643,7 +1643,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         return switch (mode.toUpperCase(Locale.ROOT)) {
             case "BARTER" -> "§9Barter";
             case "BOTH" -> "§aMoney§7/§9Barter";
-            case "MONEY_AND_BARTER" -> "§dM+B";
+            case "MONEY_AND_BARTER" -> "§6M+B";
             default -> "§aMoney";
         };
     }

@@ -23,7 +23,7 @@ public final class PlayerShopLinkService {
     public static void beginBarter(net.minecraft.server.level.ServerPlayer player, BlockPos shopPos) {
         PENDING_BARTER.put(player.getUUID(), new PendingLink(shopPos, System.currentTimeMillis() + EXPIRES_MS, true));
         // LGB#21: Explicit /link instruction for barter storage
-        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Look at a chest/storage block and type §e/link§r to confirm the §dbarter§r storage link."));
+        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Look at a chest/storage block and type §e/link§r to confirm the §9barter§r storage link."));
     }
 
     public static PendingLink consume(UUID uuid) {

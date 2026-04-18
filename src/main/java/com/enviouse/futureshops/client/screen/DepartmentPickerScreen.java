@@ -83,7 +83,7 @@ public class DepartmentPickerScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.drawSoftOutline(graphics, guiLeft, guiTop, modalW, modalH, ShopColors.BORDER_STRONG, ShopColors.BORDER_SUBTLE);
         graphics.fill(guiLeft, guiTop, guiLeft + modalW, guiTop + 2, ShopColors.ACCENT_PRIMARY);
 
-        graphics.drawString(this.font, "§d📦 Department Picker", guiLeft + 8, guiTop + 8, ShopColors.TEXT_STRONG, false);
+        graphics.drawString(this.font, "§b📦 Department Picker", guiLeft + 8, guiTop + 8, ShopColors.TEXT_STRONG, false);
 
         // Render search results
         List<String> results = DepartmentClientState.getSearchResults();

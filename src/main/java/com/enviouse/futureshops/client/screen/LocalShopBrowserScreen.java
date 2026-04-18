@@ -256,7 +256,7 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
         String priceStr;
         int priceColor;
         if ("BARTER".equalsIgnoreCase(listing.tradeMode())) {
-            priceStr = "§d⚒ Barter";
+            priceStr = "§9⚒ Barter";
             priceColor = ShopColors.TEXT_BARTER_SOFT;
         } else {
             priceStr = ShopUiUtil.formatMinorUnits(price);
