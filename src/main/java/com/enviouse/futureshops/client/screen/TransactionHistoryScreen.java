@@ -229,7 +229,7 @@ public class TransactionHistoryScreen extends Screen implements ShopScreenMarker
             case "BUY" -> ShopColors.TEXT_CURRENCY;
             case "SELL" -> ShopColors.STATUS_SUCCESS;
             case "BARTER" -> ShopColors.TEXT_BARTER_SOFT;
-            case "CART_CLAIM" -> ShopColors.ACCENT_PROMO_HI;
+            case "CART_CLAIM" -> ShopColors.ACCENT_PRIMARY;
             default -> ShopColors.TEXT_STRONG;
         };
     }

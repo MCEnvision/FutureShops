@@ -228,7 +228,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         int panelH = guiH - 56;
 
         ShopUiUtil.renderCard(graphics, leftX, panelY, PREVIEW_W, panelH);
-        graphics.fill(leftX, panelY, leftX + PREVIEW_W, panelY + 2, ShopColors.ACCENT_PROMO_HI);
+        graphics.fill(leftX, panelY, leftX + PREVIEW_W, panelY + 2, ShopColors.ACCENT_PRIMARY);
 
         ShopUiUtil.renderLargeItemPreviewWithNbt(graphics, this.font, item.itemId(),
                 item.nbtJson() != null ? item.nbtJson() : "", leftX, panelY + 8, PREVIEW_W);

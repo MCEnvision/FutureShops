@@ -81,7 +81,7 @@ public class DepartmentPickerScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.renderDimBackdrop(graphics, this.width, this.height);
         graphics.fill(guiLeft, guiTop, guiLeft + modalW, guiTop + modalH, ShopColors.SURFACE_BASE);
         ShopUiUtil.drawSoftOutline(graphics, guiLeft, guiTop, modalW, modalH, ShopColors.BORDER_STRONG, ShopColors.BORDER_SUBTLE);
-        graphics.fill(guiLeft, guiTop, guiLeft + modalW, guiTop + 2, ShopColors.ACCENT_PROMO_HI);
+        graphics.fill(guiLeft, guiTop, guiLeft + modalW, guiTop + 2, ShopColors.ACCENT_PRIMARY);
 
         graphics.drawString(this.font, "§d📦 Department Picker", guiLeft + 8, guiTop + 8, ShopColors.TEXT_STRONG, false);
 
@@ -104,7 +104,7 @@ public class DepartmentPickerScreen extends Screen implements ShopScreenMarker {
                 int bg = selected ? ShopColors.SURFACE_PRESSED : (hovered ? ShopColors.SURFACE_OVERLAY : ShopColors.SURFACE_RAISED);
                 graphics.fill(guiLeft + 8, y, guiLeft + modalW - 8, y + rowH - 2, bg);
                 if (selected) {
-                    graphics.fill(guiLeft + 8, y, guiLeft + 11, y + rowH - 2, ShopColors.ACCENT_PROMO_HI);
+                    graphics.fill(guiLeft + 8, y, guiLeft + 11, y + rowH - 2, ShopColors.ACCENT_PRIMARY);
                 }
                 String label = this.font.plainSubstrByWidth(dept, modalW - 24);
                 graphics.drawString(this.font, label, guiLeft + 14, y + 3, selected ? ShopColors.TEXT_STRONG : ShopColors.TEXT_MUTED, false);

@@ -117,7 +117,7 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.renderDimBackdrop(graphics, this.width, this.height);
         graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + guiH, ShopColors.SURFACE_BASE);
         ShopUiUtil.drawSoftOutline(graphics, guiLeft, guiTop, guiW, guiH, ShopColors.BORDER_STRONG, ShopColors.BORDER_SUBTLE);
-        graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + 2, ShopColors.ACCENT_PROMO_HI);
+        graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + 2, ShopColors.ACCENT_PRIMARY);
 
         graphics.drawCenteredString(this.font, this.title, guiLeft + guiW / 2, guiTop + 10, ShopColors.TEXT_STRONG);
 
@@ -310,16 +310,20 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
     /**
      * Smart max: inventory of barter item / cost per item, capped at stock.
      * No hard 64 cap — excess drops on floor.
+     * Returns the real achievable quantity (may be 0 if stock is empty or the player can't afford any).
+     * The display field is clamped to ≥1 by {@link #setQuantity(int)} separately.
      */
     private int resolveMaxQuantity() {
         PlayerShopListingData listing = PlayerShopClientState.selectedListing();
         if (listing == null) return 1;
-        int stock = Math.max(1, listing.stock());
+        int stock = Math.max(0, listing.stock());
         String barterId = listing.barterItemId();
         int barterCost = listing.barterItemCount();
-        if (barterId == null || barterId.isBlank() || barterCost <= 0) return Math.max(1, stock);
+        if (barterId == null || barterId.isBlank() || barterCost <= 0) {
+            return stock;
+        }
         int affordable = ShopUiUtil.countPlayerInventory(barterId) / barterCost;
-        return Math.max(1, Math.min(stock, affordable));
+        return Math.min(stock, affordable);
     }
 
     @Override

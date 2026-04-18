@@ -50,6 +50,15 @@
 - If you touched registries/resources, also run `./gradlew.bat runClient` at least once.
 - If you touched datagen inputs/providers, run `./gradlew.bat runData` and include generated outputs as needed.
 
+## Commit / push policy (identity-gated)
+- Claude is allowed to run `git commit`, `git push`, `git tag`, and `gh` commands **only when the local git identity is the user's own**, i.e. `git config user.email` returns `contact.enviouse@gmail.com`.
+- **Always verify identity first.** Before any commit/push/tag/PR action, run `git config user.email` and confirm it equals `contact.enviouse@gmail.com`. If it does not match, stop and ask the user to log in before proceeding — do not change the identity yourself.
+- Do not configure or modify `user.name`, `user.email`, `commit.gpgsign`, or any other git identity settings.
+- Do not use `--author=`, `Co-Authored-By:` trailers, or any mechanism that attributes a commit to an identity other than the configured user's own.
+- Never skip hooks (`--no-verify`) or bypass signing (`--no-gpg-sign`, `-c commit.gpgsign=false`) unless the user explicitly asks for it.
+- Never `git push --force` or force-push to `master`/`main` without an explicit request.
+- Never run destructive git operations (`git reset --hard`, `git checkout --`, `git clean -f`, `git branch -D`) without explicit user instruction.
+
 ## Audit maintenance policy
 - After every feature implementation or modification pass, update `Mod Implementation/mod-status-audit.md` to reflect: implemented scope, remaining gaps, and any changed priorities.
 - Treat `mod-status-audit.md` as the live progress ledger tied to `shop-mod-complete-specification.md`.

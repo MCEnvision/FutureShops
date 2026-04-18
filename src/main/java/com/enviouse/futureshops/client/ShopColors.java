@@ -115,7 +115,10 @@ public final class ShopColors {
     public static final int ACCENT_GOLD         = ACCENT_CURRENCY;
     public static final int ACCENT_PROMO        = ACCENT_PROMO_HI;
     public static final int ACCENT_CYAN         = ACCENT_PRIMARY;
-    public static final int ACCENT_PURPLE       = ACCENT_PROMO_HI;
+    // ACCENT_PURPLE is a legacy name from before the minimalist palette pass.
+    // It is still used by non-promo surfaces (department chips, trade-mode badges, misc accents),
+    // so it now points at the neutral cyan accent — magenta is reserved for real promo/discount UI.
+    public static final int ACCENT_PURPLE       = ACCENT_PRIMARY;
     public static final int ACCENT_ORANGE       = STATUS_WARNING;
 
     public static final int SUCCESS             = STATUS_SUCCESS;
@@ -127,12 +130,14 @@ public final class ShopColors {
     public static final int INVENTORY_HIGHLIGHT = 0x4455AA77;
     public static final int STORAGE_LINKED      = STATUS_INFO;
 
-    public static final int DISCOUNT_BG         = ACCENT_PROMO_HI;
-    public static final int DISCOUNT_TEXT       = TEXT_STRONG;
+    public static final int DISCOUNT_BG         = STATUS_WARNING;
+    public static final int DISCOUNT_TEXT       = 0xFF1A1205;
     public static final int PROFILE_BG          = SURFACE_BASE;
     public static final int PROFILE_BORDER      = ACCENT_PRIMARY;
     public static final int OWNER_BG            = SURFACE_BASE;
-    public static final int OWNER_ACCENT        = ACCENT_PROMO_HI;
+    // Owner-context accent: amber/gold evokes ownership and pairs with currency UI,
+    // and keeps magenta reserved for promo/sale surfaces.
+    public static final int OWNER_ACCENT        = ACCENT_CURRENCY;
     public static final int CONFIG_BG           = SURFACE_BASE;
     public static final int TOGGLE_ON           = STATUS_SUCCESS;
     public static final int TOGGLE_OFF          = BORDER_STRONG;

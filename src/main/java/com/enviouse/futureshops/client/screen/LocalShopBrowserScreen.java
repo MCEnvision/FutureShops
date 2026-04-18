@@ -126,7 +126,7 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
         int y = guiTop + 34;
         int h = guiH - 62;
         ShopUiUtil.renderCard(graphics, x, y, sidebarW, h);
-        graphics.fill(x, y, x + sidebarW, y + 2, ShopColors.ACCENT_PROMO_HI);
+        graphics.fill(x, y, x + sidebarW, y + 2, ShopColors.ACCENT_PRIMARY);
         graphics.drawString(this.font, "§lDepartments", x + 8, y + 6, ShopColors.TEXT_STRONG, false);
 
         List<LocalDepartment> depts = owner.departments();

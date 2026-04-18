@@ -823,6 +823,56 @@ All screens now use nearly full available screen space:
 ## Verification
 - `./gradlew.bat build` BUILD SUCCESSFUL
 
+## Latest pass — Bug fix batch + commit policy (2026-04-18)
+
+- **CLAUDE.md commit policy tightened**: New "Commit / push policy (strict)" section forbids Claude from running `git commit`, `git push`, `gh pr create`, etc. Commits must happen from the user's terminal under the user's own git credentials; Claude may only stage and diff.
+- **BalTop server spotlight scroll**: `BalTopOverviewScreen.renderHighlights()` now renders fixed-height leader cards inside a scissor-clipped viewport with a scrollbar; `mouseScrolled()` handles wheel input within the panel. Resolves the "#1 item seller overlapping sales/actions cards" layout bug.
+- **Buy-screen pink reduced**: `ShopMainScreen` sidebar accent swapped from `ACCENT_PROMO_HI` to `ACCENT_PRIMARY` (cyan). `ShopColors.DISCOUNT_BG` switched from magenta to `STATUS_WARNING` (amber) with a dark readable text; magenta is now reserved for true promo surfaces.
+- **RS storage stock refresh**: `RefinedStorage2StorageAdapter.initReflection()` no longer permanently flips its `reflectionInitialized` guard on failure — the guard now only short-circuits on prior success, so the adapter retries reflection each call until RS classes load. Previously a first-call failure (RS not yet loaded) silently pinned the adapter to the IItemHandler fallback, which doesn't see RS network inventory — causing "stock never refreshes after network change" until the block was relinked.
+- **Duplicate "All" department removed**:
+  - `ShopDefinitionLoader.buildDefaultShop()` no longer emits a hardcoded `"all"` category (the shop UI already renders a virtual "All" tab at index 0).
+  - `ShopCatalog.buildCategories()` now filters any persisted category with id `"all"` so existing installs with the legacy default also get a clean sidebar.
+- **"Nearby" department tab hidden**: `ShopMainScreen.hasNearbyTab()` now returns `false`; the dedicated 📍 Nearby button at the top of the screen remains the single entry point.
+- **Player-shop quantity/Max button accuracy**: `PlayerShopBarterScreen.resolveMaxQuantity()` no longer forces a floor of 1. It now returns the true achievable trade count (stock capped by `inventory / barterCost`, possibly 0). The display field is still clamped to ≥1 by `setQuantity()`, but the Max button and text-field clamp now report the real maximum instead of misleadingly showing 1 when the player can't afford any trades.
+
+## Verification
+- `./gradlew.bat build` BUILD SUCCESSFUL (with `-Dnet.minecraftforge.gradle.check.certs=false` workaround due to Forge maven certificate issue on this environment)
+
+## Latest pass — Palette semantics, pink-reduction layer 2 (2026-04-18)
+
+Magenta (`ACCENT_PROMO_HI`) was being used as a generic "decorative accent" across screens it had no semantic relationship to. This pass makes magenta an exclusive promo/sale signal and reworks the rest of the palette into three minimal semantic buckets.
+
+**Palette semantics after this pass:**
+- **Cyan (`ACCENT_PRIMARY`)** — neutral/structural accent. All top-of-panel accent strips, active-tab/selected-row markers, general section titles on non-owner surfaces.
+- **Amber (`ACCENT_CURRENCY`)** — ownership + money surfaces. Player-shop owner header/accent, CONFIG section strip/label, MONEY_AND_BARTER trade-mode label.
+- **Magenta (`ACCENT_PROMO_HI`)** — real promo/discount/sale UI only (`PromoEditorModalScreen`, discount badges).
+
+**Token changes in `ShopColors.java`:**
+- `ACCENT_PURPLE` alias retargeted from `ACCENT_PROMO_HI` → `ACCENT_PRIMARY`. Collapses all legacy "purple" chip/mode call sites to neutral cyan without per-call edits.
+- `OWNER_ACCENT` retargeted from `ACCENT_PROMO_HI` → `ACCENT_CURRENCY`.
+
+**Explicit call-site swaps (pink → cyan):**
+- `BarterScreen.java`: top accent bar + active recipe-tab underline.
+- `BalTopOverviewScreen.java`: "Top 10 Franchises" section strip and title.
+- `DepartmentPickerScreen.java`: modal top strip + selected-row left marker.
+- `FranchiseManagementScreen.java`: top accent bar, franchise-header strip/title (all four sites).
+- `ItemDetailScreen.java`: preview panel top strip.
+- `LocalShopBrowserScreen.java`: sidebar top strip.
+- `PlayerShopBarterScreen.java`: top accent bar.
+- `PlayerShopBlockScreen.java`: listing-rail top strip, detail-panel preview strip.
+- `TransactionHistoryScreen.java`: `CART_CLAIM` event color (was uncomfortably reading as a "promo" in the history list).
+
+**Explicit swaps (pink → amber):**
+- `PlayerShopBlockScreen.java`: owner-vs-visitor accent dispatch (two sites, was cyan/pink, now cyan/amber), config-panel top strip, CONFIG sub-section rail + label.
+- `PlayerShopBlockScreen.java`: `MONEY_AND_BARTER` trade-mode text in both rail and detail views (two sites).
+
+**Untouched (correctly pink):**
+- `PromoEditorModalScreen.java` — real promo editing surface.
+- All `ShopColors.ACCENT_PROMO_HI` token references from promo badge helpers.
+
+## Verification
+- `./gradlew.bat build` BUILD SUCCESSFUL (`-Dnet.minecraftforge.gradle.check.certs=false`).
+
 ---
 
 

@@ -259,7 +259,11 @@ public final class ShopCatalog {
         Optional<ShopDefinition> defOpt = getOrDefault(shopId);
         if (defOpt.isEmpty()) return List.of();
 
-        List<CatalogCategory> base = defOpt.get().toCatalogCategories();
+        // Drop any legacy "all" category — the shop UI renders a virtual "All" tab at index 0,
+        // so a persisted category with id "all" would show up as a duplicate empty tab.
+        List<CatalogCategory> base = defOpt.get().toCatalogCategories().stream()
+                .filter(c -> !"all".equalsIgnoreCase(c.id()))
+                .toList();
         java.util.Set<String> existingIds = base.stream().map(CatalogCategory::id).collect(java.util.stream.Collectors.toSet());
 
         // Merge admin-defined categories (replaces TagDepartmentClassifier auto-generation)

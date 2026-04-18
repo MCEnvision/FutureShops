@@ -212,7 +212,6 @@ public final class ShopDefinitionLoader {
 
     private static ShopDefinition buildDefaultShop() {
         List<CategoryDef> cats = List.of(
-                new CategoryDef("all",       "All",       0),
                 new CategoryDef("tools",     "Tools",     1),
                 new CategoryDef("materials", "Materials", 2),
                 new CategoryDef("food",      "Food",      3));

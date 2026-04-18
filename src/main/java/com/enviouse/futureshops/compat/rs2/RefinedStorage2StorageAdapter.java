@@ -87,8 +87,8 @@ public final class RefinedStorage2StorageAdapter implements ExternalStorageAdapt
 
     @SuppressWarnings("unchecked")
     private static synchronized void initReflection() {
-        if (reflectionInitialized) return;
-        reflectionInitialized = true;
+        // Retry if a prior attempt failed — RS classes may not have been loaded yet at first call.
+        if (reflectionInitialized && reflectionAvailable) return;
         try {
             // ─── INetworkNodeProxy ───
             networkNodeProxyClass = Class.forName(
@@ -135,10 +135,12 @@ public final class RefinedStorage2StorageAdapter implements ExternalStorageAdapt
             entryGetStackMethod = stackListEntryClass.getMethod("getStack");
 
             reflectionAvailable = true;
+            reflectionInitialized = true;
             LOGGER.info("FutureShops RS: Reflection-based RS1 network API access initialized successfully.");
         } catch (Throwable t) {
             reflectionAvailable = false;
-            LOGGER.warn("FutureShops RS: Reflection initialization failed — falling back to IItemHandler. Cause: {}", t.getMessage());
+            // Leave reflectionInitialized=false so the next call retries (RS classes may load later).
+            LOGGER.debug("FutureShops RS: Reflection initialization failed (will retry) — {}.", t.getMessage());
         }
     }
 

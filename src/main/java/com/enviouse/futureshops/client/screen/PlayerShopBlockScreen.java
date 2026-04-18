@@ -509,7 +509,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
         ShopUiUtil.renderDimBackdrop(graphics, this.width, this.height);
 
-        int accentColor = PlayerShopClientState.owner() ? ShopColors.ACCENT_PROMO_HI : ShopColors.ACCENT_PRIMARY;
+        int accentColor = PlayerShopClientState.owner() ? ShopColors.ACCENT_CURRENCY : ShopColors.ACCENT_PRIMARY;
         graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + guiH, ShopColors.SURFACE_BASE);
         ShopUiUtil.drawSoftOutline(graphics, guiLeft, guiTop, guiW, guiH, ShopColors.BORDER_STRONG, ShopColors.BORDER_SUBTLE);
         graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + 2, accentColor);
@@ -558,7 +558,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         int hy = guiTop + 4;
         int hw = guiW - 16;
         int hh = headerHeight - 4;
-        int accentColor = PlayerShopClientState.owner() ? ShopColors.ACCENT_PROMO_HI : ShopColors.ACCENT_PRIMARY;
+        int accentColor = PlayerShopClientState.owner() ? ShopColors.ACCENT_CURRENCY : ShopColors.ACCENT_PRIMARY;
         ShopUiUtil.renderCard(graphics, hx, hy, hw, hh);
         graphics.fill(hx, hy, hx + hw, hy + 2, accentColor);
 
@@ -644,7 +644,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         int cw = guiW - 16;
         int ch = configPanelHeight;
         ShopUiUtil.renderCard(graphics, cx, cy, cw, ch);
-        graphics.fill(cx, cy, cx + cw, cy + 2, ShopColors.ACCENT_PROMO_HI);
+        graphics.fill(cx, cy, cx + cw, cy + 2, ShopColors.ACCENT_CURRENCY);
         int labelY = cy + (compact ? 6 : 12);
         graphics.drawString(this.font, "§7Name:", cx + 6, labelY, ShopColors.TEXT_FAINT, false);
     }
@@ -655,7 +655,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         int railW = listingRailW;
         int railH = contentAreaH;
         ShopUiUtil.renderCard(graphics, railX, railY, railW, railH);
-        graphics.fill(railX, railY, railX + railW, railY + 2, ShopColors.ACCENT_PROMO_HI);
+        graphics.fill(railX, railY, railX + railW, railY + 2, ShopColors.ACCENT_PRIMARY);
         graphics.drawString(this.font, "§lListings", railX + 8, railY + 6, ShopColors.TEXT_STRONG, false);
 
         List<PlayerShopListingData> listings = PlayerShopClientState.listings();
@@ -716,7 +716,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
             meta = this.font.plainSubstrByWidth(meta, nameW);
             int metaColor = switch (listing.tradeMode().toUpperCase(Locale.ROOT)) {
                 case "BARTER" -> ShopColors.TEXT_BARTER;
-                case "MONEY_AND_BARTER" -> ShopColors.ACCENT_PURPLE;
+                case "MONEY_AND_BARTER" -> ShopColors.ACCENT_CURRENCY;
                 default -> ShopColors.TEXT_PRICE;
             };
             graphics.drawString(this.font, meta, railX + 30, y + 16, metaColor, false);
@@ -814,7 +814,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         String modeStr = prettyMode(listing.tradeMode());
         int modeColor = switch (listing.tradeMode().toUpperCase(Locale.ROOT)) {
             case "BARTER" -> ShopColors.TEXT_BARTER;
-            case "MONEY_AND_BARTER" -> ShopColors.ACCENT_PURPLE;
+            case "MONEY_AND_BARTER" -> ShopColors.ACCENT_CURRENCY;
             case "BOTH" -> ShopColors.TEXT_PRIMARY;
             default -> ShopColors.TEXT_PRICE;
         };
@@ -853,8 +853,8 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
             // Section 3: Config
             ShopUiUtil.renderPanel(graphics, ownerInfoX, configSecY, ownerInfoW, sectionH, ShopColors.SURFACE_RAISED, ShopColors.BORDER_SUBTLE);
-            graphics.fill(ownerInfoX, configSecY, ownerInfoX + 2, configSecY + sectionH, ShopColors.ACCENT_PROMO_HI);
-            graphics.drawString(this.font, "§lCONFIG", ownerInfoX + 6, configSecY + 3, ShopColors.ACCENT_PROMO_HI, false);
+            graphics.fill(ownerInfoX, configSecY, ownerInfoX + 2, configSecY + sectionH, ShopColors.ACCENT_CURRENCY);
+            graphics.drawString(this.font, "§lCONFIG", ownerInfoX + 6, configSecY + 3, ShopColors.ACCENT_CURRENCY, false);
             // Status badges at bottom of config section — only department (NBT and qty are redundant with inline controls)
             if (!compact) {
                 int badgeY = configSecY + sectionH - 14;
@@ -1009,7 +1009,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
         // ═══ Left: Preview panel ═══
         ShopUiUtil.renderCard(graphics, detailX + 8, detailY + 8, previewW, detailH - 16);
-        graphics.fill(detailX + 8, detailY + 8, detailX + 8 + previewW, detailY + 10, ShopColors.ACCENT_PROMO_HI);
+        graphics.fill(detailX + 8, detailY + 8, detailX + 8 + previewW, detailY + 10, ShopColors.ACCENT_PRIMARY);
         if (!listing.nbtJson().isBlank()) {
             ShopUiUtil.renderLargeItemPreviewWithNbt(graphics, this.font, listing.itemId(), listing.nbtJson(), detailX + 10, detailY + 16, previewW - 4);
         } else {

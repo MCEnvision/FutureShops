@@ -235,8 +235,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         int y = guiTop + headerH + 2;
         int h = guiH - headerH - stripH - footerH - 14;
         ShopUiUtil.renderCard(graphics, x, y, sidebarW, h);
-        // Magenta accent rule on top
-        graphics.fill(x, y, x + sidebarW, y + 2, ShopColors.ACCENT_PROMO_HI);
+        graphics.fill(x, y, x + sidebarW, y + 2, ShopColors.ACCENT_PRIMARY);
         graphics.drawString(this.font, "§lDepartments", x + 8, y + 6, ShopColors.TEXT_STRONG, false);
 
         List<CatalogCategory> cats = ShopClientState.getCatalogCategories();
@@ -736,7 +735,9 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
     }
 
     private boolean hasNearbyTab() {
-        return !ShopClientState.getNearbyShops().isEmpty();
+        // Nearby shops are reachable via the dedicated 📍 Nearby button at the top of the screen,
+        // so we no longer surface a duplicate department tab in the sidebar.
+        return false;
     }
 
     private boolean isBarterTabSelected() {

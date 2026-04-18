@@ -36,6 +36,14 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
     private int guiW;
     private int guiH;
 
+    private int highlightScroll;
+    private int highlightPanelX;
+    private int highlightPanelY;
+    private int highlightPanelW;
+    private int highlightPanelH;
+    private int highlightContentHeight;
+    private int highlightViewportHeight;
+
     public BalTopOverviewScreen(int page, int totalPages, List<BalanceTopEntry> entries, String currencyName, int currencyDecimals,
                                 UUID activityLeaderUuid, String activityLeaderName, int activityLeaderCount,
                                 UUID topSellerUuid, String topSellerName, int topSellerCount,
@@ -132,29 +140,79 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
         int panelW = (guiW - 28) / 2;
         int panelX = guiLeft + guiW - panelW - 10;
         int panelY = guiTop + 58;
-        // Highlights take upper portion, franchise takes lower
         int highlightH = Math.min(160, (guiH - 92) / 2 + 20);
         ShopUiUtil.renderCard(graphics, panelX, panelY, panelW, highlightH);
         graphics.fill(panelX, panelY, panelX + panelW, panelY + 2, ShopColors.ACCENT_PRIMARY);
         graphics.drawString(this.font, "Server spotlights", panelX + 8, panelY + 8, ShopColors.TEXT_STRONG, false);
 
-        int cardH = Math.min(48, (highlightH - 28) / 2 - 4);
-        renderHighlightCard(graphics, panelX + 8, panelY + 26, panelW - 16, cardH, "Most transactions", activityLeaderUuid, activityLeaderName,
-                activityLeaderCount + " total actions", ShopColors.TEXT_BARTER_SOFT);
-        renderHighlightCard(graphics, panelX + 8, panelY + 26 + cardH + 6, panelW - 16, cardH, "Top seller", topSellerUuid, topSellerName,
-                topSellerCount + " shop sales", ShopColors.TEXT_CURRENCY);
+        highlightPanelX = panelX;
+        highlightPanelY = panelY;
+        highlightPanelW = panelW;
+        highlightPanelH = highlightH;
 
-        // Most popular product — compact
-        int productY = panelY + highlightH - 38;
-        graphics.fill(panelX + 8, productY, panelX + panelW - 8, productY + 30, ShopColors.SURFACE_OVERLAY);
-        ShopUiUtil.drawBorder(graphics, panelX + 8, productY, panelW - 16, 30, ShopColors.BORDER_SUBTLE);
+        int cardH = 48;
+        int productH = 30;
+        int gap = 6;
+        highlightContentHeight = cardH + gap + cardH + gap + productH;
+        int viewportY = panelY + 24;
+        int viewportH = highlightH - 28;
+        highlightViewportHeight = viewportH;
+
+        int maxScroll = Math.max(0, highlightContentHeight - viewportH);
+        highlightScroll = Math.max(0, Math.min(highlightScroll, maxScroll));
+
+        int contentX = panelX + 8;
+        int contentW = panelW - 16 - (maxScroll > 0 ? 8 : 0);
+        int cursorY = viewportY - highlightScroll;
+
+        graphics.enableScissor(panelX + 4, viewportY, panelX + panelW - 4, viewportY + viewportH);
+
+        renderHighlightCard(graphics, contentX, cursorY, contentW, cardH, "Most transactions",
+                activityLeaderUuid, activityLeaderName, activityLeaderCount + " total actions", ShopColors.TEXT_BARTER_SOFT);
+        cursorY += cardH + gap;
+
+        renderHighlightCard(graphics, contentX, cursorY, contentW, cardH, "Top seller",
+                topSellerUuid, topSellerName, topSellerCount + " shop sales", ShopColors.TEXT_CURRENCY);
+        cursorY += cardH + gap;
+
+        graphics.fill(contentX, cursorY, contentX + contentW, cursorY + productH, ShopColors.SURFACE_OVERLAY);
+        ShopUiUtil.drawBorder(graphics, contentX, cursorY, contentW, productH, ShopColors.BORDER_SUBTLE);
         if (!popularItemId.isBlank()) {
-            ShopUiUtil.renderItemIcon(graphics, this.font, popularItemId, panelX + 14, productY + 7);
-            graphics.drawString(this.font, this.font.plainSubstrByWidth("★ " + ShopUiUtil.getItemDisplayName(popularItemId), panelW - 72), panelX + 34, productY + 4, ShopColors.TEXT_STRONG, false);
-            graphics.drawString(this.font, popularItemTrades + " trades • " + popularItemQuantity + " qty", panelX + 34, productY + 16, ShopColors.TEXT_CURRENCY, false);
+            ShopUiUtil.renderItemIcon(graphics, this.font, popularItemId, contentX + 6, cursorY + 7);
+            graphics.drawString(this.font,
+                    this.font.plainSubstrByWidth("★ " + ShopUiUtil.getItemDisplayName(popularItemId), contentW - 32),
+                    contentX + 26, cursorY + 4, ShopColors.TEXT_STRONG, false);
+            graphics.drawString(this.font, popularItemTrades + " trades • " + popularItemQuantity + " qty",
+                    contentX + 26, cursorY + 16, ShopColors.TEXT_CURRENCY, false);
         } else {
-            graphics.drawString(this.font, "No product data yet.", panelX + 14, productY + 10, ShopColors.TEXT_FAINT, false);
+            graphics.drawString(this.font, "No product data yet.", contentX + 6, cursorY + 10, ShopColors.TEXT_FAINT, false);
         }
+
+        graphics.disableScissor();
+
+        if (maxScroll > 0) {
+            int trackX = panelX + panelW - 6;
+            int trackY = viewportY + 2;
+            int trackH = viewportH - 4;
+            graphics.fill(trackX, trackY, trackX + 3, trackY + trackH, ShopColors.BORDER_DEFAULT);
+            int thumbH = Math.max(8, (int) ((float) viewportH / highlightContentHeight * trackH));
+            int thumbY = trackY + (int) ((float) highlightScroll / maxScroll * (trackH - thumbH));
+            graphics.fill(trackX, thumbY, trackX + 3, thumbY + thumbH, ShopColors.ACCENT_CYAN);
+        }
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (highlightViewportHeight > 0
+                && mouseX >= highlightPanelX && mouseX <= highlightPanelX + highlightPanelW
+                && mouseY >= highlightPanelY && mouseY <= highlightPanelY + highlightPanelH) {
+            int maxScroll = Math.max(0, highlightContentHeight - highlightViewportHeight);
+            if (maxScroll > 0) {
+                highlightScroll = Math.max(0, Math.min(maxScroll, highlightScroll - (int) (delta * 18)));
+                return true;
+            }
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
     /**
@@ -169,8 +227,8 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
         if (panelH < 40) return;
 
         ShopUiUtil.renderCard(graphics, panelX, panelY, panelW, panelH);
-        graphics.fill(panelX, panelY, panelX + panelW, panelY + 2, ShopColors.ACCENT_PROMO_HI);
-        graphics.drawString(this.font, "§l⚑ Top 10 Franchises", panelX + 8, panelY + 6, ShopColors.ACCENT_PROMO_HI, false);
+        graphics.fill(panelX, panelY, panelX + panelW, panelY + 2, ShopColors.ACCENT_PRIMARY);
+        graphics.drawString(this.font, "§l⚑ Top 10 Franchises", panelX + 8, panelY + 6, ShopColors.ACCENT_PRIMARY, false);
 
         if (franchises.isEmpty()) {
             graphics.drawString(this.font, "§7No franchises yet.", panelX + 8, panelY + 22, ShopColors.TEXT_FAINT, false);

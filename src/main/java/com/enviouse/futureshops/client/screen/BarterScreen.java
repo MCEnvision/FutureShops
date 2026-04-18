@@ -148,7 +148,7 @@ public class BarterScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.renderDimBackdrop(graphics, this.width, this.height);
         graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + guiH, ShopColors.SURFACE_BASE);
         ShopUiUtil.drawSoftOutline(graphics, guiLeft, guiTop, guiW, guiH, ShopColors.BORDER_STRONG, ShopColors.BORDER_SUBTLE);
-        graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + 2, ShopColors.ACCENT_PROMO_HI);
+        graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + 2, ShopColors.ACCENT_PRIMARY);
 
         graphics.drawCenteredString(this.font, this.title, guiLeft + guiW / 2, guiTop + 10, ShopColors.TEXT_STRONG);
 
@@ -223,7 +223,7 @@ public class BarterScreen extends Screen implements ShopScreenMarker {
             graphics.fill(tx, tabY, tx + tabW, tabY + 12,
                     sel ? ShopColors.SURFACE_PRESSED : (hov ? ShopColors.SURFACE_OVERLAY : ShopColors.SURFACE_RAISED));
             if (sel) {
-                graphics.fill(tx, tabY + 10, tx + tabW, tabY + 12, ShopColors.ACCENT_PROMO_HI);
+                graphics.fill(tx, tabY + 10, tx + tabW, tabY + 12, ShopColors.ACCENT_PRIMARY);
             }
             graphics.drawCenteredString(this.font, "Recipe " + (i + 1), tx + tabW / 2, tabY + 2,
                     sel ? ShopColors.TEXT_STRONG : ShopColors.TEXT_MUTED);

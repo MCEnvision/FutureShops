@@ -149,7 +149,7 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
         ShopUiUtil.renderDimBackdrop(graphics, this.width, this.height);
         graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + guiH, ShopColors.SURFACE_BASE);
         ShopUiUtil.drawSoftOutline(graphics, guiLeft, guiTop, guiW, guiH, ShopColors.BORDER_STRONG, ShopColors.BORDER_SUBTLE);
-        graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + 2, ShopColors.ACCENT_PROMO_HI);
+        graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + 2, ShopColors.ACCENT_PRIMARY);
 
         if (!inFranchise) {
             renderNoFranchise(graphics, mouseX, mouseY);
@@ -163,7 +163,7 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
     private void renderNoFranchise(GuiGraphics graphics, int mouseX, int mouseY) {
         // Header
         ShopUiUtil.renderCard(graphics, guiLeft + 10, guiTop + 10, guiW - 20, 40);
-        graphics.fill(guiLeft + 10, guiTop + 10, guiLeft + guiW - 10, guiTop + 12, ShopColors.ACCENT_PROMO_HI);
+        graphics.fill(guiLeft + 10, guiTop + 10, guiLeft + guiW - 10, guiTop + 12, ShopColors.ACCENT_PRIMARY);
         graphics.drawString(this.font, "⚑ Franchise", guiLeft + 18, guiTop + 18, ShopColors.TEXT_STRONG, true);
         graphics.drawString(this.font, "You are not in a franchise", guiLeft + 18, guiTop + 32, ShopColors.TEXT_MUTED, false);
 
@@ -182,8 +182,8 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
     private void renderFranchiseView(GuiGraphics graphics, int mouseX, int mouseY) {
         // Header with franchise name
         ShopUiUtil.renderCard(graphics, guiLeft + 10, guiTop + 10, guiW - 20, 40);
-        graphics.fill(guiLeft + 10, guiTop + 10, guiLeft + guiW - 10, guiTop + 12, ShopColors.ACCENT_PROMO_HI);
-        graphics.drawString(this.font, "⚑ " + franchiseName, guiLeft + 18, guiTop + 18, ShopColors.ACCENT_PROMO_HI, true);
+        graphics.fill(guiLeft + 10, guiTop + 10, guiLeft + guiW - 10, guiTop + 12, ShopColors.ACCENT_PRIMARY);
+        graphics.drawString(this.font, "⚑ " + franchiseName, guiLeft + 18, guiTop + 18, ShopColors.ACCENT_PRIMARY, true);
         String roleText = isLeader ? "§6Leader" : "§7Member";
         graphics.drawString(this.font, roleText + " • " + members.size() + " member" + (members.size() != 1 ? "s" : ""),
                 guiLeft + 18, guiTop + 32, ShopColors.TEXT_MUTED, false);
