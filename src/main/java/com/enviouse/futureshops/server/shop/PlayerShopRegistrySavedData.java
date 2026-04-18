@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.server.shop;
 
+import com.enviouse.futureshops.server.SavedDataMigrations;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -16,11 +17,14 @@ import java.util.UUID;
 
 public final class PlayerShopRegistrySavedData extends SavedData {
     private static final String DATA_NAME = "futureshops_player_shop_registry";
+    private static final int CURRENT_VERSION = 1;
 
     private final Map<UUID, List<ShopRef>> shopsByOwner = new HashMap<>();
 
     public static PlayerShopRegistrySavedData load(CompoundTag tag) {
         PlayerShopRegistrySavedData data = new PlayerShopRegistrySavedData();
+        int version = SavedDataMigrations.readVersion(tag);
+        SavedDataMigrations.needsMigration(DATA_NAME, version, CURRENT_VERSION);
         ListTag owners = tag.getList("owners", Tag.TAG_COMPOUND);
         for (Tag ownerTag : owners) {
             CompoundTag ownerCompound = (CompoundTag) ownerTag;
@@ -43,6 +47,7 @@ public final class PlayerShopRegistrySavedData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag) {
+        SavedDataMigrations.writeVersion(tag, CURRENT_VERSION);
         ListTag owners = new ListTag();
         for (Map.Entry<UUID, List<ShopRef>> entry : shopsByOwner.entrySet()) {
             CompoundTag ownerTag = new CompoundTag();
@@ -99,7 +104,25 @@ public final class PlayerShopRegistrySavedData extends SavedData {
         return snapshot;
     }
 
+    /**
+     * Returns a flat map of all registered shops: posLong → ShopRecord (with owner + dimension).
+     * Used by NearbyShopScanner for fast spatial lookup.
+     */
+    public synchronized Map<Long, ShopRecord> getAllShops() {
+        Map<Long, ShopRecord> result = new HashMap<>();
+        for (Map.Entry<UUID, List<ShopRef>> entry : shopsByOwner.entrySet()) {
+            UUID owner = entry.getKey();
+            for (ShopRef ref : entry.getValue()) {
+                result.put(ref.posLong(), new ShopRecord(owner, ref.dimension().toString()));
+            }
+        }
+        return result;
+    }
+
     public record ShopRef(ResourceLocation dimension, long posLong) {
+    }
+
+    public record ShopRecord(UUID owner, String dimension) {
     }
 }
 

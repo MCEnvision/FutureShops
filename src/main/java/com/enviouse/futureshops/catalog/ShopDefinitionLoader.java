@@ -118,7 +118,8 @@ public final class ShopDefinitionLoader {
                             getLong(o, "sellPrice", 0L),
                             getInt(o, "stock", -1),
                             getBool(o, "barterEnabled", false),
-                            getString(o, "categoryId", "all")));
+                            getString(o, "categoryId", "all"),
+                            getInt(o, "stockRefreshSeconds", 0)));
                 }
             }
 
@@ -266,7 +267,7 @@ public final class ShopDefinitionLoader {
                 { "itemId": "minecraft:iron_sword",             "displayName": "Iron Sword",             "buyPrice":  500, "sellPrice":  250, "stock": -1,  "categoryId": "tools"     },
                 { "itemId": "minecraft:diamond",                "displayName": "Diamond",                "buyPrice":  500, "sellPrice":  250, "stock": -1,  "categoryId": "materials" },
                 { "itemId": "minecraft:emerald",                "displayName": "Emerald",                "buyPrice":  300, "sellPrice":  150, "stock": -1,  "barterEnabled": true, "categoryId": "materials", "promoId": "promo_emerald_10" },
-                { "itemId": "minecraft:iron_ingot",             "displayName": "Iron Ingot",             "buyPrice":   50, "sellPrice":   25, "stock": 100, "categoryId": "materials" },
+                { "itemId": "minecraft:iron_ingot",             "displayName": "Iron Ingot",             "buyPrice":   50, "sellPrice":   25, "stock": 100, "categoryId": "materials", "stockRefreshSeconds": 300 },
                 { "itemId": "minecraft:gold_ingot",             "displayName": "Gold Ingot",             "buyPrice":  150, "sellPrice":   75, "stock": -1,  "categoryId": "materials" },
                 { "itemId": "minecraft:netherite_ingot",        "displayName": "Netherite Ingot",        "buyPrice": 5000, "sellPrice": 2500, "stock":  10, "categoryId": "materials" },
                 { "itemId": "minecraft:bread",                  "displayName": "Bread",                  "buyPrice":   10, "sellPrice":    5, "stock": -1,  "categoryId": "food"      },

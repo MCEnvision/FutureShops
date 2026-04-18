@@ -2,12 +2,14 @@ package com.enviouse.futureshops.server.transaction;
 
 import com.enviouse.futureshops.catalog.ItemDef;
 import com.enviouse.futureshops.catalog.ShopCatalog;
+import com.enviouse.futureshops.event.ShopTransactionEvent;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SSellRequestPacket;
 import com.enviouse.futureshops.network.packets.S2CSellResponsePacket;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
 import com.enviouse.futureshops.server.economy.TransactionResult;
+import com.enviouse.futureshops.server.pricing.DynamicPricingEngine;
 import com.enviouse.futureshops.server.session.ShopSession;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
 import com.enviouse.futureshops.server.shop.InventorySyncService;
@@ -36,6 +38,12 @@ public final class ShopSellService {
 
         if (result.success() && player.getServer() != null) {
             TransactionHistoryService.record(player, result.shopId(), "SELL", packet.itemId(), packet.quantity(), result.totalValue(), "DETAIL");
+            // Record sell activity for dynamic pricing (spec §30)
+            DynamicPricingEngine.recordSell(player.getServer(), result.shopId(), packet.itemId(), packet.quantity());
+            // Fire ShopTransactionEvent.Post (spec §33)
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                    new ShopTransactionEvent.Post(player.getUUID(), result.shopId(), packet.itemId(),
+                            packet.quantity(), "SELL", result.totalValue(), result.resultingBalance()));
             InventorySyncService.sendOwnedCounts(player, result.shopId());
             ShopDataService.resendSessionsViewingShop(player.getServer(), result.shopId());
         }
@@ -49,7 +57,7 @@ public final class ShopSellService {
         }
 
         int quantity = packet.quantity();
-        if (quantity <= 0 || quantity > ShopTransactionUtil.MAX_QUANTITY) {
+        if (quantity <= 0 || quantity > ShopTransactionUtil.MAX_SELL_QUANTITY) {
             return SellResult.error(shopId, BalanceManager.getProvider().getBalance(player.getUUID()), "INVALID_ITEM");
         }
 
@@ -82,11 +90,20 @@ public final class ShopSellService {
                 return SellResult.error(shopId, provider.getBalance(player.getUUID()), "SERVER_ERROR");
             }
 
+            // Fire cancellable ShopTransactionEvent.Pre (spec §33) — allows other mods to cancel or modify price
+            ShopTransactionEvent.Pre preEvent = new ShopTransactionEvent.Pre(
+                    player, shopId, packet.itemId(), quantity, "SELL", totalValue);
+            if (net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(preEvent)) {
+                return SellResult.error(shopId, provider.getBalance(player.getUUID()), "CANCELLED_BY_EVENT");
+            }
+            // Allow event listeners to modify the price
+            totalValue = preEvent.getPriceMinor();
+
             if (!ShopTransactionUtil.removeItems(inventory, item, quantity)) {
                 return SellResult.error(shopId, provider.getBalance(player.getUUID()), "MISSING_ITEMS");
             }
 
-            TransactionResult deposit = provider.deposit(player.getUUID(), totalValue);
+            TransactionResult deposit = provider.deposit(player.getUUID(), totalValue, "SELL");
             if (!deposit.success()) {
                 ShopTransactionUtil.insertIntoInventory(inventory, java.util.List.of(new net.minecraft.world.item.ItemStack(item, quantity)));
                 inventory.setChanged();
@@ -94,7 +111,7 @@ public final class ShopSellService {
             }
 
             if (!ShopCatalog.incrementStock(shopId, packet.itemId(), quantity)) {
-                provider.withdraw(player.getUUID(), totalValue);
+                provider.withdraw(player.getUUID(), totalValue, "SELL");
                 ShopTransactionUtil.insertIntoInventory(inventory, java.util.List.of(new net.minecraft.world.item.ItemStack(item, quantity)));
                 inventory.setChanged();
                 return SellResult.error(shopId, provider.getBalance(player.getUUID()), "SERVER_ERROR");

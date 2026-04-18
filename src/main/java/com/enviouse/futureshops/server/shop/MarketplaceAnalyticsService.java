@@ -2,6 +2,7 @@ package com.enviouse.futureshops.server.shop;
 
 import com.enviouse.futureshops.block.ShopBlockEntity;
 import com.enviouse.futureshops.data.BalanceTopEntry;
+import com.enviouse.futureshops.data.FranchiseLeaderboardEntry;
 import com.enviouse.futureshops.data.OwnedShopSummary;
 import com.enviouse.futureshops.data.TransactionHistoryEntry;
 import com.enviouse.futureshops.network.ShopPackets;
@@ -54,6 +55,29 @@ public final class MarketplaceAnalyticsService {
                 snapshot.alerts()));
     }
 
+    /**
+     * Sends the target player's dashboard data to the viewer (admin).
+     * This lets admins inspect another player's marketplace profile.
+     */
+    public static void sendDashboardForViewer(ServerPlayer viewer, ServerPlayer target) {
+        EconomyProvider provider = BalanceManager.getProvider();
+        DashboardSnapshot snapshot = snapshotDashboard(target);
+        ShopPackets.sendToPlayer(viewer, new S2CBalanceUiPacket(
+                target.getUUID(),
+                target.getGameProfile().getName(),
+                provider.getBalance(target.getUUID()),
+                provider.getCurrencyName(),
+                provider.getDecimalPlaces(),
+                snapshot.totalRevenueMinor(),
+                snapshot.totalPendingMinor(),
+                snapshot.shopCount(),
+                snapshot.listingCount(),
+                snapshot.totalStock(),
+                snapshot.lowSupplyCount(),
+                snapshot.shopSummaries(),
+                snapshot.alerts()));
+    }
+
     public static void sendLeaderboard(ServerPlayer player, int page) {
         MinecraftServer server = player.server;
         EconomyProvider provider = BalanceManager.getProvider();
@@ -63,9 +87,15 @@ public final class MarketplaceAnalyticsService {
                 .toList();
         int totalPages = topBalances.isEmpty() && safePage > 1 ? safePage : Math.max(1, safePage + (topBalances.size() == BALTOP_PAGE_SIZE ? 1 : 0));
 
-        PlayerMetric activityLeader = resolveActivityLeader(server);
+        // Single pass over transaction history computes both the activity leader and the popular-product metric.
+        TransactionMetrics txMetrics = resolveTransactionMetrics(server);
+        PlayerMetric activityLeader = txMetrics.activityLeader();
+        ProductMetric productMetric = txMetrics.productMetric();
         PlayerMetric sellerLeader = resolveTopSeller(server);
-        ProductMetric productMetric = resolvePopularProduct(server);
+
+        List<FranchiseLeaderboardEntry> franchises = FranchiseSavedData.get(server).getTopFranchises(10).stream()
+                .map(f -> new FranchiseLeaderboardEntry(f.franchiseId(), f.name(), resolvePlayerName(server, f.leader()), f.memberCount()))
+                .toList();
 
         ShopPackets.sendToPlayer(player, new S2CBalTopUiPacket(
                 safePage,
@@ -81,7 +111,8 @@ public final class MarketplaceAnalyticsService {
                 sellerLeader.value(),
                 productMetric.itemId(),
                 productMetric.tradeCount(),
-                productMetric.totalQuantity()));
+                productMetric.totalQuantity(),
+                franchises));
     }
 
     public static DashboardSnapshot snapshotDashboard(ServerPlayer player) {
@@ -149,12 +180,52 @@ public final class MarketplaceAnalyticsService {
         return new DashboardSnapshot(summaries, alerts, revenue, pending, summaries.size(), listingCount, totalStock, lowSupplyCount);
     }
 
-    private static PlayerMetric resolveActivityLeader(MinecraftServer server) {
+    /**
+     * Walks {@link TransactionHistorySavedData} exactly once and returns both the activity-leader
+     * {@link PlayerMetric} and the popular-product {@link ProductMetric}.
+     */
+    private static TransactionMetrics resolveTransactionMetrics(MinecraftServer server) {
         Map<UUID, List<TransactionHistoryEntry>> entriesByPlayer = TransactionHistorySavedData.get(server).snapshotEntriesByPlayer();
-        return entriesByPlayer.entrySet().stream()
-                .map(entry -> new PlayerMetric(entry.getKey(), resolvePlayerName(server, entry.getKey()), entry.getValue().size()))
-                .max(Comparator.comparingInt(PlayerMetric::value))
-                .orElse(PlayerMetric.NONE);
+
+        UUID topPlayer = null;
+        int topCount = -1;
+        String topItemId = null;
+        int topItemTradeCount = 0;
+        long topItemTotalQty = 0L;
+        Map<String, int[]> productTotals = new HashMap<>(); // itemId → [tradeCount, totalQuantity]
+
+        for (Map.Entry<UUID, List<TransactionHistoryEntry>> playerEntry : entriesByPlayer.entrySet()) {
+            List<TransactionHistoryEntry> entries = playerEntry.getValue();
+            int size = entries.size();
+            if (size > topCount) {
+                topCount = size;
+                topPlayer = playerEntry.getKey();
+            }
+            for (TransactionHistoryEntry entry : entries) {
+                if ((!"BUY".equalsIgnoreCase(entry.type()) && !"BARTER".equalsIgnoreCase(entry.type()))
+                        || entry.itemId() == null || entry.itemId().isBlank()
+                        || "cart".equalsIgnoreCase(entry.itemId())) {
+                    continue;
+                }
+                int[] totals = productTotals.computeIfAbsent(entry.itemId(), ignored -> new int[]{0, 0});
+                totals[0]++;
+                totals[1] += Math.max(1, entry.quantity());
+                if (totals[1] > topItemTotalQty
+                        || (totals[1] == topItemTotalQty && totals[0] > topItemTradeCount)) {
+                    topItemId = entry.itemId();
+                    topItemTradeCount = totals[0];
+                    topItemTotalQty = totals[1];
+                }
+            }
+        }
+
+        PlayerMetric activity = topPlayer == null
+                ? PlayerMetric.NONE
+                : new PlayerMetric(topPlayer, resolvePlayerName(server, topPlayer), topCount);
+        ProductMetric product = topItemId == null
+                ? ProductMetric.NONE
+                : new ProductMetric(topItemId, topItemTradeCount, topItemTotalQty);
+        return new TransactionMetrics(activity, product);
     }
 
     private static PlayerMetric resolveTopSeller(MinecraftServer server) {
@@ -162,22 +233,6 @@ public final class MarketplaceAnalyticsService {
                 .map(entry -> new PlayerMetric(entry.getKey(), resolvePlayerName(server, entry.getKey()), entry.getValue()))
                 .max(Comparator.comparingInt(PlayerMetric::value))
                 .orElse(PlayerMetric.NONE);
-    }
-
-    private static ProductMetric resolvePopularProduct(MinecraftServer server) {
-        Map<String, ProductMetric> productTotals = new HashMap<>();
-        TransactionHistorySavedData.get(server).snapshotEntriesByPlayer().values().forEach(entries -> entries.forEach(entry -> {
-            if ((!"BUY".equalsIgnoreCase(entry.type()) && !"BARTER".equalsIgnoreCase(entry.type()))
-                    || entry.itemId() == null || entry.itemId().isBlank() || "cart".equalsIgnoreCase(entry.itemId())) {
-                return;
-            }
-            productTotals.compute(entry.itemId(), (itemId, current) -> current == null
-                    ? new ProductMetric(itemId, 1, Math.max(1, entry.quantity()))
-                    : new ProductMetric(itemId, current.tradeCount() + 1, current.totalQuantity() + Math.max(1, entry.quantity())));
-        }));
-        return productTotals.values().stream()
-                .max(Comparator.comparingLong(ProductMetric::totalQuantity).thenComparingInt(ProductMetric::tradeCount))
-                .orElse(ProductMetric.NONE);
     }
 
     private static String resolvePlayerName(MinecraftServer server, UUID playerUUID) {
@@ -221,6 +276,9 @@ public final class MarketplaceAnalyticsService {
 
     private record ProductMetric(String itemId, int tradeCount, long totalQuantity) {
         private static final ProductMetric NONE = new ProductMetric("", 0, 0L);
+    }
+
+    private record TransactionMetrics(PlayerMetric activityLeader, ProductMetric productMetric) {
     }
 }
 

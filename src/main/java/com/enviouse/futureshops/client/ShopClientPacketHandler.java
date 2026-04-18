@@ -1,5 +1,10 @@
 package com.enviouse.futureshops.client;
 
+import com.enviouse.futureshops.client.screen.BarterScreen;
+import com.enviouse.futureshops.client.screen.CartScreen;
+import com.enviouse.futureshops.client.screen.FranchiseManagementScreen;
+import com.enviouse.futureshops.client.screen.ItemDetailScreen;
+import com.enviouse.futureshops.client.screen.PlayerShopBarterScreen;
 import com.enviouse.futureshops.client.screen.PlayerShopBlockScreen;
 import com.enviouse.futureshops.client.screen.BalTopOverviewScreen;
 import com.enviouse.futureshops.client.screen.BalanceOverviewScreen;
@@ -13,13 +18,16 @@ import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.S2CBarterResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CBuyResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CForceClosePacket;
+import com.enviouse.futureshops.network.packets.S2CFranchiseDataPacket;
 import com.enviouse.futureshops.network.packets.S2CHistoryResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CInventorySyncPacket;
+import com.enviouse.futureshops.network.packets.S2CLocalShopsPacket;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopDataPacket;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopResultPacket;
 import com.enviouse.futureshops.network.packets.S2CSettlementHistoryPacket;
 import com.enviouse.futureshops.network.packets.S2CSellResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CShopDataPacket;
+import com.enviouse.futureshops.network.packets.S2CVerifyCartResponsePacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
@@ -40,9 +48,16 @@ public final class ShopClientPacketHandler {
                     packet.categories(),
                     packet.items(),
                     packet.promos(),
-                    packet.barterRecipes());
+                    packet.barterRecipes(),
+                    packet.adminShopEnabled(),
+                    packet.nearbyShops());
             ShopPackets.CHANNEL.sendToServer(new com.enviouse.futureshops.network.packets.C2SInventorySyncPacket(packet.shopId()));
-            mc.setScreen(new ShopMainScreen());
+            // If already on ShopMainScreen, update in-place (preserves nearbyMode, scroll, etc.)
+            if (mc.screen instanceof ShopMainScreen existing) {
+                existing.refreshAfterDataUpdate();
+            } else {
+                mc.setScreen(new ShopMainScreen());
+            }
         });
     }
 
@@ -90,7 +105,8 @@ public final class ShopClientPacketHandler {
                         packet.topSellerCount(),
                         packet.popularItemId(),
                         packet.popularItemTrades(),
-                        packet.popularItemQuantity());
+                        packet.popularItemQuantity(),
+                        packet.franchises());
                 return;
             }
             mc.setScreen(new BalTopOverviewScreen(
@@ -107,7 +123,8 @@ public final class ShopClientPacketHandler {
                     packet.topSellerCount(),
                     packet.popularItemId(),
                     packet.popularItemTrades(),
-                    packet.popularItemQuantity()));
+                    packet.popularItemQuantity(),
+                    packet.franchises()));
         });
     }
 
@@ -141,16 +158,41 @@ public final class ShopClientPacketHandler {
                     packet.recentRevenueRows(),
                     packet.shopName(),
                     packet.singleItemMode(),
-                    packet.barterStorageSame());
+                    packet.barterStorageSame(),
+                    packet.description(),
+                    packet.franchiseName());
             if (!(mc.screen instanceof PlayerShopBlockScreen)) {
-                mc.setScreen(new PlayerShopBlockScreen());
+                // Pass current screen as parent for back-button navigation (Items 4, 9)
+                mc.setScreen(new PlayerShopBlockScreen(mc.screen));
             }
         });
     }
 
     public static void handlePlayerShopResult(S2CPlayerShopResultPacket packet) {
         Minecraft mc = Minecraft.getInstance();
-        mc.execute(() -> PlayerShopClientState.setResultCode(packet.code()));
+        mc.execute(() -> {
+            PlayerShopClientState.setResultCode(packet.code());
+
+            // Update ConfirmationModal on open screens
+            boolean isSuccess = packet.success();
+            String msg = packet.chatMessage() != null && !packet.chatMessage().isBlank() ? packet.chatMessage() : packet.code();
+            if (mc.screen instanceof PlayerShopBlockScreen psScreen) {
+                psScreen.onTransactionResult(isSuccess, msg);
+            } else if (mc.screen instanceof PlayerShopBarterScreen barterScreen) {
+                barterScreen.onTransactionResult(isSuccess, msg);
+            }
+
+            // Item 18: On barter/storage failure, close the UI and show a chat message
+            String code = packet.code();
+            if (!packet.success() && ("STORAGE_FULL".equals(code) || "ROLLBACK".equals(code) || "MISSING_BARTER_ITEMS".equals(code))) {
+                if (mc.screen instanceof ShopScreenMarker) {
+                    mc.setScreen(null);
+                }
+                if (mc.player != null && packet.chatMessage() != null && !packet.chatMessage().isBlank()) {
+                    mc.player.sendSystemMessage(Component.literal(packet.chatMessage()));
+                }
+            }
+        });
     }
 
     public static void handleSettlementHistory(S2CSettlementHistoryPacket packet) {
@@ -172,6 +214,13 @@ public final class ShopClientPacketHandler {
             if (packet.success() && packet.cartCheckout()) {
                 ShopClientState.clearCart();
             }
+
+            // Update ConfirmationModal if ItemDetailScreen is open
+            if (mc.screen instanceof ItemDetailScreen detailScreen) {
+                detailScreen.onTransactionResult(packet.success(), buildBuyMessage(packet).getString());
+            } else if (mc.screen instanceof CartScreen cartScreen) {
+                cartScreen.onTransactionResult(packet.success(), buildBuyMessage(packet).getString());
+            }
         });
     }
 
@@ -180,12 +229,24 @@ public final class ShopClientPacketHandler {
         mc.execute(() -> {
             ShopClientState.setCurrentBalanceMinorUnits(packet.resultingBalanceMinorUnits());
             ShopClientState.setStatus(buildSellMessage(packet), packet.success());
+
+            // Update ConfirmationModal if ItemDetailScreen is open
+            if (mc.screen instanceof ItemDetailScreen detailScreen) {
+                detailScreen.onTransactionResult(packet.success(), buildSellMessage(packet).getString());
+            }
         });
     }
 
     public static void handleBarterResponse(S2CBarterResponsePacket packet) {
         Minecraft mc = Minecraft.getInstance();
-        mc.execute(() -> ShopClientState.setStatus(buildBarterMessage(packet), packet.success()));
+        mc.execute(() -> {
+            ShopClientState.setStatus(buildBarterMessage(packet), packet.success());
+
+            // Update ConfirmationModal if BarterScreen is open
+            if (mc.screen instanceof BarterScreen barterScreen) {
+                barterScreen.onTransactionResult(packet.success(), buildBarterMessage(packet).getString());
+            }
+        });
     }
 
     /**
@@ -196,10 +257,50 @@ public final class ShopClientPacketHandler {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
             ShopClientState.reset();
+            PlayerShopCartState.clear(); // Item 34: Clear player shop cart on disconnect
             if (mc.screen instanceof ShopScreenMarker) {
                 mc.setScreen(null);
             }
         });
+    }
+
+    /**
+     * Handles aggregated local shop data for the franchise/owner browsing UI.
+     */
+    public static void handleLocalShops(S2CLocalShopsPacket packet) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            ShopClientState.applyLocalShops(packet.owners());
+            if (mc.screen instanceof ShopMainScreen existing) {
+                existing.refreshAfterDataUpdate();
+            }
+        });
+    }
+
+    /**
+     * Handles franchise data — opens or updates the FranchiseManagementScreen.
+     */
+    public static void handleFranchiseData(S2CFranchiseDataPacket packet) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            if (mc.screen instanceof FranchiseManagementScreen screen) {
+                screen.updateData(packet.inFranchise(), packet.franchiseId(), packet.franchiseName(),
+                        packet.isLeader(), packet.members(), packet.hasPendingInvite(), packet.pendingFranchiseName());
+            } else {
+                mc.setScreen(new FranchiseManagementScreen(
+                        packet.inFranchise(), packet.franchiseId(), packet.franchiseName(),
+                        packet.isLeader(), packet.members(), packet.hasPendingInvite(), packet.pendingFranchiseName()));
+            }
+        });
+    }
+
+    /**
+     * Handles cart verification response — stores warnings in client state
+     * for the cart screen to display.
+     */
+    public static void handleCartVerification(S2CVerifyCartResponsePacket packet) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> ShopClientState.applyCartVerification(packet.allOk(), packet.warnings()));
     }
 
     private static Component buildBuyMessage(S2CBuyResponsePacket packet) {

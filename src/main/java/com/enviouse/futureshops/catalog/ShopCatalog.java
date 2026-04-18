@@ -8,9 +8,12 @@ import net.minecraft.server.MinecraftServer;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -27,6 +30,13 @@ public final class ShopCatalog {
     private static final ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> STOCKS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, ConcurrentHashMap<String, PromoDef>> RUNTIME_PROMOS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, ConcurrentHashMap<String, RuntimePromoConfig>> RUNTIME_PROMO_CONFIGS = new ConcurrentHashMap<>();
+    // Indexes built once per reload. Immutable after reload() returns.
+    private static volatile Map<String, Map<String, ItemDef>> CATALOG_BY_ITEM = Map.of();
+    private static volatile Map<String, Set<String>> BARTER_TARGETS = Map.of();
+    private static volatile Map<String, Map<String, List<BarterRecipeDef>>> BARTER_BY_TARGET = Map.of();
+    private static volatile Map<String, Map<String, BarterRecipeDef>> BARTER_BY_ID = Map.of();
+    // Per-shop locks for stock mutations (replaces class-level `synchronized`).
+    private static final ConcurrentHashMap<String, java.util.concurrent.locks.ReentrantLock> STOCK_LOCKS = new ConcurrentHashMap<>();
 
     private ShopCatalog() {
     }
@@ -44,17 +54,50 @@ public final class ShopCatalog {
         STOCKS.clear();
         RUNTIME_PROMOS.clear();
         RUNTIME_PROMO_CONFIGS.clear();
+
+        Map<String, Map<String, ItemDef>> itemIndex = new LinkedHashMap<>();
+        Map<String, Set<String>> barterIndex = new LinkedHashMap<>();
+        Map<String, Map<String, List<BarterRecipeDef>>> barterByTargetIndex = new LinkedHashMap<>();
+        Map<String, Map<String, BarterRecipeDef>> barterByIdIndex = new LinkedHashMap<>();
+
         for (ShopDefinition def : ShopDefinitionLoader.loadAll()) {
             CATALOG.put(def.shopId(), def);
 
             ConcurrentHashMap<String, Integer> stockMap = new ConcurrentHashMap<>();
+            Map<String, ItemDef> byId = new LinkedHashMap<>(def.items().size() * 2);
             for (ItemDef item : def.items()) {
+                byId.putIfAbsent(item.itemId(), item);
                 if (!item.isUnlimited()) {
                     stockMap.put(item.itemId(), item.stock());
                 }
             }
             STOCKS.put(def.shopId(), stockMap);
+            itemIndex.put(def.shopId(), Map.copyOf(byId));
+
+            Set<String> barterTargets = new HashSet<>();
+            Map<String, List<BarterRecipeDef>> byTarget = new LinkedHashMap<>();
+            Map<String, BarterRecipeDef> byRecipeId = new LinkedHashMap<>();
+            for (BarterRecipeDef recipe : def.barterRecipes()) {
+                barterTargets.add(recipe.targetItemId());
+                byTarget.computeIfAbsent(recipe.targetItemId(), ignored -> new java.util.ArrayList<>()).add(recipe);
+                byRecipeId.putIfAbsent(recipe.recipeId(), recipe);
+            }
+            barterIndex.put(def.shopId(), Set.copyOf(barterTargets));
+            // Wrap each value list in an unmodifiable view for safe external exposure.
+            Map<String, List<BarterRecipeDef>> byTargetImmutable = new LinkedHashMap<>(byTarget.size() * 2);
+            byTarget.forEach((key, list) -> byTargetImmutable.put(key, List.copyOf(list)));
+            barterByTargetIndex.put(def.shopId(), Map.copyOf(byTargetImmutable));
+            barterByIdIndex.put(def.shopId(), Map.copyOf(byRecipeId));
         }
+
+        CATALOG_BY_ITEM = Map.copyOf(itemIndex);
+        BARTER_TARGETS = Map.copyOf(barterIndex);
+        BARTER_BY_TARGET = Map.copyOf(barterByTargetIndex);
+        BARTER_BY_ID = Map.copyOf(barterByIdIndex);
+
+        // Fire ShopReloadEvent (spec §33)
+        net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                new com.enviouse.futureshops.event.ShopReloadEvent(CATALOG.size()));
     }
 
     // -------------------------------------------------------------------------
@@ -81,8 +124,10 @@ public final class ShopCatalog {
     }
 
     public static Optional<ItemDef> getItem(String shopId, String itemId) {
-        return getOrDefault(shopId)
-                .flatMap(def -> def.items().stream().filter(item -> item.itemId().equals(itemId)).findFirst());
+        String resolved = resolveShopId(shopId);
+        Map<String, ItemDef> byId = CATALOG_BY_ITEM.get(resolved);
+        if (byId == null) return Optional.empty();
+        return Optional.ofNullable(byId.get(itemId));
     }
 
     public static int getCurrentStock(String shopId, String itemId) {
@@ -97,7 +142,7 @@ public final class ShopCatalog {
                 .orElse(-1);
     }
 
-    public static synchronized boolean reserveStock(String shopId, String itemId, int quantity) {
+    public static boolean reserveStock(String shopId, String itemId, int quantity) {
         if (quantity <= 0) {
             return false;
         }
@@ -113,17 +158,22 @@ public final class ShopCatalog {
         }
 
         String resolvedShopId = resolveShopId(shopId);
-        ConcurrentHashMap<String, Integer> stockMap = STOCKS.computeIfAbsent(resolvedShopId, ignored -> new ConcurrentHashMap<>());
-        int available = stockMap.getOrDefault(itemId, item.stock());
-        if (available < quantity) {
-            return false;
+        java.util.concurrent.locks.ReentrantLock lock = stockLockFor(resolvedShopId);
+        lock.lock();
+        try {
+            ConcurrentHashMap<String, Integer> stockMap = STOCKS.computeIfAbsent(resolvedShopId, ignored -> new ConcurrentHashMap<>());
+            int available = stockMap.getOrDefault(itemId, item.stock());
+            if (available < quantity) {
+                return false;
+            }
+            stockMap.put(itemId, available - quantity);
+            return true;
+        } finally {
+            lock.unlock();
         }
-
-        stockMap.put(itemId, available - quantity);
-        return true;
     }
 
-    public static synchronized void restoreStock(String shopId, String itemId, int quantity) {
+    public static void restoreStock(String shopId, String itemId, int quantity) {
         if (quantity <= 0) {
             return;
         }
@@ -134,12 +184,18 @@ public final class ShopCatalog {
             }
 
             String resolvedShopId = resolveShopId(shopId);
-            ConcurrentHashMap<String, Integer> stockMap = STOCKS.computeIfAbsent(resolvedShopId, ignored -> new ConcurrentHashMap<>());
-            stockMap.merge(itemId, quantity, Integer::sum);
+            java.util.concurrent.locks.ReentrantLock lock = stockLockFor(resolvedShopId);
+            lock.lock();
+            try {
+                ConcurrentHashMap<String, Integer> stockMap = STOCKS.computeIfAbsent(resolvedShopId, ignored -> new ConcurrentHashMap<>());
+                stockMap.merge(itemId, quantity, Integer::sum);
+            } finally {
+                lock.unlock();
+            }
         });
     }
 
-    public static synchronized boolean incrementStock(String shopId, String itemId, int quantity) {
+    public static boolean incrementStock(String shopId, String itemId, int quantity) {
         if (quantity <= 0) {
             return false;
         }
@@ -155,13 +211,79 @@ public final class ShopCatalog {
         }
 
         String resolvedShopId = resolveShopId(shopId);
-        ConcurrentHashMap<String, Integer> stockMap = STOCKS.computeIfAbsent(resolvedShopId, ignored -> new ConcurrentHashMap<>());
-        stockMap.merge(itemId, quantity, Integer::sum);
-        return true;
+        java.util.concurrent.locks.ReentrantLock lock = stockLockFor(resolvedShopId);
+        lock.lock();
+        try {
+            ConcurrentHashMap<String, Integer> stockMap = STOCKS.computeIfAbsent(resolvedShopId, ignored -> new ConcurrentHashMap<>());
+            stockMap.merge(itemId, quantity, Integer::sum);
+            return true;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Sets the stock for an item to an exact value. Used by the stock refresh scheduler (spec §31).
+     */
+    public static void setStock(String shopId, String itemId, int newStock) {
+        Optional<ItemDef> itemOpt = getItem(shopId, itemId);
+        if (itemOpt.isEmpty()) return;
+        ItemDef item = itemOpt.get();
+        if (item.isUnlimited()) return;
+
+        String resolvedShopId = resolveShopId(shopId);
+        java.util.concurrent.locks.ReentrantLock lock = stockLockFor(resolvedShopId);
+        lock.lock();
+        try {
+            ConcurrentHashMap<String, Integer> stockMap = STOCKS.computeIfAbsent(resolvedShopId, ignored -> new ConcurrentHashMap<>());
+            stockMap.put(itemId, newStock);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private static java.util.concurrent.locks.ReentrantLock stockLockFor(String resolvedShopId) {
+        return STOCK_LOCKS.computeIfAbsent(resolvedShopId, ignored -> new java.util.concurrent.locks.ReentrantLock());
     }
 
     public static List<CatalogCategory> buildCategories(String shopId) {
-        return getOrDefault(shopId).map(ShopDefinition::toCatalogCategories).orElse(List.of());
+        return buildCategories(shopId, null);
+    }
+
+    /**
+     * Builds the category list for the given shop.
+     * If a MinecraftServer is provided, admin-defined categories from AdminCategorySavedData
+     * are merged in (replacing the old TagDepartmentClassifier auto-generation).
+     */
+    public static List<CatalogCategory> buildCategories(String shopId, @javax.annotation.Nullable net.minecraft.server.MinecraftServer server) {
+        Optional<ShopDefinition> defOpt = getOrDefault(shopId);
+        if (defOpt.isEmpty()) return List.of();
+
+        List<CatalogCategory> base = defOpt.get().toCatalogCategories();
+        java.util.Set<String> existingIds = base.stream().map(CatalogCategory::id).collect(java.util.stream.Collectors.toSet());
+
+        // Merge admin-defined categories (replaces TagDepartmentClassifier auto-generation)
+        List<String> adminCategories = List.of();
+        if (server != null) {
+            adminCategories = com.enviouse.futureshops.server.shop.AdminCategorySavedData.get(server).getAllSorted();
+        }
+
+        if (adminCategories.isEmpty()) {
+            return base;
+        }
+
+        List<CatalogCategory> merged = new java.util.ArrayList<>(base);
+        int sortBase = base.stream().mapToInt(CatalogCategory::sortOrder).max().orElse(0) + 10;
+        int idx = 0;
+        for (String catName : adminCategories) {
+            String catId = catName.toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
+            if (!existingIds.contains(catId)) {
+                merged.add(new CatalogCategory(catId, catName, sortBase + idx));
+                existingIds.add(catId);
+                idx += 10;
+            }
+        }
+        return merged;
     }
 
     public static List<CatalogPromo> buildPromos(String shopId) {
@@ -187,43 +309,128 @@ public final class ShopCatalog {
     }
 
     public static List<CatalogItem> buildItems(String shopId) {
+        return buildItems(shopId, null);
+    }
+
+    /**
+     * Builds catalog items for the given shop.
+     * If a MinecraftServer is provided, admin-defined category assignments from AdminCategorySavedData
+     * are used to classify items that don't have an explicit categoryId in JSON.
+     */
+    public static List<CatalogItem> buildItems(String shopId, @javax.annotation.Nullable net.minecraft.server.MinecraftServer server) {
         Optional<ShopDefinition> defOpt = getOrDefault(shopId);
         if (defOpt.isEmpty()) {
             return List.of();
         }
 
         ShopDefinition def = defOpt.get();
+        String resolvedShopId = def.shopId();
         Map<String, PromoDef> promoByItem = def.promos().stream()
                 .filter(promo -> !promo.isExpired())
                 .filter(promo -> promo.targetItemId() != null && !promo.targetItemId().isBlank())
                 .collect(java.util.stream.Collectors.toMap(PromoDef::targetItemId, promo -> promo, (left, right) -> left));
-        RUNTIME_PROMOS.getOrDefault(def.shopId(), new ConcurrentHashMap<>()).forEach((itemId, promo) -> {
-            RuntimePromoConfig config = RUNTIME_PROMO_CONFIGS.getOrDefault(def.shopId(), new ConcurrentHashMap<>()).get(itemId);
-            if (config == null || config.isActive(nowEpochSeconds())) {
-                promoByItem.put(itemId, promo);
-            }
-        });
+        ConcurrentHashMap<String, PromoDef> runtimePromos = RUNTIME_PROMOS.get(resolvedShopId);
+        if (runtimePromos != null && !runtimePromos.isEmpty()) {
+            ConcurrentHashMap<String, RuntimePromoConfig> runtimeConfigs = RUNTIME_PROMO_CONFIGS.get(resolvedShopId);
+            long now = nowEpochSeconds();
+            runtimePromos.forEach((itemId, promo) -> {
+                RuntimePromoConfig config = runtimeConfigs == null ? null : runtimeConfigs.get(itemId);
+                if (config == null || config.isActive(now)) {
+                    promoByItem.put(itemId, promo);
+                }
+            });
+        }
+
+        // Load admin category assignments if server is available
+        final Map<String, String> adminAssignments;
+        if (server != null) {
+            adminAssignments = com.enviouse.futureshops.server.shop.AdminCategorySavedData.get(server).getAllAssignments();
+        } else {
+            adminAssignments = Map.of();
+        }
+
+        // Look up stock map and barter targets once, outside the per-item loop.
+        ConcurrentHashMap<String, Integer> stockMap = STOCKS.get(resolvedShopId);
+        Set<String> barterTargets = BARTER_TARGETS.getOrDefault(resolvedShopId, Set.of());
 
         return def.items().stream()
                 .map(item -> {
                     PromoDef promo = promoByItem.get(item.itemId());
                     boolean hasPromo = promo != null;
                     long promoPrice = hasPromo ? applyPromo(item.buyPriceMinorUnits(), promo) : 0L;
-                    boolean hasBarterRecipes = def.barterRecipes().stream().anyMatch(recipe -> recipe.targetItemId().equals(item.itemId()));
-                    return item.toCatalogItem(getCurrentStock(def.shopId(), item.itemId()), hasPromo, promoPrice, hasBarterRecipes);
+                    boolean hasBarterRecipes = barterTargets.contains(item.itemId());
+                    int stock = item.isUnlimited()
+                            ? -1
+                            : (stockMap == null ? item.stock() : stockMap.getOrDefault(item.itemId(), item.stock()));
+                    CatalogItem catalogItem = item.toCatalogItem(stock, hasPromo, promoPrice, hasBarterRecipes);
+
+                    // Override category from admin assignments if item has no explicit category
+                    if ("all".equals(catalogItem.categoryId())) {
+                        String adminCat = adminAssignments.get(item.itemId());
+                        if (adminCat != null && !adminCat.isBlank()) {
+                            String catId = adminCat.toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
+                            return new CatalogItem(
+                                    catalogItem.itemId(), catalogItem.displayName(),
+                                    catalogItem.buyPrice(), catalogItem.sellPrice(),
+                                    catalogItem.stock(), catalogItem.unlimited(),
+                                    catalogItem.barterEnabled(), catId,
+                                    catalogItem.hasPromo(), catalogItem.promoPrice(),
+                                    catalogItem.hasBarterRecipes(),
+                                    catalogItem.nbtJson());
+                        }
+                    }
+                    return catalogItem;
                 })
                 .toList();
     }
 
     public static long getEffectiveBuyPrice(String shopId, String itemId) {
-        return buildItems(shopId).stream()
-                .filter(item -> item.itemId().equals(itemId))
-                .findFirst()
-                .map(item -> item.hasPromo() ? item.promoPrice() : item.buyPrice())
-                .orElse(0L);
+        ItemDef itemDef = getItem(shopId, itemId).orElse(null);
+        if (itemDef == null) return 0L;
+        long basePrice = itemDef.buyPriceMinorUnits();
+        PromoDef promo = findEffectivePromo(shopId, itemId);
+        return promo == null ? basePrice : applyPromo(basePrice, promo);
+    }
+
+    /**
+     * Returns the active promo for {@code itemId} in {@code shopId}, or {@code null} if none applies.
+     * Checks runtime overrides first (respecting their active window), then falls back to static
+     * non-expired promos from the shop definition.
+     */
+    private static PromoDef findEffectivePromo(String shopId, String itemId) {
+        String resolvedShopId = resolveShopId(shopId);
+        ConcurrentHashMap<String, PromoDef> runtime = RUNTIME_PROMOS.get(resolvedShopId);
+        if (runtime != null) {
+            PromoDef runtimePromo = runtime.get(itemId);
+            if (runtimePromo != null) {
+                ConcurrentHashMap<String, RuntimePromoConfig> configs = RUNTIME_PROMO_CONFIGS.get(resolvedShopId);
+                RuntimePromoConfig config = configs == null ? null : configs.get(itemId);
+                if (config == null || config.isActive(nowEpochSeconds())) {
+                    return runtimePromo;
+                }
+            }
+        }
+        ShopDefinition def = CATALOG.get(resolvedShopId);
+        if (def != null) {
+            for (PromoDef promo : def.promos()) {
+                if (promo.isExpired()) continue;
+                if (promo.targetItemId() != null && promo.targetItemId().equals(itemId)) {
+                    return promo;
+                }
+            }
+        }
+        return null;
     }
 
     public static long calculateLineCost(String shopId, String itemId, int quantity) {
+        return calculateLineCost(shopId, itemId, quantity, null);
+    }
+
+    /**
+     * Calculates the line cost with optional dynamic pricing from a MinecraftServer context.
+     */
+    public static long calculateLineCost(String shopId, String itemId, int quantity,
+                                         @javax.annotation.Nullable net.minecraft.server.MinecraftServer server) {
         if (quantity <= 0) {
             return 0L;
         }
@@ -233,10 +440,27 @@ public final class ShopCatalog {
         }
 
         String resolvedShopId = resolveShopId(shopId);
+
+        // Apply dynamic pricing adjustment if enabled (spec §30)
+        long basePrice = itemDef.buyPriceMinorUnits();
+        if (server != null) {
+            basePrice = com.enviouse.futureshops.server.pricing.DynamicPricingEngine
+                    .getAdjustedPrice(server, resolvedShopId, itemId, basePrice);
+        }
+
         RuntimePromoConfig config = RUNTIME_PROMO_CONFIGS.getOrDefault(resolvedShopId, new ConcurrentHashMap<>()).get(itemId);
         long now = nowEpochSeconds();
         if (config == null || !config.isActive(now)) {
             long unit = getEffectiveBuyPrice(shopId, itemId);
+            // If dynamic pricing is active and there's no promo, use the adjusted base
+            if (server != null && com.enviouse.futureshops.Config.dynamicPricingEnabled) {
+                unit = basePrice;
+                PromoDef staticPromo = findEffectivePromo(shopId, itemId);
+                if (staticPromo != null) {
+                    long promoPrice = applyPromo(itemDef.buyPriceMinorUnits(), staticPromo);
+                    if (promoPrice > 0) unit = promoPrice;
+                }
+            }
             return unit <= 0L ? 0L : unit * quantity;
         }
 
@@ -246,27 +470,31 @@ public final class ShopCatalog {
             int fullGroups = quantity / group;
             int remainder = quantity % group;
             int payable = fullGroups * config.buyX() + Math.min(remainder, config.buyX());
-            return itemDef.buyPriceMinorUnits() * payable;
+            return basePrice * payable;
         }
 
-        long baseUnit = itemDef.buyPriceMinorUnits();
         long discounted = switch (type) {
-            case "PERCENTAGE", "FLASH" -> Math.max(1L, Math.round(baseUnit * (1.0 - config.discountValue() / 100.0)));
-            case "FLAT" -> Math.max(1L, baseUnit - (long) config.discountValue());
-            default -> baseUnit;
+            case "PERCENTAGE", "FLASH" -> Math.max(0L, Math.round(basePrice * (1.0 - config.discountValue() / 100.0)));
+            case "FLAT" -> {
+                long flatMinor = Math.round(config.discountValue() * Math.pow(10, com.enviouse.futureshops.Config.economyCurrencyDecimals));
+                yield Math.max(0L, basePrice - flatMinor);
+            }
+            default -> basePrice;
         };
         return discounted * quantity;
     }
 
     public static List<BarterRecipeDef> getBarterRecipesForItem(String shopId, String itemId) {
-        return getOrDefault(shopId)
-                .map(def -> def.barterRecipes().stream().filter(recipe -> recipe.targetItemId().equals(itemId)).toList())
-                .orElse(List.of());
+        Map<String, List<BarterRecipeDef>> byTarget = BARTER_BY_TARGET.get(resolveShopId(shopId));
+        if (byTarget == null) return List.of();
+        List<BarterRecipeDef> recipes = byTarget.get(itemId);
+        return recipes == null ? List.of() : recipes;
     }
 
     public static Optional<BarterRecipeDef> getBarterRecipe(String shopId, String recipeId) {
-        return getOrDefault(shopId)
-                .flatMap(def -> def.barterRecipes().stream().filter(recipe -> recipe.recipeId().equals(recipeId)).findFirst());
+        Map<String, BarterRecipeDef> byId = BARTER_BY_ID.get(resolveShopId(shopId));
+        if (byId == null) return Optional.empty();
+        return Optional.ofNullable(byId.get(recipeId));
     }
 
     /** Returns an unmodifiable view of all loaded shop definitions. */
@@ -355,9 +583,11 @@ public final class ShopCatalog {
     private static long applyPromo(long basePriceMinorUnits, PromoDef promo) {
         return switch (promo.promoType()) {
             case "PERCENTAGE", "FLASH" ->
-                    Math.max(1L, Math.round(basePriceMinorUnits * (1.0 - promo.discountValue() / 100.0)));
-            case "FLAT" ->
-                    Math.max(1L, basePriceMinorUnits - (long) promo.discountValue());
+                    Math.max(0L, Math.round(basePriceMinorUnits * (1.0 - promo.discountValue() / 100.0)));
+            case "FLAT" -> {
+                long flatMinor = Math.round(promo.discountValue() * Math.pow(10, com.enviouse.futureshops.Config.economyCurrencyDecimals));
+                yield Math.max(0L, basePriceMinorUnits - flatMinor);
+            }
             default -> basePriceMinorUnits;
         };
     }

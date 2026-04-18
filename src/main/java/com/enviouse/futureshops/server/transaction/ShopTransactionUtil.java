@@ -1,12 +1,14 @@
 package com.enviouse.futureshops.server.transaction;
 
 import net.minecraft.core.NonNullList;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -15,7 +17,12 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /** Shared low-level helpers for authoritative shop transactions. */
 public final class ShopTransactionUtil {
-    public static final int MAX_QUANTITY = 64;
+    /** Hard cap for a single buy transaction line (admin shop). */
+    public static final int MAX_BUY_QUANTITY = 2304;
+    /** Hard cap for a single sell transaction line — allows mass selling full inventory. */
+    public static final int MAX_SELL_QUANTITY = 2304;
+    /** Legacy alias — prefer the specific buy/sell constants. */
+    public static final int MAX_QUANTITY = MAX_BUY_QUANTITY;
 
     private static final ConcurrentHashMap<UUID, ReentrantLock> PLAYER_LOCKS = new ConcurrentHashMap<>();
 
@@ -66,14 +73,21 @@ public final class ShopTransactionUtil {
     }
 
     public static int countItems(Inventory inventory, Item target) {
+        return countItems(inventory, target, false, null);
+    }
+
+    /**
+     * NBT-aware inventory count. When nbtAware is true, only items matching the required NBT tag are counted.
+     */
+    public static int countItems(Inventory inventory, Item target, boolean nbtAware, @Nullable CompoundTag requiredTag) {
         int total = 0;
         for (ItemStack stack : inventory.items) {
-            if (stack.getItem() == target) {
+            if (NbtMatchUtil.matches(stack, target, nbtAware, requiredTag)) {
                 total += stack.getCount();
             }
         }
         for (ItemStack stack : inventory.offhand) {
-            if (stack.getItem() == target) {
+            if (NbtMatchUtil.matches(stack, target, nbtAware, requiredTag)) {
                 total += stack.getCount();
             }
         }
@@ -81,18 +95,26 @@ public final class ShopTransactionUtil {
     }
 
     public static boolean removeItems(Inventory inventory, Item target, int quantity) {
+        return removeItems(inventory, target, quantity, false, null);
+    }
+
+    /**
+     * NBT-aware item removal. When nbtAware is true, only items matching the required NBT tag are removed.
+     */
+    public static boolean removeItems(Inventory inventory, Item target, int quantity, boolean nbtAware, @Nullable CompoundTag requiredTag) {
         int remaining = quantity;
-        remaining = shrinkMatchingStacks(inventory.items, target, remaining);
-        remaining = shrinkMatchingStacks(inventory.offhand, target, remaining);
+        remaining = shrinkMatchingStacks(inventory.items, target, remaining, nbtAware, requiredTag);
+        remaining = shrinkMatchingStacks(inventory.offhand, target, remaining, nbtAware, requiredTag);
         return remaining == 0;
     }
 
-    private static int shrinkMatchingStacks(NonNullList<ItemStack> slots, Item target, int remaining) {
+    private static int shrinkMatchingStacks(NonNullList<ItemStack> slots, Item target, int remaining,
+                                            boolean nbtAware, @Nullable CompoundTag requiredTag) {
         for (ItemStack stack : slots) {
             if (remaining <= 0) {
                 break;
             }
-            if (stack.getItem() != target) {
+            if (!NbtMatchUtil.matches(stack, target, nbtAware, requiredTag)) {
                 continue;
             }
             int taken = Math.min(stack.getCount(), remaining);

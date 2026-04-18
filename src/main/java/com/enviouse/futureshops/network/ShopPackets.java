@@ -3,9 +3,12 @@ package com.enviouse.futureshops.network;
 import com.enviouse.futureshops.Futureshops;
 import com.enviouse.futureshops.network.packets.C2SBarterRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
+import com.enviouse.futureshops.network.packets.C2SFetchDepartmentsPacket;
 import com.enviouse.futureshops.network.packets.C2SFetchHistoryPacket;
+import com.enviouse.futureshops.network.packets.C2SFetchLocalShopsPacket;
 import com.enviouse.futureshops.network.packets.C2SFetchSettlementHistoryPacket;
 import com.enviouse.futureshops.network.packets.C2SInventorySyncPacket;
+import com.enviouse.futureshops.network.packets.C2SFranchiseActionPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenBalTopUiPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenBalanceUiPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenShopPacket;
@@ -14,18 +17,25 @@ import com.enviouse.futureshops.network.packets.C2SPlayerShopBuyPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopConfigPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopPromoPacket;
 import com.enviouse.futureshops.network.packets.C2SSellRequestPacket;
+import com.enviouse.futureshops.network.packets.C2SSetDepartmentPacket;
+import com.enviouse.futureshops.network.packets.C2SVerifyAdminCartPacket;
+import com.enviouse.futureshops.network.packets.C2SVerifyCartPacket;
 import com.enviouse.futureshops.network.packets.S2CBalTopUiPacket;
 import com.enviouse.futureshops.network.packets.S2CBarterResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CBalanceUiPacket;
 import com.enviouse.futureshops.network.packets.S2CBuyResponsePacket;
+import com.enviouse.futureshops.network.packets.S2CDepartmentListPacket;
 import com.enviouse.futureshops.network.packets.S2CForceClosePacket;
+import com.enviouse.futureshops.network.packets.S2CFranchiseDataPacket;
 import com.enviouse.futureshops.network.packets.S2CHistoryResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CInventorySyncPacket;
+import com.enviouse.futureshops.network.packets.S2CLocalShopsPacket;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopDataPacket;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopResultPacket;
 import com.enviouse.futureshops.network.packets.S2CSellResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CSettlementHistoryPacket;
 import com.enviouse.futureshops.network.packets.S2CShopDataPacket;
+import com.enviouse.futureshops.network.packets.S2CVerifyCartResponsePacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkDirection;
@@ -34,7 +44,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ShopPackets {
-    private static final String PROTOCOL_VERSION = "12";
+    private static final String PROTOCOL_VERSION = "21";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))
@@ -199,6 +209,71 @@ public final class ShopPackets {
             .decoder(S2CForceClosePacket::decode)
             .encoder(S2CForceClosePacket::encode)
             .consumerMainThread(S2CForceClosePacket::handle)
+            .add();
+
+        // Department system packets
+        CHANNEL.messageBuilder(C2SSetDepartmentPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SSetDepartmentPacket::decode)
+            .encoder(C2SSetDepartmentPacket::encode)
+            .consumerMainThread(C2SSetDepartmentPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SFetchDepartmentsPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SFetchDepartmentsPacket::decode)
+            .encoder(C2SFetchDepartmentsPacket::encode)
+            .consumerMainThread(C2SFetchDepartmentsPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CDepartmentListPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CDepartmentListPacket::decode)
+            .encoder(S2CDepartmentListPacket::encode)
+            .consumerMainThread(S2CDepartmentListPacket::handle)
+            .add();
+
+        // Local shops aggregation packets
+        CHANNEL.messageBuilder(C2SFetchLocalShopsPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SFetchLocalShopsPacket::decode)
+            .encoder(C2SFetchLocalShopsPacket::encode)
+            .consumerMainThread(C2SFetchLocalShopsPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CLocalShopsPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CLocalShopsPacket::decode)
+            .encoder(S2CLocalShopsPacket::encode)
+            .consumerMainThread(S2CLocalShopsPacket::handle)
+            .add();
+
+        // Cart verification packets
+        CHANNEL.messageBuilder(C2SVerifyCartPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SVerifyCartPacket::decode)
+            .encoder(C2SVerifyCartPacket::encode)
+            .consumerMainThread(C2SVerifyCartPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CVerifyCartResponsePacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CVerifyCartResponsePacket::decode)
+            .encoder(S2CVerifyCartResponsePacket::encode)
+            .consumerMainThread(S2CVerifyCartResponsePacket::handle)
+            .add();
+
+        // Admin cart verification packet
+        CHANNEL.messageBuilder(C2SVerifyAdminCartPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SVerifyAdminCartPacket::decode)
+            .encoder(C2SVerifyAdminCartPacket::encode)
+            .consumerMainThread(C2SVerifyAdminCartPacket::handle)
+            .add();
+
+        // Franchise management packets
+        CHANNEL.messageBuilder(C2SFranchiseActionPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SFranchiseActionPacket::decode)
+            .encoder(C2SFranchiseActionPacket::encode)
+            .consumerMainThread(C2SFranchiseActionPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CFranchiseDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CFranchiseDataPacket::decode)
+            .encoder(S2CFranchiseDataPacket::encode)
+            .consumerMainThread(S2CFranchiseDataPacket::handle)
             .add();
     }
 

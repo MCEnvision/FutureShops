@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.server.session;
 
+import com.enviouse.futureshops.event.ShopCloseEvent;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.S2CForceClosePacket;
 import com.enviouse.futureshops.server.transaction.TransactionHistoryService;
@@ -65,9 +66,13 @@ public final class ShopSessionManager {
      * so the client can dismiss its open shop screen.
      */
     public static void closeAndForceClose(ServerPlayer player, String reason) {
-        if (SESSIONS.remove(player.getUUID()) != null) {
+        ShopSession session = SESSIONS.remove(player.getUUID());
+        if (session != null) {
             TransactionHistoryService.clearSubscription(player.getUUID());
             ShopPackets.sendToPlayer(player, new S2CForceClosePacket(reason));
+            // Fire informational ShopCloseEvent (spec §33)
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                    new ShopCloseEvent(player.getUUID(), session.shopId(), reason));
         }
     }
 
@@ -76,14 +81,20 @@ public final class ShopSessionManager {
      * affected online players.  Used at server shutdown.
      */
     public static void closeAllAndForceClose(MinecraftServer server, String reason) {
-        Set<UUID> keys = new HashSet<>(SESSIONS.keySet());
+        // Snapshot sessions before clearing so we can fire ShopCloseEvent for each
+        Map<UUID, ShopSession> snapshot = new HashMap<>(SESSIONS);
         SESSIONS.clear();
-        for (UUID uuid : keys) {
+        for (Map.Entry<UUID, ShopSession> entry : snapshot.entrySet()) {
+            UUID uuid = entry.getKey();
+            ShopSession session = entry.getValue();
             TransactionHistoryService.clearSubscription(uuid);
             ServerPlayer player = server.getPlayerList().getPlayer(uuid);
             if (player != null) {
                 ShopPackets.sendToPlayer(player, new S2CForceClosePacket(reason));
             }
+            // Fire informational ShopCloseEvent (spec §33) for each session
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                    new ShopCloseEvent(uuid, session.shopId(), reason));
         }
     }
 

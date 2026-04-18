@@ -4,15 +4,17 @@ import net.minecraft.network.FriendlyByteBuf;
 
 import java.util.Locale;
 
-public record SettlementHistoryRow(long timestampEpochSeconds, long amountMinor, String type) {
+public record SettlementHistoryRow(long timestampEpochSeconds, long amountMinor, String type, String itemId, int quantity) {
     public static void encode(FriendlyByteBuf buffer, SettlementHistoryRow row) {
         buffer.writeLong(row.timestampEpochSeconds());
         buffer.writeLong(row.amountMinor());
         buffer.writeUtf(row.type());
+        buffer.writeUtf(row.itemId());
+        buffer.writeVarInt(row.quantity());
     }
 
     public static SettlementHistoryRow decode(FriendlyByteBuf buffer) {
-        return new SettlementHistoryRow(buffer.readLong(), buffer.readLong(), buffer.readUtf());
+        return new SettlementHistoryRow(buffer.readLong(), buffer.readLong(), buffer.readUtf(), buffer.readUtf(), buffer.readVarInt());
     }
 
     public enum SettlementFilter {
@@ -40,4 +42,3 @@ public record SettlementHistoryRow(long timestampEpochSeconds, long amountMinor,
         }
     }
 }
-

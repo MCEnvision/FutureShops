@@ -8,16 +8,17 @@ import net.minecraftforge.network.NetworkEvent;
 
 import java.util.function.Supplier;
 
-public record C2SPlayerShopConfigPacket(BlockPos shopPos, String shopName, boolean singleItemMode, boolean barterStorageSame) {
+public record C2SPlayerShopConfigPacket(BlockPos shopPos, String shopName, boolean singleItemMode, boolean barterStorageSame, int selectedListingIndex) {
     public static void encode(C2SPlayerShopConfigPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.shopPos());
         buffer.writeUtf(packet.shopName());
         buffer.writeBoolean(packet.singleItemMode());
         buffer.writeBoolean(packet.barterStorageSame());
+        buffer.writeVarInt(packet.selectedListingIndex());
     }
 
     public static C2SPlayerShopConfigPacket decode(FriendlyByteBuf buffer) {
-        return new C2SPlayerShopConfigPacket(buffer.readBlockPos(), buffer.readUtf(), buffer.readBoolean(), buffer.readBoolean());
+        return new C2SPlayerShopConfigPacket(buffer.readBlockPos(), buffer.readUtf(), buffer.readBoolean(), buffer.readBoolean(), buffer.readVarInt());
     }
 
     public static void handle(C2SPlayerShopConfigPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
@@ -25,10 +26,9 @@ public record C2SPlayerShopConfigPacket(BlockPos shopPos, String shopName, boole
         context.enqueueWork(() -> {
             ServerPlayer player = context.getSender();
             if (player != null) {
-                PlayerShopBlockService.applyConfig(player, packet.shopPos(), packet.shopName(), packet.singleItemMode(), packet.barterStorageSame());
+                PlayerShopBlockService.applyConfig(player, packet.shopPos(), packet.shopName(), packet.singleItemMode(), packet.barterStorageSame(), packet.selectedListingIndex());
             }
         });
         context.setPacketHandled(true);
     }
 }
-

@@ -2,6 +2,7 @@ package com.enviouse.futureshops.network.packets;
 
 import com.enviouse.futureshops.client.ShopClientPacketHandler;
 import com.enviouse.futureshops.data.BalanceTopEntry;
+import com.enviouse.futureshops.data.FranchiseLeaderboardEntry;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
@@ -25,7 +26,8 @@ public record S2CBalTopUiPacket(
         int topSellerCount,
         String popularItemId,
         int popularItemTrades,
-        long popularItemQuantity) {
+        long popularItemQuantity,
+        List<FranchiseLeaderboardEntry> franchises) {
     public static void encode(S2CBalTopUiPacket packet, FriendlyByteBuf buffer) {
         buffer.writeVarInt(packet.page());
         buffer.writeVarInt(packet.totalPages());
@@ -41,6 +43,7 @@ public record S2CBalTopUiPacket(
         buffer.writeUtf(packet.popularItemId());
         buffer.writeVarInt(packet.popularItemTrades());
         buffer.writeLong(packet.popularItemQuantity());
+        buffer.writeCollection(packet.franchises(), FranchiseLeaderboardEntry::encode);
     }
 
     public static S2CBalTopUiPacket decode(FriendlyByteBuf buffer) {
@@ -58,7 +61,8 @@ public record S2CBalTopUiPacket(
                 buffer.readVarInt(),
                 buffer.readUtf(),
                 buffer.readVarInt(),
-                buffer.readLong());
+                buffer.readLong(),
+                buffer.readList(FranchiseLeaderboardEntry::decode));
     }
 
     public static void handle(S2CBalTopUiPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

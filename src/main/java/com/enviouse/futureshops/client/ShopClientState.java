@@ -4,7 +4,10 @@ import com.enviouse.futureshops.data.CatalogBarterRecipe;
 import com.enviouse.futureshops.data.CatalogCategory;
 import com.enviouse.futureshops.data.CatalogItem;
 import com.enviouse.futureshops.data.CatalogPromo;
+import com.enviouse.futureshops.data.LocalShopOwnerEntry;
+import com.enviouse.futureshops.data.NearbyShopEntry;
 import com.enviouse.futureshops.data.TransactionHistoryEntry;
+import com.enviouse.futureshops.network.packets.S2CVerifyCartResponsePacket;
 import net.minecraft.network.chat.Component;
 
 import java.util.HashMap;
@@ -12,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Client-side singleton holding the most recently received shop state.
@@ -30,6 +34,13 @@ public final class ShopClientState {
     private static volatile List<CatalogPromo> catalogPromos = List.of();
     private static volatile List<CatalogBarterRecipe> catalogBarterRecipes = List.of();
     private static volatile List<TransactionHistoryEntry> transactionHistory = List.of();
+    private static volatile boolean adminShopEnabled = true;
+    private static volatile List<NearbyShopEntry> nearbyShops = List.of();
+    private static volatile List<LocalShopOwnerEntry> localShopOwners = List.of();
+    // Precomputed department summary strings (avoids per-frame stream+reduce in ShopMainScreen).
+    private static volatile Map<UUID, String> localShopDeptSummaries = Map.of();
+    private static volatile List<S2CVerifyCartResponsePacket.CartWarning> cartWarnings = List.of();
+    private static volatile boolean cartVerified = false;
 
     private static final Map<String, Integer> cart = new LinkedHashMap<>();
     private static final Map<String, Integer> ownedItemCounts = new HashMap<>();
@@ -44,7 +55,8 @@ public final class ShopClientState {
 
     public static void applyShopData(String shopId, long balanceMinorUnits, String currency, int decimals,
                                      List<CatalogCategory> categories, List<CatalogItem> items,
-                                     List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes) {
+                                     List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes,
+                                     boolean adminEnabled, List<NearbyShopEntry> nearby) {
         activeShopId = shopId;
         currentBalanceMinorUnits = balanceMinorUnits;
         currencyName = currency;
@@ -53,6 +65,8 @@ public final class ShopClientState {
         catalogItems = List.copyOf(items);
         catalogPromos = List.copyOf(promos);
         catalogBarterRecipes = List.copyOf(barterRecipes);
+        adminShopEnabled = adminEnabled;
+        nearbyShops = List.copyOf(nearby);
         transactionHistory = List.of();
         synchronized (ownedItemCounts) {
             ownedItemCounts.clear();
@@ -71,6 +85,8 @@ public final class ShopClientState {
         catalogItems = List.of();
         catalogPromos = List.of();
         catalogBarterRecipes = List.of();
+        adminShopEnabled = true;
+        nearbyShops = List.of();
         transactionHistory = List.of();
         status = null;
         synchronized (cart) {
@@ -158,6 +174,14 @@ public final class ShopClientState {
 
     public static List<TransactionHistoryEntry> getTransactionHistory() {
         return transactionHistory;
+    }
+
+    public static boolean isAdminShopEnabled() {
+        return adminShopEnabled;
+    }
+
+    public static List<NearbyShopEntry> getNearbyShops() {
+        return nearbyShops;
     }
 
     public static List<CatalogBarterRecipe> getBarterRecipesForItem(String itemId) {
@@ -265,7 +289,7 @@ public final class ShopClientState {
             return 0;
         }
 
-        int clamped = Math.max(1, Math.min(64, quantity));
+        int clamped = Math.max(1, Math.min(2304, quantity));
         if (!item.unlimited()) {
             clamped = Math.min(clamped, item.stock());
         }
@@ -276,5 +300,62 @@ public final class ShopClientState {
     }
 
     public record ShopStatus(Component message, boolean success, long expiresAtMillis) {
+    }
+
+    // -------------------------------------------------------------------------
+    // Local shops aggregation
+    // -------------------------------------------------------------------------
+
+    public static void applyLocalShops(List<LocalShopOwnerEntry> owners) {
+        localShopOwners = List.copyOf(owners);
+        // Rebuild the department-summary cache once per data update.
+        Map<UUID, String> summaries = new HashMap<>(owners.size() * 2);
+        for (LocalShopOwnerEntry owner : owners) {
+            if (owner.departments().isEmpty()) {
+                summaries.put(owner.ownerUuid(), "No departments");
+                continue;
+            }
+            StringBuilder sb = new StringBuilder();
+            boolean first = true;
+            for (LocalShopOwnerEntry.LocalDepartment dept : owner.departments()) {
+                if (!first) sb.append(", ");
+                sb.append(dept.name());
+                first = false;
+            }
+            summaries.put(owner.ownerUuid(), sb.toString());
+        }
+        localShopDeptSummaries = Map.copyOf(summaries);
+    }
+
+    public static List<LocalShopOwnerEntry> getLocalShopOwners() {
+        return localShopOwners;
+    }
+
+    /** Returns the cached comma-joined department-name summary for {@code ownerUuid}. */
+    public static String getLocalShopDeptSummary(UUID ownerUuid) {
+        String cached = localShopDeptSummaries.get(ownerUuid);
+        return cached != null ? cached : "No departments";
+    }
+
+    // -------------------------------------------------------------------------
+    // Cart verification
+    // -------------------------------------------------------------------------
+
+    public static void applyCartVerification(boolean allOk, List<S2CVerifyCartResponsePacket.CartWarning> warnings) {
+        cartVerified = true;
+        cartWarnings = List.copyOf(warnings);
+    }
+
+    public static List<S2CVerifyCartResponsePacket.CartWarning> getCartWarnings() {
+        return cartWarnings;
+    }
+
+    public static boolean isCartVerified() {
+        return cartVerified;
+    }
+
+    public static void clearCartVerification() {
+        cartVerified = false;
+        cartWarnings = List.of();
     }
 }

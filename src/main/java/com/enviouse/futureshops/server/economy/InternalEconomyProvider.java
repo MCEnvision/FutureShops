@@ -1,8 +1,10 @@
 package com.enviouse.futureshops.server.economy;
 
 import com.enviouse.futureshops.Config;
+import com.enviouse.futureshops.event.BalanceChangeEvent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraftforge.common.MinecraftForge;
 
 import java.util.Comparator;
 import java.util.List;
@@ -23,6 +25,11 @@ public class InternalEconomyProvider implements EconomyProvider {
 
     @Override
     public TransactionResult withdraw(UUID playerUUID, long amountMinorUnits) {
+        return withdraw(playerUUID, amountMinorUnits, "WITHDRAW");
+    }
+
+    @Override
+    public TransactionResult withdraw(UUID playerUUID, long amountMinorUnits, String reason) {
         if (amountMinorUnits <= 0L) {
             return TransactionResult.error("INVALID_AMOUNT", getBalance(playerUUID));
         }
@@ -32,13 +39,28 @@ public class InternalEconomyProvider implements EconomyProvider {
             return TransactionResult.error("INSUFFICIENT_FUNDS", currentBalance);
         }
 
+        // Fire cancellable BalanceChangeEvent.Pre (spec §33)
+        BalanceChangeEvent.Pre preEvent = new BalanceChangeEvent.Pre(playerUUID, -amountMinorUnits, reason, currentBalance);
+        if (MinecraftForge.EVENT_BUS.post(preEvent)) {
+            return TransactionResult.error("CANCELLED_BY_EVENT", currentBalance);
+        }
+
         long newBalance = currentBalance - amountMinorUnits;
         getData().setBalance(playerUUID, newBalance);
+
+        // Fire BalanceChangeEvent.Post
+        MinecraftForge.EVENT_BUS.post(new BalanceChangeEvent.Post(playerUUID, -amountMinorUnits, reason, newBalance));
+
         return TransactionResult.ok(newBalance);
     }
 
     @Override
     public TransactionResult deposit(UUID playerUUID, long amountMinorUnits) {
+        return deposit(playerUUID, amountMinorUnits, "DEPOSIT");
+    }
+
+    @Override
+    public TransactionResult deposit(UUID playerUUID, long amountMinorUnits, String reason) {
         if (amountMinorUnits <= 0L) {
             return TransactionResult.error("INVALID_AMOUNT", getBalance(playerUUID));
         }
@@ -49,7 +71,17 @@ public class InternalEconomyProvider implements EconomyProvider {
             return TransactionResult.error("MAX_BALANCE_EXCEEDED", currentBalance);
         }
 
+        // Fire cancellable BalanceChangeEvent.Pre (spec §33)
+        BalanceChangeEvent.Pre preEvent = new BalanceChangeEvent.Pre(playerUUID, amountMinorUnits, reason, currentBalance);
+        if (MinecraftForge.EVENT_BUS.post(preEvent)) {
+            return TransactionResult.error("CANCELLED_BY_EVENT", currentBalance);
+        }
+
         getData().setBalance(playerUUID, newBalance);
+
+        // Fire BalanceChangeEvent.Post
+        MinecraftForge.EVENT_BUS.post(new BalanceChangeEvent.Post(playerUUID, amountMinorUnits, reason, newBalance));
+
         return TransactionResult.ok(newBalance);
     }
 

@@ -2,6 +2,9 @@ package com.enviouse.futureshops.data;
 
 import net.minecraft.network.FriendlyByteBuf;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public record PlayerShopListingData(
         String itemId,
         String tradeMode,
@@ -10,7 +13,28 @@ public record PlayerShopListingData(
         String barterItemId,
         int barterItemCount,
         int stock,
-        PlayerShopPromoData promo) {
+        PlayerShopPromoData promo,
+        boolean nbtAware,
+        String nbtJson,
+        boolean visible,
+        List<BundleOutputData> bundleOutputs,
+        String department,
+        int baseQuantity,
+        int baseBarterItemCount,
+        String listingDescription) {
+
+    /** Item 11: Network DTO for a bundle output entry. */
+    public record BundleOutputData(String itemId, int count, String nbtJson) {
+        public static void encode(FriendlyByteBuf buffer, BundleOutputData data) {
+            buffer.writeUtf(data.itemId());
+            buffer.writeVarInt(data.count());
+            buffer.writeUtf(data.nbtJson());
+        }
+
+        public static BundleOutputData decode(FriendlyByteBuf buffer) {
+            return new BundleOutputData(buffer.readUtf(), buffer.readVarInt(), buffer.readUtf());
+        }
+    }
 
     public static void encode(FriendlyByteBuf buffer, PlayerShopListingData data) {
         buffer.writeUtf(data.itemId());
@@ -21,18 +45,41 @@ public record PlayerShopListingData(
         buffer.writeVarInt(data.barterItemCount());
         buffer.writeVarInt(data.stock());
         PlayerShopPromoData.encode(buffer, data.promo());
+        buffer.writeBoolean(data.nbtAware());
+        buffer.writeUtf(data.nbtJson());
+        buffer.writeBoolean(data.visible());
+        buffer.writeVarInt(data.bundleOutputs().size());
+        for (BundleOutputData entry : data.bundleOutputs()) {
+            BundleOutputData.encode(buffer, entry);
+        }
+        buffer.writeUtf(data.department());
+        buffer.writeVarInt(data.baseQuantity());
+        buffer.writeVarInt(data.baseBarterItemCount());
+        buffer.writeUtf(data.listingDescription());
     }
 
     public static PlayerShopListingData decode(FriendlyByteBuf buffer) {
-        return new PlayerShopListingData(
-                buffer.readUtf(),
-                buffer.readUtf(),
-                buffer.readLong(),
-                buffer.readLong(),
-                buffer.readUtf(),
-                buffer.readVarInt(),
-                buffer.readVarInt(),
-                PlayerShopPromoData.decode(buffer));
+        String itemId = buffer.readUtf();
+        String tradeMode = buffer.readUtf();
+        long moneyPriceMinor = buffer.readLong();
+        long effectiveUnitPriceMinor = buffer.readLong();
+        String barterItemId = buffer.readUtf();
+        int barterItemCount = buffer.readVarInt();
+        int stock = buffer.readVarInt();
+        PlayerShopPromoData promo = PlayerShopPromoData.decode(buffer);
+        boolean nbtAware = buffer.readBoolean();
+        String nbtJson = buffer.readUtf();
+        boolean visible = buffer.readBoolean();
+        int bundleCount = buffer.readVarInt();
+        List<BundleOutputData> bundleOutputs = new ArrayList<>(bundleCount);
+        for (int i = 0; i < bundleCount; i++) {
+            bundleOutputs.add(BundleOutputData.decode(buffer));
+        }
+        String department = buffer.readUtf();
+        int baseQuantity = buffer.readVarInt();
+        int baseBarterItemCount = buffer.readVarInt();
+        String listingDescription = buffer.readUtf();
+        return new PlayerShopListingData(itemId, tradeMode, moneyPriceMinor, effectiveUnitPriceMinor,
+                barterItemId, barterItemCount, stock, promo, nbtAware, nbtJson, visible, bundleOutputs, department, baseQuantity, baseBarterItemCount, listingDescription);
     }
 }
-

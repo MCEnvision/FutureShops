@@ -4,6 +4,8 @@ import com.enviouse.futureshops.catalog.BarterIngredientDef;
 import com.enviouse.futureshops.catalog.BarterRecipeDef;
 import com.enviouse.futureshops.catalog.ItemDef;
 import com.enviouse.futureshops.catalog.ShopCatalog;
+import com.enviouse.futureshops.event.BarterTradeEvent;
+import com.enviouse.futureshops.event.ShopTransactionEvent;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SBarterRequestPacket;
 import com.enviouse.futureshops.network.packets.S2CBarterResponsePacket;
@@ -39,6 +41,14 @@ public final class ShopBarterService {
 
         if (result.success() && player.getServer() != null) {
             TransactionHistoryService.record(player, result.shopId(), "BARTER", result.targetItemId(), result.outputQuantity(), 0L, packet.recipeId());
+            // Fire ShopTransactionEvent.Post (spec §33) for barter transactions
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                    new ShopTransactionEvent.Post(player.getUUID(), result.shopId(), result.targetItemId(),
+                            result.outputQuantity(), "BARTER", 0L, 0L));
+            // Fire BarterTradeEvent.Post (spec §33) with ingredient details
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                    new BarterTradeEvent.Post(player.getUUID(), result.shopId(), packet.recipeId(),
+                            result.targetItemId(), result.outputQuantity(), result.ingredientEntries()));
             InventorySyncService.sendOwnedCounts(player, result.shopId());
             ShopDataService.resendSessionsViewingShop(player.getServer(), result.shopId());
         }
@@ -120,6 +130,27 @@ public final class ShopBarterService {
                 required.add(new IngredientConsumption(ingredientItem, needed));
             }
 
+            // Build ingredient entries for event data
+            List<BarterTradeEvent.IngredientEntry> ingredientEntries = required.stream()
+                    .map(ic -> new BarterTradeEvent.IngredientEntry(
+                            net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(ic.item()).toString(), ic.count()))
+                    .toList();
+
+            // Fire cancellable BarterTradeEvent.Pre (spec §33) — allows other mods to cancel the trade
+            BarterTradeEvent.Pre preEvent = new BarterTradeEvent.Pre(
+                    player.getUUID(), shopId, packet.recipeId(),
+                    recipe.targetItemId(), outputQuantity, ingredientEntries);
+            if (net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(preEvent)) {
+                return BarterResult.error(shopId, "CANCELLED_BY_EVENT");
+            }
+
+            // Fire cancellable ShopTransactionEvent.Pre (spec §33) for the barter-as-transaction
+            ShopTransactionEvent.Pre txPreEvent = new ShopTransactionEvent.Pre(
+                    player, shopId, recipe.targetItemId(), outputQuantity, "BARTER", 0L);
+            if (net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(txPreEvent)) {
+                return BarterResult.error(shopId, "CANCELLED_BY_EVENT");
+            }
+
             for (IngredientConsumption ingredient : required) {
                 if (!ShopTransactionUtil.removeItems(inventory, ingredient.item(), ingredient.count())) {
                     return BarterResult.error(shopId, "MISSING_INGREDIENTS");
@@ -143,7 +174,7 @@ public final class ShopBarterService {
 
             inventory.setChanged();
             player.inventoryMenu.broadcastChanges();
-            return BarterResult.success(shopId, recipe.targetItemId(), outputQuantity);
+            return BarterResult.success(shopId, recipe.targetItemId(), outputQuantity, ingredientEntries);
         } finally {
             lock.unlock();
         }
@@ -152,13 +183,15 @@ public final class ShopBarterService {
     private record IngredientConsumption(Item item, int count) {
     }
 
-    private record BarterResult(boolean success, String shopId, String errorCode, String targetItemId, int outputQuantity) {
-        private static BarterResult success(String shopId, String targetItemId, int outputQuantity) {
-            return new BarterResult(true, shopId, "", targetItemId, outputQuantity);
+    private record BarterResult(boolean success, String shopId, String errorCode, String targetItemId,
+                               int outputQuantity, List<BarterTradeEvent.IngredientEntry> ingredientEntries) {
+        private static BarterResult success(String shopId, String targetItemId, int outputQuantity,
+                                            List<BarterTradeEvent.IngredientEntry> ingredientEntries) {
+            return new BarterResult(true, shopId, "", targetItemId, outputQuantity, ingredientEntries);
         }
 
         private static BarterResult error(String shopId, String errorCode) {
-            return new BarterResult(false, shopId, errorCode, "", 0);
+            return new BarterResult(false, shopId, errorCode, "", 0, List.of());
         }
     }
 }

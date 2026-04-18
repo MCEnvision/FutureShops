@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.server.transaction;
 
 import com.enviouse.futureshops.data.TransactionHistoryEntry;
+import com.enviouse.futureshops.server.SavedDataMigrations;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -17,12 +18,15 @@ import java.util.UUID;
 /** Persistent per-player transaction history scaffold. */
 public final class TransactionHistorySavedData extends SavedData {
     public static final String DATA_NAME = "futureshops_tx_history";
+    private static final int CURRENT_VERSION = 1;
     private static final int MAX_ENTRIES_PER_PLAYER = 200;
 
     private final Map<UUID, List<TransactionHistoryEntry>> entriesByPlayer = new HashMap<>();
 
     public static TransactionHistorySavedData load(CompoundTag tag) {
         TransactionHistorySavedData data = new TransactionHistorySavedData();
+        int version = SavedDataMigrations.readVersion(tag);
+        SavedDataMigrations.needsMigration(DATA_NAME, version, CURRENT_VERSION);
         ListTag players = tag.getList("players", Tag.TAG_COMPOUND);
         for (Tag playerTag : players) {
             CompoundTag playerCompound = (CompoundTag) playerTag;
@@ -49,6 +53,7 @@ public final class TransactionHistorySavedData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag) {
+        SavedDataMigrations.writeVersion(tag, CURRENT_VERSION);
         ListTag players = new ListTag();
         for (Map.Entry<UUID, List<TransactionHistoryEntry>> entry : entriesByPlayer.entrySet()) {
             CompoundTag playerTag = new CompoundTag();

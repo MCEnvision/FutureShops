@@ -3,8 +3,10 @@ package com.enviouse.futureshops.client.screen;
 import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.OwnedShopSummary;
 import com.enviouse.futureshops.network.ShopPackets;
+import com.enviouse.futureshops.network.packets.C2SFranchiseActionPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenBalTopUiPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenShopPacket;
+import com.enviouse.futureshops.network.packets.C2SPlayerShopActionPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -59,13 +61,17 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
 
     @Override
     protected void init() {
-        guiW = Math.min(540, Math.max(360, this.width - 24));
-        guiH = Math.min(320, Math.max(240, this.height - 24));
+        guiW = Math.max(360, this.width - 4);
+        guiH = Math.max(240, this.height - 4);
         guiLeft = (this.width - guiW) / 2;
         guiTop = (this.height - guiH) / 2;
-        visibleShopCards = Math.max(2, (guiH - 156) / 52);
-        visibleAlerts = Math.max(3, (guiH - 156) / 18);
+        visibleShopCards = Math.max(2, (guiH - 200) / 52);
+        visibleAlerts = Math.max(1, (guiH - 200) / 18);
 
+        addRenderableWidget(Button.builder(Component.literal("⚑ Franchise"), button ->
+                        ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("OPEN", "")))
+                .bounds(guiLeft + guiW - 286, guiTop + guiH - 24, 68, 18)
+                .build());
         addRenderableWidget(Button.builder(Component.literal("Storefront"), button ->
                         ShopPackets.CHANNEL.sendToServer(new C2SOpenShopPacket("default")))
                 .bounds(guiLeft + guiW - 214, guiTop + guiH - 24, 68, 18)
@@ -81,8 +87,10 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        graphics.fill(0, 0, this.width, this.height, ShopColors.BG_PRIMARY);
-        ShopUiUtil.renderPanel(graphics, guiLeft, guiTop, guiW, guiH, ShopColors.BG_PANEL, ShopColors.BORDER_DEFAULT);
+        ShopUiUtil.renderDimBackdrop(graphics, this.width, this.height);
+        graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + guiH, ShopColors.SURFACE_BASE);
+        ShopUiUtil.drawSoftOutline(graphics, guiLeft, guiTop, guiW, guiH, ShopColors.BORDER_STRONG, ShopColors.BORDER_SUBTLE);
+        graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + 2, ShopColors.ACCENT_CURRENCY);
 
         renderHeader(graphics);
         renderMetrics(graphics);
@@ -93,32 +101,35 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
     }
 
     private void renderHeader(GuiGraphics graphics) {
-        ShopUiUtil.renderPanel(graphics, guiLeft + 10, guiTop + 10, guiW - 20, 56, ShopColors.BG_CARD, ShopColors.BORDER_DEFAULT);
+        ShopUiUtil.renderElevatedCard(graphics, guiLeft + 10, guiTop + 10, guiW - 20, 56);
         ShopUiUtil.renderPlayerFace(graphics, playerUuid, guiLeft + 18, guiTop + 18, 40);
-        graphics.drawString(this.font, this.title, guiLeft + 68, guiTop + 18, ShopColors.TEXT_PRIMARY, false);
-        graphics.drawString(this.font, this.font.plainSubstrByWidth(playerName, 132), guiLeft + 68, guiTop + 32, ShopColors.TEXT_SECONDARY, false);
+        graphics.drawString(this.font, this.title, guiLeft + 68, guiTop + 18, ShopColors.TEXT_STRONG, false);
+        graphics.drawString(this.font, this.font.plainSubstrByWidth(playerName, 132), guiLeft + 68, guiTop + 32, ShopColors.TEXT_MUTED, false);
         String balanceText = formatMinorUnits(balanceMinorUnits) + " " + currencyName;
-        graphics.drawString(this.font, balanceText, guiLeft + guiW - this.font.width(balanceText) - 18, guiTop + 24, ShopColors.TEXT_PRICE, false);
-        ShopUiUtil.drawChip(graphics, this.font, guiLeft + guiW - 112, guiTop + 44,
-                lowSupplyCount > 0 ? lowSupplyCount + " low stock" : "Supply stable",
-                ShopColors.BG_PANEL,
-                lowSupplyCount > 0 ? ShopColors.ERROR : ShopColors.SUCCESS,
-                lowSupplyCount > 0 ? ShopColors.ERROR : ShopColors.SUCCESS);
+        graphics.drawString(this.font, balanceText, guiLeft + guiW - this.font.width(balanceText) - 18, guiTop + 24, ShopColors.TEXT_CURRENCY, false);
+        boolean warn = lowSupplyCount > 0;
+        ShopUiUtil.renderPill(graphics, this.font, guiLeft + guiW - 112, guiTop + 44,
+                warn ? lowSupplyCount + " low stock" : "Supply stable",
+                ShopColors.SURFACE_OVERLAY,
+                warn ? ShopColors.STATUS_DANGER : ShopColors.STATUS_SUCCESS,
+                warn ? ShopColors.STATUS_DANGER : ShopColors.STATUS_SUCCESS);
     }
 
     private void renderMetrics(GuiGraphics graphics) {
         int cardY = guiTop + 74;
         int gap = 8;
         int cardW = (guiW - 20 - (gap * 3)) / 4;
-        renderMetricCard(graphics, guiLeft + 10, cardY, cardW, "Revenue", formatMinorUnits(totalRevenueMinor), ShopColors.TEXT_PRICE);
-        renderMetricCard(graphics, guiLeft + 10 + (cardW + gap), cardY, cardW, "Pending", formatMinorUnits(pendingSettlementMinor), ShopColors.TEXT_BARTER);
-        renderMetricCard(graphics, guiLeft + 10 + (cardW + gap) * 2, cardY, cardW, "Shops", shopCount + " / " + listingCount + " listings", ShopColors.TEXT_PRIMARY);
-        renderMetricCard(graphics, guiLeft + 10 + (cardW + gap) * 3, cardY, cardW, "Supply", totalStock + " items tracked", ShopColors.TEXT_SECONDARY);
+        renderMetricCard(graphics, guiLeft + 10, cardY, cardW, "Revenue", formatMinorUnits(totalRevenueMinor), ShopColors.TEXT_CURRENCY);
+        renderMetricCard(graphics, guiLeft + 10 + (cardW + gap), cardY, cardW, "Pending", formatMinorUnits(pendingSettlementMinor), ShopColors.TEXT_BARTER_SOFT);
+        renderMetricCard(graphics, guiLeft + 10 + (cardW + gap) * 2, cardY, cardW, "Shops", shopCount + " / " + listingCount + " listings", ShopColors.ACCENT_PRIMARY);
+        renderMetricCard(graphics, guiLeft + 10 + (cardW + gap) * 3, cardY, cardW, "Supply", totalStock + " items tracked", ShopColors.TEXT_MUTED);
     }
 
     private void renderMetricCard(GuiGraphics graphics, int x, int y, int width, String title, String value, int accent) {
-        ShopUiUtil.renderPanel(graphics, x, y, width, 44, ShopColors.BG_CARD, ShopColors.BORDER_DEFAULT);
-        graphics.drawString(this.font, title, x + 8, y + 8, ShopColors.TEXT_SECONDARY, false);
+        ShopUiUtil.renderCard(graphics, x, y, width, 44);
+        // Top accent rule in the supplied color
+        graphics.fill(x, y, x + width, y + 2, accent);
+        graphics.drawString(this.font, title.toUpperCase(), x + 8, y + 8, ShopColors.TEXT_FAINT, false);
         graphics.drawString(this.font, this.font.plainSubstrByWidth(value, width - 16), x + 8, y + 22, accent, false);
     }
 
@@ -127,36 +138,52 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         int panelY = guiTop + 126;
         int panelW = (guiW - 28) / 2;
         int panelH = guiH - 160;
-        ShopUiUtil.renderPanel(graphics, panelX, panelY, panelW, panelH, ShopColors.BG_CARD, ShopColors.BORDER_DEFAULT);
-        graphics.drawString(this.font, "Your placed shops", panelX + 8, panelY + 8, ShopColors.TEXT_PRIMARY, false);
-        graphics.drawString(this.font, shopCount == 0 ? "No shops registered yet" : shopCount + " tracked across the server", panelX + 8, panelY + 20, ShopColors.TEXT_SECONDARY, false);
+        ShopUiUtil.renderCard(graphics, panelX, panelY, panelW, panelH);
+        graphics.fill(panelX, panelY, panelX + panelW, panelY + 2, ShopColors.ACCENT_PRIMARY);
+        graphics.drawString(this.font, "Your placed shops", panelX + 8, panelY + 8, ShopColors.TEXT_STRONG, false);
+        graphics.drawString(this.font, shopCount == 0 ? "No shops registered yet" : shopCount + " tracked across the server", panelX + 8, panelY + 20, ShopColors.TEXT_MUTED, false);
 
         int maxScroll = Math.max(0, shopSummaries.size() - visibleShopCards);
         shopScroll = Math.max(0, Math.min(shopScroll, maxScroll));
         if (shopSummaries.isEmpty()) {
-            graphics.drawString(this.font, "Place and configure a shop block to see revenue, stock, and supply health here.", panelX + 8, panelY + 44, ShopColors.TEXT_SECONDARY, false);
+            graphics.drawString(this.font, "Place and configure a shop block to see revenue, stock, and supply health here.", panelX + 8, panelY + 44, ShopColors.TEXT_FAINT, false);
             return;
         }
 
         int cardY = panelY + 36;
+        graphics.enableScissor(panelX, panelY + 30, panelX + panelW, panelY + panelH - 2);
         for (int i = 0; i < visibleShopCards && i + shopScroll < shopSummaries.size(); i++) {
             OwnedShopSummary summary = shopSummaries.get(i + shopScroll);
             int y = cardY + i * 52;
-            ShopUiUtil.renderPanel(graphics, panelX + 8, y, panelW - 16, 46, i % 2 == 0 ? ShopColors.BG_PANEL : ShopColors.BG_CARD_HOVER, ShopColors.BORDER_DEFAULT);
+            boolean hovered = mouseX >= panelX + 8 && mouseX <= panelX + panelW - 8 && mouseY >= y && mouseY <= y + 46;
+            ShopUiUtil.renderPanel(graphics, panelX + 8, y, panelW - 16, 46,
+                    hovered ? ShopColors.SURFACE_OVERLAY : ShopColors.SURFACE_RAISED,
+                    hovered ? ShopColors.BORDER_GLOW : ShopColors.BORDER_MUTED);
+            if (hovered) {
+                graphics.fill(panelX + 8, y, panelX + panelW - 8, y + 1, ShopColors.ACCENT_PRIMARY);
+            }
             if (!summary.featuredItemId().isBlank()) {
                 ShopUiUtil.renderItemIcon(graphics, this.font, summary.featuredItemId(), panelX + 14, y + 14);
             }
             BlockPos pos = BlockPos.of(summary.shopPosLong());
             String title = summary.listingCount() + " listing" + (summary.listingCount() == 1 ? "" : "s") + " • " + displayDimension(summary.dimensionKey());
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(title, panelW - 76), panelX + 36, y + 6, ShopColors.TEXT_PRIMARY, false);
-            graphics.drawString(this.font, pos.getX() + ", " + pos.getY() + ", " + pos.getZ(), panelX + 36, y + 18, ShopColors.TEXT_SECONDARY, false);
-            graphics.drawString(this.font, "Stock " + summary.totalStock() + " • Revenue " + formatMinorUnits(summary.lifetimeMinor()), panelX + 36, y + 30, ShopColors.TEXT_PRICE, false);
+            graphics.drawString(this.font, this.font.plainSubstrByWidth(title, panelW - 76), panelX + 36, y + 6, ShopColors.TEXT_STRONG, false);
+            graphics.drawString(this.font, pos.getX() + ", " + pos.getY() + ", " + pos.getZ(), panelX + 36, y + 18, ShopColors.TEXT_MUTED, false);
+            graphics.drawString(this.font, "Stock " + summary.totalStock() + " • Revenue " + formatMinorUnits(summary.lifetimeMinor()), panelX + 36, y + 30, ShopColors.TEXT_CURRENCY, false);
             if (summary.lowStockListings() > 0) {
-                ShopUiUtil.drawChip(graphics, this.font, panelX + panelW - 88, y + 6, summary.lowStockListings() + " low", ShopColors.BG_PANEL, ShopColors.ERROR, ShopColors.ERROR);
+                ShopUiUtil.renderPill(graphics, this.font, panelX + panelW - 88, y + 6, summary.lowStockListings() + " low",
+                        ShopColors.SURFACE_BASE, ShopColors.STATUS_DANGER, ShopColors.STATUS_DANGER);
             } else if (summary.linked()) {
-                ShopUiUtil.drawChip(graphics, this.font, panelX + panelW - 88, y + 6, "linked", ShopColors.BG_PANEL, ShopColors.STORAGE_LINKED, ShopColors.STORAGE_LINKED);
+                ShopUiUtil.renderPill(graphics, this.font, panelX + panelW - 88, y + 6, "linked",
+                        ShopColors.SURFACE_BASE, ShopColors.STATUS_INFO, ShopColors.STATUS_INFO);
+            }
+            if (hovered) {
+                String visitText = "§a▶ Click to visit";
+                int vw = this.font.width(visitText);
+                graphics.drawString(this.font, visitText, panelX + panelW - vw - 14, y + 34, ShopColors.ACCENT_PRIMARY, false);
             }
         }
+        graphics.disableScissor();
     }
 
     private void renderAlerts(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -164,24 +191,27 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         int panelX = guiLeft + guiW - panelW - 10;
         int panelY = guiTop + 126;
         int panelH = guiH - 160;
-        ShopUiUtil.renderPanel(graphics, panelX, panelY, panelW, panelH, ShopColors.BG_CARD, ShopColors.BORDER_DEFAULT);
-        graphics.drawString(this.font, "Supply warnings", panelX + 8, panelY + 8, ShopColors.TEXT_PRIMARY, false);
-        graphics.drawString(this.font, alerts.isEmpty() ? "Everything looks healthy" : alerts.size() + " attention point(s)", panelX + 8, panelY + 20, ShopColors.TEXT_SECONDARY, false);
+        ShopUiUtil.renderCard(graphics, panelX, panelY, panelW, panelH);
+        graphics.fill(panelX, panelY, panelX + panelW, panelY + 2, ShopColors.STATUS_WARNING);
+        graphics.drawString(this.font, "Supply warnings", panelX + 8, panelY + 8, ShopColors.TEXT_STRONG, false);
+        graphics.drawString(this.font, alerts.isEmpty() ? "Everything looks healthy" : alerts.size() + " attention point(s)", panelX + 8, panelY + 20, ShopColors.TEXT_MUTED, false);
 
         int maxScroll = Math.max(0, alerts.size() - visibleAlerts);
         alertScroll = Math.max(0, Math.min(alertScroll, maxScroll));
         if (alerts.isEmpty()) {
-            graphics.drawString(this.font, "No low-supply or missing-link warnings right now.", panelX + 8, panelY + 44, ShopColors.SUCCESS, false);
+            graphics.drawString(this.font, "No low-supply or missing-link warnings right now.", panelX + 8, panelY + 44, ShopColors.STATUS_SUCCESS, false);
             return;
         }
 
         int lineY = panelY + 40;
+        graphics.enableScissor(panelX, panelY + 36, panelX + panelW, panelY + panelH - 2);
         for (int i = 0; i < visibleAlerts && i + alertScroll < alerts.size(); i++) {
             int y = lineY + i * 18;
-            graphics.fill(panelX + 8, y, panelX + panelW - 8, y + 16, i % 2 == 0 ? ShopColors.BG_PANEL : ShopColors.BG_CARD_HOVER);
-            graphics.fill(panelX + 8, y, panelX + 9, y + 16, ShopColors.ERROR);
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(alerts.get(i + alertScroll), panelW - 24), panelX + 14, y + 4, ShopColors.TEXT_PRIMARY, false);
+            graphics.fill(panelX + 8, y, panelX + panelW - 8, y + 16, i % 2 == 0 ? ShopColors.SURFACE_RAISED : ShopColors.SURFACE_OVERLAY);
+            graphics.fill(panelX + 8, y, panelX + 10, y + 16, ShopColors.STATUS_DANGER);
+            graphics.drawString(this.font, this.font.plainSubstrByWidth(alerts.get(i + alertScroll), panelW - 24), panelX + 14, y + 4, ShopColors.TEXT_STRONG, false);
         }
+        graphics.disableScissor();
     }
 
     private String displayDimension(String dimensionKey) {
@@ -215,6 +245,25 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Item 9: Clickable owned shop cards → navigate to shop manage view
+        int panelX = guiLeft + 10;
+        int panelY = guiTop + 126;
+        int panelW = (guiW - 28) / 2;
+        int cardY = panelY + 36;
+        for (int i = 0; i < visibleShopCards && i + shopScroll < shopSummaries.size(); i++) {
+            int y = cardY + i * 52;
+            if (mouseX >= panelX + 8 && mouseX <= panelX + panelW - 8 && mouseY >= y && mouseY <= y + 46) {
+                OwnedShopSummary summary = shopSummaries.get(i + shopScroll);
+                BlockPos pos = BlockPos.of(summary.shopPosLong());
+                ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopActionPacket(pos, "VISIT", 0, 0));
+                return true;
+            }
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.coin;
 
+import com.enviouse.futureshops.server.SavedDataMigrations;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -30,6 +31,7 @@ import java.util.UUID;
 public final class SpentMintsSavedData extends SavedData {
 
     public static final String DATA_NAME = "futureshops_coin_mints";
+    private static final int CURRENT_VERSION = 1;
 
     private final Map<String, CoinMintRecord> registry = new HashMap<>();
 
@@ -39,6 +41,8 @@ public final class SpentMintsSavedData extends SavedData {
 
     public static SpentMintsSavedData load(CompoundTag tag) {
         SpentMintsSavedData data = new SpentMintsSavedData();
+        int version = SavedDataMigrations.readVersion(tag);
+        SavedDataMigrations.needsMigration(DATA_NAME, version, CURRENT_VERSION);
         ListTag entries = tag.getList("mints", Tag.TAG_COMPOUND);
         for (Tag entryTag : entries) {
             CompoundTag entry = (CompoundTag) entryTag;
@@ -61,6 +65,7 @@ public final class SpentMintsSavedData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag) {
+        SavedDataMigrations.writeVersion(tag, CURRENT_VERSION);
         ListTag entries = new ListTag();
         for (CoinMintRecord record : registry.values()) {
             CompoundTag entry = new CompoundTag();

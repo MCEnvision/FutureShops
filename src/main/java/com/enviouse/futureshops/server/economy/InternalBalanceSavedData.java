@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.server.economy;
 
+import com.enviouse.futureshops.server.SavedDataMigrations;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -12,11 +13,14 @@ import java.util.UUID;
 
 public class InternalBalanceSavedData extends SavedData {
     public static final String DATA_NAME = "futureshops_balances";
+    private static final int CURRENT_VERSION = 1;
 
     private final Map<UUID, Long> balances = new HashMap<>();
 
     public static InternalBalanceSavedData load(CompoundTag tag) {
         InternalBalanceSavedData data = new InternalBalanceSavedData();
+        int version = SavedDataMigrations.readVersion(tag);
+        SavedDataMigrations.needsMigration(DATA_NAME, version, CURRENT_VERSION);
         ListTag entries = tag.getList("balances", Tag.TAG_COMPOUND);
         for (Tag entryTag : entries) {
             CompoundTag entry = (CompoundTag) entryTag;
@@ -29,6 +33,7 @@ public class InternalBalanceSavedData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag) {
+        SavedDataMigrations.writeVersion(tag, CURRENT_VERSION);
         ListTag entries = new ListTag();
         for (Map.Entry<UUID, Long> entry : balances.entrySet()) {
             CompoundTag balanceTag = new CompoundTag();

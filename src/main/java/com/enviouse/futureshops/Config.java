@@ -67,6 +67,49 @@ public class Config {
         .comment("Whether taking any damage while a shop session is open will force-close the GUI.")
         .define("session.close_on_damage", false);
 
+    // ---- Dynamic Pricing (spec §30) ----
+    private static final ForgeConfigSpec.BooleanValue DYNAMIC_PRICING_ENABLED = BUILDER
+        .comment("Master toggle for dynamic pricing. When enabled, prices fluctuate based on supply/demand.")
+        .define("dynamic_pricing.enabled", false);
+
+    private static final ForgeConfigSpec.IntValue DYNAMIC_PRICING_RECALC_INTERVAL_SEC = BUILDER
+        .comment("Seconds between dynamic pricing recalculations.")
+        .defineInRange("dynamic_pricing.recalc_interval_sec", 300, 10, 86400);
+
+    private static final ForgeConfigSpec.DoubleValue DYNAMIC_PRICING_MAX_INCREASE_PCT = BUILDER
+        .comment("Maximum percentage increase from base price.")
+        .defineInRange("dynamic_pricing.max_increase_pct", 50.0D, 0.0D, 1000.0D);
+
+    private static final ForgeConfigSpec.DoubleValue DYNAMIC_PRICING_MAX_DECREASE_PCT = BUILDER
+        .comment("Maximum percentage decrease from base price.")
+        .defineInRange("dynamic_pricing.max_decrease_pct", 30.0D, 0.0D, 100.0D);
+
+    private static final ForgeConfigSpec.DoubleValue DYNAMIC_PRICING_DEMAND_WEIGHT = BUILDER
+        .comment("Weight multiplier for buy activity (demand) in the pricing formula.")
+        .defineInRange("dynamic_pricing.demand_weight", 0.6D, 0.0D, 10.0D);
+
+    private static final ForgeConfigSpec.DoubleValue DYNAMIC_PRICING_SUPPLY_WEIGHT = BUILDER
+        .comment("Weight multiplier for sell activity (supply) in the pricing formula.")
+        .defineInRange("dynamic_pricing.supply_weight", 0.4D, 0.0D, 10.0D);
+
+    private static final ForgeConfigSpec.DoubleValue DYNAMIC_PRICING_DECAY_RATE = BUILDER
+        .comment("Return-to-base multiplier applied each recalculation cycle (0.0 = instant reset, 1.0 = no decay).")
+        .defineInRange("dynamic_pricing.decay_rate", 0.95D, 0.0D, 1.0D);
+
+    // ---- Stock Refresh (spec §31) ----
+    private static final ForgeConfigSpec.IntValue STOCK_REFRESH_CHECK_INTERVAL_SEC = BUILDER
+        .comment("How often (seconds) the stock refresh scheduler checks for items due for restock. Default 60.")
+        .defineInRange("stock_refresh.check_interval_sec", 60, 5, 3600);
+
+    private static final ForgeConfigSpec.BooleanValue STOCK_REFRESH_ENABLED = BUILDER
+        .comment("Master toggle for the stock refresh scheduler. When disabled, admin shop stock never auto-restocks.")
+        .define("stock_refresh.enabled", true);
+
+    // ---- Events (spec §33) ----
+    private static final ForgeConfigSpec.BooleanValue EVENTS_TRANSACTION_ENABLED = BUILDER
+        .comment("Fire ShopTransactionEvent and BarterTradeEvent on every trade. Disable for slight performance gain if no listeners.")
+        .define("events.transaction_events", true);
+
     static final ForgeConfigSpec SPEC = BUILDER.build();
 
     public static boolean logDirtBlock;
@@ -86,6 +129,22 @@ public class Config {
 
     public static int sessionMaxDistanceBlocks;
     public static boolean sessionCloseOnDamage;
+
+    // Dynamic Pricing
+    public static boolean dynamicPricingEnabled;
+    public static int dynamicPricingRecalcIntervalSec;
+    public static double dynamicPricingMaxIncreasePct;
+    public static double dynamicPricingMaxDecreasePct;
+    public static double dynamicPricingDemandWeight;
+    public static double dynamicPricingSupplyWeight;
+    public static double dynamicPricingDecayRate;
+
+    // Stock Refresh (spec §31)
+    public static int stockRefreshCheckIntervalSec;
+    public static boolean stockRefreshEnabled;
+
+    // Events (spec §33)
+    public static boolean eventsTransactionEnabled;
 
     private static boolean validateItemName(final Object obj) {
         return obj instanceof final String itemName && ForgeRegistries.ITEMS.containsKey(ResourceLocation.parse(itemName));
@@ -112,5 +171,17 @@ public class Config {
 
         sessionMaxDistanceBlocks = SESSION_MAX_DISTANCE_BLOCKS.get();
         sessionCloseOnDamage = SESSION_CLOSE_ON_DAMAGE.get();
+
+        dynamicPricingEnabled = DYNAMIC_PRICING_ENABLED.get();
+        dynamicPricingRecalcIntervalSec = DYNAMIC_PRICING_RECALC_INTERVAL_SEC.get();
+        dynamicPricingMaxIncreasePct = DYNAMIC_PRICING_MAX_INCREASE_PCT.get();
+        dynamicPricingMaxDecreasePct = DYNAMIC_PRICING_MAX_DECREASE_PCT.get();
+        dynamicPricingDemandWeight = DYNAMIC_PRICING_DEMAND_WEIGHT.get();
+        dynamicPricingSupplyWeight = DYNAMIC_PRICING_SUPPLY_WEIGHT.get();
+        dynamicPricingDecayRate = DYNAMIC_PRICING_DECAY_RATE.get();
+
+        stockRefreshCheckIntervalSec = STOCK_REFRESH_CHECK_INTERVAL_SEC.get();
+        stockRefreshEnabled = STOCK_REFRESH_ENABLED.get();
+        eventsTransactionEnabled = EVENTS_TRANSACTION_ENABLED.get();
     }
 }

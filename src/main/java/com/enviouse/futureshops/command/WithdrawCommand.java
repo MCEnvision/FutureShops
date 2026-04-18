@@ -3,6 +3,7 @@ package com.enviouse.futureshops.command;
 import com.enviouse.futureshops.coin.CoinMintService;
 import com.enviouse.futureshops.coin.CoinNbtKeys;
 import com.enviouse.futureshops.coin.SpentMintsSavedData;
+import com.enviouse.futureshops.event.CoinMintEvent;
 import com.enviouse.futureshops.init.ModItems;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import net.minecraft.nbt.CompoundTag;
@@ -180,6 +181,11 @@ public final class WithdrawCommand {
                     bill.count,
                     coinData.getLong(CoinNbtKeys.MINT_TIMESTAMP),
                     coinData.getString(CoinNbtKeys.MINT_SERVER));
+
+            // Fire CoinMintEvent (spec §33)
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                    new CoinMintEvent(player.getUUID(), bill.denominationMinor, bill.count,
+                            coinData.getString(CoinNbtKeys.MINT_ID)));
 
             if (!player.getInventory().add(stack)) {
                 return false;

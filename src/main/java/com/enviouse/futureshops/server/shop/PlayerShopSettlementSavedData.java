@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.server.shop;
 
 import com.enviouse.futureshops.data.SettlementHistoryRow;
+import com.enviouse.futureshops.server.SavedDataMigrations;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -17,6 +18,7 @@ import java.util.UUID;
 
 public final class PlayerShopSettlementSavedData extends SavedData {
     private static final String DATA_NAME = "futureshops_player_shop_settlements";
+    private static final int CURRENT_VERSION = 1;
     private static final int MAX_ROWS_PER_OWNER = 40;
 
     private final Map<Long, ShopSettlement> settlementsByShopPos = new HashMap<>();
@@ -24,6 +26,8 @@ public final class PlayerShopSettlementSavedData extends SavedData {
 
     public static PlayerShopSettlementSavedData load(CompoundTag tag) {
         PlayerShopSettlementSavedData data = new PlayerShopSettlementSavedData();
+        int version = SavedDataMigrations.readVersion(tag);
+        SavedDataMigrations.needsMigration(DATA_NAME, version, CURRENT_VERSION);
 
         ListTag settlementList = tag.getList("settlements", Tag.TAG_COMPOUND);
         for (Tag value : settlementList) {
@@ -53,7 +57,9 @@ public final class PlayerShopSettlementSavedData extends SavedData {
                         row.getLong("ts"),
                         row.getLong("shopPos"),
                         row.getLong("amount"),
-                        row.getString("type")
+                        row.getString("type"),
+                        row.getString("itemId"),
+                        row.getInt("quantity")
                 ));
             }
             data.rowsByOwner.put(owner, rows);
@@ -64,6 +70,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag) {
+        SavedDataMigrations.writeVersion(tag, CURRENT_VERSION);
         ListTag settlementList = new ListTag();
         for (Map.Entry<Long, ShopSettlement> entry : settlementsByShopPos.entrySet()) {
             CompoundTag row = new CompoundTag();
@@ -86,6 +93,8 @@ public final class PlayerShopSettlementSavedData extends SavedData {
                 rowTag.putLong("shopPos", row.shopPosLong());
                 rowTag.putLong("amount", row.amountMinor());
                 rowTag.putString("type", row.type());
+                rowTag.putString("itemId", row.itemId());
+                rowTag.putInt("quantity", row.quantity());
                 rowsTag.add(rowTag);
             }
             ownerTag.put("rows", rowsTag);
@@ -104,7 +113,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
                 DATA_NAME);
     }
 
-    public synchronized void recordSale(UUID owner, long shopPosLong, long amountMinor) {
+    public synchronized void recordSale(UUID owner, long shopPosLong, long amountMinor, String itemId, int quantity) {
         ShopSettlement current = settlementsByShopPos.get(shopPosLong);
         if (current == null || !current.owner().equals(owner)) {
             current = new ShopSettlement(owner, 0L, 0L);
@@ -115,7 +124,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
                 current.lifetimeMinor() + Math.max(0L, amountMinor)
         ));
 
-        appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, amountMinor, "SALE"));
+        appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, amountMinor, "SALE", itemId == null ? "" : itemId, Math.max(0, quantity)));
         setDirty();
     }
 
@@ -127,7 +136,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
         long pending = Math.max(0L, settlement.pendingMinor());
         settlementsByShopPos.put(shopPosLong, new ShopSettlement(owner, 0L, settlement.lifetimeMinor()));
         if (pending > 0L) {
-            appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, pending, "CLAIM"));
+            appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, pending, "CLAIM", "", 0));
         }
         setDirty();
         return pending;
@@ -146,7 +155,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
             return false;
         }
         settlementsByShopPos.put(shopPosLong, new ShopSettlement(owner, currentPending - amountMinor, settlement.lifetimeMinor()));
-        appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, amountMinor, "ROLLBACK"));
+        appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, amountMinor, "ROLLBACK", "", 0));
         setDirty();
         return true;
     }
@@ -211,7 +220,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
         }
         int to = Math.min(filtered.size(), from + safePageSize);
         return filtered.subList(from, to).stream()
-                .map(row -> new SettlementHistoryRow(row.timestampEpochSeconds(), row.amountMinor(), row.type()))
+                .map(row -> new SettlementHistoryRow(row.timestampEpochSeconds(), row.amountMinor(), row.type(), row.itemId(), row.quantity()))
                 .toList();
     }
 
@@ -267,7 +276,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
     private record ShopSettlement(UUID owner, long pendingMinor, long lifetimeMinor) {
     }
 
-    private record RevenueRow(long timestampEpochSeconds, long shopPosLong, long amountMinor, String type) {
+    private record RevenueRow(long timestampEpochSeconds, long shopPosLong, long amountMinor, String type, String itemId, int quantity) {
     }
 
     public record Snapshot(long pendingMinor, long lifetimeMinor, List<String> rows) {

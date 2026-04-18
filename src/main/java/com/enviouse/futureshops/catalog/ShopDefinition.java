@@ -73,9 +73,11 @@ public record ShopDefinition(
     private static long applyPromo(long basePriceMinorUnits, PromoDef promo) {
         return switch (promo.promoType()) {
             case "PERCENTAGE" ->
-                    Math.max(1L, Math.round(basePriceMinorUnits * (1.0 - promo.discountValue() / 100.0)));
-            case "FLAT" ->
-                    Math.max(1L, basePriceMinorUnits - (long) promo.discountValue());
+                    Math.max(0L, Math.round(basePriceMinorUnits * (1.0 - promo.discountValue() / 100.0)));
+            case "FLAT" -> {
+                long flatMinor = Math.round(promo.discountValue() * Math.pow(10, com.enviouse.futureshops.Config.economyCurrencyDecimals));
+                yield Math.max(0L, basePriceMinorUnits - flatMinor);
+            }
             default -> basePriceMinorUnits;
         };
     }

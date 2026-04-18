@@ -2,105 +2,140 @@ package com.enviouse.futureshops.client;
 
 /**
  * Central ARGB color palette for all FutureShops GUI rendering.
- * Never use raw hex literals outside this class — always reference a named constant.
  *
- * <p>All values are 32-bit ARGB (0xAARRGGBB) compatible with Minecraft's
- * {@code GuiGraphics.fill()}, {@code drawString()}, and related primitives.
+ * <p>The palette is organised as a small, opinionated design system:
+ * <ul>
+ *   <li><b>Surfaces</b> — three tiers of neutral slate that form the background hierarchy.</li>
+ *   <li><b>Borders</b> — subtle / default / strong / glow, in ascending prominence.</li>
+ *   <li><b>Text</b> — primary, secondary, muted, plus semantic text tints.</li>
+ *   <li><b>Accents</b> — cyan (primary), amber (currency), magenta (promo), plus status
+ *       success / warning / error.</li>
+ * </ul>
+ *
+ * <p>All values are 32-bit ARGB (0xAARRGGBB). Legacy constants remain as aliases so
+ * older call sites continue to compile while the system is rolled out.
  */
 public final class ShopColors {
 
     private ShopColors() {
     }
 
-    // ─── Backgrounds ─────────────────────────────────────────────────────────
-    /** Full-screen dimming overlay behind the shop panel. */
-    public static final int BG_PRIMARY          = 0xCC0A0A0A;
-    /** Main panel / modal background. */
-    public static final int BG_PANEL            = 0xEA141414;
-    /** Item card / inactive tab fill. */
-    public static final int BG_CARD             = 0xFF1E1E1E;
-    /** Hovered card / active tab fill. */
-    public static final int BG_CARD_HOVER       = 0xFF2A2A2A;
+    // ═══════════════════════════════════════════════════════════════════════
+    // Design tokens (prefer these in new code)
+    // ═══════════════════════════════════════════════════════════════════════
 
-    // ─── Borders ─────────────────────────────────────────────────────────────
-    /** Subtle border: card edges, dividers, input field outlines. */
-    public static final int BORDER_DEFAULT      = 0xFF4A4A4A;
-    /** Accent border: selected card, focused input, active tab. */
-    public static final int BORDER_ACCENT       = 0xFFBDBDBD;
+    // ─── Surfaces ──────────────────────────────────────────────────────────
+    /** Full-screen dim behind everything. */
+    public static final int SURFACE_DIM       = 0xD40D0D0D;
+    /** Base panel sitting on the dim. */
+    public static final int SURFACE_BASE      = 0xEE141414;
+    /** A raised surface (card, sidebar) sitting on a base panel. */
+    public static final int SURFACE_RAISED    = 0xFF1E1E1E;
+    /** An overlay surface (hover, active selection). */
+    public static final int SURFACE_OVERLAY   = 0xFF2B2B2B;
+    /** Pressed / heavy tint for selected states. */
+    public static final int SURFACE_PRESSED   = 0xFF3A3A3A;
 
-    // ─── Text ────────────────────────────────────────────────────────────────
-    /** Primary text: item names, headers, labels. */
-    public static final int TEXT_PRIMARY        = 0xFFFFFFFF;
-    /** Secondary / muted text: descriptions, quantities, helper text. */
-    public static final int TEXT_SECONDARY      = 0xFFB0B0B0;
-    /** Price / currency text. */
+    // ─── Borders ───────────────────────────────────────────────────────────
+    /** Almost invisible — for deep interior dividers. */
+    public static final int BORDER_SUBTLE     = 0xFF262626;
+    /** Default card / input outline. */
+    public static final int BORDER_MUTED      = 0xFF3A3A3A;
+    /** Prominent border (focused / hovered). */
+    public static final int BORDER_STRONG     = 0xFF5A5A5A;
+    /** Glow border — only for primary accents (active tab, focused input). */
+    public static final int BORDER_GLOW       = 0xFF00D4FF;
+
+    // ─── Text ──────────────────────────────────────────────────────────────
+    /** Primary text: titles, item names, values. */
+    public static final int TEXT_STRONG       = 0xFFF5F7FA;
+    /** Default secondary text: descriptions, row labels. */
+    public static final int TEXT_MUTED        = 0xFFB8C0D0;
+    /** Disabled / deep-muted text. */
+    public static final int TEXT_FAINT        = 0xFF6B7487;
+    /** Currency amounts. */
+    public static final int TEXT_CURRENCY     = 0xFFFFCB6B;
+    /** Barter / trade readout. */
+    public static final int TEXT_BARTER_SOFT  = 0xFF8AB4FF;
+
+    // ─── Accents ───────────────────────────────────────────────────────────
+    /** Primary accent — cyan. Use sparingly: active, focused, CTA highlights. */
+    public static final int ACCENT_PRIMARY    = 0xFF00D4FF;
+    /** Primary accent — softer variant for fills. */
+    public static final int ACCENT_PRIMARY_DIM = 0x4400D4FF;
+    /** Secondary accent — amber / gold. For currency and rewards. */
+    public static final int ACCENT_CURRENCY   = 0xFFFFCB6B;
+    /** Tertiary accent — magenta. For promos / sale / discounts. */
+    public static final int ACCENT_PROMO_HI   = 0xFFFF4FA8;
+    /** Magenta soft fill variant. */
+    public static final int ACCENT_PROMO_DIM  = 0x55FF4FA8;
+
+    // ─── Semantic status ───────────────────────────────────────────────────
+    public static final int STATUS_SUCCESS    = 0xFF5DD89B;
+    public static final int STATUS_WARNING    = 0xFFFFB55C;
+    public static final int STATUS_DANGER     = 0xFFFF6E6E;
+    public static final int STATUS_INFO       = 0xFF8AB4FF;
+
+    // ─── Button fills ──────────────────────────────────────────────────────
+    /** Neutral button rest state. */
+    public static final int BTN_REST          = 0xFF1E2432;
+    /** Neutral button hovered. */
+    public static final int BTN_HOVER         = 0xFF2B3348;
+    /** Primary button rest state (CTA). */
+    public static final int BTN_CTA_REST      = 0xFF003D52;
+    /** Primary button hovered. */
+    public static final int BTN_CTA_HOVER     = 0xFF005E7A;
+    /** Danger button fill. */
+    public static final int BTN_DANGER        = 0xFF5A1F28;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Legacy aliases — kept for compatibility with screens not yet migrated.
+    // New code should reference the tokens above.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    public static final int BG_PRIMARY          = SURFACE_DIM;
+    public static final int BG_PANEL            = SURFACE_BASE;
+    public static final int BG_CARD             = SURFACE_RAISED;
+    public static final int BG_CARD_HOVER       = SURFACE_OVERLAY;
+
+    public static final int BORDER_DEFAULT      = BORDER_MUTED;
+    public static final int BORDER_ACCENT       = BORDER_STRONG;
+
+    public static final int TEXT_PRIMARY        = TEXT_STRONG;
+    public static final int TEXT_SECONDARY      = TEXT_MUTED;
     public static final int TEXT_PRICE          = 0xFF7CFCB6;
-    /** Barter / trade text. */
-    public static final int TEXT_BARTER         = 0xFF8AB4FF;
+    public static final int TEXT_BARTER         = TEXT_BARTER_SOFT;
 
-    // ─── Buttons ─────────────────────────────────────────────────────────────
-    /** Primary call-to-action (Buy, Checkout, Confirm). */
-    public static final int BTN_PRIMARY         = 0xFF333333;
-    /** Primary CTA hover. */
-    public static final int BTN_PRIMARY_HOVER   = 0xFF444444;
-    /** Secondary action (Cancel, Back, Add to Cart). */
-    public static final int BTN_SECONDARY       = 0xFF2D2D2D;
-    /** Barter action button. */
-    public static final int BTN_BARTER          = 0xFF5A5A5A;
-    /** Barter button hover. */
-    public static final int BTN_BARTER_HOVER    = 0xFF6A6A6A;
+    public static final int BTN_PRIMARY         = BTN_REST;
+    public static final int BTN_PRIMARY_HOVER   = BTN_HOVER;
+    public static final int BTN_SECONDARY       = BTN_REST;
+    public static final int BTN_BARTER          = 0xFF44506A;
+    public static final int BTN_BARTER_HOVER    = 0xFF5A6886;
 
-    // ─── Accents ─────────────────────────────────────────────────────────────
-    /** Currency icon / coin indicator (gold). */
-    public static final int ACCENT_GOLD         = 0xFFFBBF24;
-    /** Promo / discount accent. */
-    public static final int ACCENT_PROMO        = 0xFFFF6B6B;
+    public static final int ACCENT_GOLD         = ACCENT_CURRENCY;
+    public static final int ACCENT_PROMO        = ACCENT_PROMO_HI;
+    public static final int ACCENT_CYAN         = ACCENT_PRIMARY;
+    public static final int ACCENT_PURPLE       = ACCENT_PROMO_HI;
+    public static final int ACCENT_ORANGE       = STATUS_WARNING;
 
-    // ─── Status ──────────────────────────────────────────────────────────────
-    /** Positive feedback: purchase confirmed, in-stock. */
-    public static final int SUCCESS             = 0xFF61D98A;
-    /** Error / out-of-stock / invalid. */
-    public static final int ERROR               = 0xFFFF6E6E;
+    public static final int SUCCESS             = STATUS_SUCCESS;
+    public static final int ERROR               = STATUS_DANGER;
 
-    // ─── Promos ──────────────────────────────────────────────────────────────
-    /** Sale banner background. */
-    public static final int PROMO_BANNER        = 0xFF2C2C2C;
-    /** Text on sale banners. */
-    public static final int PROMO_TEXT          = 0xFFFFFFFF;
+    public static final int PROMO_BANNER        = 0xFF2A1B28;
+    public static final int PROMO_TEXT          = TEXT_STRONG;
 
-    // ─── Overlays ────────────────────────────────────────────────────────────
-    /** Player-owns-this-item inventory count badge (translucent green). */
     public static final int INVENTORY_HIGHLIGHT = 0x4455AA77;
-    /** Storage link status indicator. */
-    public static final int STORAGE_LINKED      = 0xFF8AB4FF;
+    public static final int STORAGE_LINKED      = STATUS_INFO;
 
-    // ─── Modern UI Accents ────────────────────────────────────────────────────
-    /** Vibrant cyan accent for highlighted UI elements. */
-    public static final int ACCENT_CYAN         = 0xFF00E5FF;
-    /** Purple accent for special badges. */
-    public static final int ACCENT_PURPLE       = 0xFFBB86FC;
-    /** Orange accent for warnings/attention. */
-    public static final int ACCENT_ORANGE       = 0xFFFF9100;
-    /** Full red for discount badges. */
-    public static final int DISCOUNT_BG         = 0xFFFF1744;
-    /** White text on discount badges. */
-    public static final int DISCOUNT_TEXT        = 0xFFFFFFFF;
-    /** Profile panel background. */
-    public static final int PROFILE_BG          = 0xFF1A1A2E;
-    /** Profile panel border accent. */
-    public static final int PROFILE_BORDER      = 0xFF00E5FF;
-    /** Owner mode background tint. */
-    public static final int OWNER_BG            = 0xFF1A1A28;
-    /** Owner mode accent. */
-    public static final int OWNER_ACCENT        = 0xFFBB86FC;
-    /** Config panel background. */
-    public static final int CONFIG_BG           = 0xFF181828;
-    /** Active toggle on. */
-    public static final int TOGGLE_ON           = 0xFF00E676;
-    /** Active toggle off. */
-    public static final int TOGGLE_OFF          = 0xFF666666;
-    /** Gradient highlight for section headers. */
-    public static final int HEADER_GRADIENT_L   = 0xFF1A1A3E;
-    /** Gradient highlight end. */
-    public static final int HEADER_GRADIENT_R   = 0xFF0A0A1E;
+    public static final int DISCOUNT_BG         = ACCENT_PROMO_HI;
+    public static final int DISCOUNT_TEXT       = TEXT_STRONG;
+    public static final int PROFILE_BG          = SURFACE_BASE;
+    public static final int PROFILE_BORDER      = ACCENT_PRIMARY;
+    public static final int OWNER_BG            = SURFACE_BASE;
+    public static final int OWNER_ACCENT        = ACCENT_PROMO_HI;
+    public static final int CONFIG_BG           = SURFACE_BASE;
+    public static final int TOGGLE_ON           = STATUS_SUCCESS;
+    public static final int TOGGLE_OFF          = BORDER_STRONG;
+    public static final int HEADER_GRADIENT_L   = 0xFF0E2336;
+    public static final int HEADER_GRADIENT_R   = 0xFF06111A;
 }

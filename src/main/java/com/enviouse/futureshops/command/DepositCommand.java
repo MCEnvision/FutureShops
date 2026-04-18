@@ -4,6 +4,7 @@ import com.enviouse.futureshops.coin.CoinNbtKeys;
 import com.enviouse.futureshops.coin.CoinValidationResult;
 import com.enviouse.futureshops.coin.CoinValidationService;
 import com.enviouse.futureshops.coin.SpentMintsSavedData;
+import com.enviouse.futureshops.event.CoinDepositEvent;
 import com.enviouse.futureshops.init.ModItems;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
@@ -97,6 +98,10 @@ public final class DepositCommand {
 
         // Phase 5: Mark mints consumed.
         mintData.consumeMints(toConsume);
+
+        // Fire CoinDepositEvent (spec §33)
+        net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                new CoinDepositEvent(player.getUUID(), amountMinorUnits, toConsume.size()));
 
         String depositedText = EconomyCommandUtil.formatMinorUnits(amountMinorUnits, provider.getDecimalPlaces());
         String balanceText = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());

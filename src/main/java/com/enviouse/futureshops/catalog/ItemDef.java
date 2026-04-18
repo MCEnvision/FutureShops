@@ -14,11 +14,25 @@ public record ItemDef(
         long sellPriceMinorUnits,
         int stock,
         boolean barterEnabled,
-        String categoryId) {
+        String categoryId,
+        int stockRefreshSeconds) {
+
+    /**
+     * Backwards-compatible constructor without stockRefreshSeconds.
+     */
+    public ItemDef(String itemId, String displayName, long buyPriceMinorUnits, long sellPriceMinorUnits,
+                   int stock, boolean barterEnabled, String categoryId) {
+        this(itemId, displayName, buyPriceMinorUnits, sellPriceMinorUnits, stock, barterEnabled, categoryId, 0);
+    }
 
     /** Returns {@code true} when this item has unlimited stock. */
     public boolean isUnlimited() {
         return stock < 0;
+    }
+
+    /** Returns {@code true} when this item has automatic stock refresh enabled. */
+    public boolean hasStockRefresh() {
+        return stockRefreshSeconds > 0 && !isUnlimited();
     }
 
     /**
@@ -37,6 +51,9 @@ public record ItemDef(
 
     public CatalogItem toCatalogItem(int currentStock, boolean hasPromo, long promoPrice, boolean hasBarterRecipes) {
         String name = (displayName != null && !displayName.isBlank()) ? displayName : itemId;
+        // Use explicit JSON-defined category first, then fall back to admin-set categories.
+        // TagDepartmentClassifier is deprecated — admin categories take priority.
+        String resolvedCategory = (categoryId != null && !categoryId.isBlank()) ? categoryId : "all";
         return new CatalogItem(
                 itemId,
                 name,
@@ -45,10 +62,11 @@ public record ItemDef(
                 currentStock,
                 currentStock < 0,
                 barterEnabled,
-                categoryId != null ? categoryId : "all",
+                resolvedCategory,
                 hasPromo,
                 promoPrice,
-                hasBarterRecipes);
+                hasBarterRecipes,
+                "");
     }
 }
 

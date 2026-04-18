@@ -21,7 +21,8 @@ public record CatalogItem(
         String categoryId,
         boolean hasPromo,
         long promoPrice,
-        boolean hasBarterRecipes) {
+        boolean hasBarterRecipes,
+        String nbtJson) {
 
     public static void encode(FriendlyByteBuf buf, CatalogItem item) {
         buf.writeUtf(item.itemId);
@@ -35,6 +36,7 @@ public record CatalogItem(
         buf.writeBoolean(item.hasPromo);
         buf.writeLong(item.promoPrice);
         buf.writeBoolean(item.hasBarterRecipes);
+        buf.writeUtf(item.nbtJson != null ? item.nbtJson : "");
     }
 
     public static CatalogItem decode(FriendlyByteBuf buf) {
@@ -49,7 +51,8 @@ public record CatalogItem(
                 buf.readUtf(),
                 buf.readBoolean(),
                 buf.readLong(),
-                buf.readBoolean());
+                buf.readBoolean(),
+                buf.readUtf());
     }
 }
 

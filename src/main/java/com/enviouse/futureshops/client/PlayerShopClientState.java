@@ -13,6 +13,8 @@ public final class PlayerShopClientState {
     private static UUID ownerUuid = new UUID(0L, 0L);
     private static String ownerName = "";
     private static String shopName = "";
+    private static String description = "";
+    private static String franchiseName = "";
     private static boolean singleItemMode = false;
     private static boolean barterStorageSame = true;
     private static List<PlayerShopListingData> listings = List.of();
@@ -33,12 +35,15 @@ public final class PlayerShopClientState {
                              List<PlayerShopListingData> listingsValue, boolean linkedValue,
                              long pendingSettlementMinorValue, long lifetimeRevenueMinorValue,
                              List<String> recentRevenueRowsValue,
-                             String shopNameValue, boolean singleItemModeValue, boolean barterStorageSameValue) {
+                             String shopNameValue, boolean singleItemModeValue, boolean barterStorageSameValue,
+                             String descriptionValue, String franchiseNameValue) {
         shopPos = pos;
         owner = ownerFlag;
         ownerUuid = ownerUuidValue;
         ownerName = ownerNameValue;
         shopName = shopNameValue == null ? "" : shopNameValue;
+        description = descriptionValue == null ? "" : descriptionValue;
+        franchiseName = franchiseNameValue == null ? "" : franchiseNameValue;
         singleItemMode = singleItemModeValue;
         barterStorageSame = barterStorageSameValue;
         listings = List.copyOf(listingsValue);
@@ -54,6 +59,8 @@ public final class PlayerShopClientState {
     public static UUID ownerUuid() { return ownerUuid; }
     public static String ownerName() { return ownerName; }
     public static String shopName() { return shopName; }
+    public static String description() { return description; }
+    public static String franchiseName() { return franchiseName; }
     public static boolean singleItemMode() { return singleItemMode; }
     public static boolean barterStorageSame() { return barterStorageSame; }
     public static List<PlayerShopListingData> listings() { return listings; }

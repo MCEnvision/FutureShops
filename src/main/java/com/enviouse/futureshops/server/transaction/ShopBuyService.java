@@ -2,12 +2,14 @@ package com.enviouse.futureshops.server.transaction;
 
 import com.enviouse.futureshops.catalog.ItemDef;
 import com.enviouse.futureshops.catalog.ShopCatalog;
+import com.enviouse.futureshops.event.ShopTransactionEvent;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
 import com.enviouse.futureshops.network.packets.S2CBuyResponsePacket;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
 import com.enviouse.futureshops.server.economy.TransactionResult;
+import com.enviouse.futureshops.server.pricing.DynamicPricingEngine;
 import com.enviouse.futureshops.server.session.ShopSession;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
 import com.enviouse.futureshops.server.shop.InventorySyncService;
@@ -43,9 +45,15 @@ public final class ShopBuyService {
 
         if (result.success() && player.getServer() != null) {
             for (PreparedLine line : result.lines()) {
-                long lineCost = ShopCatalog.calculateLineCost(result.shopId(), line.itemId(), line.quantity());
+                long lineCost = line.lineCost();
                 TransactionHistoryService.record(player, result.shopId(), "BUY", line.itemId(), line.quantity(), lineCost,
                         packet.cartCheckout() ? "CART" : "DETAIL");
+                // Record buy activity for dynamic pricing (spec §30)
+                DynamicPricingEngine.recordBuy(player.getServer(), result.shopId(), line.itemId(), line.quantity());
+                // Fire ShopTransactionEvent.Post (spec §33)
+                net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                        new ShopTransactionEvent.Post(player.getUUID(), result.shopId(), line.itemId(),
+                                line.quantity(), "BUY", lineCost, result.resultingBalance()));
             }
             InventorySyncService.sendOwnedCounts(player, result.shopId());
             ShopDataService.resendSessionsViewingShop(player.getServer(), result.shopId());
@@ -80,7 +88,7 @@ public final class ShopBuyService {
             for (Map.Entry<String, Integer> entry : mergedLines.entrySet()) {
                 String itemId = entry.getKey();
                 int quantity = entry.getValue();
-                if (quantity <= 0 || quantity > ShopTransactionUtil.MAX_QUANTITY) {
+                if (quantity <= 0 || quantity > ShopTransactionUtil.MAX_BUY_QUANTITY) {
                     return BuyResult.error(shopId, provider.getBalance(player.getUUID()), "INVALID_ITEM");
                 }
 
@@ -113,7 +121,7 @@ public final class ShopBuyService {
                 totalQuantity += quantity;
                 ItemStack rewardStack = new ItemStack(item, quantity);
                 rewards.add(rewardStack.copy());
-                preparedLines.add(new PreparedLine(itemId, quantity));
+                preparedLines.add(new PreparedLine(itemId, quantity, lineCost));
             }
 
             if (!ShopTransactionUtil.canFit(inventory, rewards)) {
@@ -124,7 +132,16 @@ public final class ShopBuyService {
                 return BuyResult.error(shopId, provider.getBalance(player.getUUID()), "INSUFFICIENT_FUNDS");
             }
 
-            TransactionResult withdrawal = provider.withdraw(player.getUUID(), totalCost);
+            // Fire cancellable ShopTransactionEvent.Pre (spec §33) — allows other mods to cancel or modify price
+            for (PreparedLine line : preparedLines) {
+                ShopTransactionEvent.Pre preEvent = new ShopTransactionEvent.Pre(
+                        player, shopId, line.itemId(), line.quantity(), "BUY", line.lineCost());
+                if (net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(preEvent)) {
+                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), "CANCELLED_BY_EVENT");
+                }
+            }
+
+            TransactionResult withdrawal = provider.withdraw(player.getUUID(), totalCost, "BUY");
             if (!withdrawal.success()) {
                 return BuyResult.error(shopId, withdrawal.resultingBalance(), withdrawal.errorCode());
             }
@@ -135,18 +152,19 @@ public final class ShopBuyService {
                     for (PreparedLine rollback : reserved) {
                         ShopCatalog.restoreStock(shopId, rollback.itemId(), rollback.quantity());
                     }
-                    provider.deposit(player.getUUID(), totalCost);
+                    provider.deposit(player.getUUID(), totalCost, "BUY");
                     return BuyResult.error(shopId, provider.getBalance(player.getUUID()), "OUT_OF_STOCK");
                 }
                 reserved.add(line);
             }
 
             if (!ShopTransactionUtil.insertIntoInventory(inventory, rewards)) {
-                for (PreparedLine rollback : reserved) {
-                    ShopCatalog.restoreStock(shopId, rollback.itemId(), rollback.quantity());
+                // Drop any remaining items at the player's feet instead of rolling back
+                for (ItemStack stack : rewards) {
+                    if (!stack.isEmpty()) {
+                        player.drop(stack, false);
+                    }
                 }
-                provider.deposit(player.getUUID(), totalCost);
-                return BuyResult.error(shopId, provider.getBalance(player.getUUID()), "INVENTORY_FULL");
             }
 
             inventory.setChanged();
@@ -168,7 +186,7 @@ public final class ShopBuyService {
         return merged;
     }
 
-    private record PreparedLine(String itemId, int quantity) {
+    private record PreparedLine(String itemId, int quantity, long lineCost) {
     }
 
     private record BuyResult(boolean success, String shopId, String errorCode, long resultingBalance, long totalCost, int totalQuantity,

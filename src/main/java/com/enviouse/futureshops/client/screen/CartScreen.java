@@ -5,6 +5,8 @@ import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.CatalogItem;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
+import com.enviouse.futureshops.network.packets.C2SVerifyAdminCartPacket;
+import com.enviouse.futureshops.network.packets.S2CVerifyCartResponsePacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -21,6 +23,8 @@ public class CartScreen extends Screen implements ShopScreenMarker {
     private int visibleRows;
     private int scrollIndex;
     private Button checkoutButton;
+    private boolean awaitingVerification = false;
+    private ConfirmationModal confirmationModal = null;
 
     public CartScreen(Screen parent) {
         super(Component.translatable("gui.futureshops.cart.title"));
@@ -29,8 +33,8 @@ public class CartScreen extends Screen implements ShopScreenMarker {
 
     @Override
     protected void init() {
-        guiW = Math.min(520, Math.max(360, this.width - 20));
-        guiH = Math.min(340, Math.max(250, this.height - 20));
+        guiW = Math.max(360, this.width - 4);
+        guiH = Math.max(250, this.height - 4);
         guiLeft = (this.width - guiW) / 2;
         guiTop = (this.height - guiH) / 2;
         visibleRows = Math.max(4, (guiH - 140) / 28);
@@ -41,31 +45,113 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         addRenderableWidget(Button.builder(Component.literal("§cClear"), button -> ShopClientState.clearCart())
                 .bounds(guiLeft + 64, guiTop + guiH - 24, 48, 18)
                 .build());
-        checkoutButton = addRenderableWidget(Button.builder(Component.literal("§a$ Checkout"), button -> sendCheckout())
+        checkoutButton = addRenderableWidget(Button.builder(Component.literal("§a$ Checkout"), button -> requestVerifyAndCheckout())
                 .bounds(guiLeft + guiW - 100, guiTop + guiH - 24, 90, 18)
                 .build());
     }
 
     @Override
+    public void tick() {
+        super.tick();
+        if (awaitingVerification && ShopClientState.isCartVerified()) {
+            awaitingVerification = false;
+            List<S2CVerifyCartResponsePacket.CartWarning> warnings = ShopClientState.getCartWarnings();
+            if (warnings.isEmpty()) {
+                // All OK — show confirmation modal before checkout
+                showCheckoutModal();
+            }
+            // If warnings exist, they'll render — user must click Checkout again to force
+        }
+    }
+
+    private void showCheckoutModal() {
+        List<ShopClientState.CartEntry> entries = ShopClientState.getCartEntries();
+        List<ConfirmationModal.SummaryLine> lines = new java.util.ArrayList<>();
+        for (ShopClientState.CartEntry entry : entries) {
+            CatalogItem item = ShopClientState.getCatalogItem(entry.itemId()).orElse(null);
+            String name = item != null ? item.displayName() : entry.itemId();
+            lines.add(ConfirmationModal.SummaryLine.item(entry.itemId(), name + " ×" + entry.quantity()));
+        }
+        String totalStr = ShopUiUtil.formatMinorUnits(ShopClientState.getCartTotalMinorUnits());
+        confirmationModal = new ConfirmationModal(
+                "Confirm Checkout",
+                lines,
+                "Total: " + totalStr + " " + ShopClientState.getCurrencyName(),
+                modal -> {
+                    modal.setProcessing();
+                    sendCheckout();
+                },
+                () -> confirmationModal = null
+        );
+    }
+
+    @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        graphics.fill(0, 0, this.width, this.height, ShopColors.BG_PRIMARY);
-        ShopUiUtil.renderAccentPanel(graphics, guiLeft, guiTop, guiW, guiH,
-                ShopColors.BG_PANEL, ShopColors.BORDER_DEFAULT, ShopColors.ACCENT_CYAN);
+        ShopUiUtil.renderDimBackdrop(graphics, this.width, this.height);
+        graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + guiH, ShopColors.SURFACE_BASE);
+        ShopUiUtil.drawSoftOutline(graphics, guiLeft, guiTop, guiW, guiH, ShopColors.BORDER_STRONG, ShopColors.BORDER_SUBTLE);
+        graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + 2, ShopColors.ACCENT_PRIMARY);
         renderHeader(graphics);
         renderRows(graphics);
         renderSummary(graphics);
+
+        // Cart verification warnings
+        List<S2CVerifyCartResponsePacket.CartWarning> warnings = ShopClientState.getCartWarnings();
+        if (!warnings.isEmpty()) {
+            int warnY = guiTop + guiH - 62;
+            for (int wi = Math.min(warnings.size(), 3) - 1; wi >= 0; wi--) {
+                S2CVerifyCartResponsePacket.CartWarning w = warnings.get(wi);
+                String warnText = "§c⚠ #" + (w.cartLineIndex() + 1) + ": " + w.detail();
+                graphics.drawString(this.font, this.font.plainSubstrByWidth(warnText, guiW - 30),
+                        guiLeft + 10, warnY, ShopColors.ERROR, false);
+                warnY -= 12;
+            }
+            if (warnings.size() > 3) {
+                graphics.drawString(this.font, "§c... and " + (warnings.size() - 3) + " more warnings",
+                        guiLeft + 10, warnY, ShopColors.ERROR, false);
+            }
+        }
+
+        // Awaiting verification indicator
+        if (awaitingVerification) {
+            graphics.drawCenteredString(this.font, "§eVerifying cart...",
+                    guiLeft + guiW / 2, guiTop + guiH - 62, ShopColors.ACCENT_ORANGE);
+        }
+
         ShopUiUtil.renderStatusPanel(graphics, this.font, guiLeft + 10, Math.max(6, guiTop - 24), guiW - 20);
         checkoutButton.active = !ShopClientState.getCartEntries().isEmpty();
         super.render(graphics, mouseX, mouseY, partialTick);
+
+        // Tooltip for cart "+" hover (Shift+Click: Max)
+        List<ShopClientState.CartEntry> tooltipEntries = ShopClientState.getCartEntries();
+        int listX = guiLeft + 10;
+        int rowY = guiTop + 60;
+        int listW = guiW - 20;
+        for (int row = 0; row < visibleRows && row + scrollIndex < tooltipEntries.size(); row++) {
+            int y = rowY + row * 28;
+            int ctrlX = listX + listW - 130;
+            if (mouseX >= ctrlX + 24 && mouseX <= ctrlX + 38 && mouseY >= y && mouseY <= y + 22) {
+                graphics.renderTooltip(this.font, Component.literal("Shift+Click: Max"), mouseX, mouseY);
+                break;
+            }
+        }
+
+        // Spec §8: Render confirmation modal on top of everything
+        if (confirmationModal != null) {
+            confirmationModal.render(graphics, this.font, this.width, this.height, mouseX, mouseY);
+            if (confirmationModal.shouldAutoDismiss()) {
+                confirmationModal = null;
+            }
+        }
     }
 
     private void renderHeader(GuiGraphics graphics) {
         int hx = guiLeft + 8;
         int hy = guiTop + 8;
         int hw = guiW - 16;
-        ShopUiUtil.renderAccentPanel(graphics, hx, hy, hw, 34, ShopColors.BG_CARD, ShopColors.BORDER_DEFAULT, ShopColors.ACCENT_PURPLE);
-        graphics.drawString(this.font, "§l" + this.title.getString(), hx + 10, hy + 6, ShopColors.TEXT_PRIMARY, false);
-        graphics.drawString(this.font, "§7Review every cart line before checkout.", hx + 10, hy + 18, ShopColors.TEXT_SECONDARY, false);
+        ShopUiUtil.renderHeroHeader(graphics, this.font, hx, hy, hw,
+                this.title.getString(),
+                "Review every cart line before checkout");
     }
 
     private void renderRows(GuiGraphics graphics) {
@@ -73,12 +159,12 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         int listY = guiTop + 52;
         int listW = guiW - 20;
         int listH = guiH - 120;
-        ShopUiUtil.renderPanel(graphics, listX, listY, listW, listH, ShopColors.BG_CARD, ShopColors.BORDER_DEFAULT);
+        ShopUiUtil.renderCard(graphics, listX, listY, listW, listH);
 
         List<ShopClientState.CartEntry> entries = ShopClientState.getCartEntries();
         if (entries.isEmpty()) {
-            graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.cart.empty"), listX + listW / 2, listY + listH / 2 - 8, ShopColors.TEXT_SECONDARY);
-            graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.cart.empty_hint"), listX + listW / 2, listY + listH / 2 + 6, ShopColors.TEXT_SECONDARY);
+            graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.cart.empty"), listX + listW / 2, listY + listH / 2 - 8, ShopColors.TEXT_MUTED);
+            graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.cart.empty_hint"), listX + listW / 2, listY + listH / 2 + 6, ShopColors.TEXT_FAINT);
             return;
         }
 
@@ -90,27 +176,27 @@ public class CartScreen extends Screen implements ShopScreenMarker {
             CatalogItem item = ShopClientState.getCatalogItem(entry.itemId()).orElse(null);
             if (item == null) continue;
             int y = rowY + row * 28;
-            int rowBg = row % 2 == 0 ? ShopColors.BG_PANEL : ShopColors.BG_CARD_HOVER;
-            ShopUiUtil.renderPanel(graphics, listX + 6, y, listW - 12, 22, rowBg, ShopColors.BORDER_DEFAULT);
+            int rowBg = row % 2 == 0 ? ShopColors.SURFACE_RAISED : ShopColors.SURFACE_OVERLAY;
+            ShopUiUtil.renderPanel(graphics, listX + 6, y, listW - 12, 22, rowBg, ShopColors.BORDER_SUBTLE);
             ShopUiUtil.renderItemIcon(graphics, this.font, item.itemId(), listX + 10, y + 3);
 
             // Name — truncated
             String name = this.font.plainSubstrByWidth(item.displayName(), listW - 240);
-            graphics.drawString(this.font, name, listX + 30, y + 7, ShopColors.TEXT_PRIMARY, false);
+            graphics.drawString(this.font, name, listX + 30, y + 7, ShopColors.TEXT_STRONG, false);
 
             // Quantity controls
             int ctrlX = listX + listW - 130;
-            graphics.drawString(this.font, "§7-", ctrlX, y + 7, ShopColors.TEXT_SECONDARY, false);
-            graphics.drawString(this.font, "§f" + entry.quantity(), ctrlX + 14, y + 7, ShopColors.TEXT_PRIMARY, false);
-            graphics.drawString(this.font, "§7+", ctrlX + 28, y + 7, ShopColors.TEXT_SECONDARY, false);
+            graphics.drawString(this.font, "§7-", ctrlX, y + 7, ShopColors.TEXT_MUTED, false);
+            graphics.drawString(this.font, "§f" + entry.quantity(), ctrlX + 14, y + 7, ShopColors.TEXT_STRONG, false);
+            graphics.drawString(this.font, "§7+", ctrlX + 28, y + 7, ShopColors.TEXT_MUTED, false);
 
-            // Price
+            // Price — currency amber
             long unitPrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
             String priceStr = this.font.plainSubstrByWidth(ShopUiUtil.formatMinorUnits(unitPrice * entry.quantity()), 60);
-            graphics.drawString(this.font, "§a" + priceStr, listX + listW - 86, y + 7, ShopColors.TEXT_PRICE, false);
+            graphics.drawString(this.font, priceStr, listX + listW - 86, y + 7, ShopColors.TEXT_CURRENCY, false);
 
             // Remove
-            graphics.drawString(this.font, "§c✕", listX + listW - 22, y + 7, ShopColors.ERROR, false);
+            graphics.drawString(this.font, "§c✕", listX + listW - 22, y + 7, ShopColors.STATUS_DANGER, false);
         }
     }
 
@@ -118,14 +204,44 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         int x = guiLeft + 10;
         int y = guiTop + guiH - 56;
         int w = guiW - 20;
-        ShopUiUtil.renderAccentPanel(graphics, x, y, w, 24, ShopColors.BG_CARD, ShopColors.BORDER_DEFAULT, ShopColors.ACCENT_GOLD);
+        graphics.fill(x, y, x + w, y + 24, ShopColors.SURFACE_RAISED);
+        ShopUiUtil.drawBorder(graphics, x, y, w, 24, ShopColors.BORDER_MUTED);
+        graphics.fill(x, y, x + w, y + 2, ShopColors.ACCENT_CURRENCY);
         // Item count — truncated
         String items = this.font.plainSubstrByWidth(ShopClientState.getCartTotalQuantity() + " items in cart", w / 2 - 10);
-        graphics.drawString(this.font, items, x + 10, y + 8, ShopColors.TEXT_SECONDARY, false);
-        // Total
-        String total = "§6Total: §a" + ShopUiUtil.formatMinorUnits(ShopClientState.getCartTotalMinorUnits());
+        graphics.drawString(this.font, items, x + 10, y + 8, ShopColors.TEXT_MUTED, false);
+        // Total — amber
+        String total = "Total: " + ShopUiUtil.formatMinorUnits(ShopClientState.getCartTotalMinorUnits());
         String clipped = this.font.plainSubstrByWidth(total, w / 2);
-        graphics.drawString(this.font, clipped, x + w - this.font.width(clipped) - 10, y + 8, ShopColors.TEXT_PRICE, false);
+        graphics.drawString(this.font, clipped, x + w - this.font.width(clipped) - 10, y + 8, ShopColors.TEXT_CURRENCY, false);
+    }
+
+    private void requestVerifyAndCheckout() {
+        List<ShopClientState.CartEntry> entries = ShopClientState.getCartEntries();
+        if (entries.isEmpty()) return;
+
+        // If we already have warnings (user saw them), force checkout on second click
+        if (!ShopClientState.getCartWarnings().isEmpty()) {
+            ShopClientState.clearCartVerification();
+            sendCheckout();
+            return;
+        }
+
+        // Build verification lines from cart state
+        String shopId = ShopClientState.getActiveShopId();
+        List<C2SVerifyAdminCartPacket.AdminCartLine> lines = entries.stream()
+                .map(e -> {
+                    CatalogItem item = ShopClientState.getCatalogItem(e.itemId()).orElse(null);
+                    long expectedPrice = 0;
+                    if (item != null) {
+                        expectedPrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
+                    }
+                    return new C2SVerifyAdminCartPacket.AdminCartLine(e.itemId(), e.quantity(), expectedPrice);
+                })
+                .toList();
+        ShopClientState.clearCartVerification();
+        awaitingVerification = true;
+        ShopPackets.CHANNEL.sendToServer(new C2SVerifyAdminCartPacket(shopId, lines));
     }
 
     private void sendCheckout() {
@@ -149,6 +265,9 @@ public class CartScreen extends Screen implements ShopScreenMarker {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (confirmationModal != null) {
+            return confirmationModal.mouseClicked(mouseX, mouseY, button, this.font);
+        }
         int listX = guiLeft + 10;
         int rowY = guiTop + 60;
         int listW = guiW - 20;
@@ -162,9 +281,23 @@ public class CartScreen extends Screen implements ShopScreenMarker {
                 ShopClientState.setCartQuantity(entry.itemId(), entry.quantity() - 1);
                 return true;
             }
-            // Plus
+            // Plus (Shift+Click = Max)
             if (mouseX >= ctrlX + 24 && mouseX <= ctrlX + 38 && mouseY >= y && mouseY <= y + 22) {
-                ShopClientState.setCartQuantity(entry.itemId(), entry.quantity() + 1);
+                if (hasShiftDown()) {
+                    CatalogItem item = ShopClientState.getCatalogItem(entry.itemId()).orElse(null);
+                    int max = 2304;
+                    if (item != null) {
+                        if (!item.unlimited()) max = Math.min(max, Math.max(1, item.stock()));
+                        long price = item.hasPromo() ? item.promoPrice() : item.buyPrice();
+                        if (price > 0) {
+                            long bal = ShopClientState.getCurrentBalanceMinorUnits();
+                            max = Math.min(max, (int) Math.min(bal / price, 2304));
+                        }
+                    }
+                    ShopClientState.setCartQuantity(entry.itemId(), Math.max(1, max));
+                } else {
+                    ShopClientState.setCartQuantity(entry.itemId(), entry.quantity() + 1);
+                }
                 return true;
             }
             // Remove
@@ -174,6 +307,25 @@ public class CartScreen extends Screen implements ShopScreenMarker {
             }
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (confirmationModal != null) {
+            if (confirmationModal.keyPressed(keyCode)) return true;
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    public void onTransactionResult(boolean success, String message) {
+        if (confirmationModal != null) {
+            if (success) {
+                confirmationModal.setSuccess(message);
+            } else {
+                confirmationModal.setFailed(message);
+            }
+        }
     }
 
     @Override

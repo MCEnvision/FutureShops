@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.coin;
 
 import com.enviouse.futureshops.command.EconomyCommandUtil;
+import com.enviouse.futureshops.event.CoinDepositEvent;
 import com.enviouse.futureshops.init.ModItems;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
@@ -94,6 +95,10 @@ public class CoinItem extends Item {
         // Remove the entire stack from hand
         int count = stack.getCount();
         stack.setCount(0);
+
+        // Fire CoinDepositEvent (spec §33)
+        net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                new CoinDepositEvent(serverPlayer.getUUID(), totalValue, count));
 
         // --- Feedback ---
         String depositedText = EconomyCommandUtil.formatMinorUnits(totalValue, provider.getDecimalPlaces());

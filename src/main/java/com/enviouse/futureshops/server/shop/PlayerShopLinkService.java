@@ -16,12 +16,14 @@ public final class PlayerShopLinkService {
 
     public static void begin(net.minecraft.server.level.ServerPlayer player, BlockPos shopPos) {
         PENDING.put(player.getUUID(), new PendingLink(shopPos, System.currentTimeMillis() + EXPIRES_MS, false));
-        player.sendSystemMessage(net.minecraft.network.chat.Component.translatable("command.futureshops.link.start"));
+        // LGB#21: Explicit /link instruction
+        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Look at a chest/storage block and type §e/link§r to confirm the stock storage link."));
     }
 
     public static void beginBarter(net.minecraft.server.level.ServerPlayer player, BlockPos shopPos) {
         PENDING_BARTER.put(player.getUUID(), new PendingLink(shopPos, System.currentTimeMillis() + EXPIRES_MS, true));
-        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Look at a chest and right-click to link barter storage."));
+        // LGB#21: Explicit /link instruction for barter storage
+        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Look at a chest/storage block and type §e/link§r to confirm the §dbarter§r storage link."));
     }
 
     public static PendingLink consume(UUID uuid) {

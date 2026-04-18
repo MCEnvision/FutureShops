@@ -37,7 +37,8 @@ public record TransactionHistoryEntry(
         ALL,
         BUY,
         SELL,
-        BARTER;
+        BARTER,
+        CART_CLAIM;
 
         public boolean matches(TransactionHistoryEntry entry) {
             if (this == ALL) {

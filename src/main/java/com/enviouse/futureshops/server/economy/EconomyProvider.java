@@ -10,15 +10,31 @@ public interface EconomyProvider {
 
     TransactionResult deposit(UUID playerUUID, long amountMinorUnits);
 
+    /**
+     * Withdraw with an explicit reason tag for {@code BalanceChangeEvent}.
+     * Reason should be one of: {@code "BUY"}, {@code "SELL"}, {@code "TRANSFER"},
+     * {@code "WITHDRAW"}, {@code "DEPOSIT"}, {@code "ADMIN"}.
+     */
+    default TransactionResult withdraw(UUID playerUUID, long amountMinorUnits, String reason) {
+        return withdraw(playerUUID, amountMinorUnits);
+    }
+
+    /**
+     * Deposit with an explicit reason tag for {@code BalanceChangeEvent}.
+     */
+    default TransactionResult deposit(UUID playerUUID, long amountMinorUnits, String reason) {
+        return deposit(playerUUID, amountMinorUnits);
+    }
+
     default TransactionResult transfer(UUID fromPlayerUUID, UUID toPlayerUUID, long amountMinorUnits) {
-        TransactionResult withdrawal = withdraw(fromPlayerUUID, amountMinorUnits);
+        TransactionResult withdrawal = withdraw(fromPlayerUUID, amountMinorUnits, "TRANSFER");
         if (!withdrawal.success()) {
             return withdrawal;
         }
 
-        TransactionResult deposit = deposit(toPlayerUUID, amountMinorUnits);
+        TransactionResult deposit = deposit(toPlayerUUID, amountMinorUnits, "TRANSFER");
         if (!deposit.success()) {
-            deposit(fromPlayerUUID, amountMinorUnits);
+            deposit(fromPlayerUUID, amountMinorUnits, "TRANSFER");
             return TransactionResult.error(deposit.errorCode(), withdrawal.resultingBalance());
         }
 

@@ -24,7 +24,9 @@ public record S2CPlayerShopDataPacket(
         List<String> recentRevenueRows,
         String shopName,
         boolean singleItemMode,
-        boolean barterStorageSame) {
+        boolean barterStorageSame,
+        String description,
+        String franchiseName) {
 
     public static void encode(S2CPlayerShopDataPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.shopPos());
@@ -39,6 +41,8 @@ public record S2CPlayerShopDataPacket(
         buffer.writeUtf(packet.shopName());
         buffer.writeBoolean(packet.singleItemMode());
         buffer.writeBoolean(packet.barterStorageSame());
+        buffer.writeUtf(packet.description());
+        buffer.writeUtf(packet.franchiseName());
     }
 
     public static S2CPlayerShopDataPacket decode(FriendlyByteBuf buffer) {
@@ -54,7 +58,9 @@ public record S2CPlayerShopDataPacket(
                 buffer.readList(FriendlyByteBuf::readUtf),
                 buffer.readUtf(),
                 buffer.readBoolean(),
-                buffer.readBoolean());
+                buffer.readBoolean(),
+                buffer.readUtf(),
+                buffer.readUtf());
     }
 
     public static void handle(S2CPlayerShopDataPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
@@ -64,4 +70,3 @@ public record S2CPlayerShopDataPacket(
         context.setPacketHandled(true);
     }
 }
-

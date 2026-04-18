@@ -71,28 +71,24 @@ public final class SessionEventHandler {
 
     @SubscribeEvent
     public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
-        // Process only at the END phase and only for server-side players.
+        // Cheapest guards first — skip entirely before any map lookups or Optional allocs.
         if (event.phase != TickEvent.Phase.END) return;
         if (!(event.player instanceof ServerPlayer player)) return;
-        // Sample once per second (every 20 ticks).
         if (player.tickCount % 20 != 0) return;
+        int maxDist = Config.sessionMaxDistanceBlocks;
+        if (maxDist <= 0) return;
 
-        ShopSessionManager.get(player.getUUID()).ifPresent(session -> {
-            // Command-opened sessions have no block anchor → skip distance check.
-            if (session.shopBlockPos() == null) return;
+        ShopSession session = ShopSessionManager.get(player.getUUID()).orElse(null);
+        if (session == null) return;
+        if (session.shopBlockPos() == null) return; // Command-opened sessions — no anchor.
 
-            int maxDist = Config.sessionMaxDistanceBlocks;
-            if (maxDist <= 0) return; // Distance check disabled via config.
-
-            double distSq = player.distanceToSqr(
-                    session.shopBlockPos().getX() + 0.5,
-                    session.shopBlockPos().getY() + 0.5,
-                    session.shopBlockPos().getZ() + 0.5);
-
-            if (distSq > (double) maxDist * maxDist) {
-                ShopSessionManager.closeAndForceClose(player, "DISTANCE");
-            }
-        });
+        double distSq = player.distanceToSqr(
+                session.shopBlockPos().getX() + 0.5,
+                session.shopBlockPos().getY() + 0.5,
+                session.shopBlockPos().getZ() + 0.5);
+        if (distSq > (double) maxDist * maxDist) {
+            ShopSessionManager.closeAndForceClose(player, "DISTANCE");
+        }
     }
 }
 
