@@ -28,6 +28,7 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
     private EditBox durationBox;
     private boolean flash;
     private Button flashButton;
+    private ConfirmationModal clearConfirm;
 
     public PromoEditorModalScreen(Screen parent) {
         super(Component.literal("Promo Editor"));
@@ -98,7 +99,7 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
         addRenderableWidget(Button.builder(Component.literal("§aApply"), button -> applyPromo())
                 .bounds(guiLeft + 10, guiTop + modalH - 30, btnW, 18)
                 .build());
-        addRenderableWidget(Button.builder(Component.literal("§cClear"), button -> clearPromo())
+        addRenderableWidget(Button.builder(Component.literal("§cClear"), button -> openClearConfirm())
                 .bounds(guiLeft + 14 + btnW, guiTop + modalH - 30, btnW, 18)
                 .build());
         addRenderableWidget(Button.builder(Component.literal("§7Back"), button -> onClose())
@@ -147,6 +148,21 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
         graphics.drawString(this.font, scheduleHint, guiLeft + 10, guiTop + 114, ShopColors.TEXT_FAINT, false);
 
         super.render(graphics, mouseX, mouseY, partialTick);
+
+        if (clearConfirm != null) {
+            clearConfirm.render(graphics, this.font, this.width, this.height, mouseX, mouseY);
+            if (clearConfirm.shouldAutoDismiss()) {
+                clearConfirm = null;
+            }
+        }
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (clearConfirm != null) {
+            return clearConfirm.mouseClicked(mouseX, mouseY, button, this.font);
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     private String formatScheduleHint(int startMin, int durationMin) {
@@ -194,6 +210,25 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
         onClose();
     }
 
+    private void openClearConfirm() {
+        if (PlayerShopClientState.selectedListing() == null || PlayerShopClientState.selectedListing().itemId().isBlank()) {
+            return;
+        }
+        String itemName = ShopUiUtil.getItemDisplayName(PlayerShopClientState.selectedListing().itemId());
+        clearConfirm = new ConfirmationModal(
+                "§c⚠ Clear Promo",
+                java.util.List.of(
+                        ConfirmationModal.SummaryLine.text("§fRemove promo from §e" + itemName + "§f?"),
+                        ConfirmationModal.SummaryLine.text("§7Schedule, value, and flash flag will be lost.")),
+                "§cThis cannot be undone.",
+                modal -> {
+                    modal.setProcessing();
+                    clearPromo();
+                    modal.setSuccess("Promo cleared");
+                },
+                () -> clearConfirm = null);
+    }
+
     private void clearPromo() {
         if (PlayerShopClientState.selectedListing() == null || PlayerShopClientState.selectedListing().itemId().isBlank()) {
             return;
@@ -230,8 +265,13 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // ESC (256) always returns to parent — prevents EditBox from swallowing it
+        // ESC (256) dismisses the clear-confirm overlay first if open, otherwise returns to parent
         if (keyCode == 256) {
+            if (clearConfirm != null) {
+                clearConfirm.keyPressed(keyCode);
+                clearConfirm = null;
+                return true;
+            }
             onClose();
             return true;
         }

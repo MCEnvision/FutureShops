@@ -1065,6 +1065,11 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                         infoX + infoW / 2, nextY + 6, "-" + promoPercent + "% OFF!");
                 nextY += 20;
             }
+            String scheduleLine = formatPromoSchedule(listing.promo());
+            if (scheduleLine != null) {
+                graphics.drawString(this.font, scheduleLine, infoX + 8, nextY, ShopColors.TEXT_FAINT, false);
+                nextY += 10;
+            }
         }
 
         // Divider
@@ -1617,6 +1622,31 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
             return (int) Math.round(listing.promo().promoValue());
         }
         return ShopUiUtil.computePromoPercent(listing.moneyPriceMinor(), listing.effectiveUnitPriceMinor());
+    }
+
+    private String formatPromoSchedule(com.enviouse.futureshops.data.PlayerShopPromoData promo) {
+        long now = System.currentTimeMillis() / 1000L;
+        long start = promo.startEpochSeconds();
+        long end = promo.endEpochSeconds();
+        if (start > now) {
+            return "§7starts in §f" + humanDuration(start - now);
+        }
+        if (end > 0L && end > now) {
+            return "§7ends in §f" + humanDuration(end - now);
+        }
+        return null;
+    }
+
+    private static String humanDuration(long seconds) {
+        if (seconds <= 0L) return "0m";
+        long days = seconds / 86_400L;
+        long hours = (seconds % 86_400L) / 3_600L;
+        long mins = (seconds % 3_600L) / 60L;
+        StringBuilder out = new StringBuilder();
+        if (days > 0) out.append(days).append("d ");
+        if (hours > 0) out.append(hours).append("h ");
+        if (mins > 0 || out.length() == 0) out.append(Math.max(1, mins)).append("m");
+        return out.toString().trim();
     }
 
     private String promoLabel(PlayerShopListingData listing) {

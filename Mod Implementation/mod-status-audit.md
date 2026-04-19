@@ -941,3 +941,30 @@ Six issues reported by the user, fixed in one pass.
 
 ## Verification
 - `./gradlew.bat build` BUILD SUCCESSFUL (`-Dnet.minecraftforge.gradle.check.certs=false`).
+
+---
+
+## Follow-up pass — promo-end sync, Leave/Clear confirms, sell-path NBT audit (2026-04-19)
+
+Three additional items requested after the first round.
+
+### Task G — Buyers see promo end-time on player shops
+- Server already persisted `startEpochSeconds` / `endEpochSeconds` on `ShopBlockEntity.Promo`, but neither field was synced to clients.
+- Added accessors to `ShopBlockEntity.Promo` and expanded `PlayerShopPromoData` to carry both epochs (encoded via `writeVarLong`, clamped to `>=0`).
+- `PlayerShopBlockService` now populates those fields when building the client payload.
+- `PlayerShopBlockScreen.renderDetailPanel` renders a new `starts in …` / `ends in …` line (human-readable d/h/m format) below the promo banner, so buyers can see the countdown without opening the editor.
+- **Files:** `data/PlayerShopPromoData.java`, `block/ShopBlockEntity.java`, `server/shop/PlayerShopBlockService.java`, `client/screen/PlayerShopBlockScreen.java`.
+
+### Task H — Confirmation modal parity for Leave Franchise + Clear Promo
+- `FranchiseManagementScreen` Leave button now opens a `ConfirmationModal` ("Leave \"<name>\"?") before sending `C2SFranchiseActionPacket("LEAVE", "")`. Matches the disband flow's Esc/click routing and timeout protection.
+- `PromoEditorModalScreen` Clear button now opens a `ConfirmationModal` ("Remove promo from <item>?") before clearing. Esc is routed to the overlay first so dismissing the confirm doesn't close the whole editor.
+- **Files:** `client/screen/FranchiseManagementScreen.java`, `client/screen/PromoEditorModalScreen.java`.
+
+### Task I — Sell-path NBT-strictness audit
+- `ShopSellService.execute` was calling `ShopTransactionUtil.countItems`/`removeItems` without NBT filtering, meaning a damaged tool or enchanted chestplate would sell at the plain-item price.
+- Both call sites now pass `nbtAware=true, requiredTag=null` — only plain/tag-less stacks qualify, matching the barter fix from the previous pass.
+- Audit confirmed all other sell-like flows (`ShopBarterService`, `PlayerShopBlockService` barter ingredient consumption) already use the strict form.
+- **Files:** `server/transaction/ShopSellService.java`.
+
+## Verification
+- `./gradlew.bat build` BUILD SUCCESSFUL (`-Dnet.minecraftforge.gradle.check.certs=false`).

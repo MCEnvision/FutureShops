@@ -494,6 +494,8 @@ public class ShopBlockEntity extends BlockEntity {
         public double promoValue() { return promoValue; }
         public int buyX() { return buyX; }
         public int buyY() { return buyY; }
+        public long startEpochSeconds() { return startEpochSeconds; }
+        public long endEpochSeconds() { return endEpochSeconds; }
         public boolean flash() { return flash; }
         public boolean configured() { return promoType != null && !promoType.isBlank(); }
         public boolean active() {

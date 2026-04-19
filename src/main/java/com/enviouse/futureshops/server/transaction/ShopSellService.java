@@ -79,7 +79,9 @@ public final class ShopSellService {
             }
 
             Inventory inventory = player.getInventory();
-            if (ShopTransactionUtil.countItems(inventory, item) < quantity) {
+            // NBT-strict: requiredTag=null means only plain/tag-less stacks match — prevents selling
+            // enchanted/damaged gear or semi-full tanks as plain items.
+            if (ShopTransactionUtil.countItems(inventory, item, true, null) < quantity) {
                 return SellResult.error(shopId, provider.getBalance(player.getUUID()), "MISSING_ITEMS");
             }
 
@@ -99,7 +101,7 @@ public final class ShopSellService {
             // Allow event listeners to modify the price
             totalValue = preEvent.getPriceMinor();
 
-            if (!ShopTransactionUtil.removeItems(inventory, item, quantity)) {
+            if (!ShopTransactionUtil.removeItems(inventory, item, quantity, true, null)) {
                 return SellResult.error(shopId, provider.getBalance(player.getUUID()), "MISSING_ITEMS");
             }
 

@@ -950,7 +950,8 @@ public final class PlayerShopBlockService {
                 listing.effectiveBarterItemCount(), // Item 24: send promo-adjusted barter count
                 countStock(level, shop, shopPos, listing),
                 promo.configured()
-                        ? new PlayerShopPromoData(promo.active(), promo.promoType(), promo.promoValue(), promo.buyX(), promo.buyY(), promo.flash())
+                        ? new PlayerShopPromoData(promo.active(), promo.promoType(), promo.promoValue(), promo.buyX(), promo.buyY(), promo.flash(),
+                                promo.startEpochSeconds(), promo.endEpochSeconds())
                         : PlayerShopPromoData.NONE,
                 listing.nbtAware(),
                 nbtJson,

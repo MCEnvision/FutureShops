@@ -33,6 +33,7 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
     private int visibleMembers;
     private EditBox inviteBox;
     private ConfirmationModal disbandConfirm;
+    private ConfirmationModal leaveConfirm;
 
     public FranchiseManagementScreen(boolean inFranchise, UUID franchiseId, String franchiseName,
                                      boolean isLeader, List<FranchiseMemberEntry> members,
@@ -137,11 +138,26 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
                     .bounds(guiLeft + guiW - 80, guiTop + guiH - 22, 70, 16)
                     .build());
         } else {
-            addRenderableWidget(Button.builder(Component.literal("§c↩ Leave"), button ->
-                            ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("LEAVE", "")))
+            addRenderableWidget(Button.builder(Component.literal("§c↩ Leave"), button -> openLeaveConfirm())
                     .bounds(guiLeft + guiW - 66, guiTop + guiH - 22, 58, 16)
                     .build());
         }
+    }
+
+    private void openLeaveConfirm() {
+        String name = franchiseName == null || franchiseName.isBlank() ? "this franchise" : franchiseName;
+        leaveConfirm = new ConfirmationModal(
+                "§c↩ Leave Franchise",
+                java.util.List.of(
+                        ConfirmationModal.SummaryLine.text("§fLeave §e\"" + name + "\"§f?"),
+                        ConfirmationModal.SummaryLine.text("§7You'll need a new invite to rejoin.")),
+                "§7Leave confirms immediately.",
+                modal -> {
+                    modal.setProcessing();
+                    ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("LEAVE", ""));
+                    modal.setSuccess("Left franchise");
+                },
+                () -> leaveConfirm = null);
     }
 
     private void openDisbandConfirm() {
@@ -180,6 +196,12 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
             disbandConfirm.render(graphics, this.font, this.width, this.height, mouseX, mouseY);
             if (disbandConfirm.shouldAutoDismiss()) {
                 disbandConfirm = null;
+            }
+        }
+        if (leaveConfirm != null) {
+            leaveConfirm.render(graphics, this.font, this.width, this.height, mouseX, mouseY);
+            if (leaveConfirm.shouldAutoDismiss()) {
+                leaveConfirm = null;
             }
         }
     }
@@ -273,6 +295,9 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
         if (disbandConfirm != null) {
             return disbandConfirm.mouseClicked(mouseX, mouseY, button, this.font);
         }
+        if (leaveConfirm != null) {
+            return leaveConfirm.mouseClicked(mouseX, mouseY, button, this.font);
+        }
         // Handle create franchise (when not in a franchise and inviteBox has text)
         if (!inFranchise && !hasPendingInvite && inviteBox != null && !inviteBox.getValue().isBlank()) {
             // Check if we clicked near the create area — use Enter key instead
@@ -313,6 +338,11 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (disbandConfirm != null) {
             if (disbandConfirm.keyPressed(keyCode)) {
+                return true;
+            }
+        }
+        if (leaveConfirm != null) {
+            if (leaveConfirm.keyPressed(keyCode)) {
                 return true;
             }
         }
