@@ -71,16 +71,18 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
         qtyBox = new EditBox(this.font, qtyX + 18, bottomY, 32, 16, Component.literal("Qty"));
         qtyBox.setValue(Integer.toString(quantity));
         qtyBox.setMaxLength(4);
+        qtyBox.setFilter(s -> s.isEmpty() || s.chars().allMatch(Character::isDigit));
+        // Don't overwrite the field mid-type (that's what made the box feel broken
+        // when resolveMaxQuantity was momentarily 0/1). Only update backing state.
         qtyBox.setResponder(value -> {
-            if (value.isBlank()) return;
+            if (value.isBlank()) {
+                quantity = 1;
+                return;
+            }
             try {
                 int parsed = Integer.parseInt(value);
-                int clamped = Math.max(1, Math.min(resolveMaxQuantity(), parsed));
-                if (clamped != parsed) qtyBox.setValue(Integer.toString(clamped));
-                else quantity = clamped;
-            } catch (NumberFormatException ignored) {
-                qtyBox.setValue("1");
-            }
+                quantity = Math.max(1, Math.min(Math.max(1, resolveMaxQuantity()), parsed));
+            } catch (NumberFormatException ignored) { /* keep last good */ }
         });
         addRenderableWidget(qtyBox);
         addRenderableWidget(Button.builder(Component.literal("+"), button -> {

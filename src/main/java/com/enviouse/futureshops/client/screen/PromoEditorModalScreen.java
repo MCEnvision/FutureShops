@@ -75,14 +75,16 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
         buyYBox.setMaxLength(4);
         addRenderableWidget(buyYBox);
 
-        startBox = new EditBox(this.font, fieldX, guiTop + 80, fieldW / 2 - 4, 14, Component.literal("Starts in min"));
+        startBox = new EditBox(this.font, fieldX, guiTop + 80, fieldW / 2 - 4, 14, Component.literal("Start (min)"));
         startBox.setValue("0");
         startBox.setMaxLength(6);
+        startBox.setHint(Component.literal("Start (min)"));
         addRenderableWidget(startBox);
 
-        durationBox = new EditBox(this.font, fieldX + fieldW / 2 + 4, guiTop + 80, fieldW / 2 - 4, 14, Component.literal("Duration min"));
+        durationBox = new EditBox(this.font, fieldX + fieldW / 2 + 4, guiTop + 80, fieldW / 2 - 4, 14, Component.literal("Length (min)"));
         durationBox.setValue("0");
         durationBox.setMaxLength(6);
+        durationBox.setHint(Component.literal("Length (min)"));
         addRenderableWidget(durationBox);
 
         flashButton = addRenderableWidget(Button.builder(Component.literal("Flash: OFF"), button -> {
@@ -140,7 +142,33 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
         }
         drawLabel(graphics, "Schedule", guiTop + 83);
 
+        // Translate the minutes entered into human-readable start/length so owners don't have to do math.
+        String scheduleHint = formatScheduleHint(parseInt(startBox.getValue(), 0), parseInt(durationBox.getValue(), 0));
+        graphics.drawString(this.font, scheduleHint, guiLeft + 10, guiTop + 114, ShopColors.TEXT_FAINT, false);
+
         super.render(graphics, mouseX, mouseY, partialTick);
+    }
+
+    private String formatScheduleHint(int startMin, int durationMin) {
+        String duration = durationMin <= 0
+                ? "§7duration: §funtil cleared"
+                : "§7lasts §f" + humanMinutes(durationMin);
+        String start = startMin <= 0
+                ? "§7starts: §fnow"
+                : "§7starts in §f" + humanMinutes(startMin);
+        return start + " §8• " + duration;
+    }
+
+    private static String humanMinutes(int minutes) {
+        if (minutes <= 0) return "0m";
+        int days = minutes / 1440;
+        int hours = (minutes % 1440) / 60;
+        int mins = minutes % 60;
+        StringBuilder out = new StringBuilder();
+        if (days > 0) out.append(days).append("d ");
+        if (hours > 0) out.append(hours).append("h ");
+        if (mins > 0 || out.length() == 0) out.append(mins).append("m");
+        return out.toString().trim();
     }
 
     private void drawLabel(GuiGraphics graphics, String text, int y) {

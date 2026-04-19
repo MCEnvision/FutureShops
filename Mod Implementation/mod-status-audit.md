@@ -891,5 +891,53 @@ Files touched: `LocalShopBrowserScreen`, `DepartmentPickerScreen`, `BarterScreen
 
 
 
-```
+## Latest pass — quantity-box & confirmation-modal escape bugs (2026-04-18)
 
+Two regressions reported by the user were fixed together:
+
+### Bug A — Quantity field "not accepting input" until `/shop` was opened first
+- **Root cause:** every quantity `EditBox` set a `setResponder` that parsed the live value, clamped it via `resolveMaxQuantity()`, and wrote the clamped string back into the box (`quantityBox.setValue(...)`). When a shop was opened via right-clicking a block before `ShopClientState` had been primed by `/shop`, the client catalog was empty, so `resolveMaxQuantity()` returned `1`. Every keystroke therefore collapsed the field back to `"1"` and moved the caret, making the field feel dead. `/shop` populated the catalog → max resolved correctly → typing worked.
+- **Fix:** removed in-typing clamp-and-rewrite behavior. Responders no longer call `setValue` while the user is editing; `setFilter(s -> digits-only)` prevents junk input. Clamping is applied only at consumption sites (`getQuantity()` on `ItemDetailScreen` / `PlayerShopBlockScreen`, `multiplier`/`quantity` state in `BarterScreen` / `PlayerShopBarterScreen`, and all `setQuantity`/`setMultiplier` button handlers).
+- **Files:** `client/screen/ItemDetailScreen.java`, `client/screen/BarterScreen.java`, `client/screen/PlayerShopBarterScreen.java`, `client/screen/PlayerShopBlockScreen.java`.
+
+### Bug B — "Processing…" modal hang + ESC/Back unable to leave
+- **Root cause:** `ConfirmationModal.keyPressed` swallowed ESC silently when `state == PROCESSING` (only fired `onCancel` for `WAITING`), and `mouseClicked` returned early for both `PROCESSING` and `SUCCESS`, so the Cancel button and outside-clicks were all dead. If the server response never reached the client (some barter failure branches close the shop screen before updating the modal, or any dropped packet), the player was stuck in the modal and had to restart the game.
+- **Fix (`client/screen/ConfirmationModal.java`):**
+  - ESC now always dismisses (calls `onCancel.run()`), regardless of state.
+  - `mouseClicked` during `PROCESSING` routes clicks to the Cancel button and outside-click-cancel just like `WAITING` (Confirm is gated to `WAITING` only).
+  - Added `processingStartedAt` timestamp + `PROCESSING_TIMEOUT_MS = 10_000`. If the server hasn't responded in 10 s, the modal transitions to `FAILED("Request timed out")` on the next render pass, so the player can always get back out via the OK button / ESC.
+- **Safety:** cancelling during `PROCESSING` only closes the UI; any in-flight server-side transaction still settles server-side (no duplicate spend risk because the packet already left the client).
+
+## Verification
+- `./gradlew.bat build` BUILD SUCCESSFUL (`-Dnet.minecraftforge.gradle.check.certs=false`).
+
+---
+
+## Latest pass — NBT/barter exploit, Nearby tab, disband confirm, history detail, promo polish (2026-04-19)
+
+Six issues reported by the user, fixed in one pass.
+
+### Bug A — Barter ingredients accepted items with arbitrary NBT
+- **Root cause:** `ShopBarterService` and `PlayerShopBlockService` called `ShopTransactionUtil.countItems`/`removeItems` without NBT filtering. Any stack matching the item ID counted — so a half-full modded tank, a damaged tool, or an enchanted chestplate was consumed as a "plain" barter ingredient.
+- **Fix:** both services now pass `nbtAware=true, requiredTag=null` to the count/remove helpers — only stacks with no tag (vanilla/plain form) qualify. `ShopUiUtil.countPlayerInventory` now filters the same way so the client-side Max button stays in sync.
+- **Files:** `server/transaction/ShopBarterService.java`, `server/shop/PlayerShopBlockService.java`, `client/screen/ShopUiUtil.java`.
+
+### Task B — Restored the "Nearby" department tab
+- `ShopMainScreen.hasNearbyTab()` now returns `true` again. The user preferred the duplicate sidebar entry alongside the top `📍 Nearby` button.
+
+### Task C — Disband franchise now prompts for confirmation
+- `FranchiseManagementScreen` now opens a `ConfirmationModal` when the leader hits Disband. Modal has its own Esc/click handling and inherits the existing shared `ConfirmationModal.PROCESSING` timeout (so the same soft-lock protection applies).
+
+### Task D — Transaction history shows what was bartered
+- Server records barter payment details in the existing `note` field using `paid=<itemId>×<n>[,…]`. Both admin shop (`ShopBarterService`) and player shop (`PlayerShopBlockService`, covers `BARTER` and `MONEY_AND_BARTER`) emit this format.
+- `TransactionHistoryScreen` row height bumped to 28px and the screen renders a secondary line like `paid: 8×Diamond` under the base row when the note parses.
+
+### Task E — Discount badge readability
+- `ShopUiUtil.renderAnimatedDiscountBadge` rebuilt: removed the 0.82→1.18 scale pulse and the -15° rotation that made the text jitter. Now a static pill with a gentle red halo pulse. Text stays sharp on flash promos and percentage labels alike.
+
+### Task F — Promo schedule now clearly shows unit
+- `PromoEditorModalScreen` schedule fields relabeled `Start (min)` / `Length (min)` (both the label and hint).
+- Added a live helper line below: `starts in 2d 4h • lasts 1d` (or `starts: now • duration: until cleared`). Owners no longer have to do mental math from raw minutes.
+
+## Verification
+- `./gradlew.bat build` BUILD SUCCESSFUL (`-Dnet.minecraftforge.gradle.check.certs=false`).

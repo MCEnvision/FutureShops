@@ -480,16 +480,9 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         quantityBox = new EditBox(this.font, qtyX + 16, y, 32, 14, Component.literal("Qty"));
         quantityBox.setValue("1");
         quantityBox.setMaxLength(4);
-        quantityBox.setResponder(value -> {
-            if (value.isBlank()) return;
-            try {
-                int parsed = Integer.parseInt(value);
-                int clamped = clampQuantity(parsed);
-                if (clamped != parsed) quantityBox.setValue(String.valueOf(clamped));
-            } catch (NumberFormatException ignored) {
-                quantityBox.setValue("1");
-            }
-        });
+        quantityBox.setFilter(s -> s.isEmpty() || s.chars().allMatch(Character::isDigit));
+        // Don't rewrite the field mid-type; clamp is applied at getQuantity() call sites.
+        quantityBox.setResponder(value -> { /* no-op; clamp on use */ });
         addRenderableWidget(quantityBox);
         addRenderableWidget(Button.builder(Component.literal("+"), button -> {
                     if (hasShiftDown()) setQuantity(resolveMaxQuantity());

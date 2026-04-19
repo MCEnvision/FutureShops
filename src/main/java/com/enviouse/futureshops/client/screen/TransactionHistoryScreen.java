@@ -156,18 +156,46 @@ public class TransactionHistoryScreen extends Screen implements ShopScreenMarker
         }
 
         int rowY = tableY + 26;
-        int rowH = 20;
+        int rowH = 28;
         int maxRows = Math.min(10, (tableH - 34) / rowH);
         for (int i = 0; i < Math.min(entries.size(), maxRows); i++) {
             TransactionHistoryEntry entry = entries.get(i);
             int y = rowY + i * rowH;
-            graphics.fill(tableX + 8, y, tableX + tableW - 8, y + 18, i % 2 == 0 ? ShopColors.SURFACE_RAISED : ShopColors.SURFACE_OVERLAY);
+            graphics.fill(tableX + 8, y, tableX + tableW - 8, y + rowH - 2, i % 2 == 0 ? ShopColors.SURFACE_RAISED : ShopColors.SURFACE_OVERLAY);
             graphics.drawString(this.font, entry.type(), tableX + 10, y + 5, colorForType(entry.type()), false);
             graphics.drawString(this.font, this.font.plainSubstrByWidth(ShopUiUtil.getItemDisplayName(entry.itemId()), tableW - 250), tableX + 74, y + 5, ShopColors.TEXT_STRONG, false);
             graphics.drawString(this.font, Integer.toString(entry.quantity()), tableX + tableW - 168, y + 5, ShopColors.TEXT_MUTED, false);
             graphics.drawString(this.font, entry.totalMinorUnits() > 0L ? ShopUiUtil.formatMinorUnits(entry.totalMinorUnits()) : "—", tableX + tableW - 118, y + 5, ShopColors.TEXT_CURRENCY, false);
             graphics.drawString(this.font, TS_FORMAT.format(Instant.ofEpochSecond(entry.timestampEpochSeconds())), tableX + tableW - 58, y + 5, ShopColors.TEXT_FAINT, false);
+
+            String detail = formatBarterDetail(entry);
+            if (detail != null) {
+                graphics.drawString(this.font, this.font.plainSubstrByWidth(detail, tableW - 30), tableX + 74, y + 16, ShopColors.TEXT_BARTER_SOFT, false);
+            }
         }
+    }
+
+    private String formatBarterDetail(TransactionHistoryEntry entry) {
+        String note = entry.note();
+        if (note == null || !note.startsWith("paid=")) {
+            return null;
+        }
+        String payload = note.substring(5);
+        if (payload.isBlank()) {
+            return null;
+        }
+        StringBuilder out = new StringBuilder("§7paid: ");
+        String[] parts = payload.split(",");
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) out.append("§8, ");
+            String part = parts[i];
+            int sep = part.indexOf('\u00d7');
+            if (sep <= 0) continue;
+            String itemId = part.substring(0, sep);
+            String count = part.substring(sep + 1);
+            out.append("§f").append(count).append("§8×§f").append(ShopUiUtil.getItemDisplayName(itemId));
+        }
+        return out.toString();
     }
 
     private void renderFooter(GuiGraphics graphics) {

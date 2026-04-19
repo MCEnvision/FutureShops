@@ -40,7 +40,14 @@ public final class ShopBarterService {
                 result.outputQuantity()));
 
         if (result.success() && player.getServer() != null) {
-            TransactionHistoryService.record(player, result.shopId(), "BARTER", result.targetItemId(), result.outputQuantity(), 0L, packet.recipeId());
+            // note: "paid=<itemId>×<n>[,<itemId>×<n>...]" so the history UI can show what the player handed over.
+            StringBuilder paid = new StringBuilder("paid=");
+            for (int i = 0; i < result.ingredientEntries().size(); i++) {
+                BarterTradeEvent.IngredientEntry ing = result.ingredientEntries().get(i);
+                if (i > 0) paid.append(',');
+                paid.append(ing.itemId()).append('\u00d7').append(ing.count());
+            }
+            TransactionHistoryService.record(player, result.shopId(), "BARTER", result.targetItemId(), result.outputQuantity(), 0L, paid.toString());
             // Fire ShopTransactionEvent.Post (spec §33) for barter transactions
             net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
                     new ShopTransactionEvent.Post(player.getUUID(), result.shopId(), result.targetItemId(),
@@ -124,7 +131,10 @@ public final class ShopBarterService {
                     return BarterResult.error(shopId, "SERVER_ERROR");
                 }
 
-                if (ShopTransactionUtil.countItems(inventory, ingredientItem) < needed) {
+                // NBT-strict: only vanilla/plain stacks (no damage, enchantments, fluid, etc.)
+                // qualify as barter ingredients — prevents exploits like handing over an
+                // enchanted chestplate or a tank with fluid in place of a plain item.
+                if (ShopTransactionUtil.countItems(inventory, ingredientItem, true, null) < needed) {
                     return BarterResult.error(shopId, "MISSING_INGREDIENTS");
                 }
                 required.add(new IngredientConsumption(ingredientItem, needed));
@@ -152,7 +162,7 @@ public final class ShopBarterService {
             }
 
             for (IngredientConsumption ingredient : required) {
-                if (!ShopTransactionUtil.removeItems(inventory, ingredient.item(), ingredient.count())) {
+                if (!ShopTransactionUtil.removeItems(inventory, ingredient.item(), ingredient.count(), true, null)) {
                     return BarterResult.error(shopId, "MISSING_INGREDIENTS");
                 }
             }

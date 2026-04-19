@@ -735,9 +735,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
     }
 
     private boolean hasNearbyTab() {
-        // Nearby shops are reachable via the dedicated 📍 Nearby button at the top of the screen,
-        // so we no longer surface a duplicate department tab in the sidebar.
-        return false;
+        return true;
     }
 
     private boolean isBarterTabSelected() {

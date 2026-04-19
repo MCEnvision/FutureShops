@@ -80,15 +80,13 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                 Component.translatable("gui.futureshops.detail.quantity"));
         quantityBox.setValue("1");
         quantityBox.setMaxLength(4);
-        quantityBox.setResponder(value -> {
-            if (value.isBlank()) return;
-            try {
-                String clamped = Integer.toString(clampQuantity(Integer.parseInt(value)));
-                if (!clamped.equals(value)) quantityBox.setValue(clamped);
-            } catch (NumberFormatException ignored) {
-                if (!"1".equals(value)) quantityBox.setValue("1");
-            }
-        });
+        // Only allow digits — prevents junk input without fighting the user mid-type.
+        quantityBox.setFilter(s -> s.isEmpty() || s.chars().allMatch(Character::isDigit));
+        // Responder is intentionally empty: getQuantity() clamps on demand when an
+        // action fires. Writing a clamped value back during typing erases the caret
+        // and was perceived as "field not accepting input" when the client catalog
+        // hadn't loaded yet (resolveMaxQuantity() returns 1 → every keystroke reset).
+        quantityBox.setResponder(value -> { /* no-op; clamp on use */ });
         addRenderableWidget(quantityBox);
         addRenderableWidget(Button.builder(Component.literal("+"), button -> {
                     if (hasShiftDown()) setQuantity(resolveMaxQuantity());

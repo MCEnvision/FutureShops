@@ -563,7 +563,9 @@ public final class PlayerShopBlockService {
             if (compoundTrade || barterTrade) {
                 barterItem = ShopTransactionUtil.resolveItem(listing.barterItemId());
                 barterAmount = listing.effectiveBarterTotal(qty);
-                if (barterItem == null || barterItem == Items.AIR || ShopTransactionUtil.countItems(buyer.getInventory(), barterItem) < barterAmount) {
+                // NBT-strict: only plain stacks (no damage/enchants/fluid NBT) count as barter payment,
+                // preventing exploits like paying with enchanted gear or a semi-full modded tank.
+                if (barterItem == null || barterItem == Items.AIR || ShopTransactionUtil.countItems(buyer.getInventory(), barterItem, true, null) < barterAmount) {
                     if (compoundTrade) {
                         sendResultWithChat(buyer, false, "MISSING_BARTER_ITEMS", "§cTrade cancelled: you don't have enough barter items.");
                         return;
@@ -615,7 +617,7 @@ public final class PlayerShopBlockService {
                 }
 
                 List<ItemStack> paymentStacks = splitStacks(barterItem, barterAmount);
-                if (!ShopTransactionUtil.removeItems(buyer.getInventory(), barterItem, barterAmount)) {
+                if (!ShopTransactionUtil.removeItems(buyer.getInventory(), barterItem, barterAmount, true, null)) {
                     provider.deposit(buyer.getUUID(), cost, "BUY");
                     sendResultWithChat(buyer, false, "MISSING_BARTER_ITEMS", "§cTrade cancelled: barter items could not be taken.");
                     return;
@@ -690,7 +692,7 @@ public final class PlayerShopBlockService {
                 }
 
                 List<ItemStack> paymentStacks = splitStacks(barterItem, barterAmount);
-                if (!ShopTransactionUtil.removeItems(buyer.getInventory(), barterItem, barterAmount)) {
+                if (!ShopTransactionUtil.removeItems(buyer.getInventory(), barterItem, barterAmount, true, null)) {
                     sendResultWithChat(buyer, false, "MISSING_BARTER_ITEMS", "§cTrade cancelled: barter items could not be taken.");
                     return;
                 }
@@ -754,6 +756,9 @@ public final class PlayerShopBlockService {
             if (buyer.getServer() != null) {
                 String tradeType = compoundTrade ? "MONEY_AND_BARTER" : (barterTrade ? "BARTER" : "BUY");
                 String source = compoundTrade ? "PLAYER_SHOP_COMPOUND" : (barterTrade ? "PLAYER_SHOP_BARTER" : "PLAYER_SHOP");
+                String historyNote = (barterTrade || compoundTrade) && barterItem != null
+                        ? "paid=" + net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(barterItem) + "\u00d7" + barterAmount
+                        : source;
                 TransactionHistoryService.record(
                         buyer,
                         shop.getShopId(),
@@ -761,7 +766,7 @@ public final class PlayerShopBlockService {
                         listing.itemId(),
                         qty,
                         barterTrade ? 0L : cost,
-                        source);
+                        historyNote);
 
                 // ═══ Fire ShopTransactionEvent.Post (spec §33) ═══
                 if (com.enviouse.futureshops.Config.eventsTransactionEnabled) {

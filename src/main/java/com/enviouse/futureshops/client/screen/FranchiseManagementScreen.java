@@ -32,6 +32,7 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
     private int memberScroll;
     private int visibleMembers;
     private EditBox inviteBox;
+    private ConfirmationModal disbandConfirm;
 
     public FranchiseManagementScreen(boolean inFranchise, UUID franchiseId, String franchiseName,
                                      boolean isLeader, List<FranchiseMemberEntry> members,
@@ -132,8 +133,7 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
 
         // Leave / Disband buttons
         if (isLeader) {
-            addRenderableWidget(Button.builder(Component.literal("§c⚠ Disband"), button ->
-                            ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("DISBAND", "")))
+            addRenderableWidget(Button.builder(Component.literal("§c⚠ Disband"), button -> openDisbandConfirm())
                     .bounds(guiLeft + guiW - 80, guiTop + guiH - 22, 70, 16)
                     .build());
         } else {
@@ -142,6 +142,23 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
                     .bounds(guiLeft + guiW - 66, guiTop + guiH - 22, 58, 16)
                     .build());
         }
+    }
+
+    private void openDisbandConfirm() {
+        String name = franchiseName == null || franchiseName.isBlank() ? "this franchise" : franchiseName;
+        disbandConfirm = new ConfirmationModal(
+                "§c⚠ Disband Franchise",
+                java.util.List.of(
+                        ConfirmationModal.SummaryLine.text("§fDisband §e\"" + name + "\"§f?"),
+                        ConfirmationModal.SummaryLine.text("§7All members will be removed."),
+                        ConfirmationModal.SummaryLine.text("§7This action cannot be undone.")),
+                "§cThis is permanent.",
+                modal -> {
+                    modal.setProcessing();
+                    ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("DISBAND", ""));
+                    modal.setSuccess("Franchise disbanded");
+                },
+                () -> disbandConfirm = null);
     }
 
     @Override
@@ -158,6 +175,13 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
         }
 
         super.render(graphics, mouseX, mouseY, partialTick);
+
+        if (disbandConfirm != null) {
+            disbandConfirm.render(graphics, this.font, this.width, this.height, mouseX, mouseY);
+            if (disbandConfirm.shouldAutoDismiss()) {
+                disbandConfirm = null;
+            }
+        }
     }
 
     private void renderNoFranchise(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -246,6 +270,9 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (disbandConfirm != null) {
+            return disbandConfirm.mouseClicked(mouseX, mouseY, button, this.font);
+        }
         // Handle create franchise (when not in a franchise and inviteBox has text)
         if (!inFranchise && !hasPendingInvite && inviteBox != null && !inviteBox.getValue().isBlank()) {
             // Check if we clicked near the create area — use Enter key instead
@@ -284,6 +311,11 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (disbandConfirm != null) {
+            if (disbandConfirm.keyPressed(keyCode)) {
+                return true;
+            }
+        }
         // Enter key in inviteBox: if not in franchise → create; if in franchise → invite
         if ((keyCode == 257 || keyCode == 335) && inviteBox != null && inviteBox.isFocused() && !inviteBox.getValue().isBlank()) {
             if (!inFranchise) {

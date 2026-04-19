@@ -70,17 +70,18 @@ public class BarterScreen extends Screen implements ShopScreenMarker {
         qtyBox = new EditBox(this.font, qtyX + 18, bottomY, 32, 16, Component.literal("Qty"));
         qtyBox.setValue("1");
         qtyBox.setMaxLength(4);
+        qtyBox.setFilter(s -> s.isEmpty() || s.chars().allMatch(Character::isDigit));
+        // Don't write clamped values back during typing — it kills the caret and made
+        // the field feel broken when the catalog wasn't loaded yet. Only update state.
         qtyBox.setResponder(value -> {
-            if (value.isBlank()) return;
+            if (value.isBlank()) {
+                multiplier = 1;
+                return;
+            }
             try {
                 int parsed = Integer.parseInt(value);
-                int max = resolveMaxMultiplier();
-                int clamped = Math.max(1, Math.min(max, parsed));
-                if (clamped != parsed) qtyBox.setValue(Integer.toString(clamped));
-                else multiplier = clamped;
-            } catch (NumberFormatException ignored) {
-                qtyBox.setValue("1");
-            }
+                multiplier = Math.max(1, Math.min(resolveMaxMultiplier(), parsed));
+            } catch (NumberFormatException ignored) { /* keep last good */ }
         });
         addRenderableWidget(qtyBox);
         addRenderableWidget(Button.builder(Component.literal("+"), button -> {

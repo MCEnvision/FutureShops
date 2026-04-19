@@ -184,12 +184,12 @@ public final class ShopUiUtil {
             if (item != null) {
                 int total = 0;
                 for (ItemStack stack : minecraft.player.getInventory().items) {
-                    if (stack.getItem() == item) {
+                    if (stack.getItem() == item && !stack.hasTag()) {
                         total += stack.getCount();
                     }
                 }
                 for (ItemStack stack : minecraft.player.getInventory().offhand) {
-                    if (stack.getItem() == item) {
+                    if (stack.getItem() == item && !stack.hasTag()) {
                         total += stack.getCount();
                     }
                 }
@@ -291,32 +291,29 @@ public final class ShopUiUtil {
     }
 
     /**
-     * Renders an animated discount badge that pops (scales big→small→big) and is tilted 45°.
-     * Fully red background with white text. Uses system time for animation.
+     * Subtle, readable discount badge. Static geometry + gentle glow pulse so the text stays sharp.
      */
     public static void renderAnimatedDiscountBadge(GuiGraphics graphics, Font font, int centerX, int centerY, String text) {
         long time = System.currentTimeMillis();
-        // Pulsating scale: oscillates between 0.82 and 1.18
-        float scale = 1.0f + 0.18f * (float) Math.sin(time * 0.005D);
-        float angle = (float) Math.toRadians(-15.0);
+        // Gentle glow — text does not move or rotate, so it remains legible.
+        float glow = 0.5f + 0.5f * (float) Math.sin(time * 0.004D);
+        int glowAlpha = 0x40 + (int) (0x60 * glow);
+        int glowColor = (glowAlpha << 24) | 0x00FF2233;
 
         int textW = font.width(text);
-        int badgeW = textW + 10;
-        int badgeH = 12;
-
-        graphics.pose().pushPose();
-        graphics.pose().translate(centerX, centerY, 200f);
-        graphics.pose().scale(scale, scale, 1f);
-        com.mojang.math.Axis axis = com.mojang.math.Axis.ZP;
-        graphics.pose().mulPose(axis.rotation(angle));
-
+        int badgeW = textW + 14;
+        int badgeH = 14;
         int halfW = badgeW / 2;
         int halfH = badgeH / 2;
-        graphics.fill(-halfW, -halfH, halfW, halfH, ShopColors.DISCOUNT_BG);
-        drawBorder(graphics, -halfW, -halfH, badgeW, badgeH, 0xFFCC0033);
-        graphics.drawString(font, text, -textW / 2, -halfH + 2, ShopColors.DISCOUNT_TEXT, true);
+        int x0 = centerX - halfW;
+        int y0 = centerY - halfH;
 
-        graphics.pose().popPose();
+        // Soft halo behind the badge
+        graphics.fill(x0 - 2, y0 - 2, x0 + badgeW + 2, y0 + badgeH + 2, glowColor);
+        // Solid, readable pill
+        graphics.fill(x0, y0, x0 + badgeW, y0 + badgeH, ShopColors.DISCOUNT_BG);
+        drawBorder(graphics, x0, y0, badgeW, badgeH, 0xFFCC0033);
+        graphics.drawString(font, text, centerX - textW / 2, y0 + 3, ShopColors.DISCOUNT_TEXT, true);
     }
 
     /**

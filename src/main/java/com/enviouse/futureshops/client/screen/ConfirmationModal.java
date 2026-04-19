@@ -27,6 +27,9 @@ public class ConfirmationModal {
     private State state = State.WAITING;
     private String resultMessage = "";
     private long resultTimestamp = 0;
+    private long processingStartedAt = 0;
+    /** How long to wait for a server response before auto-failing so the player can escape. */
+    private static final long PROCESSING_TIMEOUT_MS = 10_000L;
 
     // Modal dimensions (computed in render)
     private int modalX, modalY, modalW, modalH;
@@ -46,6 +49,7 @@ public class ConfirmationModal {
 
     public void setProcessing() {
         this.state = State.PROCESSING;
+        this.processingStartedAt = System.currentTimeMillis();
     }
 
     public void setSuccess(String message) {
@@ -70,6 +74,12 @@ public class ConfirmationModal {
      * Render the modal overlay. Call this AFTER super.render() in the parent screen.
      */
     public void render(GuiGraphics graphics, Font font, int screenW, int screenH, int mouseX, int mouseY) {
+        // Safety: if the server never responded, unblock the UI so the player can escape.
+        if (state == State.PROCESSING && processingStartedAt > 0
+                && System.currentTimeMillis() - processingStartedAt > PROCESSING_TIMEOUT_MS) {
+            setFailed("Request timed out");
+        }
+
         // Dim layer
         ShopUiUtil.renderDimBackdrop(graphics, screenW, screenH);
 
@@ -173,11 +183,11 @@ public class ConfirmationModal {
             }
             return true; // consume click anyway
         }
-        if (state == State.PROCESSING || state == State.SUCCESS) {
-            return true; // consume all clicks
+        if (state == State.SUCCESS) {
+            return true; // success auto-dismisses; consume clicks meanwhile
         }
 
-        // Check if click is outside modal → cancel
+        // Check if click is outside modal → cancel (works in WAITING and PROCESSING)
         if (mouseX < modalX || mouseX > modalX + modalW || mouseY < modalY || mouseY > modalY + modalH) {
             onCancel.run();
             return true;
@@ -191,17 +201,19 @@ public class ConfirmationModal {
         int totalBtnW = btnW * 2 + gap;
         int startX = modalX + (modalW - totalBtnW) / 2;
 
-        // Cancel button
+        // Cancel button — always active (also escape hatch from PROCESSING)
         if (mouseX >= startX && mouseX <= startX + btnW && mouseY >= lineY && mouseY <= lineY + btnH) {
             onCancel.run();
             return true;
         }
 
-        // Confirm button
-        int confirmX = startX + btnW + gap;
-        if (mouseX >= confirmX && mouseX <= confirmX + btnW && mouseY >= lineY && mouseY <= lineY + btnH) {
-            onConfirm.accept(this);
-            return true;
+        // Confirm button — only in WAITING state
+        if (state == State.WAITING) {
+            int confirmX = startX + btnW + gap;
+            if (mouseX >= confirmX && mouseX <= confirmX + btnW && mouseY >= lineY && mouseY <= lineY + btnH) {
+                onConfirm.accept(this);
+                return true;
+            }
         }
 
         return true; // consume click inside modal
@@ -211,10 +223,8 @@ public class ConfirmationModal {
      * Handle Escape key in modal. Returns true if consumed.
      */
     public boolean keyPressed(int keyCode) {
-        if (keyCode == 256) { // Escape
-            if (state == State.WAITING) {
-                onCancel.run();
-            }
+        if (keyCode == 256) { // Escape — always dismiss so the player can never get stuck
+            onCancel.run();
             return true;
         }
         return false;
