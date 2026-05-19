@@ -1,6 +1,5 @@
 package com.enviouse.futureshops.command;
 
-import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SFranchiseActionPacket;
 import com.enviouse.futureshops.server.shop.FranchiseSavedData;
 import com.mojang.brigadier.CommandDispatcher;
@@ -12,240 +11,253 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
-import java.util.Set;
 import java.util.UUID;
 
 /**
- * Registers the {@code /shop franchise} command tree.
+ * Registers the {@code /franchise} command tree.
  * Subcommands: create, invite, accept, decline, kick, promote, manage, leave, disband.
+ *
+ * <p>All player-visible messages flow through {@code command.futureshops.franchise.*}
+ * lang keys — see {@code en_us.json}. Dynamic arguments (player names, franchise names)
+ * are passed as {@link Component#translatable(String, Object...)} args.
  */
 public final class FranchiseCommand {
     private FranchiseCommand() {
     }
 
+    /** Centralised "player only" error — reused by every subcommand. */
+    private static Component playerOnly() {
+        return Component.translatable("command.futureshops.player_only");
+    }
+
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("franchise")
-                // /franchise create <name>
                 .then(Commands.literal("create")
                         .then(Commands.argument("name", StringArgumentType.greedyString())
                                 .executes(ctx -> create(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                // /franchise invite <player>
                 .then(Commands.literal("invite")
                         .then(Commands.argument("player", StringArgumentType.word())
                                 .executes(ctx -> invite(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
-                // /franchise accept
                 .then(Commands.literal("accept")
                         .executes(ctx -> accept(ctx.getSource())))
-                // /franchise decline
                 .then(Commands.literal("decline")
                         .executes(ctx -> decline(ctx.getSource())))
-                // /franchise kick <player>
                 .then(Commands.literal("kick")
                         .then(Commands.argument("player", StringArgumentType.word())
                                 .executes(ctx -> kick(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
-                // /franchise promote <player>
                 .then(Commands.literal("promote")
                         .then(Commands.argument("player", StringArgumentType.word())
                                 .executes(ctx -> promote(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
-                // /franchise manage
                 .then(Commands.literal("manage")
                         .executes(ctx -> manage(ctx.getSource())))
-                // /franchise leave
                 .then(Commands.literal("leave")
                         .executes(ctx -> leave(ctx.getSource())))
-                // /franchise disband
                 .then(Commands.literal("disband")
                         .executes(ctx -> disband(ctx.getSource()))));
     }
 
     private static int create(CommandSourceStack source, String name) {
         if (!(source.getEntity() instanceof ServerPlayer player)) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Player only command")));
+            source.sendFailure(EconomyCommandUtil.error(playerOnly()));
             return 0;
         }
         if (name.isBlank() || name.length() > 32) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Franchise name must be 1-32 characters.")));
+            source.sendFailure(EconomyCommandUtil.error(
+                    Component.translatable("command.futureshops.franchise.create.invalid_name")));
             return 0;
         }
         FranchiseSavedData data = FranchiseSavedData.get(player.getServer());
         FranchiseSavedData.CreateResult result = data.createFranchise(player.getUUID(), name);
         if (!result.success()) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal(
-                    "ALREADY_IN_FRANCHISE".equals(result.code())
-                            ? "You're already in a franchise! Use /franchise leave first."
-                            : "Could not create franchise.")));
+            String key = "ALREADY_IN_FRANCHISE".equals(result.code())
+                    ? "command.futureshops.franchise.create.already_in"
+                    : "command.futureshops.franchise.create.failed";
+            source.sendFailure(EconomyCommandUtil.error(Component.translatable(key)));
             return 0;
         }
         source.sendSuccess(() -> EconomyCommandUtil.success(
-                Component.literal("✨ Franchise \"" + name + "\" created! Invite members with /franchise invite <player>")), false);
+                Component.translatable("command.futureshops.franchise.create.success", name)), false);
         return 1;
     }
 
     private static int invite(CommandSourceStack source, String targetName) {
         if (!(source.getEntity() instanceof ServerPlayer player)) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Player only command")));
+            source.sendFailure(EconomyCommandUtil.error(playerOnly()));
             return 0;
         }
         MinecraftServer server = player.getServer();
         ServerPlayer target = server.getPlayerList().getPlayerByName(targetName);
         if (target == null) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Player \"" + targetName + "\" is not online.")));
+            source.sendFailure(EconomyCommandUtil.error(
+                    Component.translatable("command.futureshops.franchise.invite.offline", targetName)));
             return 0;
         }
         FranchiseSavedData data = FranchiseSavedData.get(server);
         if (!data.invite(player.getUUID(), target.getUUID())) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Could not invite. Are you a franchise leader? Is the player already in a franchise?")));
+            source.sendFailure(EconomyCommandUtil.error(
+                    Component.translatable("command.futureshops.franchise.invite.failed")));
             return 0;
         }
         FranchiseSavedData.Franchise franchise = data.getFranchise(player.getUUID());
-        String franchiseName = franchise != null ? franchise.name : "Unknown";
+        String franchiseName = franchise != null ? franchise.name : "";
 
         source.sendSuccess(() -> EconomyCommandUtil.success(
-                Component.literal("📨 Invitation sent to " + targetName + "!")), false);
+                Component.translatable("command.futureshops.franchise.invite.sent", targetName)), false);
 
-        // Notify the invited player
+        // Invitee-side: a decorated multi-part banner. We keep the individual lines as
+        // separate lang keys so translators can reword the prompt without touching code,
+        // and apply the ChatFormatting styles server-side for consistent visuals.
         target.sendSystemMessage(Component.literal("")
-                .append(Component.literal("═══ Franchise Invite ═══").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD))
+                .append(Component.translatable("command.futureshops.franchise.invite.banner.header")
+                        .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD))
                 .append(Component.literal("\n"))
-                .append(Component.literal(player.getGameProfile().getName() + " invited you to join ").withStyle(ChatFormatting.YELLOW))
-                .append(Component.literal("\"" + franchiseName + "\"").withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD))
+                .append(Component.translatable("command.futureshops.franchise.invite.banner.line1",
+                                player.getGameProfile().getName(), franchiseName)
+                        .withStyle(ChatFormatting.YELLOW))
                 .append(Component.literal("\n"))
-                .append(Component.literal("Type ").withStyle(ChatFormatting.GRAY))
-                .append(Component.literal("/franchise accept").withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD))
-                .append(Component.literal(" or ").withStyle(ChatFormatting.GRAY))
-                .append(Component.literal("/franchise decline").withStyle(ChatFormatting.RED, ChatFormatting.BOLD)));
+                .append(Component.translatable("command.futureshops.franchise.invite.banner.line2")
+                        .withStyle(ChatFormatting.GRAY)));
         return 1;
     }
 
     private static int accept(CommandSourceStack source) {
         if (!(source.getEntity() instanceof ServerPlayer player)) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Player only command")));
+            source.sendFailure(EconomyCommandUtil.error(playerOnly()));
             return 0;
         }
         FranchiseSavedData data = FranchiseSavedData.get(player.getServer());
         if (!data.acceptInvite(player.getUUID())) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("No pending franchise invite found.")));
+            source.sendFailure(EconomyCommandUtil.error(
+                    Component.translatable("command.futureshops.franchise.invite.none_pending")));
             return 0;
         }
         FranchiseSavedData.Franchise franchise = data.getFranchise(player.getUUID());
-        String name = franchise != null ? franchise.name : "Unknown";
+        String name = franchise != null ? franchise.name : "";
         source.sendSuccess(() -> EconomyCommandUtil.success(
-                Component.literal("✅ You joined franchise \"" + name + "\"! You can now manage shared shops.")), false);
+                Component.translatable("command.futureshops.franchise.accept.success", name)), false);
         return 1;
     }
 
     private static int decline(CommandSourceStack source) {
         if (!(source.getEntity() instanceof ServerPlayer player)) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Player only command")));
+            source.sendFailure(EconomyCommandUtil.error(playerOnly()));
             return 0;
         }
         FranchiseSavedData data = FranchiseSavedData.get(player.getServer());
         if (!data.declineInvite(player.getUUID())) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("No pending franchise invite found.")));
+            source.sendFailure(EconomyCommandUtil.error(
+                    Component.translatable("command.futureshops.franchise.invite.none_pending")));
             return 0;
         }
-        source.sendSuccess(() -> EconomyCommandUtil.success(Component.literal("❌ Franchise invite declined.")), false);
+        source.sendSuccess(() -> EconomyCommandUtil.success(
+                Component.translatable("command.futureshops.franchise.decline.success")), false);
         return 1;
     }
 
     private static int kick(CommandSourceStack source, String targetName) {
         if (!(source.getEntity() instanceof ServerPlayer player)) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Player only command")));
+            source.sendFailure(EconomyCommandUtil.error(playerOnly()));
             return 0;
         }
         MinecraftServer server = player.getServer();
         UUID targetUuid = resolveUuid(server, targetName);
         if (targetUuid == null) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Unknown player: " + targetName)));
+            source.sendFailure(EconomyCommandUtil.error(
+                    Component.translatable("command.futureshops.franchise.unknown_player", targetName)));
             return 0;
         }
         FranchiseSavedData data = FranchiseSavedData.get(server);
         if (!data.kick(player.getUUID(), targetUuid)) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Could not kick. Are you the franchise leader?")));
+            source.sendFailure(EconomyCommandUtil.error(
+                    Component.translatable("command.futureshops.franchise.kick.failed")));
             return 0;
         }
         source.sendSuccess(() -> EconomyCommandUtil.success(
-                Component.literal("🚫 " + targetName + " has been kicked from the franchise.")), false);
-        // Notify kicked player if online
+                Component.translatable("command.futureshops.franchise.kick.success", targetName)), false);
         ServerPlayer target = server.getPlayerList().getPlayer(targetUuid);
         if (target != null) {
             target.sendSystemMessage(EconomyCommandUtil.error(
-                    Component.literal("You have been kicked from the franchise by " + player.getGameProfile().getName() + ".")));
+                    Component.translatable("command.futureshops.franchise.kick.notify",
+                            player.getGameProfile().getName())));
         }
         return 1;
     }
 
     private static int promote(CommandSourceStack source, String targetName) {
         if (!(source.getEntity() instanceof ServerPlayer player)) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Player only command")));
+            source.sendFailure(EconomyCommandUtil.error(playerOnly()));
             return 0;
         }
         MinecraftServer server = player.getServer();
         UUID targetUuid = resolveUuid(server, targetName);
         if (targetUuid == null) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Unknown player: " + targetName)));
+            source.sendFailure(EconomyCommandUtil.error(
+                    Component.translatable("command.futureshops.franchise.unknown_player", targetName)));
             return 0;
         }
         FranchiseSavedData data = FranchiseSavedData.get(server);
         if (!data.promote(player.getUUID(), targetUuid)) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Could not promote. Are you the franchise leader?")));
+            source.sendFailure(EconomyCommandUtil.error(
+                    Component.translatable("command.futureshops.franchise.promote.failed")));
             return 0;
         }
         source.sendSuccess(() -> EconomyCommandUtil.success(
-                Component.literal("👑 " + targetName + " is now the franchise leader!")), false);
+                Component.translatable("command.futureshops.franchise.promote.success", targetName)), false);
         return 1;
     }
 
     private static int manage(CommandSourceStack source) {
         if (!(source.getEntity() instanceof ServerPlayer player)) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Player only command")));
+            source.sendFailure(EconomyCommandUtil.error(playerOnly()));
             return 0;
         }
-        // Open the franchise management GUI by sending franchise data packet
         C2SFranchiseActionPacket.sendFranchiseDataToPlayer(player);
         return 1;
     }
 
     private static int leave(CommandSourceStack source) {
         if (!(source.getEntity() instanceof ServerPlayer player)) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Player only command")));
+            source.sendFailure(EconomyCommandUtil.error(playerOnly()));
             return 0;
         }
         FranchiseSavedData data = FranchiseSavedData.get(player.getServer());
         if (!data.leave(player.getUUID())) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("You're not in a franchise.")));
+            source.sendFailure(EconomyCommandUtil.error(
+                    Component.translatable("command.futureshops.franchise.not_in_franchise")));
             return 0;
         }
-        source.sendSuccess(() -> EconomyCommandUtil.success(Component.literal("👋 You have left the franchise.")), false);
+        source.sendSuccess(() -> EconomyCommandUtil.success(
+                Component.translatable("command.futureshops.franchise.leave.success")), false);
         return 1;
     }
 
     private static int disband(CommandSourceStack source) {
         if (!(source.getEntity() instanceof ServerPlayer player)) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Player only command")));
+            source.sendFailure(EconomyCommandUtil.error(playerOnly()));
             return 0;
         }
         FranchiseSavedData data = FranchiseSavedData.get(player.getServer());
         FranchiseSavedData.Franchise franchise = data.getFranchise(player.getUUID());
         if (franchise == null) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("You're not in a franchise.")));
+            source.sendFailure(EconomyCommandUtil.error(
+                    Component.translatable("command.futureshops.franchise.not_in_franchise")));
             return 0;
         }
-        // Notify members before disbanding
         for (UUID member : franchise.getMembers()) {
             if (member.equals(player.getUUID())) continue;
             ServerPlayer memberPlayer = player.getServer().getPlayerList().getPlayer(member);
             if (memberPlayer != null) {
                 memberPlayer.sendSystemMessage(EconomyCommandUtil.error(
-                        Component.literal("The franchise \"" + franchise.name + "\" has been disbanded by the leader.")));
+                        Component.translatable("command.futureshops.franchise.disband.notify", franchise.name)));
             }
         }
         if (!data.disband(player.getUUID())) {
-            source.sendFailure(EconomyCommandUtil.error(Component.literal("Only the franchise leader can disband.")));
+            source.sendFailure(EconomyCommandUtil.error(
+                    Component.translatable("command.futureshops.franchise.disband.not_leader")));
             return 0;
         }
         source.sendSuccess(() -> EconomyCommandUtil.success(
-                Component.literal("💥 Franchise disbanded. All members have been removed.")), false);
+                Component.translatable("command.futureshops.franchise.disband.success")), false);
         return 1;
     }
 
@@ -260,18 +272,6 @@ public final class FranchiseCommand {
                     : null;
         } catch (Exception ignored) {
             return null;
-        }
-    }
-
-    private static String resolvePlayerName(MinecraftServer server, UUID uuid) {
-        ServerPlayer online = server.getPlayerList().getPlayer(uuid);
-        if (online != null) return online.getGameProfile().getName();
-        try {
-            return server.getProfileCache() != null
-                    ? server.getProfileCache().get(uuid).map(p -> p.getName()).orElse(uuid.toString().substring(0, 8))
-                    : uuid.toString().substring(0, 8);
-        } catch (Exception ignored) {
-            return uuid.toString().substring(0, 8);
         }
     }
 }

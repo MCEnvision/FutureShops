@@ -5,6 +5,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
@@ -77,10 +78,26 @@ public class ConfirmationModal {
         // Safety: if the server never responded, unblock the UI so the player can escape.
         if (state == State.PROCESSING && processingStartedAt > 0
                 && System.currentTimeMillis() - processingStartedAt > PROCESSING_TIMEOUT_MS) {
-            setFailed("Request timed out");
+            setFailed(I18n.get("gui.futureshops.modal.request_timed_out"));
         }
 
-        // Dim layer
+        // Push the whole modal forward on the Z axis so it sits on top of *everything*
+        // the parent screen drew — including item stacks rendered via ItemRenderer, which
+        // otherwise blit at ~+150 and punch through any `fill()` we draw afterwards.
+        // Vanilla tooltips use +400, so +500 guarantees the modal sits above them too.
+        graphics.pose().pushPose();
+        graphics.pose().translate(0f, 0f, 500f);
+        try {
+            renderInner(graphics, font, screenW, screenH, mouseX, mouseY);
+        } finally {
+            graphics.pose().popPose();
+        }
+    }
+
+    private void renderInner(GuiGraphics graphics, Font font, int screenW, int screenH, int mouseX, int mouseY) {
+        // Dim layer — single pass is enough now that we're drawing above the item-stack
+        // Z plane. Previously the layer appeared "weak" because bright item icons / glyphs
+        // rendered at a higher Z were punching through.
         ShopUiUtil.renderDimBackdrop(graphics, screenW, screenH);
 
         // Modal panel — responsive to screen size, never exceeds viewport
@@ -111,7 +128,7 @@ public class ConfirmationModal {
             boolean hovered = mouseX >= btnX && mouseX <= btnX + 50 && mouseY >= btnY && mouseY <= btnY + 16;
             graphics.fill(btnX, btnY, btnX + 50, btnY + 16, hovered ? ShopColors.BTN_HOVER : ShopColors.BTN_REST);
             ShopUiUtil.drawBorder(graphics, btnX, btnY, 50, 16, ShopColors.BORDER_MUTED);
-            graphics.drawString(font, "OK", btnX + 20, btnY + 4, ShopColors.TEXT_STRONG, true);
+            graphics.drawString(font, I18n.get("gui.futureshops.modal.ok"), btnX + 20, btnY + 4, ShopColors.TEXT_STRONG, true);
             return;
         }
 
@@ -119,12 +136,24 @@ public class ConfirmationModal {
         int tw = font.width(title);
         graphics.drawString(font, title, modalX + (modalW - tw) / 2, modalY + 8, ShopColors.TEXT_STRONG, true);
 
-        // Summary lines
+        // Summary lines — track icon hover so we can render a vanilla tooltip at the end.
         int lineY = modalY + 26;
+        String hoverItemId = null;
+        String hoverNbtJson = null;
         for (SummaryLine line : summaryLines) {
             if (line.itemId != null && !line.itemId.isBlank()) {
-                ShopUiUtil.renderItemIcon(graphics, font, line.itemId, modalX + 10, lineY - 2);
+                int iconX = modalX + 10;
+                int iconY = lineY - 2;
+                if (line.nbtJson != null && !line.nbtJson.isBlank()) {
+                    ShopUiUtil.renderItemIconWithNbt(graphics, font, line.itemId, line.nbtJson, iconX, iconY);
+                } else {
+                    ShopUiUtil.renderItemIcon(graphics, font, line.itemId, iconX, iconY);
+                }
                 graphics.drawString(font, font.plainSubstrByWidth(line.text, modalW - 42), modalX + 30, lineY + 2, ShopColors.TEXT_STRONG, false);
+                if (mouseX >= iconX && mouseX < iconX + 16 && mouseY >= iconY && mouseY < iconY + 16) {
+                    hoverItemId = line.itemId;
+                    hoverNbtJson = line.nbtJson != null ? line.nbtJson : "";
+                }
             } else {
                 graphics.drawString(font, font.plainSubstrByWidth(line.text, modalW - 20), modalX + 10, lineY + 2, ShopColors.TEXT_MUTED, false);
             }
@@ -150,7 +179,7 @@ public class ConfirmationModal {
         boolean cancelHover = mouseX >= startX && mouseX <= startX + btnW && mouseY >= lineY && mouseY <= lineY + btnH;
         graphics.fill(startX, lineY, startX + btnW, lineY + btnH, cancelHover ? ShopColors.BTN_HOVER : ShopColors.BTN_REST);
         ShopUiUtil.drawBorder(graphics, startX, lineY, btnW, btnH, ShopColors.BORDER_MUTED);
-        String cancelText = "Cancel";
+        String cancelText = I18n.get("gui.futureshops.modal.cancel");
         graphics.drawString(font, cancelText, startX + (btnW - font.width(cancelText)) / 2, lineY + 4, ShopColors.TEXT_MUTED, true);
 
         // Confirm
@@ -158,14 +187,20 @@ public class ConfirmationModal {
         if (state == State.PROCESSING) {
             graphics.fill(confirmX, lineY, confirmX + btnW, lineY + btnH, ShopColors.BTN_REST);
             ShopUiUtil.drawBorder(graphics, confirmX, lineY, btnW, btnH, ShopColors.BORDER_MUTED);
-            String proc = "Processing...";
+            String proc = I18n.get("gui.futureshops.modal.processing");
             graphics.drawString(font, proc, confirmX + (btnW - font.width(proc)) / 2, lineY + 4, ShopColors.TEXT_MUTED, false);
         } else {
             boolean confirmHover = mouseX >= confirmX && mouseX <= confirmX + btnW && mouseY >= lineY && mouseY <= lineY + btnH;
             graphics.fill(confirmX, lineY, confirmX + btnW, lineY + btnH, confirmHover ? ShopColors.BTN_CTA_HOVER : ShopColors.BTN_CTA_REST);
             ShopUiUtil.drawBorder(graphics, confirmX, lineY, btnW, btnH, ShopColors.BORDER_GLOW);
-            String confirmText = "Confirm";
+            String confirmText = I18n.get("gui.futureshops.modal.confirm");
             graphics.drawString(font, confirmText, confirmX + (btnW - font.width(confirmText)) / 2, lineY + 4, ShopColors.TEXT_STRONG, true);
+        }
+
+        // Vanilla-style tooltip on hovered item icon so buyers can inspect enchantments,
+        // durability, and other NBT before confirming. Drawn last so it sits on top.
+        if (hoverItemId != null) {
+            ShopUiUtil.renderItemTooltip(graphics, font, hoverItemId, hoverNbtJson, mouseX, mouseY);
         }
     }
 
@@ -230,13 +265,17 @@ public class ConfirmationModal {
         return false;
     }
 
-    public record SummaryLine(String itemId, String text) {
+    public record SummaryLine(String itemId, String text, String nbtJson) {
         public static SummaryLine item(String itemId, String text) {
-            return new SummaryLine(itemId, text);
+            return new SummaryLine(itemId, text, "");
+        }
+
+        public static SummaryLine item(String itemId, String text, String nbtJson) {
+            return new SummaryLine(itemId, text, nbtJson != null ? nbtJson : "");
         }
 
         public static SummaryLine text(String text) {
-            return new SummaryLine("", text);
+            return new SummaryLine("", text, "");
         }
     }
 }

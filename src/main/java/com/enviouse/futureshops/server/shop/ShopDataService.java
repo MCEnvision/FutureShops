@@ -39,19 +39,30 @@ public final class ShopDataService {
         if (event.isCanceled()) return;
 
         ShopSessionManager.open(player.getUUID(), shopId);
-        sendShopData(player, shopId, true);
+        // forceOpen=true: this is the deliberate open path (command / shop block use)
+        sendShopData(player, shopId, true, true);
         InventorySyncService.sendOwnedCounts(player, shopId);
     }
 
     public static void sendShopData(ServerPlayer player, String requestedShopId) {
-        sendShopData(player, requestedShopId, true);
+        sendShopData(player, requestedShopId, true, true);
+    }
+
+    public static void sendShopData(ServerPlayer player, String requestedShopId, boolean includeNearbyShops) {
+        sendShopData(player, requestedShopId, includeNearbyShops, true);
     }
 
     /**
      * Sends shop data. When {@code includeNearbyShops} is false, the expensive nearby-shop
      * scan is skipped — use this for post-transaction refreshes where nearby shops haven't changed.
+     *
+     * <p>{@code forceOpen} controls client-side behavior when no shop screen is currently open:
+     * {@code true} pops the shop GUI open (used by the explicit open path); {@code false} silently
+     * updates an already-open screen and is otherwise discarded — used for stock refresh, post-
+     * transaction sync, and admin reload, so a player who closed the GUI but still has a live
+     * session does not get the screen forced back open.
      */
-    public static void sendShopData(ServerPlayer player, String requestedShopId, boolean includeNearbyShops) {
+    public static void sendShopData(ServerPlayer player, String requestedShopId, boolean includeNearbyShops, boolean forceOpen) {
         String shopId = resolveShopId(requestedShopId);
         EconomyProvider provider = BalanceManager.getProvider();
         long balance = provider.getBalance(player.getUUID());
@@ -62,7 +73,7 @@ public final class ShopDataService {
 
         // Scan nearby player shops only when requested (skipped for post-transaction refreshes)
         List<NearbyShopEntry> nearbyShops = includeNearbyShops && player.getServer() != null
-                ? NearbyShopScanner.scanNearby(player, NearbyShopScanner.DEFAULT_RADIUS)
+                ? NearbyShopScanner.scanNearby(player, com.enviouse.futureshops.Config.localListingsScanRadiusBlocks)
                 : List.of();
 
         ShopPackets.sendToPlayer(player, new S2CShopDataPacket(
@@ -75,7 +86,8 @@ public final class ShopDataService {
                 adminEnabled ? ShopCatalog.buildPromos(shopId) : List.of(),
                 adminEnabled ? ShopCatalog.buildBarterRecipes(shopId) : List.of(),
                 adminEnabled,
-                nearbyShops));
+                nearbyShops,
+                forceOpen));
     }
 
     public static void resendActiveSessions(MinecraftServer server) {
@@ -87,7 +99,8 @@ public final class ShopDataService {
 
             ShopSession session = entry.getValue();
             if (ShopCatalog.get(session.shopId()).isPresent()) {
-                sendShopData(player, session.shopId());
+                // forceOpen=false: admin reload should refresh open UIs, not pop them open
+                sendShopData(player, session.shopId(), true, false);
             } else {
                 ShopSessionManager.closeAndForceClose(player, "SHOP_REMOVED");
             }
@@ -103,8 +116,8 @@ public final class ShopDataService {
 
             ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
             if (player != null) {
-                // Post-transaction refresh — skip the nearby-shop scan.
-                sendShopData(player, shopId, false);
+                // Post-transaction / stock-refresh resync — never force the GUI open.
+                sendShopData(player, shopId, false, false);
             }
         }
     }

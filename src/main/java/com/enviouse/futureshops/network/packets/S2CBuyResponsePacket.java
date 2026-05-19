@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.network.packets;
 
 import com.enviouse.futureshops.client.ShopClientPacketHandler;
+import com.enviouse.futureshops.server.shop.ShopResultCode;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
@@ -16,7 +17,7 @@ public record S2CBuyResponsePacket(
         boolean success,
         boolean cartCheckout,
         String shopId,
-        String errorCode,
+        ShopResultCode errorCode,
         long resultingBalanceMinorUnits,
         int totalQuantity,
         long totalMinorUnits) {
@@ -25,21 +26,28 @@ public record S2CBuyResponsePacket(
         buffer.writeBoolean(packet.success);
         buffer.writeBoolean(packet.cartCheckout);
         buffer.writeUtf(packet.shopId);
-        buffer.writeUtf(packet.errorCode);
+        // Serialize by name for enum-reorder tolerance.
+        buffer.writeUtf(packet.errorCode.name());
         buffer.writeLong(packet.resultingBalanceMinorUnits);
         buffer.writeVarInt(packet.totalQuantity);
         buffer.writeLong(packet.totalMinorUnits);
     }
 
     public static S2CBuyResponsePacket decode(FriendlyByteBuf buffer) {
-        return new S2CBuyResponsePacket(
-                buffer.readBoolean(),
-                buffer.readBoolean(),
-                buffer.readUtf(),
-                buffer.readUtf(),
-                buffer.readLong(),
-                buffer.readVarInt(),
-                buffer.readLong());
+        boolean success = buffer.readBoolean();
+        boolean cartCheckout = buffer.readBoolean();
+        String shopId = buffer.readUtf();
+        String rawCode = buffer.readUtf();
+        ShopResultCode code;
+        try {
+            code = ShopResultCode.valueOf(rawCode);
+        } catch (IllegalArgumentException ex) {
+            code = ShopResultCode.SERVER_ERROR;
+        }
+        long bal = buffer.readLong();
+        int totalQty = buffer.readVarInt();
+        long totalMu = buffer.readLong();
+        return new S2CBuyResponsePacket(success, cartCheckout, shopId, code, bal, totalQty, totalMu);
     }
 
     public static void handle(S2CBuyResponsePacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

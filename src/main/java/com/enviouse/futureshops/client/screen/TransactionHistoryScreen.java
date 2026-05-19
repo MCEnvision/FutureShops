@@ -50,7 +50,7 @@ public class TransactionHistoryScreen extends Screen implements ShopScreenMarker
         guiLeft = (this.width - guiW) / 2;
         guiTop = (this.height - guiH) / 2;
 
-        addRenderableWidget(Button.builder(Component.literal("Back"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.history.back"), button -> onClose())
                 .bounds(guiLeft + 10, guiTop + guiH - 24, 48, 18)
                 .build());
         addRenderableWidget(Button.builder(Component.literal("<"), button -> {
@@ -158,12 +158,18 @@ public class TransactionHistoryScreen extends Screen implements ShopScreenMarker
         int rowY = tableY + 26;
         int rowH = 28;
         int maxRows = Math.min(10, (tableH - 34) / rowH);
+        // Column geometry — Item starts at +74, so Type has ~60px before it. Raw types
+        // like "MONEY_AND_BARTER" are far too wide and previously bled over the Item
+        // column; show a short label instead and clip defensively.
+        int typeColW = 60;
+        int itemColW = (tableW - 168) - 74 - 4;
         for (int i = 0; i < Math.min(entries.size(), maxRows); i++) {
             TransactionHistoryEntry entry = entries.get(i);
             int y = rowY + i * rowH;
             graphics.fill(tableX + 8, y, tableX + tableW - 8, y + rowH - 2, i % 2 == 0 ? ShopColors.SURFACE_RAISED : ShopColors.SURFACE_OVERLAY);
-            graphics.drawString(this.font, entry.type(), tableX + 10, y + 5, colorForType(entry.type()), false);
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(ShopUiUtil.getItemDisplayName(entry.itemId()), tableW - 250), tableX + 74, y + 5, ShopColors.TEXT_STRONG, false);
+            String typeLabel = this.font.plainSubstrByWidth(shortTypeLabel(entry.type()), typeColW);
+            graphics.drawString(this.font, typeLabel, tableX + 10, y + 5, colorForType(entry.type()), false);
+            graphics.drawString(this.font, this.font.plainSubstrByWidth(ShopUiUtil.getItemDisplayName(entry.itemId()), itemColW), tableX + 74, y + 5, ShopColors.TEXT_STRONG, false);
             graphics.drawString(this.font, Integer.toString(entry.quantity()), tableX + tableW - 168, y + 5, ShopColors.TEXT_MUTED, false);
             graphics.drawString(this.font, entry.totalMinorUnits() > 0L ? ShopUiUtil.formatMinorUnits(entry.totalMinorUnits()) : "—", tableX + tableW - 118, y + 5, ShopColors.TEXT_CURRENCY, false);
             graphics.drawString(this.font, TS_FORMAT.format(Instant.ofEpochSecond(entry.timestampEpochSeconds())), tableX + tableW - 58, y + 5, ShopColors.TEXT_FAINT, false);
@@ -230,15 +236,17 @@ public class TransactionHistoryScreen extends Screen implements ShopScreenMarker
     }
 
     private Component sortLabel() {
-        return Component.literal(sortOrder == TransactionHistoryEntry.SortOrder.NEWEST ? "Newest" : "Oldest");
+        return Component.translatable(sortOrder == TransactionHistoryEntry.SortOrder.NEWEST
+                ? "gui.futureshops.history.sort.newest"
+                : "gui.futureshops.history.sort.oldest");
     }
 
     private Component windowLabel() {
-        return Component.literal(switch (timeWindow) {
-            case ALL -> "All time";
-            case DAY -> "24h";
-            case WEEK -> "7d";
-            case MONTH -> "30d";
+        return Component.translatable(switch (timeWindow) {
+            case ALL -> "gui.futureshops.history.window.all";
+            case DAY -> "gui.futureshops.history.window.day";
+            case WEEK -> "gui.futureshops.history.window.week";
+            case MONTH -> "gui.futureshops.history.window.month";
         });
     }
 
@@ -258,7 +266,17 @@ public class TransactionHistoryScreen extends Screen implements ShopScreenMarker
             case "SELL" -> ShopColors.STATUS_SUCCESS;
             case "BARTER" -> ShopColors.TEXT_BARTER_SOFT;
             case "CART_CLAIM" -> ShopColors.ACCENT_PRIMARY;
+            case "MONEY_AND_BARTER" -> ShopColors.TEXT_BARTER_SOFT;
             default -> ShopColors.TEXT_STRONG;
+        };
+    }
+
+    private String shortTypeLabel(String type) {
+        if (type == null) return "";
+        return switch (type.toUpperCase()) {
+            case "MONEY_AND_BARTER" -> "M+B";
+            case "CART_CLAIM" -> "FUNDS";
+            default -> type;
         };
     }
 

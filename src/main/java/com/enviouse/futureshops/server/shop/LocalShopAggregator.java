@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.server.shop;
 
+import com.enviouse.futureshops.Config;
 import com.enviouse.futureshops.block.ShopBlockEntity;
 import com.enviouse.futureshops.data.LocalShopOwnerEntry;
 import com.enviouse.futureshops.data.LocalShopOwnerEntry.LocalDepartment;
@@ -22,7 +23,6 @@ import java.util.stream.Collectors;
  * (or franchise), builds departments and listings, and sends the result to the client.
  */
 public final class LocalShopAggregator {
-    private static final int SCAN_RADIUS = NearbyShopScanner.DEFAULT_RADIUS;
     private static final int MAX_OWNERS = 30;
 
     private LocalShopAggregator() {}
@@ -40,6 +40,9 @@ public final class LocalShopAggregator {
         FranchiseSavedData franchiseData = FranchiseSavedData.get(player.getServer());
 
         Map<Long, PlayerShopRegistrySavedData.ShopRecord> allShops = registry.getAllShops();
+        int scanRadius = Config.localListingsScanRadiusBlocks;
+        boolean unlimited = scanRadius <= 0;
+        long scanRadiusSq = (long) scanRadius * scanRadius;
 
         // Group nearby shops by effective owner (franchise leader or individual owner)
         // Key = display UUID (owner or franchise leader), Value = list of (pos, shop BE)
@@ -54,7 +57,7 @@ public final class LocalShopAggregator {
 
             BlockPos shopPos = BlockPos.of(entry.getKey());
             double distSq = center.distSqr(shopPos);
-            if (distSq > (double) SCAN_RADIUS * SCAN_RADIUS) continue;
+            if (!unlimited && distSq > (double) scanRadiusSq) continue;
             if (!level.hasChunkAt(shopPos)) continue;
 
             BlockEntity be = level.getBlockEntity(shopPos);

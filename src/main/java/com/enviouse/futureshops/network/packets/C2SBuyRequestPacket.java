@@ -39,11 +39,23 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
         buffer.writeCollection(packet.lineItems, LineItem::encode);
     }
 
+    /** Hard cap on cart line count. A real cart never exceeds a few dozen;
+     *  bounds a malicious varInt to a finite allocation. */
+    private static final int MAX_LINES = 256;
+
     public static C2SBuyRequestPacket decode(FriendlyByteBuf buffer) {
-        return new C2SBuyRequestPacket(
-                buffer.readUtf(),
-                buffer.readBoolean(),
-                buffer.readList(LineItem::decode));
+        String shopId = buffer.readUtf();
+        boolean cartCheckout = buffer.readBoolean();
+        int count = buffer.readVarInt();
+        if (count < 0 || count > MAX_LINES) {
+            throw new io.netty.handler.codec.DecoderException(
+                    "C2SBuyRequestPacket lines out of range: " + count);
+        }
+        java.util.List<LineItem> lines = new java.util.ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            lines.add(LineItem.decode(buffer));
+        }
+        return new C2SBuyRequestPacket(shopId, cartCheckout, lines);
     }
 
     public static void handle(C2SBuyRequestPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

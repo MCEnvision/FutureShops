@@ -5,6 +5,7 @@ import com.enviouse.futureshops.server.shop.PlayerShopRegistrySavedData;
 import com.enviouse.futureshops.server.shop.ShopLimitsSavedData;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
@@ -12,19 +13,74 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.RenderShape;
+import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
 public class ShopBlock extends BaseEntityBlock {
+    public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
+
+    // Matches the GeckoLib model bounds (geo cubes span ~[-6.5, 6.5] X/Z and
+    // [0, 8.5] Y in blockbench units; block-local voxel space is 0..16 with the
+    // model anchor at (8, 0, 8)). Shape is symmetrical so it doesn't need to
+    // vary per facing.
+    private static final VoxelShape SHAPE = net.minecraft.world.level.block.Block.box(
+            1.5D, 0.0D, 1.5D, 14.5D, 9.0D, 14.5D);
+
     public ShopBlock(Properties properties) {
         super(properties);
+        registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH));
+    }
+
+    @Override
+    public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        return SHAPE;
+    }
+
+    @Override
+    public VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        return SHAPE;
+    }
+
+    @Override
+    public VoxelShape getOcclusionShape(BlockState state, BlockGetter level, BlockPos pos) {
+        return SHAPE;
+    }
+
+    @Override
+    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+        builder.add(FACING);
+    }
+
+    @Override
+    public BlockState getStateForPlacement(BlockPlaceContext context) {
+        // Face the player — model's "front" points toward whoever placed it.
+        return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
+    }
+
+    @Override
+    public BlockState rotate(BlockState state, Rotation rot) {
+        return state.setValue(FACING, rot.rotate(state.getValue(FACING)));
+    }
+
+    @Override
+    public BlockState mirror(BlockState state, Mirror mirror) {
+        return state.rotate(mirror.getRotation(state.getValue(FACING)));
     }
 
     /**
@@ -38,7 +94,9 @@ public class ShopBlock extends BaseEntityBlock {
 
     @Override
     public RenderShape getRenderShape(BlockState state) {
-        return RenderShape.MODEL;
+        // The actual block model is a GeckoLib animatable drawn by the block
+        // entity renderer — disable the vanilla model pipeline.
+        return RenderShape.ENTITYBLOCK_ANIMATED;
     }
 
     @Override
@@ -71,7 +129,7 @@ public class ShopBlock extends BaseEntityBlock {
                         return;
                     }
                 }
-                shop.setOwnerUuid(player.getUUID());
+                shop.setOwnerUuid(player.getUUID(), player.getGameProfile().getName());
             }
             // Item 14: Always (re-)register the shop at its new position.
             // This covers CarryOn mod compatibility: when a shop is picked up, its
@@ -95,6 +153,16 @@ public class ShopBlock extends BaseEntityBlock {
 
     @Override
     public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hitResult) {
+        // If the player is sneaking while holding a placeable block item, pass through so
+        // they can place the block against the shop instead of opening its UI. Fixes the
+        // "shop UI pops up while I'm building" complaint.
+        ItemStack held = player.getItemInHand(hand);
+        if (player.isShiftKeyDown()
+                && held.getItem() instanceof net.minecraft.world.item.BlockItem blockItem
+                && blockItem.getBlock() != this) {
+            return InteractionResult.PASS;
+        }
+
         if (level.isClientSide) {
             return InteractionResult.SUCCESS;
         }
@@ -104,8 +172,7 @@ public class ShopBlock extends BaseEntityBlock {
         }
 
         if (shop.getOwnerUuid() == null) {
-            shop.setOwnerUuid(player.getUUID());
-            // Register new shop in the registry
+            shop.setOwnerUuid(player.getUUID(), player.getGameProfile().getName());
             if (level.getServer() != null) {
                 PlayerShopRegistrySavedData.get(level.getServer()).register(player.getUUID(), level.dimension().location(), pos.asLong());
             }

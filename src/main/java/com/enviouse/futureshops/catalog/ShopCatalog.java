@@ -111,6 +111,32 @@ public final class ShopCatalog {
         return Optional.ofNullable(CATALOG.get(shopId));
     }
 
+    /** Live view of all loaded shop definitions. Read-only — do not mutate. */
+    public static Collection<ShopDefinition> getAllDefinitions() {
+        return Collections.unmodifiableCollection(CATALOG.values());
+    }
+
+    /**
+     * Looks up a bundled (JSON-defined) category across every loaded shop by id or displayName
+     * (case-insensitive). Returns the matching {@link CategoryDef} from the first shop where it
+     * occurs, or empty if no bundled category matches.
+     */
+    public static Optional<CategoryDef> findBundledCategory(String idOrName) {
+        if (idOrName == null || idOrName.isBlank()) return Optional.empty();
+        String trimmed = idOrName.trim();
+        String normalizedId = trimmed.toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
+        for (ShopDefinition def : CATALOG.values()) {
+            for (CategoryDef cat : def.categories()) {
+                if (cat.id().equalsIgnoreCase(trimmed)
+                        || cat.id().equalsIgnoreCase(normalizedId)
+                        || cat.displayName().equalsIgnoreCase(trimmed)) {
+                    return Optional.of(cat);
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
     /**
      * Returns the shop definition for the given ID, falling back to "default",
      * or empty if neither exists.
@@ -261,8 +287,13 @@ public final class ShopCatalog {
 
         // Drop any legacy "all" category — the shop UI renders a virtual "All" tab at index 0,
         // so a persisted category with id "all" would show up as a duplicate empty tab.
+        // Also drop any bundled categories the admin has tombstoned via /shopadmin category remove.
+        java.util.Set<String> hiddenBaseIds = server != null
+                ? com.enviouse.futureshops.server.shop.AdminCategorySavedData.get(server).getHiddenBaseCategoryIds()
+                : java.util.Set.of();
         List<CatalogCategory> base = defOpt.get().toCatalogCategories().stream()
                 .filter(c -> !"all".equalsIgnoreCase(c.id()))
+                .filter(c -> !hiddenBaseIds.contains(c.id().toLowerCase(java.util.Locale.ROOT)))
                 .toList();
         java.util.Set<String> existingIds = base.stream().map(CatalogCategory::id).collect(java.util.stream.Collectors.toSet());
 

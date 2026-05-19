@@ -28,6 +28,13 @@ public final class PlayerShopClientState {
     private static int settlementHistoryTotalPages = 1;
     private static String resultCode = "";
 
+    // Pending-visit target: set by UI sites (e.g. LocalShopBrowserScreen) that want the
+    // next incoming shop-data payload for a specific BlockPos to land on a specific
+    // listing instead of whatever the last-selected index happened to be.  Cleared in
+    // apply() once the matching payload arrives so it can't leak into an unrelated shop.
+    private static BlockPos pendingVisitShopPos = null;
+    private static int pendingVisitListingIndex = -1;
+
     private PlayerShopClientState() {
     }
 
@@ -47,7 +54,16 @@ public final class PlayerShopClientState {
         singleItemMode = singleItemModeValue;
         barterStorageSame = barterStorageSameValue;
         listings = List.copyOf(listingsValue);
-        selectedListingIndex = Math.max(0, Math.min(selectedListingIndex, Math.max(0, listings.size() - 1)));
+        // Honor an outstanding "visit this specific listing" request when the incoming
+        // payload is for the matching shop; otherwise fall back to clamping the previous
+        // selection into range so stale indices don't crash access.
+        if (pendingVisitShopPos != null && pendingVisitShopPos.equals(pos) && pendingVisitListingIndex >= 0) {
+            selectedListingIndex = Math.max(0, Math.min(pendingVisitListingIndex, Math.max(0, listings.size() - 1)));
+            pendingVisitShopPos = null;
+            pendingVisitListingIndex = -1;
+        } else {
+            selectedListingIndex = Math.max(0, Math.min(selectedListingIndex, Math.max(0, listings.size() - 1)));
+        }
         linked = linkedValue;
         pendingSettlementMinor = pendingSettlementMinorValue;
         lifetimeRevenueMinor = lifetimeRevenueMinorValue;
@@ -79,6 +95,16 @@ public final class PlayerShopClientState {
 
     public static void setSelectedListingIndex(int index) {
         selectedListingIndex = Math.max(0, Math.min(index, Math.max(0, listings.size() - 1)));
+    }
+
+    /**
+     * Marks the next shop-data payload for {@code pos} to preselect {@code listingIndex}.
+     * Used by listing-row clicks in browser screens so the visitor lands on the trade they
+     * actually clicked instead of their previously-selected listing.
+     */
+    public static void requestVisit(BlockPos pos, int listingIndex) {
+        pendingVisitShopPos = pos;
+        pendingVisitListingIndex = Math.max(0, listingIndex);
     }
 
     public static void applySettlementHistory(int page, int totalPages, List<SettlementHistoryRow> rows) {

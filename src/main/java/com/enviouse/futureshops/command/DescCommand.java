@@ -25,13 +25,13 @@ public final class DescCommand {
                             int result = PlayerShopBlockService.applyDescription(player, text);
                             if (result == 2) {
                                 player.sendSystemMessage(EconomyCommandUtil.success(
-                                        Component.literal("Listing description updated!")));
+                                        Component.translatable("command.futureshops.desc.listing_updated")));
                             } else if (result == 1) {
                                 player.sendSystemMessage(EconomyCommandUtil.success(
-                                        Component.literal("Shop description updated!")));
+                                        Component.translatable("command.futureshops.desc.shop_updated")));
                             } else {
                                 player.sendSystemMessage(EconomyCommandUtil.error(
-                                        Component.literal("No pending description. Open your shop and click Desc first.")));
+                                        Component.translatable("command.futureshops.desc.none_pending")));
                             }
                             return result;
                         })));

@@ -50,7 +50,7 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
     private int tooltipMouseX, tooltipMouseY;
 
     public LocalShopBrowserScreen(Screen parent, LocalShopOwnerEntry owner) {
-        super(Component.literal(owner.displayName() + "'s Shop"));
+        super(Component.translatable("gui.futureshops.local.title", owner.displayName()));
         this.parent = parent;
         this.owner = owner;
     }
@@ -67,8 +67,8 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
         int gridX = guiLeft + sidebarW + 16;
         int sortW = 64;
         int searchW = Math.min(200, guiW - sidebarW - 40 - sortW - 6);
-        searchBox = new EditBox(this.font, gridX + 8, guiTop + 36, searchW, 14, Component.literal("Search"));
-        searchBox.setHint(Component.literal("§7🔍 Search items..."));
+        searchBox = new EditBox(this.font, gridX + 8, guiTop + 36, searchW, 14, Component.translatable("gui.futureshops.local.search"));
+        searchBox.setHint(Component.translatable("gui.futureshops.local.search_hint"));
         searchBox.setBordered(true);
         searchBox.setMaxLength(64);
         searchBox.setResponder(query -> {
@@ -85,7 +85,7 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
             gridScrollRows = 0;
         }).bounds(gridX + 8 + searchW + 4, guiTop + 36, sortW, 14).build());
 
-        addRenderableWidget(Button.builder(Component.literal("§c← Back"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.local.back"), button -> onClose())
                 .bounds(guiLeft + 8, guiTop + guiH - 22, 50, 16).build());
     }
 
@@ -227,6 +227,24 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
         }
 
         ShopUiUtil.renderScrollIndicators(graphics, this.font, gridX, gridY, gridW, gridH, gridScrollRows, visibleRows, totalRows);
+
+        // Overlay pass: promo badges above cards AND scrollbar so they never get clipped.
+        for (int index = 0; index < listings.size(); index++) {
+            int row = index / columns;
+            if (row < gridScrollRows || row >= gridScrollRows + visibleRows) continue;
+            int visibleRow = row - gridScrollRows;
+            int col = index % columns;
+            int cardX = contentX + col * (cardW + gap);
+            int cardY = contentY + visibleRow * (cardH + gap);
+            LocalListing listing = listings.get(index);
+            if (listing.hasPromo() && listing.priceMinor() > 0) {
+                int percent = ShopUiUtil.computePromoPercent(listing.priceMinor(), listing.promoPriceMinor());
+                if (percent > 0) {
+                    String badgeText = percent >= 100 ? "Free!" : "-" + percent + "%";
+                    ShopUiUtil.renderAnimatedDiscountBadge(graphics, this.font, cardX + cardW - 6, cardY + 8, badgeText);
+                }
+            }
+        }
     }
 
     private void renderListingCard(GuiGraphics graphics, LocalListing listing, int x, int y, int width, int height, int mouseX, int mouseY) {
@@ -247,35 +265,38 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
             ShopUiUtil.renderItemIcon(graphics, this.font, listing.itemId(), x + (width - 16) / 2, y + 6);
         }
 
-        // Name
-        String name = this.font.plainSubstrByWidth(listing.displayName(), width - 8);
-        graphics.drawCenteredString(this.font, name, x + width / 2, y + 28, ShopColors.TEXT_STRONG);
+        // Name — scrolls when too long so modded items with lengthy names stay fully readable.
+        ShopUiUtil.renderScrollingCentered(graphics, this.font, listing.displayName(),
+                x + width / 2, y + 28, width - 8, ShopColors.TEXT_STRONG);
 
-        // Price
-        long price = listing.hasPromo() ? listing.promoPriceMinor() : listing.priceMinor();
-        String priceStr;
-        int priceColor;
-        if ("BARTER".equalsIgnoreCase(listing.tradeMode())) {
-            priceStr = "§9⚒ Barter";
-            priceColor = ShopColors.TEXT_BARTER_SOFT;
-        } else {
-            priceStr = ShopUiUtil.formatMinorUnits(price);
-            priceColor = ShopColors.TEXT_CURRENCY;
-        }
-        graphics.drawCenteredString(this.font, priceStr, x + width / 2, y + 42, priceColor);
-
-        // Stock
-        String stockStr = listing.stock() + " left";
-        graphics.drawCenteredString(this.font, stockStr, x + width / 2, y + 56,
-                outOfStock ? ShopColors.STATUS_DANGER : ShopColors.TEXT_FAINT);
-
-        // Promo badge
-        if (listing.hasPromo() && listing.priceMinor() > 0) {
-            int percent = ShopUiUtil.computePromoPercent(listing.priceMinor(), listing.promoPriceMinor());
-            if (percent > 0) {
-                String badgeText = percent >= 100 ? "Free!" : "-" + percent + "%";
-                ShopUiUtil.renderAnimatedDiscountBadge(graphics, this.font, x + width - 6, y + 8, badgeText);
+        if (!outOfStock) {
+            // Price
+            long price = listing.hasPromo() ? listing.promoPriceMinor() : listing.priceMinor();
+            String priceStr;
+            int priceColor;
+            if ("BARTER".equalsIgnoreCase(listing.tradeMode())) {
+                priceStr = "§9⚒ Barter";
+                priceColor = ShopColors.TEXT_BARTER_SOFT;
+            } else {
+                priceStr = ShopUiUtil.formatMinorUnits(price);
+                priceColor = ShopColors.TEXT_CURRENCY;
             }
+            graphics.drawCenteredString(this.font, priceStr, x + width / 2, y + 42, priceColor);
+
+            // Stock
+            String stockStr = listing.stock() + " left";
+            graphics.drawCenteredString(this.font, stockStr, x + width / 2, y + 56, ShopColors.TEXT_FAINT);
+
+            // Promo badge
+            if (listing.hasPromo() && listing.priceMinor() > 0) {
+                int percent = ShopUiUtil.computePromoPercent(listing.priceMinor(), listing.promoPriceMinor());
+                if (percent > 0) {
+                    String badgeText = percent >= 100 ? "Free!" : "-" + percent + "%";
+                    ShopUiUtil.renderAnimatedDiscountBadge(graphics, this.font, x + width - 6, y + 8, badgeText);
+                }
+            }
+        } else {
+            graphics.drawCenteredString(this.font, "§cSold Out", x + width / 2, y + 49, ShopColors.ERROR);
         }
 
         // Shop name tooltip on hover
@@ -284,11 +305,6 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
             tooltipNbtJson = (listing.nbtAware() && nbt != null && !nbt.isBlank()) ? nbt : "";
             tooltipMouseX = mouseX;
             tooltipMouseY = mouseY;
-        }
-
-        if (outOfStock) {
-            graphics.fill(x, y, x + width, y + height, 0x88000000);
-            graphics.drawCenteredString(this.font, "§cSold Out", x + width / 2, y + height / 2 - 4, ShopColors.ERROR);
         }
     }
 
@@ -359,8 +375,11 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
                 int cy = contentY + visibleRow * (cardH + gap);
                 if (mouseX >= cx && mouseX <= cx + cardW && mouseY >= cy && mouseY <= cy + cardH) {
                     LocalListing listing = listings.get(index);
-                    // Visit the shop block that contains this listing
+                    // Visit the shop block that contains this listing — and preselect the
+                    // specific listing the visitor clicked, so they land on that trade
+                    // instead of whatever listing was last viewed in that shop.
                     BlockPos pos = BlockPos.of(listing.shopPosLong());
+                    com.enviouse.futureshops.client.PlayerShopClientState.requestVisit(pos, listing.listingIndex());
                     ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopActionPacket(
                             pos, "VISIT", 0, 0));
                     return true;

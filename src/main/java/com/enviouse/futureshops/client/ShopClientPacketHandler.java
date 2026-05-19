@@ -28,6 +28,7 @@ import com.enviouse.futureshops.network.packets.S2CSettlementHistoryPacket;
 import com.enviouse.futureshops.network.packets.S2CSellResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CShopDataPacket;
 import com.enviouse.futureshops.network.packets.S2CVerifyCartResponsePacket;
+import com.enviouse.futureshops.server.shop.ShopResultCode;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
@@ -36,10 +37,24 @@ public final class ShopClientPacketHandler {
     private ShopClientPacketHandler() {
     }
 
-    /** Applies the full shop catalog + balance state received from the server, then opens the GUI. */
+    /**
+     * Applies the full shop catalog + balance state received from the server.
+     *
+     * <p>When {@code packet.forceOpen()} is true (the explicit open path), the GUI is opened if
+     * it is not already showing. When false (stock refresh, post-transaction sync, admin reload),
+     * the packet only updates an already-open ShopMainScreen and is otherwise discarded — so a
+     * player who closed the shop but still has a live server-side session does not get the GUI
+     * forced back open by background server activity.
+     */
     public static void handleShopData(S2CShopDataPacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
+            boolean shopScreenOpen = mc.screen instanceof ShopMainScreen;
+            if (!packet.forceOpen() && !shopScreenOpen) {
+                // Silent refresh and the player isn't viewing the shop — nothing to do.
+                return;
+            }
+
             ShopClientState.applyShopData(
                     packet.shopId(),
                     packet.balanceMinorUnits(),
@@ -52,9 +67,9 @@ public final class ShopClientPacketHandler {
                     packet.adminShopEnabled(),
                     packet.nearbyShops());
             ShopPackets.CHANNEL.sendToServer(new com.enviouse.futureshops.network.packets.C2SInventorySyncPacket(packet.shopId()));
-            // If already on ShopMainScreen, update in-place (preserves nearbyMode, scroll, etc.)
-            if (mc.screen instanceof ShopMainScreen existing) {
-                existing.refreshAfterDataUpdate();
+            if (shopScreenOpen) {
+                // Update in-place — preserves nearbyMode, scroll, tabs.
+                ((ShopMainScreen) mc.screen).refreshAfterDataUpdate();
             } else {
                 mc.setScreen(new ShopMainScreen());
             }
@@ -335,17 +350,36 @@ public final class ShopClientPacketHandler {
         return Component.translatable(errorKey(packet.errorCode()));
     }
 
-    private static String errorKey(String errorCode) {
-        return switch (errorCode) {
-            case "OUT_OF_STOCK" -> "command.futureshops.buy.error.out_of_stock";
-            case "INVENTORY_FULL" -> "command.futureshops.buy.error.inventory_full";
-            case "SHOP_CLOSED" -> "command.futureshops.buy.error.shop_closed";
-            case "COOLDOWN" -> "command.futureshops.buy.error.cooldown";
-            case "INVALID_ITEM", "INVALID_RECIPE" -> "command.futureshops.buy.error.invalid_item";
-            case "INSUFFICIENT_FUNDS" -> "command.futureshops.error.insufficient_funds";
-            case "MISSING_ITEMS" -> "gui.futureshops.status.sell.error.missing_items";
-            case "MISSING_INGREDIENTS" -> "gui.futureshops.status.barter.error.missing_ingredients";
-            default -> "command.futureshops.error.server";
+    /**
+     * Maps a typed server result code to the chat-log lang key used for buy/sell/barter
+     * transaction feedback. The switch is exhaustive over {@link ShopResultCode} so adding
+     * a new constant without a matching case is a compile error (or, for codes that don't
+     * apply to transaction chat, an intentional fall-through to the generic server-error
+     * key via the {@code default} branch).
+     */
+    private static String errorKey(ShopResultCode code) {
+        return switch (code) {
+            case OUT_OF_STOCK -> "command.futureshops.buy.error.out_of_stock";
+            case INVENTORY_FULL -> "command.futureshops.buy.error.inventory_full";
+            case SHOP_CLOSED -> "command.futureshops.buy.error.shop_closed";
+            case COOLDOWN -> "command.futureshops.buy.error.cooldown";
+            case INVALID_ITEM, INVALID_RECIPE -> "command.futureshops.buy.error.invalid_item";
+            case INSUFFICIENT_FUNDS -> "command.futureshops.error.insufficient_funds";
+            case INVALID_AMOUNT -> "command.futureshops.error.invalid_amount";
+            case MAX_BALANCE_EXCEEDED -> "command.futureshops.error.max_balance_exceeded";
+            case MISSING_ITEMS -> "gui.futureshops.status.sell.error.missing_items";
+            case MISSING_INGREDIENTS -> "gui.futureshops.status.barter.error.missing_ingredients";
+            // Codes not specific to transaction chat — fall back to the generic server-error
+            // line so nothing ever renders the raw enum name to the player.
+            case OK, BOUGHT, CONFIG_SAVED, CONFIG_COPIED, DEPARTMENT_SET, PROMO_SET, PROMO_CLEARED,
+                 LINKED, BARTER_LINKED, LINK_PENDING, LINK_NONE, BARTER_LINK_PENDING,
+                 DESC_PENDING, LISTING_DESC_PENDING, NOT_OWNER, HOLD_ITEM, LISTING_LIMIT,
+                 NO_LISTING, UNCONFIGURED, NOT_SINGLE_MODE, USE_SET_DEPARTMENT_ACTION,
+                 NO_LINK, BAD_LINK_TARGET, RS_NOT_CONTROLLER, STORAGE_FULL,
+                 MISSING_BARTER_ITEMS, ROLLBACK, NOTHING_TO_CLAIM, CLAIM_FAILED,
+                 PROMO_FAILED, NO_CLIPBOARD, INVALID_REQUEST, INVALID_TARGET, SERVER_ERROR,
+                 CANCELLED_BY_EVENT
+                    -> "command.futureshops.error.server";
         };
     }
 }

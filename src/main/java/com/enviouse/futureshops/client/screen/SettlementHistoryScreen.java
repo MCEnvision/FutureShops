@@ -49,7 +49,7 @@ public class SettlementHistoryScreen extends Screen implements ShopScreenMarker 
         // colliding with the Apply button or overflowing the right edge.
         tightTopBar = guiW < 400;
 
-        addRenderableWidget(Button.builder(Component.literal("<-"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.settlement.back"), button -> onClose())
                 .bounds(guiLeft + 8, guiTop + 8, 18, 14)
                 .build());
 
@@ -82,17 +82,17 @@ public class SettlementHistoryScreen extends Screen implements ShopScreenMarker 
         }
         int dateBoxW = Math.max(60, (dateAvailW - 4) / 2);
 
-        fromDateBox = new EditBox(this.font, dateStartX, dateRowY, dateBoxW, 14, Component.literal("From"));
+        fromDateBox = new EditBox(this.font, dateStartX, dateRowY, dateBoxW, 14, Component.translatable("gui.futureshops.settlement.date.from"));
         fromDateBox.setMaxLength(10);
-        fromDateBox.setHint(Component.literal("yyyy-mm-dd"));
+        fromDateBox.setHint(Component.translatable("gui.futureshops.settlement.date.hint"));
         addRenderableWidget(fromDateBox);
 
-        toDateBox = new EditBox(this.font, dateStartX + dateBoxW + 4, dateRowY, dateBoxW, 14, Component.literal("To"));
+        toDateBox = new EditBox(this.font, dateStartX + dateBoxW + 4, dateRowY, dateBoxW, 14, Component.translatable("gui.futureshops.settlement.date.to"));
         toDateBox.setMaxLength(10);
-        toDateBox.setHint(Component.literal("yyyy-mm-dd"));
+        toDateBox.setHint(Component.translatable("gui.futureshops.settlement.date.hint"));
         addRenderableWidget(toDateBox);
 
-        addRenderableWidget(Button.builder(Component.literal("Apply"), button -> request(1))
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.settlement.apply"), button -> request(1))
                 .bounds(applyX, dateRowY, applyW, 14)
                 .build());
 
@@ -149,14 +149,27 @@ public class SettlementHistoryScreen extends Screen implements ShopScreenMarker 
                 String qtyStr = row.quantity() > 0 ? " x" + row.quantity() : "";
                 String itemName = (row.itemId() != null && !row.itemId().isBlank())
                         ? ShopUiUtil.getItemDisplayName(row.itemId()) : "";
-                String line;
+
+                // Column layout — previously rendered as a single "type • amount • item • ts"
+                // string. Long type labels like "MONEY_AND_BARTER" plus long mod item names
+                // overflowed the row width and visually overlapped the timestamp.
+                // Now: right-align the timestamp, then drop text from the middle columns
+                // individually so each gets its own truncation budget.
+                int rowTextY = rowY + 4;
+                int rowEndX = guiLeft + guiW - 12;
+                int tsW = this.font.width(ts);
+                int tsX = rowEndX - tsW;
+                graphics.drawString(this.font, ts, tsX, rowTextY, ShopColors.TEXT_SECONDARY, false);
+
+                int middleAvailW = Math.max(0, tsX - textStartX - 6);
+                String middleLine;
                 if (!itemName.isBlank()) {
-                    line = left + " • " + amount + " • " + itemName + qtyStr + " • " + ts;
+                    middleLine = left + " • " + amount + " • " + itemName + qtyStr;
                 } else {
-                    line = Component.translatable("gui.futureshops.settlement.row", left, amount, ts).getString();
+                    middleLine = left + " • " + amount;
                 }
-                int availTextW = guiW - (textStartX - guiLeft) - 12;
-                graphics.drawString(this.font, this.font.plainSubstrByWidth(line, availTextW), textStartX, rowY + 4, ShopColors.TEXT_PRIMARY, false);
+                graphics.drawString(this.font, this.font.plainSubstrByWidth(middleLine, middleAvailW),
+                        textStartX, rowTextY, ShopColors.TEXT_PRIMARY, false);
             }
         }
 
@@ -185,12 +198,12 @@ public class SettlementHistoryScreen extends Screen implements ShopScreenMarker 
 
     private Component filterLabel() {
         String label = switch (filter) {
-            case ALL -> "All";
-            case SALE -> "Sale";
-            case CLAIM -> "Cart Claim";
-            case ROLLBACK -> "Rollback";
+            case ALL -> net.minecraft.client.resources.language.I18n.get("gui.futureshops.settlement.filter.all");
+            case SALE -> net.minecraft.client.resources.language.I18n.get("gui.futureshops.settlement.filter.sale");
+            case CLAIM -> net.minecraft.client.resources.language.I18n.get("gui.futureshops.settlement.filter.claim");
+            case ROLLBACK -> net.minecraft.client.resources.language.I18n.get("gui.futureshops.settlement.filter.rollback");
         };
-        return Component.literal("Filter: " + label);
+        return Component.translatable("gui.futureshops.settlement.filter.label", label);
     }
 
     private long parseDate(String raw, boolean endOfDay) {

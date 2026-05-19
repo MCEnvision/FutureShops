@@ -14,6 +14,7 @@ import com.enviouse.futureshops.server.session.ShopSession;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
 import com.enviouse.futureshops.server.shop.InventorySyncService;
 import com.enviouse.futureshops.server.shop.ShopDataService;
+import com.enviouse.futureshops.server.shop.ShopResultCode;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
@@ -64,17 +65,17 @@ public final class ShopBuyService {
         String shopId = ShopDataService.resolveShopId(packet.shopId());
         ShopSession session = ShopSessionManager.get(player.getUUID()).orElse(null);
         if (session == null || !session.shopId().equals(shopId)) {
-            return BuyResult.error(shopId, BalanceManager.getProvider().getBalance(player.getUUID()), "SHOP_CLOSED");
+            return BuyResult.error(shopId, BalanceManager.getProvider().getBalance(player.getUUID()), ShopResultCode.SHOP_CLOSED);
         }
 
         Map<String, Integer> mergedLines = mergeLines(packet.lineItems());
         if (mergedLines.isEmpty()) {
-            return BuyResult.error(shopId, BalanceManager.getProvider().getBalance(player.getUUID()), "INVALID_ITEM");
+            return BuyResult.error(shopId, BalanceManager.getProvider().getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
         }
 
         ReentrantLock lock = ShopTransactionUtil.lockFor(player.getUUID());
         if (!lock.tryLock()) {
-            return BuyResult.error(shopId, BalanceManager.getProvider().getBalance(player.getUUID()), "COOLDOWN");
+            return BuyResult.error(shopId, BalanceManager.getProvider().getBalance(player.getUUID()), ShopResultCode.COOLDOWN);
         }
 
         try {
@@ -89,33 +90,36 @@ public final class ShopBuyService {
                 String itemId = entry.getKey();
                 int quantity = entry.getValue();
                 if (quantity <= 0 || quantity > ShopTransactionUtil.MAX_BUY_QUANTITY) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), "INVALID_ITEM");
+                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
+                }
+                if (itemId == null || itemId.isBlank() || "minecraft:air".equals(itemId)) {
+                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
                 }
 
                 ItemDef itemDef = ShopCatalog.getItem(shopId, itemId).orElse(null);
                 if (itemDef == null || itemDef.buyPriceMinorUnits() <= 0L) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), "INVALID_ITEM");
+                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
                 }
 
                 int currentStock = ShopCatalog.getCurrentStock(shopId, itemId);
                 if (currentStock >= 0 && currentStock < quantity) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), "OUT_OF_STOCK");
+                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.OUT_OF_STOCK);
                 }
 
                 Item item = ShopTransactionUtil.resolveItem(itemId);
                 if (item == null) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), "INVALID_ITEM");
+                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
                 }
 
                 long lineCost = ShopCatalog.calculateLineCost(shopId, itemId, quantity);
                 if (lineCost <= 0L) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), "INVALID_ITEM");
+                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
                 }
 
                 try {
                     totalCost = Math.addExact(totalCost, lineCost);
                 } catch (ArithmeticException ex) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), "SERVER_ERROR");
+                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.SERVER_ERROR);
                 }
 
                 totalQuantity += quantity;
@@ -125,11 +129,11 @@ public final class ShopBuyService {
             }
 
             if (!ShopTransactionUtil.canFit(inventory, rewards)) {
-                return BuyResult.error(shopId, provider.getBalance(player.getUUID()), "INVENTORY_FULL");
+                return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVENTORY_FULL);
             }
 
             if (provider.getBalance(player.getUUID()) < totalCost) {
-                return BuyResult.error(shopId, provider.getBalance(player.getUUID()), "INSUFFICIENT_FUNDS");
+                return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INSUFFICIENT_FUNDS);
             }
 
             // Fire cancellable ShopTransactionEvent.Pre (spec §33) — allows other mods to cancel or modify price
@@ -137,7 +141,7 @@ public final class ShopBuyService {
                 ShopTransactionEvent.Pre preEvent = new ShopTransactionEvent.Pre(
                         player, shopId, line.itemId(), line.quantity(), "BUY", line.lineCost());
                 if (net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(preEvent)) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), "CANCELLED_BY_EVENT");
+                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.CANCELLED_BY_EVENT);
                 }
             }
 
@@ -153,7 +157,7 @@ public final class ShopBuyService {
                         ShopCatalog.restoreStock(shopId, rollback.itemId(), rollback.quantity());
                     }
                     provider.deposit(player.getUUID(), totalCost, "BUY");
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), "OUT_OF_STOCK");
+                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.OUT_OF_STOCK);
                 }
                 reserved.add(line);
             }
@@ -189,13 +193,13 @@ public final class ShopBuyService {
     private record PreparedLine(String itemId, int quantity, long lineCost) {
     }
 
-    private record BuyResult(boolean success, String shopId, String errorCode, long resultingBalance, long totalCost, int totalQuantity,
+    private record BuyResult(boolean success, String shopId, ShopResultCode errorCode, long resultingBalance, long totalCost, int totalQuantity,
                              List<PreparedLine> lines) {
         private static BuyResult success(String shopId, long resultingBalance, long totalCost, int totalQuantity, List<PreparedLine> lines) {
-            return new BuyResult(true, shopId, "", resultingBalance, totalCost, totalQuantity, lines);
+            return new BuyResult(true, shopId, ShopResultCode.OK, resultingBalance, totalCost, totalQuantity, lines);
         }
 
-        private static BuyResult error(String shopId, long resultingBalance, String errorCode) {
+        private static BuyResult error(String shopId, long resultingBalance, ShopResultCode errorCode) {
             return new BuyResult(false, shopId, errorCode, resultingBalance, 0L, 0, List.of());
         }
     }

@@ -43,13 +43,35 @@ public final class EconomyCommandUtil {
         return String.format(Locale.ROOT, "%s%d.%0" + decimals + "d", sign, whole, fractional);
     }
 
-    public static void sendProviderError(ServerPlayer player, String errorCode) {
+    /**
+     * Maps a server {@link com.enviouse.futureshops.server.shop.ShopResultCode} to the
+     * chat-log lang key used for direct economy commands (/pay, /bal, etc.).
+     *
+     * <p>The switch is exhaustive — every enum constant must appear as a case label so
+     * that adding a new code is a compile error until an intentional mapping (specific
+     * or generic) is chosen. This prevents the silent-fall-through to the generic
+     * {@code command.futureshops.error.server} line that a {@code default ->} branch
+     * would allow.
+     */
+    public static void sendProviderError(ServerPlayer player, com.enviouse.futureshops.server.shop.ShopResultCode errorCode) {
         String key = switch (errorCode) {
-            case "INVALID_AMOUNT" -> "command.futureshops.error.invalid_amount";
-            case "INSUFFICIENT_FUNDS" -> "command.futureshops.error.insufficient_funds";
-            case "MAX_BALANCE_EXCEEDED" -> "command.futureshops.error.max_balance_exceeded";
-            case "INVALID_TARGET" -> "command.futureshops.pay.self";
-            default -> "command.futureshops.error.server";
+            case INVALID_AMOUNT -> "command.futureshops.error.invalid_amount";
+            case INSUFFICIENT_FUNDS -> "command.futureshops.error.insufficient_funds";
+            case MAX_BALANCE_EXCEEDED -> "command.futureshops.error.max_balance_exceeded";
+            case INVALID_TARGET -> "command.futureshops.pay.self";
+            // Codes not meaningful for direct economy commands fall through to a single
+            // generic server-error line. The explicit enumeration is a deliberate
+            // "intentionally generic" contract — see the exhaustive-switch unit test.
+            case OK, BOUGHT, CONFIG_SAVED, CONFIG_COPIED, DEPARTMENT_SET, PROMO_SET, PROMO_CLEARED,
+                 LINKED, BARTER_LINKED, LINK_PENDING, LINK_NONE, BARTER_LINK_PENDING,
+                 DESC_PENDING, LISTING_DESC_PENDING, NOT_OWNER, HOLD_ITEM, LISTING_LIMIT,
+                 NO_LISTING, INVALID_ITEM, UNCONFIGURED, NOT_SINGLE_MODE,
+                 USE_SET_DEPARTMENT_ACTION, NO_LINK, BAD_LINK_TARGET, RS_NOT_CONTROLLER,
+                 OUT_OF_STOCK, STORAGE_FULL, INVENTORY_FULL, MISSING_BARTER_ITEMS,
+                 MISSING_INGREDIENTS, MISSING_ITEMS, INVALID_RECIPE, ROLLBACK,
+                 NOTHING_TO_CLAIM, CLAIM_FAILED, PROMO_FAILED, NO_CLIPBOARD, INVALID_REQUEST,
+                 SERVER_ERROR, CANCELLED_BY_EVENT, COOLDOWN, SHOP_CLOSED
+                    -> "command.futureshops.error.server";
         };
 
         player.sendSystemMessage(error(Component.translatable(key)));

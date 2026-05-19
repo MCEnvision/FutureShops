@@ -44,7 +44,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ShopPackets {
-    private static final String PROTOCOL_VERSION = "21";
+    public static final String PROTOCOL_VERSION = "22";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))

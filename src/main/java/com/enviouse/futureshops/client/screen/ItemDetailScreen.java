@@ -14,6 +14,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
@@ -64,7 +65,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         ShopPackets.CHANNEL.sendToServer(new C2SInventorySyncPacket(ShopClientState.getActiveShopId()));
 
         // Back button
-        addRenderableWidget(Button.builder(Component.literal("§7← Back"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.local.back"), button -> onClose())
                 .bounds(guiLeft + 6, guiTop + 6, 44, 14)
                 .build());
 
@@ -92,10 +93,10 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                     if (hasShiftDown()) setQuantity(resolveMaxQuantity());
                     else setQuantity(getQuantity() + 1);
                 })
-                .tooltip(Tooltip.create(Component.literal("Shift+Click: Max")))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.cart.tooltip.shift_max")))
                 .bounds(previewCenterX + 10, qtyY, 14, 14)
                 .build());
-        addRenderableWidget(Button.builder(Component.literal("Max"), button -> setQuantity(resolveMaxQuantity()))
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.barter.max"), button -> setQuantity(resolveMaxQuantity()))
                 .bounds(previewCenterX + 28, qtyY, 26, 14)
                 .build());
 
@@ -107,7 +108,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         int totalBtnW = btnW * 4 + gap * 3; // 4 buttons now
         int startX = guiLeft + (guiW - totalBtnW) / 2;
 
-        addToCartButton = Button.builder(Component.literal("§e+ Cart"), button -> {
+        addToCartButton = Button.builder(Component.translatable("gui.futureshops.item_detail.add_cart"), button -> {
                     CatalogItem item = currentItem();
                     if (item != null) ShopClientState.addToCart(item.itemId(), getQuantity());
                 })
@@ -115,18 +116,18 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                 .build();
         addRenderableWidget(addToCartButton);
 
-        buyButton = Button.builder(Component.literal("§a$ Buy"), button -> {
+        buyButton = Button.builder(Component.translatable("gui.futureshops.item_detail.buy"), button -> {
                     CatalogItem item = currentItem();
                     if (item != null) {
                         long effectivePrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
                         int qty = getQuantity();
                         String totalStr = ShopUiUtil.formatMinorUnits(effectivePrice * qty);
                         confirmationModal = new ConfirmationModal(
-                                "Confirm Purchase",
+                                I18n.get("gui.futureshops.item_detail.confirm_buy_title"),
                                 java.util.List.of(
                                         ConfirmationModal.SummaryLine.item(item.itemId(), item.displayName() + " ×" + qty)
                                 ),
-                                "Total: " + totalStr + " " + ShopClientState.getCurrencyName(),
+                                I18n.get("gui.futureshops.item_detail.total_cost", totalStr, ShopClientState.getCurrencyName()),
                                 modal -> {
                                     modal.setProcessing();
                                     ShopPackets.CHANNEL.sendToServer(C2SBuyRequestPacket.single(
@@ -140,17 +141,18 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                 .build();
         addRenderableWidget(buyButton);
 
-        sellButton = Button.builder(Component.literal("§6↑ Sell"), button -> {
+        sellButton = Button.builder(Component.translatable("gui.futureshops.item_detail.sell"), button -> {
                     CatalogItem item = currentItem();
                     if (item != null) {
                         int qty = getQuantity();
                         String totalStr = ShopUiUtil.formatMinorUnits(item.sellPrice() * qty);
                         confirmationModal = new ConfirmationModal(
-                                "Confirm Sale",
+                                I18n.get("gui.futureshops.item_detail.confirm_sell_title"),
                                 java.util.List.of(
-                                        ConfirmationModal.SummaryLine.item(item.itemId(), "Sell " + item.displayName() + " ×" + qty)
+                                        ConfirmationModal.SummaryLine.item(item.itemId(),
+                                                I18n.get("gui.futureshops.item_detail.sell_summary", item.displayName(), qty))
                                 ),
-                                "Earn: " + totalStr + " " + ShopClientState.getCurrencyName(),
+                                I18n.get("gui.futureshops.item_detail.earn", totalStr, ShopClientState.getCurrencyName()),
                                 modal -> {
                                     modal.setProcessing();
                                     ShopPackets.CHANNEL.sendToServer(new C2SSellRequestPacket(
@@ -165,7 +167,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         addRenderableWidget(sellButton);
 
         // LGB#23: Barter at bottom alongside other actions
-        barterButton = Button.builder(Component.literal("§9⚒ Barter"), button -> {
+        barterButton = Button.builder(Component.translatable("gui.futureshops.item_detail.barter"), button -> {
                     CatalogItem item = currentItem();
                     if (item != null) this.minecraft.setScreen(new BarterScreen(this, item.itemId()));
                 })
@@ -238,14 +240,15 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
             showItemTooltip = true;
         }
 
-        // Name — wrapped
+        // Name — wrapped (moved up to leave room at scale 4 where guiH is small)
         String name = this.font.plainSubstrByWidth(item.displayName(), PREVIEW_W - 10);
-        graphics.drawCenteredString(this.font, name, leftX + PREVIEW_W / 2, panelY + 82, ShopColors.TEXT_STRONG);
+        graphics.drawCenteredString(this.font, name, leftX + PREVIEW_W / 2, panelY + 66, ShopColors.TEXT_STRONG);
 
-        // Owned count
+        // Owned count (moved up to clear qty controls row)
+        String ownedStr = Component.translatable("gui.futureshops.detail.you_own", ShopUiUtil.countPlayerInventory(item.itemId())).getString();
         graphics.drawCenteredString(this.font,
-                Component.translatable("gui.futureshops.detail.you_own", ShopUiUtil.countPlayerInventory(item.itemId())),
-                leftX + PREVIEW_W / 2, panelY + 96, ShopColors.TEXT_MUTED);
+                this.font.plainSubstrByWidth(ownedStr, PREVIEW_W - 10),
+                leftX + PREVIEW_W / 2, panelY + 80, ShopColors.TEXT_MUTED);
 
         // Total cost — currency amber, right below the qty controls
         long effectiveBuyPrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
@@ -253,7 +256,8 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         graphics.drawCenteredString(this.font, total, leftX + PREVIEW_W / 2, panelY + panelH - 26, ShopColors.TEXT_CURRENCY);
 
         // Quantity label — below Total
-        graphics.drawCenteredString(this.font, "Quantity", leftX + PREVIEW_W / 2, panelY + panelH - 14, ShopColors.TEXT_FAINT);
+        graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.item_detail.quantity_label"),
+                leftX + PREVIEW_W / 2, panelY + panelH - 14, ShopColors.TEXT_FAINT);
     }
 
     private void renderInfoPanel(GuiGraphics graphics, CatalogItem item) {
@@ -283,20 +287,18 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
 
         int nextY = infoY + 38;
 
-        // Animated promo banner
-        if (item.hasPromo() && promoPercent > 0) {
-            String bannerText = promoPercent >= 100 ? "Free!" : "-" + promoPercent + "% OFF!";
-            ShopUiUtil.renderAnimatedDiscountBadge(graphics, this.font,
-                    infoX + infoW / 2, nextY + 6, bannerText);
-            nextY += 20;
-        }
-
         // Divider
         graphics.fill(contentX, nextY, contentX + contentW, nextY + 1, ShopColors.BORDER_MUTED);
         nextY += 6;
 
-        // Buy price
+        // Buy price — with inline "(-X%)" suffix when promo is active.
+        // We deliberately skip the animated discount badge in the info panel: the price
+        // line is the pricing source of truth, and a duplicate badge next to it was
+        // visually noisy.  The suffix is plain §7 text so it reads as secondary info.
         String buyStr = effectiveBuyPrice <= 0 ? "Free" : ShopUiUtil.formatMinorUnits(effectiveBuyPrice);
+        if (item.hasPromo() && promoPercent > 0 && effectiveBuyPrice > 0) {
+            buyStr = buyStr + " §7(-" + promoPercent + "%)";
+        }
         drawInfoLine(graphics, "Buy:", buyStr, contentX, contentW, nextY, ShopColors.TEXT_CURRENCY);
         nextY += 12;
 

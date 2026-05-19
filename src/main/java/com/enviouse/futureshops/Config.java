@@ -1,31 +1,13 @@
 package com.enviouse.futureshops;
 
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.Item;
 import net.minecraftforge.common.ForgeConfigSpec;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.config.ModConfigEvent;
-import net.minecraftforge.registries.ForgeRegistries;
 
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
-
-// An example config class. This is not required, but it's a good idea to have one to keep your config organized.
-// Demonstrates how to use Forge's config APIs
 @Mod.EventBusSubscriber(modid = Futureshops.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
 public class Config {
     private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
-
-    private static final ForgeConfigSpec.BooleanValue LOG_DIRT_BLOCK = BUILDER.comment("Whether to log the dirt block on common setup").define("logDirtBlock", true);
-
-    private static final ForgeConfigSpec.IntValue MAGIC_NUMBER = BUILDER.comment("A magic number").defineInRange("magicNumber", 42, 0, Integer.MAX_VALUE);
-
-    public static final ForgeConfigSpec.ConfigValue<String> MAGIC_NUMBER_INTRODUCTION = BUILDER.comment("What you want the introduction message to be for the magic number").define("magicNumberIntroduction", "The magic number is... ");
-
-    // a list of strings that are treated as resource locations for items
-    private static final ForgeConfigSpec.ConfigValue<List<? extends String>> ITEM_STRINGS = BUILDER.comment("A list of items to log on common setup.").defineListAllowEmpty("items", List.of("minecraft:iron_ingot"), Config::validateItemName);
 
     private static final ForgeConfigSpec.ConfigValue<String> ECONOMY_CURRENCY_NAME = BUILDER
         .comment("Display name of the economy currency")
@@ -44,20 +26,25 @@ public class Config {
         .defineInRange("economy.max_balance_minor_units", 99999999999L, 0L, Long.MAX_VALUE);
 
     private static final ForgeConfigSpec.BooleanValue ECONOMY_ALLOW_NEGATIVE = BUILDER
-        .comment("Whether balances are allowed to go below zero")
+        .comment(
+            "Whether admins may push a player's balance below zero via /shopadmin bal remove.",
+            "Player-driven transactions (BUY, SELL, BARTER, TRANSFER, WITHDRAW, etc.) are always",
+            "blocked when they would leave the balance negative — i.e. a player already in debt",
+            "cannot buy anything until their balance is back at zero or above."
+        )
         .define("economy.allow_negative", false);
 
-    private static final ForgeConfigSpec.ConfigValue<String> COIN_CHECKSUM_SALT = BUILDER
-        .comment("Server-side salt used for CoinItem checksum generation")
-        .define("coins.checksum_salt", "change-me-before-production");
+    private static final ForgeConfigSpec.ConfigValue<String> MONEY_CHECKSUM_SALT = BUILDER
+        .comment("Server-side salt used for MoneyItem checksum generation")
+        .define("money.checksum_salt", "change-me-before-production");
 
-    private static final ForgeConfigSpec.ConfigValue<String> COIN_MINT_SERVER_ID = BUILDER
-        .comment("Identifier embedded in CoinItem mint metadata")
-        .define("coins.mint_server_id", "futureshops-dev");
+    private static final ForgeConfigSpec.ConfigValue<String> MONEY_MINT_SERVER_ID = BUILDER
+        .comment("Identifier embedded in MoneyItem mint metadata")
+        .define("money.mint_server_id", "futureshops-dev");
 
-    private static final ForgeConfigSpec.IntValue COIN_MAX_AGE_DAYS = BUILDER
-        .comment("Maximum age for valid CoinItems")
-        .defineInRange("coins.max_age_days", 365, 1, 3650);
+    private static final ForgeConfigSpec.IntValue MONEY_MAX_AGE_DAYS = BUILDER
+        .comment("Maximum age for valid MoneyItems")
+        .defineInRange("money.max_age_days", 365, 1, 3650);
 
     private static final ForgeConfigSpec.IntValue SESSION_MAX_DISTANCE_BLOCKS = BUILDER
         .comment("Distance (in blocks) a player may move from the shop block before the session auto-closes. 0 = disabled.")
@@ -110,12 +97,16 @@ public class Config {
         .comment("Fire ShopTransactionEvent and BarterTradeEvent on every trade. Disable for slight performance gain if no listeners.")
         .define("events.transaction_events", true);
 
-    static final ForgeConfigSpec SPEC = BUILDER.build();
+    // ---- Local Listings (player-shop discovery via /shop) ----
+    private static final ForgeConfigSpec.IntValue LOCAL_LISTINGS_SCAN_RADIUS_BLOCKS = BUILDER
+        .comment(
+            "Radius (in blocks) the /shop -> Local Listings (and Nearby tab) will search around the player for player-owned shop blocks.",
+            "Set to 0 for unlimited distance — every player shop in the current dimension whose chunk is currently loaded will be included.",
+            "Shops whose chunks are not currently loaded are always skipped, regardless of radius — that is intentional, since unloaded shops cannot report fresh stock counts."
+        )
+        .defineInRange("local_listings.scan_radius_blocks", 64, 0, 1024);
 
-    public static boolean logDirtBlock;
-    public static int magicNumber;
-    public static String magicNumberIntroduction;
-    public static Set<Item> items;
+    static final ForgeConfigSpec SPEC = BUILDER.build();
 
     public static String economyCurrencyName;
     public static int economyCurrencyDecimals;
@@ -123,9 +114,9 @@ public class Config {
     public static long economyMaxBalanceMinorUnits;
     public static boolean economyAllowNegative;
 
-    public static String coinChecksumSalt;
-    public static String coinMintServerId;
-    public static int coinMaxAgeDays;
+    public static String moneyChecksumSalt;
+    public static String moneyMintServerId;
+    public static int moneyMaxAgeDays;
 
     public static int sessionMaxDistanceBlocks;
     public static boolean sessionCloseOnDamage;
@@ -146,28 +137,20 @@ public class Config {
     // Events (spec §33)
     public static boolean eventsTransactionEnabled;
 
-    private static boolean validateItemName(final Object obj) {
-        return obj instanceof final String itemName && ForgeRegistries.ITEMS.containsKey(ResourceLocation.parse(itemName));
-    }
+    // Local Listings
+    public static int localListingsScanRadiusBlocks;
 
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event) {
-        logDirtBlock = LOG_DIRT_BLOCK.get();
-        magicNumber = MAGIC_NUMBER.get();
-        magicNumberIntroduction = MAGIC_NUMBER_INTRODUCTION.get();
-
-        // convert the list of strings into a set of items
-        items = ITEM_STRINGS.get().stream().map(itemName -> ForgeRegistries.ITEMS.getValue(ResourceLocation.parse(itemName))).collect(Collectors.toSet());
-
         economyCurrencyName = ECONOMY_CURRENCY_NAME.get();
         economyCurrencyDecimals = ECONOMY_DECIMALS.get();
         economyStartingBalanceMinorUnits = ECONOMY_STARTING_BALANCE_MINOR_UNITS.get();
         economyMaxBalanceMinorUnits = ECONOMY_MAX_BALANCE_MINOR_UNITS.get();
         economyAllowNegative = ECONOMY_ALLOW_NEGATIVE.get();
 
-        coinChecksumSalt = COIN_CHECKSUM_SALT.get();
-        coinMintServerId = COIN_MINT_SERVER_ID.get();
-        coinMaxAgeDays = COIN_MAX_AGE_DAYS.get();
+        moneyChecksumSalt = MONEY_CHECKSUM_SALT.get();
+        moneyMintServerId = MONEY_MINT_SERVER_ID.get();
+        moneyMaxAgeDays = MONEY_MAX_AGE_DAYS.get();
 
         sessionMaxDistanceBlocks = SESSION_MAX_DISTANCE_BLOCKS.get();
         sessionCloseOnDamage = SESSION_CLOSE_ON_DAMAGE.get();
@@ -183,5 +166,7 @@ public class Config {
         stockRefreshCheckIntervalSec = STOCK_REFRESH_CHECK_INTERVAL_SEC.get();
         stockRefreshEnabled = STOCK_REFRESH_ENABLED.get();
         eventsTransactionEnabled = EVENTS_TRANSACTION_ENABLED.get();
+
+        localListingsScanRadiusBlocks = LOCAL_LISTINGS_SCAN_RADIUS_BLOCKS.get();
     }
 }

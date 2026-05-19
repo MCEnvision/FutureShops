@@ -5,8 +5,20 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.Connection;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import software.bernie.geckolib.animatable.GeoBlockEntity;
+import software.bernie.geckolib.core.animatable.instance.AnimatableInstanceCache;
+import software.bernie.geckolib.core.animation.AnimatableManager;
+import software.bernie.geckolib.core.animation.AnimationController;
+import software.bernie.geckolib.core.animation.AnimationState;
+import software.bernie.geckolib.core.animation.RawAnimation;
+import software.bernie.geckolib.core.object.PlayState;
+import software.bernie.geckolib.util.GeckoLibUtil;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -14,7 +26,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
-public class ShopBlockEntity extends BlockEntity {
+public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
+    private static final RawAnimation IDLE_ANIM = RawAnimation.begin().thenLoop("idle");
+
+    private final AnimatableInstanceCache geoCache = GeckoLibUtil.createInstanceCache(this);
     /** Default listing cap when maxListings is not overridden (-1 = unlimited). */
     public static final int DEFAULT_MAX_LISTINGS = -1;
     public static final int MAX_BUNDLE_OUTPUTS = 36;
@@ -49,6 +64,13 @@ public class ShopBlockEntity extends BlockEntity {
     }
 
     private UUID ownerUuid;
+    /**
+     * Owner's last-known username. Captured whenever {@link #setOwnerUuid(UUID, String)}
+     * is called with a non-blank name. Synced to clients so the block-top
+     * nameplate + head decal can show a label without the client resolving
+     * UUIDs itself.
+     */
+    private String ownerName = "";
     private String shopId = "default";
     private String shopName = "";
     private String description = "";
@@ -60,6 +82,20 @@ public class ShopBlockEntity extends BlockEntity {
     private BlockPos linkedStoragePos;
     private BlockPos barterStoragePos;
 
+    // Owner-tunable visuals for the spinning listing item on top of the block.
+    // Bounds picked so the item stays visible inside a 1×1×1 block envelope:
+    // Y offset is relative to the default "a bit above the hitbox top" anchor.
+    public static final float DISPLAY_Y_OFFSET_MIN = -0.35F;
+    public static final float DISPLAY_Y_OFFSET_MAX = 0.60F;
+    public static final float DISPLAY_Y_OFFSET_STEP = 0.05F;
+    public static final float DISPLAY_SCALE_MIN = 0.40F;
+    public static final float DISPLAY_SCALE_MAX = 1.80F;
+    public static final float DISPLAY_SCALE_STEP = 0.10F;
+    private float displayYOffset = 0.0F;
+    private float displayScale = 1.0F;
+    /** When true the block-top nameplate is suppressed even while a player is looking at the shop. */
+    private boolean nameplateHidden = false;
+
     public ShopBlockEntity(BlockPos pos, BlockState blockState) {
         super(ModBlockEntities.SHOP_BLOCK_ENTITY.get(), pos, blockState);
     }
@@ -69,8 +105,54 @@ public class ShopBlockEntity extends BlockEntity {
     }
 
     public void setOwnerUuid(UUID ownerUuid) {
+        setOwnerUuid(ownerUuid, null);
+    }
+
+    public void setOwnerUuid(UUID ownerUuid, @Nullable String ownerName) {
         this.ownerUuid = ownerUuid;
+        if (ownerName != null && !ownerName.isBlank()) {
+            this.ownerName = ownerName;
+        }
         setChanged();
+        syncTopItemsToClients();
+    }
+
+    public String getOwnerName() {
+        return ownerName;
+    }
+
+    public float getDisplayYOffset() {
+        return displayYOffset;
+    }
+
+    public float getDisplayScale() {
+        return displayScale;
+    }
+
+    public void adjustDisplayYOffset(float delta) {
+        displayYOffset = clamp(displayYOffset + delta, DISPLAY_Y_OFFSET_MIN, DISPLAY_Y_OFFSET_MAX);
+        setChanged();
+        syncTopItemsToClients();
+    }
+
+    public void adjustDisplayScale(float delta) {
+        displayScale = clamp(displayScale + delta, DISPLAY_SCALE_MIN, DISPLAY_SCALE_MAX);
+        setChanged();
+        syncTopItemsToClients();
+    }
+
+    public boolean isNameplateHidden() {
+        return nameplateHidden;
+    }
+
+    public void toggleNameplateHidden() {
+        this.nameplateHidden = !this.nameplateHidden;
+        setChanged();
+        syncTopItemsToClients();
+    }
+
+    private static float clamp(float v, float lo, float hi) {
+        return v < lo ? lo : (v > hi ? hi : v);
     }
 
     public String getShopId() {
@@ -168,6 +250,7 @@ public class ShopBlockEntity extends BlockEntity {
         }
         listings.add(new Listing(itemId));
         setChanged();
+        syncTopItemsToClients();
         return listings.size() - 1;
     }
 
@@ -181,6 +264,7 @@ public class ShopBlockEntity extends BlockEntity {
             visibleListingIndex = Math.max(0, listings.size() - 1);
         }
         setChanged();
+        syncTopItemsToClients();
         return true;
     }
 
@@ -195,6 +279,7 @@ public class ShopBlockEntity extends BlockEntity {
             listings.add(new Listing(listedItemId));
         }
         setChanged();
+        syncTopItemsToClients();
     }
 
     public TradeMode getTradeMode() {
@@ -263,11 +348,65 @@ public class ShopBlockEntity extends BlockEntity {
         setChanged();
     }
 
+    /**
+     * Serializes only the owner-configurable portion of this shop (name, description, flags,
+     * listings incl. promos + bundle outputs) — <em>not</em> ownership, position, or
+     * linked-storage block positions. Used by the Copy Config / Paste Config buttons so
+     * operators can stamp the same listing catalogue onto a new shop block in a different
+     * location without pulling along the linked chest coordinates (which would be invalid
+     * at the destination) or the owner UUID (which must stay whoever placed the block).
+     */
+    public CompoundTag exportConfigSnapshot() {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("ShopName", shopName);
+        tag.putString("Description", description);
+        tag.putBoolean("SingleItemMode", singleItemMode);
+        tag.putInt("VisibleListingIndex", visibleListingIndex);
+        tag.putBoolean("BarterStorageSame", barterStorageSame);
+        tag.putInt("MaxListings", maxListings);
+        ListTag listingTags = new ListTag();
+        for (Listing listing : listings) {
+            listingTags.add(listing.save());
+        }
+        tag.put("Listings", listingTags);
+        return tag;
+    }
+
+    /**
+     * Applies a snapshot produced by {@link #exportConfigSnapshot()} to this shop.
+     * Intentionally does not touch owner UUID, block position, or linked storage
+     * positions — see {@link #exportConfigSnapshot()} for rationale.
+     */
+    public void applyConfigSnapshot(CompoundTag tag) {
+        if (tag == null) return;
+        if (tag.contains("ShopName")) shopName = tag.getString("ShopName");
+        if (tag.contains("Description")) description = tag.getString("Description");
+        if (tag.contains("SingleItemMode")) singleItemMode = tag.getBoolean("SingleItemMode");
+        if (tag.contains("VisibleListingIndex")) visibleListingIndex = tag.getInt("VisibleListingIndex");
+        if (tag.contains("BarterStorageSame")) barterStorageSame = tag.getBoolean("BarterStorageSame");
+        if (tag.contains("MaxListings")) maxListings = tag.getInt("MaxListings");
+        if (tag.contains("Listings", Tag.TAG_LIST)) {
+            listings.clear();
+            ListTag listingTags = tag.getList("Listings", Tag.TAG_COMPOUND);
+            for (Tag lt : listingTags) {
+                listings.add(Listing.load((CompoundTag) lt));
+            }
+            if (visibleListingIndex >= listings.size()) {
+                visibleListingIndex = listings.isEmpty() ? -1 : 0;
+            }
+        }
+        setChanged();
+        syncTopItemsToClients();
+    }
+
     @Override
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
         if (ownerUuid != null) {
             tag.putUUID("OwnerUUID", ownerUuid);
+        }
+        if (!ownerName.isEmpty()) {
+            tag.putString("OwnerName", ownerName);
         }
         tag.putString("ShopId", shopId);
         tag.putString("ShopName", shopName);
@@ -276,6 +415,9 @@ public class ShopBlockEntity extends BlockEntity {
         tag.putInt("VisibleListingIndex", visibleListingIndex);
         tag.putBoolean("BarterStorageSame", barterStorageSame);
         tag.putInt("MaxListings", maxListings);
+        tag.putFloat("DisplayYOffset", displayYOffset);
+        tag.putFloat("DisplayScale", displayScale);
+        tag.putBoolean("NameplateHidden", nameplateHidden);
         ListTag listingTags = new ListTag();
         for (Listing listing : listings) {
             listingTags.add(listing.save());
@@ -293,6 +435,7 @@ public class ShopBlockEntity extends BlockEntity {
     public void load(CompoundTag tag) {
         super.load(tag);
         ownerUuid = tag.hasUUID("OwnerUUID") ? tag.getUUID("OwnerUUID") : null;
+        ownerName = tag.getString("OwnerName");
         shopId = tag.getString("ShopId");
         if (shopId.isBlank()) {
             shopId = "default";
@@ -303,6 +446,11 @@ public class ShopBlockEntity extends BlockEntity {
         visibleListingIndex = tag.contains("VisibleListingIndex") ? tag.getInt("VisibleListingIndex") : -1;
         barterStorageSame = tag.contains("BarterStorageSame") ? tag.getBoolean("BarterStorageSame") : true;
         maxListings = tag.contains("MaxListings") ? tag.getInt("MaxListings") : DEFAULT_MAX_LISTINGS;
+        displayYOffset = clamp(tag.contains("DisplayYOffset") ? tag.getFloat("DisplayYOffset") : 0.0F,
+                DISPLAY_Y_OFFSET_MIN, DISPLAY_Y_OFFSET_MAX);
+        displayScale = clamp(tag.contains("DisplayScale") ? tag.getFloat("DisplayScale") : 1.0F,
+                DISPLAY_SCALE_MIN, DISPLAY_SCALE_MAX);
+        nameplateHidden = tag.getBoolean("NameplateHidden");
         listings.clear();
         if (tag.contains("Listings", Tag.TAG_LIST)) {
             ListTag listingTags = tag.getList("Listings", Tag.TAG_COMPOUND);
@@ -340,6 +488,13 @@ public class ShopBlockEntity extends BlockEntity {
         private int baseQuantity = 0; // Item 32 fix: Default 0 prevents sales during listing setup
         private boolean nbtAware = false;
         private CompoundTag nbtTag = null;
+        // NBT-strict barter payment: when the owner registers a barter item with a non-null
+        // tag (e.g. an empty tank, a specific enchanted chestplate), the listing captures
+        // that tag and the buy/barter pipeline enforces strict equality against the buyer's
+        // inventory. Without this, a player could pay with a partially-full tank or an
+        // enchanted chestplate and the server would accept it as if it were the plain variant.
+        private boolean barterNbtAware = false;
+        private CompoundTag barterNbtTag = null;
         private final Promo promo = new Promo();
         private final List<BundleEntry> bundleOutputs = new ArrayList<>(); // Item 11
 
@@ -359,6 +514,10 @@ public class ShopBlockEntity extends BlockEntity {
         public void setBarterItemId(String barterItemId) { this.barterItemId = barterItemId == null ? "" : barterItemId; }
         public int barterItemCount() { return barterItemCount; }
         public void setBarterItemCount(int barterItemCount) { this.barterItemCount = Math.max(1, barterItemCount); }
+        public boolean barterNbtAware() { return barterNbtAware; }
+        public void setBarterNbtAware(boolean barterNbtAware) { this.barterNbtAware = barterNbtAware; }
+        public CompoundTag barterNbtTag() { return barterNbtTag; }
+        public void setBarterNbtTag(CompoundTag barterNbtTag) { this.barterNbtTag = barterNbtTag; }
         public String department() { return department; }
         public void setDepartment(String department) { this.department = department == null ? "" : department.trim(); }
         public String listingDescription() { return listingDescription; }
@@ -438,6 +597,10 @@ public class ShopBlockEntity extends BlockEntity {
             if (nbtTag != null) {
                 tag.put("NbtTag", nbtTag.copy());
             }
+            tag.putBoolean("BarterNbtAware", barterNbtAware);
+            if (barterNbtTag != null) {
+                tag.put("BarterNbtTag", barterNbtTag.copy());
+            }
             tag.put("Promo", promo.save());
             // Item 11: Save bundle outputs
             if (!bundleOutputs.isEmpty()) {
@@ -466,6 +629,10 @@ public class ShopBlockEntity extends BlockEntity {
             listing.setNbtAware(tag.getBoolean("NbtAware"));
             if (tag.contains("NbtTag", Tag.TAG_COMPOUND)) {
                 listing.setNbtTag(tag.getCompound("NbtTag"));
+            }
+            listing.setBarterNbtAware(tag.getBoolean("BarterNbtAware"));
+            if (tag.contains("BarterNbtTag", Tag.TAG_COMPOUND)) {
+                listing.setBarterNbtTag(tag.getCompound("BarterNbtTag"));
             }
             if (tag.contains("Promo", Tag.TAG_COMPOUND)) {
                 listing.promo.load(tag.getCompound("Promo"));
@@ -557,5 +724,121 @@ public class ShopBlockEntity extends BlockEntity {
                     tag.getLong("Start"), tag.getLong("End"), tag.getBoolean("Flash"));
         }
     }
+
+    // ---- GeckoLib (animated block rendering) -------------------------------
+    @Override
+    public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
+        controllers.add(new AnimationController<>(this, "idle", 0, this::idleController));
+    }
+
+    private <E extends ShopBlockEntity> PlayState idleController(AnimationState<E> state) {
+        return state.setAndContinue(IDLE_ANIM);
+    }
+
+    @Override
+    public AnimatableInstanceCache getAnimatableInstanceCache() {
+        return this.geoCache;
+    }
+
+    // ---- Client sync for the top-of-block spinning listing preview ---------
+    // The renderer only needs the ordered list of listing item ids, not the
+    // rest of the shop state; we ship a compact tag (just "TopItems": [ids])
+    // instead of the full saveAdditional payload which would needlessly
+    // expose prices/barter/promos on the network every chunk load.
+    @Override
+    public CompoundTag getUpdateTag() {
+        CompoundTag tag = new CompoundTag();
+        ListTag items = new ListTag();
+        for (Listing l : listings) {
+            if (l != null && l.itemId() != null && !l.itemId().isBlank()) {
+                CompoundTag e = new CompoundTag();
+                e.putString("Id", l.itemId());
+                items.add(e);
+            }
+        }
+        tag.put("TopItems", items);
+        tag.putString("ShopName", shopName);
+        tag.putString("OwnerName", ownerName);
+        if (ownerUuid != null) {
+            tag.putUUID("OwnerUUID", ownerUuid);
+        }
+        tag.putFloat("DisplayYOffset", displayYOffset);
+        tag.putFloat("DisplayScale", displayScale);
+        tag.putBoolean("NameplateHidden", nameplateHidden);
+        return tag;
+    }
+
+    @Override
+    public void handleUpdateTag(CompoundTag tag) {
+        clientTopItemIds.clear();
+        if (tag.contains("TopItems", Tag.TAG_LIST)) {
+            ListTag items = tag.getList("TopItems", Tag.TAG_COMPOUND);
+            for (Tag t : items) {
+                if (t instanceof CompoundTag ct) {
+                    String id = ct.getString("Id");
+                    if (!id.isBlank()) clientTopItemIds.add(id);
+                }
+            }
+        }
+        if (tag.contains("ShopName")) {
+            this.shopName = tag.getString("ShopName");
+        }
+        if (tag.contains("OwnerName")) {
+            this.ownerName = tag.getString("OwnerName");
+        }
+        if (tag.hasUUID("OwnerUUID")) {
+            this.ownerUuid = tag.getUUID("OwnerUUID");
+        }
+        if (tag.contains("DisplayYOffset")) {
+            this.displayYOffset = clamp(tag.getFloat("DisplayYOffset"),
+                    DISPLAY_Y_OFFSET_MIN, DISPLAY_Y_OFFSET_MAX);
+        }
+        if (tag.contains("DisplayScale")) {
+            this.displayScale = clamp(tag.getFloat("DisplayScale"),
+                    DISPLAY_SCALE_MIN, DISPLAY_SCALE_MAX);
+        }
+        if (tag.contains("NameplateHidden")) {
+            this.nameplateHidden = tag.getBoolean("NameplateHidden");
+        }
+    }
+
+    /**
+     * Client-side display label for the block-top nameplate. Falls back to the
+     * owner username if the shop was never custom-named.
+     */
+    public String getDisplayLabel() {
+        if (shopName != null && !shopName.isBlank()) {
+            return shopName;
+        }
+        if (ownerName != null && !ownerName.isBlank()) {
+            return ownerName;
+        }
+        return "";
+    }
+
+    @Nullable
+    @Override
+    public Packet<ClientGamePacketListener> getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
+    }
+
+    @Override
+    public void onDataPacket(Connection net, ClientboundBlockEntityDataPacket pkt) {
+        if (pkt.getTag() != null) handleUpdateTag(pkt.getTag());
+    }
+
+    /** Client-visible list of listing item ids, in order. Empty on servers. */
+    public List<String> getClientTopItemIds() {
+        return Collections.unmodifiableList(clientTopItemIds);
+    }
+
+    /** Call on the server whenever listings change to push a fresh update packet to nearby clients. */
+    public void syncTopItemsToClients() {
+        if (level != null && !level.isClientSide) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
+        }
+    }
+
+    private final List<String> clientTopItemIds = new ArrayList<>();
 }
 

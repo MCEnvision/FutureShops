@@ -90,43 +90,52 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         int btnRightEdge = guiLeft + guiW - 8;
 
         // Close button (rightmost)
-        addRenderableWidget(Button.builder(Component.literal("§c✕"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.shop_main.close"), button -> onClose())
                 .bounds(btnRightEdge - closeW, topBarY - 2, closeW, closeW)
                 .build());
         btnRightEdge -= closeW + pad;
 
 
         // History button
-        historyBtn = addRenderableWidget(Button.builder(Component.literal(tight ? "§7🕑" : "History"), button -> this.minecraft.setScreen(new TransactionHistoryScreen(this)))
-                .tooltip(tight ? net.minecraft.client.gui.components.Tooltip.create(Component.literal("History")) : null)
+        historyBtn = addRenderableWidget(Button.builder(
+                        tight ? Component.literal("§7🕑")
+                              : Component.translatable("gui.futureshops.shop_main.history"),
+                        button -> this.minecraft.setScreen(new TransactionHistoryScreen(this)))
+                .tooltip(tight ? net.minecraft.client.gui.components.Tooltip.create(Component.translatable("gui.futureshops.shop_main.history")) : null)
                 .bounds(btnRightEdge - historyW, topBarY, historyW, topBarH)
                 .build());
         btnRightEdge -= historyW + pad;
 
         // Cart button
-        cartBtn = addRenderableWidget(Button.builder(Component.literal(tight ? "§6🛒" : "Cart"), button -> this.minecraft.setScreen(new CartScreen(this)))
-                .tooltip(tight ? net.minecraft.client.gui.components.Tooltip.create(Component.literal("Cart")) : null)
+        cartBtn = addRenderableWidget(Button.builder(
+                        tight ? Component.literal("§6🛒")
+                              : Component.translatable("gui.futureshops.shop_main.cart"),
+                        button -> this.minecraft.setScreen(new CartScreen(this)))
+                .tooltip(tight ? net.minecraft.client.gui.components.Tooltip.create(Component.translatable("gui.futureshops.shop_main.cart")) : null)
                 .bounds(btnRightEdge - cartW, topBarY, cartW, topBarH)
                 .build());
         btnRightEdge -= cartW + pad;
 
         // Mode toggle
-        modeBtn = addRenderableWidget(Button.builder(Component.literal(tight ? (barterMode ? "§9⚒" : "§a$") : (barterMode ? "§9⚒ Barter" : "§a$ Buy")), button -> {
+        modeBtn = addRenderableWidget(Button.builder(modeButtonMessage(tight), button -> {
                     barterMode = !barterMode;
                     if (!barterMode && isBarterTabSelected()) {
                         selectedCategoryIdx = 0;
                     }
-                    button.setMessage(Component.literal(tight ? (barterMode ? "§9⚒" : "§a$") : (barterMode ? "§9⚒ Barter" : "§a$ Buy")));
+                    button.setMessage(modeButtonMessage(tight));
                     gridScrollRows = 0;
                     rebuildFilteredItems();
                 })
-                .tooltip(tight ? net.minecraft.client.gui.components.Tooltip.create(Component.literal("Toggle Buy / Barter")) : null)
+                .tooltip(tight ? net.minecraft.client.gui.components.Tooltip.create(Component.translatable("gui.futureshops.shop_main.mode_tooltip")) : null)
                 .bounds(btnRightEdge - modeW, topBarY, modeW, topBarH)
                 .build());
         btnRightEdge -= modeW + pad;
 
         // Local Shops button — always visible, toggles nearby player shops view
-        addRenderableWidget(Button.builder(Component.literal(tight ? "§e📍" : "§e\uD83D\uDCCD Local"), button -> {
+        addRenderableWidget(Button.builder(
+                        tight ? Component.literal("§e📍")
+                              : Component.translatable("gui.futureshops.shop_main.local"),
+                        button -> {
                     nearbyMode = !nearbyMode;
                     gridScrollRows = 0;
                     nearbyScrollIdx = 0;
@@ -137,7 +146,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                         rebuildFilteredItems();
                     }
                 })
-                .tooltip(tight ? net.minecraft.client.gui.components.Tooltip.create(Component.literal("Local shops")) : null)
+                .tooltip(tight ? net.minecraft.client.gui.components.Tooltip.create(Component.translatable("gui.futureshops.shop_main.local")) : null)
                 .bounds(btnRightEdge - localW, topBarY, localW, topBarH)
                 .build());
         btnRightEdge -= localW + pad;
@@ -201,7 +210,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         int cartLineCount = ShopClientState.getCartLineCount();
         if (cartLineCount != cachedCartLineCount) {
             cachedCartLineCount = cartLineCount;
-            cartBtn.setMessage(Component.literal("Cart (" + cartLineCount + ")"));
+            cartBtn.setMessage(Component.translatable("gui.futureshops.shop_main.cart_count", cartLineCount));
         }
 
         super.render(graphics, mouseX, mouseY, partialTick);
@@ -366,20 +375,19 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
             String displayName = owner.franchiseName().isBlank()
                     ? owner.displayName() + "'s Shop"
                     : owner.franchiseName() + " — " + owner.displayName();
-            String name = this.font.plainSubstrByWidth(displayName, contentW - 100);
-            graphics.drawString(this.font, name, contentX + 42, y + 6, ShopColors.TEXT_PRIMARY, false);
+            ShopUiUtil.renderScrollingString(graphics, this.font, displayName,
+                    contentX + 42, y + 6, contentW - 100, ShopColors.TEXT_PRIMARY);
 
             // Info line
-            String info = this.font.plainSubstrByWidth(
-                    owner.shopBlockCount() + " shops • " + owner.totalListings() + " items • " +
-                            owner.totalStock() + " stock • " + String.format("%.0f", owner.closestDistance()) + "m",
-                    contentW - 60);
-            graphics.drawString(this.font, "§7" + info, contentX + 42, y + 18, ShopColors.TEXT_SECONDARY, false);
+            String info = owner.shopBlockCount() + " shops • " + owner.totalListings() + " items • " +
+                    owner.totalStock() + " stock • " + String.format("%.0f", owner.closestDistance()) + "m";
+            ShopUiUtil.renderScrollingString(graphics, this.font, "§7" + info,
+                    contentX + 42, y + 18, contentW - 60, ShopColors.TEXT_SECONDARY);
 
             // Department summary (precomputed when the owner list was received)
-            String deptStr = this.font.plainSubstrByWidth(
-                    "§7Depts: " + ShopClientState.getLocalShopDeptSummary(owner.ownerUuid()), contentW - 60);
-            graphics.drawString(this.font, deptStr, contentX + 42, y + 30, ShopColors.TEXT_SECONDARY, false);
+            String deptStr = "§7Depts: " + ShopClientState.getLocalShopDeptSummary(owner.ownerUuid());
+            ShopUiUtil.renderScrollingString(graphics, this.font, deptStr,
+                    contentX + 42, y + 30, contentW - 60, ShopColors.TEXT_SECONDARY);
 
             if (hovered) {
                 String visitText = "§a▶ Browse";
@@ -416,14 +424,13 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
             }
 
             ShopUiUtil.renderPlayerFace(graphics, entry.ownerUuid(), contentX + 6, y + 8, 30);
-            String name = this.font.plainSubstrByWidth(entry.shopName(), contentW - 100);
-            graphics.drawString(this.font, name, contentX + 42, y + 6, ShopColors.TEXT_PRIMARY, false);
-            String ownerStr = this.font.plainSubstrByWidth("§7by " + entry.ownerName(), contentW - 100);
-            graphics.drawString(this.font, ownerStr, contentX + 42, y + 18, ShopColors.TEXT_SECONDARY, false);
-            String infoStr = this.font.plainSubstrByWidth(
-                    entry.listingCount() + " items • " + entry.totalStock() + " stock • " + String.format("%.0f", entry.distance()) + "m away",
-                    contentW - 60);
-            graphics.drawString(this.font, infoStr, contentX + 42, y + 30, ShopColors.TEXT_SECONDARY, false);
+            ShopUiUtil.renderScrollingString(graphics, this.font, entry.shopName(),
+                    contentX + 42, y + 6, contentW - 100, ShopColors.TEXT_PRIMARY);
+            ShopUiUtil.renderScrollingString(graphics, this.font, "§7by " + entry.ownerName(),
+                    contentX + 42, y + 18, contentW - 100, ShopColors.TEXT_SECONDARY);
+            String infoStr = entry.listingCount() + " items • " + entry.totalStock() + " stock • " + String.format("%.0f", entry.distance()) + "m away";
+            ShopUiUtil.renderScrollingString(graphics, this.font, infoStr,
+                    contentX + 42, y + 30, contentW - 60, ShopColors.TEXT_SECONDARY);
             if (hovered) {
                 String visitText = "§a▶ Click to visit";
                 int vw = this.font.width(visitText);
@@ -453,33 +460,36 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
             ShopUiUtil.renderItemIcon(graphics, this.font, item.itemId(), x + (width - 16) / 2, y + 6);
         }
 
-        // Name — truncated to fit
-        String name = this.font.plainSubstrByWidth(item.displayName(), width - 8);
-        graphics.drawCenteredString(this.font, name, x + width / 2, y + 28, ShopColors.TEXT_PRIMARY);
+        // Name — scrolls when too long so modded names with many words don't get clipped.
+        ShopUiUtil.renderScrollingCentered(graphics, this.font, item.displayName(),
+                x + width / 2, y + 28, width - 8, ShopColors.TEXT_PRIMARY);
 
-        // Price
-        long price = item.hasPromo() ? item.promoPrice() : item.buyPrice();
-        String priceStr = ShopUiUtil.formatMinorUnits(price);
-        graphics.drawCenteredString(this.font, "§a" + priceStr, x + width / 2, y + 42, ShopColors.TEXT_PRICE);
+        if (!outOfStock) {
+            // Price
+            long price = item.hasPromo() ? item.promoPrice() : item.buyPrice();
+            String priceStr = ShopUiUtil.formatMinorUnits(price);
+            graphics.drawCenteredString(this.font, "§a" + priceStr, x + width / 2, y + 42, ShopColors.TEXT_PRICE);
 
-        // Stock line — truncated
-        String stockStr = item.unlimited() ? "∞ Stock" : item.stock() + " left";
-        graphics.drawCenteredString(this.font, stockStr, x + width / 2, y + 56,
-                outOfStock ? ShopColors.ERROR : ShopColors.TEXT_SECONDARY);
+            // Stock line — truncated
+            String stockStr = item.unlimited() ? "∞ Stock" : item.stock() + " left";
+            graphics.drawCenteredString(this.font, stockStr, x + width / 2, y + 56, ShopColors.TEXT_SECONDARY);
 
-        // Animated discount badge
-        if (item.hasPromo()) {
-            int percent = ShopUiUtil.computePromoPercent(item.buyPrice(), item.promoPrice());
-            if (percent > 0) {
-                String badgeText = percent >= 100 ? "Free!" : "-" + percent + "%";
-                ShopUiUtil.renderAnimatedDiscountBadge(graphics, this.font, x + width - 6, y + 8, badgeText);
+            // Animated discount badge
+            if (item.hasPromo()) {
+                int percent = ShopUiUtil.computePromoPercent(item.buyPrice(), item.promoPrice());
+                if (percent > 0) {
+                    String badgeText = percent >= 100 ? "Free!" : "-" + percent + "%";
+                    ShopUiUtil.renderAnimatedDiscountBadge(graphics, this.font, x + width - 6, y + 8, badgeText);
+                }
             }
-        }
-        // LGB#22: Always show barter badge when barter recipes exist (not exclusive with promo)
-        if (item.hasBarterRecipes()) {
-            int badgeY = item.hasPromo() ? y + height - 14 : y + height - 14;
-            ShopUiUtil.renderPill(graphics, this.font, x + width - 48, badgeY, "⚒ Barter",
-                    ShopColors.SURFACE_BASE, ShopColors.TEXT_BARTER_SOFT, ShopColors.TEXT_BARTER_SOFT);
+            // LGB#22: Always show barter badge when barter recipes exist (not exclusive with promo)
+            if (item.hasBarterRecipes()) {
+                int badgeY = item.hasPromo() ? y + height - 14 : y + height - 14;
+                ShopUiUtil.renderPill(graphics, this.font, x + width - 48, badgeY, "⚒ Barter",
+                        ShopColors.SURFACE_BASE, ShopColors.TEXT_BARTER_SOFT, ShopColors.TEXT_BARTER_SOFT);
+            }
+        } else {
+            graphics.drawCenteredString(this.font, "§cSold Out", x + width / 2, y + 49, ShopColors.ERROR);
         }
 
         // Tooltip on hover — Item 6: full advanced tooltip
@@ -491,12 +501,6 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                     ? nbt : "";
             tooltipMouseX = mouseX;
             tooltipMouseY = mouseY;
-        }
-
-        // Out of stock overlay
-        if (outOfStock) {
-            graphics.fill(x, y, x + width, y + height, 0x88000000);
-            graphics.drawCenteredString(this.font, "§cSold Out", x + width / 2, y + height / 2 - 4, ShopColors.ERROR);
         }
     }
 
@@ -612,10 +616,10 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                     nearbyMode = isNearbyTabIndex(i, cats.size());
                     if (isBarterTabIndex(i, cats.size())) {
                         barterMode = true;
-                        modeBtn.setMessage(Component.literal("§9⚒ Barter"));
+                        modeBtn.setMessage(modeButtonMessage(guiW < 520));
                     } else if (!nearbyMode) {
                         barterMode = false;
-                        modeBtn.setMessage(Component.literal("§a$ Buy"));
+                        modeBtn.setMessage(modeButtonMessage(guiW < 520));
                     }
                     gridScrollRows = 0;
                     nearbyScrollIdx = 0;
@@ -773,6 +777,16 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         return ShopClientState.getCatalogCategories().get(index - 1).displayName();
     }
 
+    private Component modeButtonMessage(boolean tight) {
+        if (tight) {
+            // Icon-only variants stay inline — they're glyphs, not translatable prose.
+            return Component.literal(barterMode ? "§9⚒" : "§a$");
+        }
+        return Component.translatable(barterMode
+                ? "gui.futureshops.shop_main.mode_barter"
+                : "gui.futureshops.shop_main.mode_buy");
+    }
+
     private String prettyName(String raw) {
         if (raw == null || raw.isBlank()) {
             return "Server Shop";
@@ -812,7 +826,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                 selectedCategoryIdx = 0;
             }
             if (modeBtn != null) {
-                modeBtn.setMessage(Component.literal(barterMode ? "§9⚒ Barter" : "§a$ Buy"));
+                modeBtn.setMessage(modeButtonMessage(guiW < 520));
             }
             gridScrollRows = 0;
             rebuildFilteredItems();

@@ -33,8 +33,20 @@ public record C2SVerifyAdminCartPacket(String shopId, List<AdminCartLine> lines)
         buffer.writeCollection(packet.lines, AdminCartLine::encode);
     }
 
+    private static final int MAX_LINES = 256;
+
     public static C2SVerifyAdminCartPacket decode(FriendlyByteBuf buffer) {
-        return new C2SVerifyAdminCartPacket(buffer.readUtf(), buffer.readList(AdminCartLine::decode));
+        String shopId = buffer.readUtf();
+        int count = buffer.readVarInt();
+        if (count < 0 || count > MAX_LINES) {
+            throw new io.netty.handler.codec.DecoderException(
+                    "C2SVerifyAdminCartPacket lines out of range: " + count);
+        }
+        java.util.List<AdminCartLine> lines = new java.util.ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            lines.add(AdminCartLine.decode(buffer));
+        }
+        return new C2SVerifyAdminCartPacket(shopId, lines);
     }
 
     public static void handle(C2SVerifyAdminCartPacket packet, Supplier<NetworkEvent.Context> ctx) {

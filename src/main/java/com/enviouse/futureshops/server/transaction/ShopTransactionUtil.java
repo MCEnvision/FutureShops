@@ -29,6 +29,8 @@ public final class ShopTransactionUtil {
     private ShopTransactionUtil() {
     }
 
+
+
     public static ReentrantLock lockFor(UUID playerUUID) {
         return PLAYER_LOCKS.computeIfAbsent(playerUUID, ignored -> new ReentrantLock());
     }
@@ -118,6 +120,51 @@ public final class ShopTransactionUtil {
                 continue;
             }
             int taken = Math.min(stack.getCount(), remaining);
+            stack.shrink(taken);
+            remaining -= taken;
+        }
+        return remaining;
+    }
+
+    /**
+     * NBT-preserving variant of {@link #removeItems}. Removes up to {@code quantity} items
+     * matching the target (+ optional NBT filter) from the player's inventory AND returns
+     * split copies of the actual stacks that were consumed, NBT intact. Used by the barter
+     * payment path so the owner's storage receives the exact enchanted/tagged items the
+     * buyer paid with rather than freshly-minted plain stacks.
+     *
+     * <p>If the full quantity cannot be matched, no items are removed and an empty list is
+     * returned — call sites should treat an empty result identically to the old
+     * {@code removeItems() == false} branch.
+     */
+    public static List<ItemStack> collectAndRemoveItems(Inventory inventory, Item target, int quantity,
+                                                        boolean nbtAware, @Nullable CompoundTag requiredTag) {
+        if (quantity <= 0) return new ArrayList<>();
+        int available = countItems(inventory, target, nbtAware, requiredTag);
+        if (available < quantity) return new ArrayList<>();
+
+        List<ItemStack> collected = new ArrayList<>();
+        int remaining = quantity;
+        remaining = collectFromSlots(inventory.items, target, remaining, nbtAware, requiredTag, collected);
+        remaining = collectFromSlots(inventory.offhand, target, remaining, nbtAware, requiredTag, collected);
+        // Guarded by the countItems pre-check above, but defensively roll back if anything slipped.
+        if (remaining != 0) {
+            insertIntoInventory(inventory, collected);
+            return new ArrayList<>();
+        }
+        return collected;
+    }
+
+    private static int collectFromSlots(NonNullList<ItemStack> slots, Item target, int remaining,
+                                        boolean nbtAware, @Nullable CompoundTag requiredTag,
+                                        List<ItemStack> collected) {
+        for (ItemStack stack : slots) {
+            if (remaining <= 0) break;
+            if (!NbtMatchUtil.matches(stack, target, nbtAware, requiredTag)) continue;
+            int taken = Math.min(stack.getCount(), remaining);
+            ItemStack portion = stack.copy();
+            portion.setCount(taken);
+            collected.add(portion);
             stack.shrink(taken);
             remaining -= taken;
         }

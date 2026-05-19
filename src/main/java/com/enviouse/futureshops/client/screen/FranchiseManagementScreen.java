@@ -38,7 +38,7 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
     public FranchiseManagementScreen(boolean inFranchise, UUID franchiseId, String franchiseName,
                                      boolean isLeader, List<FranchiseMemberEntry> members,
                                      boolean hasPendingInvite, String pendingFranchiseName) {
-        super(Component.literal("Franchise Management"));
+        super(Component.translatable("gui.futureshops.franchise_mgmt.title"));
         this.inFranchise = inFranchise;
         this.franchiseId = franchiseId;
         this.franchiseName = franchiseName;
@@ -73,7 +73,7 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
         visibleMembers = Math.max(2, (guiH - 140) / 22);
 
         // Back button (always at the left)
-        addRenderableWidget(Button.builder(Component.literal("§7← Back"), button ->
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.cart.back"), button ->
                         ShopPackets.CHANNEL.sendToServer(new C2SOpenBalanceUiPacket()))
                 .bounds(guiLeft + 6, guiTop + guiH - 22, 50, 16)
                 .build());
@@ -88,27 +88,27 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
         } else {
             closeRightEdge = guiLeft + guiW - 6;
         }
-        addRenderableWidget(Button.builder(Component.literal("Close"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.baltop.close"), button -> onClose())
                 .bounds(closeRightEdge - 50, guiTop + guiH - 22, 50, 16)
                 .build());
 
         if (!inFranchise) {
             // Show pending invite or "no franchise" state
             if (hasPendingInvite) {
-                addRenderableWidget(Button.builder(Component.literal("§a✓ Accept"), button ->
+                addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.franchise_mgmt.accept"), button ->
                                 ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("ACCEPT", "")))
                         .bounds(guiLeft + guiW / 2 - 60, guiTop + 100, 55, 16)
                         .build());
-                addRenderableWidget(Button.builder(Component.literal("§c✗ Decline"), button ->
+                addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.franchise_mgmt.decline"), button ->
                                 ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("DECLINE", "")))
                         .bounds(guiLeft + guiW / 2 + 5, guiTop + 100, 55, 16)
                         .build());
             }
             // Create franchise — use an EditBox for name input
             inviteBox = new EditBox(this.font, guiLeft + guiW / 2 - 60, guiTop + 140, 120, 16,
-                    Component.literal("Franchise name"));
+                    Component.translatable("gui.futureshops.franchise_mgmt.name_narration"));
             inviteBox.setMaxLength(32);
-            inviteBox.setHint(Component.literal("Enter franchise name..."));
+            inviteBox.setHint(Component.translatable("gui.futureshops.franchise_mgmt.name_hint"));
             addRenderableWidget(inviteBox);
             // Create button — handled in mouseClicked via custom logic (franchise create uses /franchise create)
             return;
@@ -117,12 +117,12 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
         // In franchise — show invite box for leader
         if (isLeader) {
             inviteBox = new EditBox(this.font, guiLeft + guiW - 180, guiTop + 56, 110, 14,
-                    Component.literal("Invite player"));
+                    Component.translatable("gui.futureshops.franchise_mgmt.invite_narration"));
             inviteBox.setMaxLength(16);
-            inviteBox.setHint(Component.literal("Player name..."));
+            inviteBox.setHint(Component.translatable("gui.futureshops.franchise_mgmt.invite_hint"));
             addRenderableWidget(inviteBox);
 
-            addRenderableWidget(Button.builder(Component.literal("§a+ Invite"), button -> {
+            addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.franchise_mgmt.invite_btn"), button -> {
                         if (inviteBox != null && !inviteBox.getValue().isBlank()) {
                             ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("INVITE", inviteBox.getValue().trim()));
                             inviteBox.setValue("");
@@ -134,11 +134,11 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
 
         // Leave / Disband buttons
         if (isLeader) {
-            addRenderableWidget(Button.builder(Component.literal("§c⚠ Disband"), button -> openDisbandConfirm())
+            addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.franchise_mgmt.disband_btn"), button -> openDisbandConfirm())
                     .bounds(guiLeft + guiW - 80, guiTop + guiH - 22, 70, 16)
                     .build());
         } else {
-            addRenderableWidget(Button.builder(Component.literal("§c↩ Leave"), button -> openLeaveConfirm())
+            addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.franchise_mgmt.leave_btn"), button -> openLeaveConfirm())
                     .bounds(guiLeft + guiW - 66, guiTop + guiH - 22, 58, 16)
                     .build());
         }
@@ -266,8 +266,8 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
             // Name + role
             String nameText = member.name();
             if (member.leader()) nameText += " §6[Leader]";
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(nameText, listW - 120),
-                    listX + 38, y + 6, ShopColors.TEXT_STRONG, false);
+            ShopUiUtil.renderScrollingString(graphics, this.font, nameText,
+                    listX + 38, y + 6, listW - 120, ShopColors.TEXT_STRONG);
 
             // Action buttons (leader only, can't kick/promote self)
             if (isLeader && !member.leader()) {

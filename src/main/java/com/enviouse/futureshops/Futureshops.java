@@ -6,7 +6,7 @@ import com.enviouse.futureshops.init.ModBlockEntities;
 import com.enviouse.futureshops.init.ModBlocks;
 import com.enviouse.futureshops.init.ModCreativeTabs;
 import com.enviouse.futureshops.init.ModItems;
-import com.enviouse.futureshops.coin.SpentMintsSavedData;
+import com.enviouse.futureshops.money.SpentMintsSavedData;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.pricing.DynamicPricingEngine;
@@ -51,6 +51,9 @@ public class Futureshops {
         ModItems.ITEMS.register(modEventBus);
         ModBlockEntities.BLOCK_ENTITY_TYPES.register(modEventBus);
         ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
+
+        // Legacy id remapping: `futureshops:coin` → `futureshops:money` (Change B rename).
+        MinecraftForge.EVENT_BUS.addListener(this::onMissingItemMappings);
 
         // Register ourselves for server and other game events we are interested in
         MinecraftForge.EVENT_BUS.register(this);
@@ -101,6 +104,7 @@ public class Futureshops {
         BalanceManager.clear();
         DynamicPricingEngine.reset();
         StockRefreshScheduler.reset();
+        com.enviouse.futureshops.server.shop.ShopConfigClipboard.clearAll();
         LOGGER.info("FutureShops server stopping.");
     }
 
@@ -112,14 +116,39 @@ public class Futureshops {
         }
     }
 
+    /**
+     * Legacy save-compat: prior releases registered the currency item as
+     * {@code futureshops:coin}. The Change B rename moved it to {@code futureshops:money};
+     * without this handler every existing world's coin stacks (in chests, inventories,
+     * dropped items) would be wiped on load. Forge fires {@code MissingMappingsEvent}
+     * during registry load for any saved id that has no live registry entry — we remap
+     * ours inline here.
+     */
+    public void onMissingItemMappings(net.minecraftforge.registries.MissingMappingsEvent event) {
+        for (var mapping : event.getMappings(net.minecraftforge.registries.ForgeRegistries.Keys.ITEMS, MODID)) {
+            if ("coin".equals(mapping.getKey().getPath())) {
+                mapping.remap(ModItems.MONEY_ITEM.get());
+                LOGGER.info("Remapped legacy item id futureshops:coin -> futureshops:money");
+            }
+        }
+    }
+
     // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
-    @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
+    @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.MOD, value = net.minecraftforge.api.distmarker.Dist.CLIENT)
     public static class ClientModEvents {
 
         @SubscribeEvent
         public static void onClientSetup(FMLClientSetupEvent event) {
-            // Some client setup code
+            // Change C: the currency item uses a single unified texture (dollar_bill) regardless
+            // of stack count, so no item-property override is registered here anymore.
             LOGGER.info("FutureShops client setup complete.");
+        }
+
+        @SubscribeEvent
+        public static void onRegisterRenderers(net.minecraftforge.client.event.EntityRenderersEvent.RegisterRenderers event) {
+            event.registerBlockEntityRenderer(
+                    ModBlockEntities.SHOP_BLOCK_ENTITY.get(),
+                    com.enviouse.futureshops.client.shop.ShopBlockGeoRenderer::new);
         }
     }
 }

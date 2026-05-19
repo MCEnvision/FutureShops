@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.network.packets;
 
 import com.enviouse.futureshops.client.ShopClientPacketHandler;
+import com.enviouse.futureshops.server.shop.ShopResultCode;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
@@ -13,7 +14,7 @@ public record S2CBarterResponsePacket(
         boolean success,
         String shopId,
         String recipeId,
-        String errorCode,
+        ShopResultCode errorCode,
         int multiplier,
         int outputQuantity) {
 
@@ -21,19 +22,26 @@ public record S2CBarterResponsePacket(
         buffer.writeBoolean(packet.success);
         buffer.writeUtf(packet.shopId);
         buffer.writeUtf(packet.recipeId);
-        buffer.writeUtf(packet.errorCode);
+        // Serialize by name for forward/backward tolerance against enum reorderings.
+        buffer.writeUtf(packet.errorCode.name());
         buffer.writeVarInt(packet.multiplier);
         buffer.writeVarInt(packet.outputQuantity);
     }
 
     public static S2CBarterResponsePacket decode(FriendlyByteBuf buffer) {
-        return new S2CBarterResponsePacket(
-                buffer.readBoolean(),
-                buffer.readUtf(),
-                buffer.readUtf(),
-                buffer.readUtf(),
-                buffer.readVarInt(),
-                buffer.readVarInt());
+        boolean success = buffer.readBoolean();
+        String shopId = buffer.readUtf();
+        String recipeId = buffer.readUtf();
+        String rawCode = buffer.readUtf();
+        ShopResultCode code;
+        try {
+            code = ShopResultCode.valueOf(rawCode);
+        } catch (IllegalArgumentException ex) {
+            code = ShopResultCode.SERVER_ERROR;
+        }
+        int multiplier = buffer.readVarInt();
+        int outputQuantity = buffer.readVarInt();
+        return new S2CBarterResponsePacket(success, shopId, recipeId, code, multiplier, outputQuantity);
     }
 
     public static void handle(S2CBarterResponsePacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

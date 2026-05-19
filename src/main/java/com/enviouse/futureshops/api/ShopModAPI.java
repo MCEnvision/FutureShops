@@ -2,8 +2,8 @@ package com.enviouse.futureshops.api;
 
 import com.enviouse.futureshops.catalog.ShopCatalog;
 import com.enviouse.futureshops.catalog.ShopDefinition;
-import com.enviouse.futureshops.coin.CoinValidationResult;
-import com.enviouse.futureshops.coin.CoinValidationService;
+import com.enviouse.futureshops.money.MoneyValidationResult;
+import com.enviouse.futureshops.money.MoneyValidationService;
 import com.enviouse.futureshops.data.TransactionHistoryEntry;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
@@ -36,7 +36,7 @@ import java.util.UUID;
  * ShopModAPI.openShopForPlayer(serverPlayer, "default");
  *
  * // Validate a coin item
- * boolean valid = ShopModAPI.validateCoinItem(stack);
+ * boolean valid = ShopModAPI.validateMoneyItem(stack);
  *
  * // Listen to events
  * MinecraftForge.EVENT_BUS.addListener((ShopTransactionEvent.Post event) -> {
@@ -154,18 +154,18 @@ public final class ShopModAPI {
     // ═══════════════════════════════════════════════
 
     /**
-     * Validates a CoinItem stack. Returns true if the coin passes all integrity checks
+     * Validates a MoneyItem stack. Returns true if the coin passes all integrity checks
      * (checksum, age, mint-ID uniqueness).
      */
-    public static boolean validateCoinItem(ItemStack stack) {
-        return CoinValidationService.validate(stack).valid();
+    public static boolean validateMoneyItem(ItemStack stack) {
+        return MoneyValidationService.validate(stack).valid();
     }
 
     /**
      * Returns detailed validation result for a coin item stack.
      */
-    public static CoinValidationResult validateCoinItemDetailed(ItemStack stack) {
-        return CoinValidationService.validate(stack);
+    public static MoneyValidationResult validateMoneyItemDetailed(ItemStack stack) {
+        return MoneyValidationService.validate(stack);
     }
 
     /**
@@ -175,7 +175,7 @@ public final class ShopModAPI {
         long total = 0L;
         for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
             ItemStack stack = player.getInventory().getItem(i);
-            CoinValidationResult result = CoinValidationService.validate(stack);
+            MoneyValidationResult result = MoneyValidationService.validate(stack);
             if (result.valid()) {
                 total += result.denominationMinorUnits() * stack.getCount();
             }

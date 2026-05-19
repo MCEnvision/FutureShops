@@ -42,8 +42,19 @@ public record C2SVerifyCartPacket(List<CartLine> lines) {
         buffer.writeCollection(packet.lines, CartLine::encode);
     }
 
+    private static final int MAX_LINES = 256;
+
     public static C2SVerifyCartPacket decode(FriendlyByteBuf buffer) {
-        return new C2SVerifyCartPacket(buffer.readList(CartLine::decode));
+        int count = buffer.readVarInt();
+        if (count < 0 || count > MAX_LINES) {
+            throw new io.netty.handler.codec.DecoderException(
+                    "C2SVerifyCartPacket lines out of range: " + count);
+        }
+        java.util.List<CartLine> lines = new java.util.ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            lines.add(CartLine.decode(buffer));
+        }
+        return new C2SVerifyCartPacket(lines);
     }
 
     public static void handle(C2SVerifyCartPacket packet, Supplier<NetworkEvent.Context> ctx) {

@@ -18,7 +18,7 @@ public final class ModCreativeTabs {
                     .icon(() -> new ItemStack(ModItems.SHOP_BLOCK_ITEM.get()))
                     .displayItems((params, output) -> {
                         output.accept(ModItems.SHOP_BLOCK_ITEM.get());
-                        output.accept(ModItems.COIN_ITEM.get());
+                        output.accept(ModItems.MONEY_ITEM.get());
                     })
                     .build()
     );

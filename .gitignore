@@ -19,3 +19,11 @@ hs_err_pid*
 
 # Common working directory
 run
+
+# Session-local / tooling
+.claude/
+CLAUDE.md
+AGENTS.md
+
+# Local-only design / spec / reference materials
+Mod Implementation/

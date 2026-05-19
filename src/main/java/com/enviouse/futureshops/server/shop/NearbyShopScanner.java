@@ -20,8 +20,6 @@ import java.util.UUID;
  * iterating all block entities in range.
  */
 public final class NearbyShopScanner {
-    /** Default scan radius in blocks. */
-    public static final int DEFAULT_RADIUS = 25;
     /** Maximum number of nearby shops to return. */
     public static final int MAX_RESULTS = 20;
 
@@ -32,10 +30,13 @@ public final class NearbyShopScanner {
      * Scans for player-owned shop blocks within {@code radius} blocks of the player.
      *
      * @param player the scanning player
-     * @param radius the search radius in blocks
+     * @param radius the search radius in blocks; {@code 0} or negative means unlimited (every shop in
+     *               the current dimension whose chunk is currently loaded is considered)
      * @return a sorted list of nearby shop entries (closest first)
      */
     public static List<NearbyShopEntry> scanNearby(ServerPlayer player, int radius) {
+        boolean unlimited = radius <= 0;
+        long radiusSq = (long) radius * radius;
         Level level = player.level();
         BlockPos center = player.blockPosition();
         List<NearbyShopEntry> results = new ArrayList<>();
@@ -59,7 +60,7 @@ public final class NearbyShopScanner {
 
             BlockPos shopPos = BlockPos.of(entry.getKey());
             double distance = center.distSqr(shopPos);
-            if (distance > (double) radius * radius) {
+            if (!unlimited && distance > (double) radiusSq) {
                 continue;
             }
 

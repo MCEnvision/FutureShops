@@ -43,7 +43,7 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
     public BalanceOverviewScreen(UUID playerUuid, String playerName, long balanceMinorUnits, String currencyName, int currencyDecimals,
                                  long totalRevenueMinor, long pendingSettlementMinor, int shopCount, int listingCount,
                                  int totalStock, int lowSupplyCount, List<OwnedShopSummary> shopSummaries, List<String> alerts) {
-        super(Component.literal("Marketplace Profile"));
+        super(Component.translatable("gui.futureshops.balance.title"));
         this.playerUuid = playerUuid;
         this.playerName = playerName;
         this.balanceMinorUnits = balanceMinorUnits;
@@ -68,19 +68,19 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         visibleShopCards = Math.max(2, (guiH - 200) / 52);
         visibleAlerts = Math.max(1, (guiH - 200) / 18);
 
-        addRenderableWidget(Button.builder(Component.literal("⚑ Franchise"), button ->
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.balance.franchise"), button ->
                         ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("OPEN", "")))
                 .bounds(guiLeft + guiW - 286, guiTop + guiH - 24, 68, 18)
                 .build());
-        addRenderableWidget(Button.builder(Component.literal("Storefront"), button ->
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.balance.storefront"), button ->
                         ShopPackets.CHANNEL.sendToServer(new C2SOpenShopPacket("default")))
                 .bounds(guiLeft + guiW - 214, guiTop + guiH - 24, 68, 18)
                 .build());
-        addRenderableWidget(Button.builder(Component.literal("Leaders"), button ->
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.balance.leaders"), button ->
                         ShopPackets.CHANNEL.sendToServer(new C2SOpenBalTopUiPacket(1)))
                 .bounds(guiLeft + guiW - 142, guiTop + guiH - 24, 60, 18)
                 .build());
-        addRenderableWidget(Button.builder(Component.literal("Close"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.balance.close"), button -> onClose())
                 .bounds(guiLeft + guiW - 78, guiTop + guiH - 24, 60, 18)
                 .build());
     }
@@ -104,7 +104,8 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.renderElevatedCard(graphics, guiLeft + 10, guiTop + 10, guiW - 20, 56);
         ShopUiUtil.renderPlayerFace(graphics, playerUuid, guiLeft + 18, guiTop + 18, 40);
         graphics.drawString(this.font, this.title, guiLeft + 68, guiTop + 18, ShopColors.TEXT_STRONG, false);
-        graphics.drawString(this.font, this.font.plainSubstrByWidth(playerName, 132), guiLeft + 68, guiTop + 32, ShopColors.TEXT_MUTED, false);
+        ShopUiUtil.renderScrollingString(graphics, this.font, playerName,
+                guiLeft + 68, guiTop + 32, 132, ShopColors.TEXT_MUTED);
         String balanceText = formatMinorUnits(balanceMinorUnits) + " " + currencyName;
         graphics.drawString(this.font, balanceText, guiLeft + guiW - this.font.width(balanceText) - 18, guiTop + 24, ShopColors.TEXT_CURRENCY, false);
         boolean warn = lowSupplyCount > 0;
@@ -121,7 +122,7 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         int cardW = (guiW - 20 - (gap * 3)) / 4;
         renderMetricCard(graphics, guiLeft + 10, cardY, cardW, "Revenue", formatMinorUnits(totalRevenueMinor), ShopColors.TEXT_CURRENCY);
         renderMetricCard(graphics, guiLeft + 10 + (cardW + gap), cardY, cardW, "Pending", formatMinorUnits(pendingSettlementMinor), ShopColors.TEXT_BARTER_SOFT);
-        renderMetricCard(graphics, guiLeft + 10 + (cardW + gap) * 2, cardY, cardW, "Shops", shopCount + " / " + listingCount + " listings", ShopColors.ACCENT_PRIMARY);
+        renderShopsListingsCard(graphics, guiLeft + 10 + (cardW + gap) * 2, cardY, cardW);
         renderMetricCard(graphics, guiLeft + 10 + (cardW + gap) * 3, cardY, cardW, "Supply", totalStock + " items tracked", ShopColors.TEXT_MUTED);
     }
 
@@ -131,6 +132,36 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         graphics.fill(x, y, x + width, y + 2, accent);
         graphics.drawString(this.font, title.toUpperCase(), x + 8, y + 8, ShopColors.TEXT_FAINT, false);
         graphics.drawString(this.font, this.font.plainSubstrByWidth(value, width - 16), x + 8, y + 22, accent, false);
+    }
+
+    /**
+     * Redesigned Shops / Listings metric card. The original "3 / 2 listings" caption read
+     * like a limit ratio; users kept asking whether they were capped. New layout uses a
+     * split "SHOPS │ LISTINGS" header with the two numbers underneath so each count is
+     * unambiguously tied to its label.
+     */
+    private void renderShopsListingsCard(GuiGraphics graphics, int x, int y, int width) {
+        ShopUiUtil.renderCard(graphics, x, y, width, 44);
+        graphics.fill(x, y, x + width, y + 2, ShopColors.ACCENT_PRIMARY);
+        int midX = x + width / 2;
+        // Thin vertical separator between the two columns.
+        graphics.fill(midX, y + 6, midX + 1, y + 40, ShopColors.BORDER_MUTED);
+
+        // Center the label + value pair in each half so the SHOPS and LISTINGS halves look
+        // like matching columns (labels above numbers, both axis-aligned to the sub-column center)
+        // instead of label-left / label-right with numbers floating in between.
+        String shopsLabel = "SHOPS";
+        String listingsLabel = "LISTINGS";
+        String shopsVal = Integer.toString(shopCount);
+        String listingsVal = Integer.toString(listingCount);
+
+        int leftCenter = x + width / 4;
+        int rightCenter = x + (3 * width) / 4;
+
+        graphics.drawString(this.font, shopsLabel, leftCenter - this.font.width(shopsLabel) / 2, y + 8, ShopColors.TEXT_FAINT, false);
+        graphics.drawString(this.font, listingsLabel, rightCenter - this.font.width(listingsLabel) / 2, y + 8, ShopColors.TEXT_FAINT, false);
+        graphics.drawString(this.font, shopsVal, leftCenter - this.font.width(shopsVal) / 2, y + 22, ShopColors.ACCENT_PRIMARY, false);
+        graphics.drawString(this.font, listingsVal, rightCenter - this.font.width(listingsVal) / 2, y + 22, ShopColors.ACCENT_PRIMARY, false);
     }
 
     private void renderOwnedShops(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -167,15 +198,24 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
             }
             BlockPos pos = BlockPos.of(summary.shopPosLong());
             String title = summary.listingCount() + " listing" + (summary.listingCount() == 1 ? "" : "s") + " • " + displayDimension(summary.dimensionKey());
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(title, panelW - 76), panelX + 36, y + 6, ShopColors.TEXT_STRONG, false);
+            ShopUiUtil.renderScrollingString(graphics, this.font, title,
+                    panelX + 36, y + 6, panelW - 76, ShopColors.TEXT_STRONG);
             graphics.drawString(this.font, pos.getX() + ", " + pos.getY() + ", " + pos.getZ(), panelX + 36, y + 18, ShopColors.TEXT_MUTED, false);
             graphics.drawString(this.font, "Stock " + summary.totalStock() + " • Revenue " + formatMinorUnits(summary.lifetimeMinor()), panelX + 36, y + 30, ShopColors.TEXT_CURRENCY, false);
             if (summary.lowStockListings() > 0) {
+                // Item icons in owned-shop cards render at z≈+150 internally; lift pills above
+                // that layer so the "low"/"linked" badges can't be occluded by a wide icon.
+                graphics.pose().pushPose();
+                graphics.pose().translate(0.0F, 0.0F, 200.0F);
                 ShopUiUtil.renderPill(graphics, this.font, panelX + panelW - 88, y + 6, summary.lowStockListings() + " low",
                         ShopColors.SURFACE_BASE, ShopColors.STATUS_DANGER, ShopColors.STATUS_DANGER);
+                graphics.pose().popPose();
             } else if (summary.linked()) {
+                graphics.pose().pushPose();
+                graphics.pose().translate(0.0F, 0.0F, 200.0F);
                 ShopUiUtil.renderPill(graphics, this.font, panelX + panelW - 88, y + 6, "linked",
                         ShopColors.SURFACE_BASE, ShopColors.STATUS_INFO, ShopColors.STATUS_INFO);
+                graphics.pose().popPose();
             }
             if (hovered) {
                 String visitText = "§a▶ Click to visit";
@@ -209,7 +249,10 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
             int y = lineY + i * 18;
             graphics.fill(panelX + 8, y, panelX + panelW - 8, y + 16, i % 2 == 0 ? ShopColors.SURFACE_RAISED : ShopColors.SURFACE_OVERLAY);
             graphics.fill(panelX + 8, y, panelX + 10, y + 16, ShopColors.STATUS_DANGER);
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(alerts.get(i + alertScroll), panelW - 24), panelX + 14, y + 4, ShopColors.TEXT_STRONG, false);
+            // Use a scrolling (ping-pong) string instead of hard-clipping so long alert lines —
+            // e.g. "<shop name> low at <dimension> <x, y, z>" — never swallow the coordinates.
+            ShopUiUtil.renderScrollingString(graphics, this.font, alerts.get(i + alertScroll),
+                    panelX + 14, y + 4, panelW - 24, ShopColors.TEXT_STRONG);
         }
         graphics.disableScissor();
     }

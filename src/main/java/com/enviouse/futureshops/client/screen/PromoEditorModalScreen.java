@@ -8,7 +8,10 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
+
+import java.util.Locale;
 
 public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
     private final Screen parent;
@@ -31,8 +34,12 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
     private ConfirmationModal clearConfirm;
 
     public PromoEditorModalScreen(Screen parent) {
-        super(Component.literal("Promo Editor"));
+        super(Component.translatable("gui.futureshops.promo_editor.title"));
         this.parent = parent;
+    }
+
+    private static Component typeLabel(String type) {
+        return Component.translatable("gui.futureshops.promo_editor.type." + type.toLowerCase(Locale.ROOT));
     }
 
     @Override
@@ -47,62 +54,64 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
 
         // Item 36: Type is a button that cycles through options
         typeButton = addRenderableWidget(Button.builder(
-                Component.literal("§e" + PROMO_TYPES[selectedTypeIndex]),
+                typeLabel(PROMO_TYPES[selectedTypeIndex]),
                 button -> {
                     selectedTypeIndex = (selectedTypeIndex + 1) % PROMO_TYPES.length;
-                    button.setMessage(Component.literal("§e" + PROMO_TYPES[selectedTypeIndex]));
+                    button.setMessage(typeLabel(PROMO_TYPES[selectedTypeIndex]));
                     // Item 37: Flash toggle binds to FLASH type
                     if ("FLASH".equals(PROMO_TYPES[selectedTypeIndex])) {
                         flash = true;
-                        if (flashButton != null) flashButton.setMessage(Component.literal("Flash: ON"));
+                        if (flashButton != null) flashButton.setMessage(Component.translatable("gui.futureshops.promo_editor.flash_on"));
                     }
                     updateFieldVisibility();
                 })
                 .bounds(fieldX, guiTop + 26, fieldW, 14)
                 .build());
 
-        valueBox = new EditBox(this.font, fieldX, guiTop + 44, fieldW, 14, Component.literal("Value"));
+        valueBox = new EditBox(this.font, fieldX, guiTop + 44, fieldW, 14, Component.translatable("gui.futureshops.promo_editor.value"));
         valueBox.setValue("10.00");
         valueBox.setMaxLength(10);
         addRenderableWidget(valueBox);
 
-        buyXBox = new EditBox(this.font, fieldX, guiTop + 62, fieldW / 2 - 4, 14, Component.literal("Buy X"));
+        buyXBox = new EditBox(this.font, fieldX, guiTop + 62, fieldW / 2 - 4, 14, Component.translatable("gui.futureshops.promo_editor.buy_x"));
         buyXBox.setValue("1");
         buyXBox.setMaxLength(4);
         addRenderableWidget(buyXBox);
 
-        buyYBox = new EditBox(this.font, fieldX + fieldW / 2 + 4, guiTop + 62, fieldW / 2 - 4, 14, Component.literal("Get Y"));
+        buyYBox = new EditBox(this.font, fieldX + fieldW / 2 + 4, guiTop + 62, fieldW / 2 - 4, 14, Component.translatable("gui.futureshops.promo_editor.get_y"));
         buyYBox.setValue("1");
         buyYBox.setMaxLength(4);
         addRenderableWidget(buyYBox);
 
-        startBox = new EditBox(this.font, fieldX, guiTop + 80, fieldW / 2 - 4, 14, Component.literal("Start (min)"));
+        startBox = new EditBox(this.font, fieldX, guiTop + 80, fieldW / 2 - 4, 14, Component.translatable("gui.futureshops.promo_editor.start"));
         startBox.setValue("0");
         startBox.setMaxLength(6);
-        startBox.setHint(Component.literal("Start (min)"));
+        startBox.setHint(Component.translatable("gui.futureshops.promo_editor.start"));
         addRenderableWidget(startBox);
 
-        durationBox = new EditBox(this.font, fieldX + fieldW / 2 + 4, guiTop + 80, fieldW / 2 - 4, 14, Component.literal("Length (min)"));
+        durationBox = new EditBox(this.font, fieldX + fieldW / 2 + 4, guiTop + 80, fieldW / 2 - 4, 14, Component.translatable("gui.futureshops.promo_editor.length"));
         durationBox.setValue("0");
         durationBox.setMaxLength(6);
-        durationBox.setHint(Component.literal("Length (min)"));
+        durationBox.setHint(Component.translatable("gui.futureshops.promo_editor.length"));
         addRenderableWidget(durationBox);
 
-        flashButton = addRenderableWidget(Button.builder(Component.literal("Flash: OFF"), button -> {
+        flashButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.promo_editor.flash_off"), button -> {
                     flash = !flash;
-                    button.setMessage(Component.literal(flash ? "Flash: ON" : "Flash: OFF"));
+                    button.setMessage(Component.translatable(flash
+                            ? "gui.futureshops.promo_editor.flash_on"
+                            : "gui.futureshops.promo_editor.flash_off"));
                 })
                 .bounds(fieldX, guiTop + 98, 96, 14)
                 .build());
 
         int btnW = Math.max(50, (modalW - 20) / 3 - 4);
-        addRenderableWidget(Button.builder(Component.literal("§aApply"), button -> applyPromo())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.promo_editor.apply"), button -> applyPromo())
                 .bounds(guiLeft + 10, guiTop + modalH - 30, btnW, 18)
                 .build());
-        addRenderableWidget(Button.builder(Component.literal("§cClear"), button -> openClearConfirm())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.promo_editor.clear"), button -> openClearConfirm())
                 .bounds(guiLeft + 14 + btnW, guiTop + modalH - 30, btnW, 18)
                 .build());
-        addRenderableWidget(Button.builder(Component.literal("§7Back"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.promo_editor.back"), button -> onClose())
                 .bounds(guiLeft + 18 + btnW * 2, guiTop + modalH - 30, btnW, 18)
                 .build());
 
@@ -128,20 +137,23 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.drawSoftOutline(graphics, guiLeft, guiTop, modalW, modalH, ShopColors.BORDER_STRONG, ShopColors.BORDER_SUBTLE);
         graphics.fill(guiLeft, guiTop, guiLeft + modalW, guiTop + 2, ShopColors.ACCENT_PROMO_HI);
 
-        graphics.drawString(this.font, "§d⚡ Promo Editor", guiLeft + 8, guiTop + 8, ShopColors.TEXT_STRONG, false);
+        graphics.drawString(this.font, I18n.get("gui.futureshops.promo_editor.header"), guiLeft + 8, guiTop + 8, ShopColors.TEXT_STRONG, false);
         String itemId = PlayerShopClientState.selectedListing() == null ? "" : PlayerShopClientState.selectedListing().itemId();
-        String itemName = itemId.isBlank() ? "(none)" : ShopUiUtil.getItemDisplayName(itemId);
-        graphics.drawString(this.font, this.font.plainSubstrByWidth("Item: " + itemName, modalW - 16), guiLeft + 8, guiTop + 16, ShopColors.TEXT_MUTED, false);
+        String itemName = itemId.isBlank()
+                ? I18n.get("gui.futureshops.promo_editor.item_none")
+                : ShopUiUtil.getItemDisplayName(itemId);
+        graphics.drawString(this.font, this.font.plainSubstrByWidth(
+                I18n.get("gui.futureshops.promo_editor.item_prefix", itemName), modalW - 16), guiLeft + 8, guiTop + 16, ShopColors.TEXT_MUTED, false);
 
-        drawLabel(graphics, "Type", guiTop + 29);
+        drawLabel(graphics, I18n.get("gui.futureshops.promo_editor.label.type"), guiTop + 29);
         // Item 37: Conditionally show label based on type
         boolean isBuyXGetY = "BUY_X_GET_Y".equals(PROMO_TYPES[selectedTypeIndex]);
         if (!isBuyXGetY) {
-            drawLabel(graphics, "- %/$", guiTop + 47);
+            drawLabel(graphics, I18n.get("gui.futureshops.promo_editor.label.pct_flat"), guiTop + 47);
         } else {
-            drawLabel(graphics, "BuyX/GetY", guiTop + 65);
+            drawLabel(graphics, I18n.get("gui.futureshops.promo_editor.label.buy_x_get_y"), guiTop + 65);
         }
-        drawLabel(graphics, "Schedule", guiTop + 83);
+        drawLabel(graphics, I18n.get("gui.futureshops.promo_editor.label.schedule"), guiTop + 83);
 
         // Translate the minutes entered into human-readable start/length so owners don't have to do math.
         String scheduleHint = formatScheduleHint(parseInt(startBox.getValue(), 0), parseInt(durationBox.getValue(), 0));
@@ -167,12 +179,12 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
 
     private String formatScheduleHint(int startMin, int durationMin) {
         String duration = durationMin <= 0
-                ? "§7duration: §funtil cleared"
-                : "§7lasts §f" + humanMinutes(durationMin);
+                ? I18n.get("gui.futureshops.promo_editor.schedule.duration_until_cleared")
+                : I18n.get("gui.futureshops.promo_editor.schedule.lasts", humanMinutes(durationMin));
         String start = startMin <= 0
-                ? "§7starts: §fnow"
-                : "§7starts in §f" + humanMinutes(startMin);
-        return start + " §8• " + duration;
+                ? I18n.get("gui.futureshops.promo_editor.schedule.starts_now")
+                : I18n.get("gui.futureshops.promo_editor.schedule.starts_in", humanMinutes(startMin));
+        return start + I18n.get("gui.futureshops.promo_editor.schedule.separator") + duration;
     }
 
     private static String humanMinutes(int minutes) {
@@ -216,15 +228,15 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
         }
         String itemName = ShopUiUtil.getItemDisplayName(PlayerShopClientState.selectedListing().itemId());
         clearConfirm = new ConfirmationModal(
-                "§c⚠ Clear Promo",
+                I18n.get("gui.futureshops.promo_editor.clear_title"),
                 java.util.List.of(
-                        ConfirmationModal.SummaryLine.text("§fRemove promo from §e" + itemName + "§f?"),
-                        ConfirmationModal.SummaryLine.text("§7Schedule, value, and flash flag will be lost.")),
-                "§cThis cannot be undone.",
+                        ConfirmationModal.SummaryLine.text(I18n.get("gui.futureshops.promo_editor.clear_line1", itemName)),
+                        ConfirmationModal.SummaryLine.text(I18n.get("gui.futureshops.promo_editor.clear_line2"))),
+                I18n.get("gui.futureshops.promo_editor.clear_warning"),
                 modal -> {
                     modal.setProcessing();
                     clearPromo();
-                    modal.setSuccess("Promo cleared");
+                    modal.setSuccess(I18n.get("gui.futureshops.promo_editor.clear_success"));
                 },
                 () -> clearConfirm = null);
     }

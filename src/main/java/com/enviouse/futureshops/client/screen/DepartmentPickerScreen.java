@@ -31,7 +31,7 @@ public class DepartmentPickerScreen extends Screen implements ShopScreenMarker {
     private String lastQuery = "";
 
     public DepartmentPickerScreen(Screen parent) {
-        super(Component.literal("Department Picker"));
+        super(Component.translatable("gui.futureshops.department.title"));
         this.parent = parent;
     }
 
@@ -42,7 +42,7 @@ public class DepartmentPickerScreen extends Screen implements ShopScreenMarker {
         guiLeft = (this.width - modalW) / 2;
         guiTop = (this.height - modalH) / 2;
 
-        searchBox = new EditBox(this.font, guiLeft + 8, guiTop + 22, modalW - 16, 14, Component.literal("Search departments..."));
+        searchBox = new EditBox(this.font, guiLeft + 8, guiTop + 22, modalW - 16, 14, Component.translatable("gui.futureshops.department.search_hint"));
         searchBox.setMaxLength(48);
         searchBox.setResponder(query -> {
             lastSearchMs = System.currentTimeMillis();
@@ -59,11 +59,11 @@ public class DepartmentPickerScreen extends Screen implements ShopScreenMarker {
 
         // Buttons at the bottom
         int btnW = (modalW - 24) / 3;
-        addRenderableWidget(Button.builder(Component.literal("§aSet"), button -> applyDepartment())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.department.set"), button -> applyDepartment())
                 .bounds(guiLeft + 4, guiTop + modalH - 22, btnW, 16).build());
-        addRenderableWidget(Button.builder(Component.literal("§cClear"), button -> clearDepartment())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.department.clear"), button -> clearDepartment())
                 .bounds(guiLeft + 8 + btnW, guiTop + modalH - 22, btnW, 16).build());
-        addRenderableWidget(Button.builder(Component.literal("§7Back"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.department.back"), button -> onClose())
                 .bounds(guiLeft + 12 + btnW * 2, guiTop + modalH - 22, btnW, 16).build());
 
         // Trigger initial search

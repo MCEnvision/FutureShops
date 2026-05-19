@@ -130,8 +130,8 @@ public final class ShopColors {
     public static final int INVENTORY_HIGHLIGHT = 0x4455AA77;
     public static final int STORAGE_LINKED      = STATUS_INFO;
 
-    public static final int DISCOUNT_BG         = STATUS_WARNING;
-    public static final int DISCOUNT_TEXT       = 0xFF1A1205;
+    public static final int DISCOUNT_BG         = 0xFFD92030; // solid red body
+    public static final int DISCOUNT_TEXT       = 0xFF000000; // pure black text for contrast
     public static final int PROFILE_BG          = SURFACE_BASE;
     public static final int PROFILE_BORDER      = ACCENT_PRIMARY;
     public static final int OWNER_BG            = SURFACE_BASE;

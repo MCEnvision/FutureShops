@@ -1,9 +1,9 @@
 package com.enviouse.futureshops.command;
 
-import com.enviouse.futureshops.coin.CoinMintService;
-import com.enviouse.futureshops.coin.CoinNbtKeys;
-import com.enviouse.futureshops.coin.SpentMintsSavedData;
-import com.enviouse.futureshops.event.CoinMintEvent;
+import com.enviouse.futureshops.money.MoneyMintService;
+import com.enviouse.futureshops.money.MoneyNbtKeys;
+import com.enviouse.futureshops.money.SpentMintsSavedData;
+import com.enviouse.futureshops.event.MoneyMintEvent;
 import com.enviouse.futureshops.init.ModItems;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import net.minecraft.nbt.CompoundTag;
@@ -167,25 +167,26 @@ public final class WithdrawCommand {
     }
 
     private static boolean giveAllBills(ServerPlayer player, List<BillEntry> bills) {
-        Item coinItem = ModItems.COIN_ITEM.get();
-        SpentMintsSavedData mintData = SpentMintsSavedData.get(player.getServer());
+                SpentMintsSavedData mintData = SpentMintsSavedData.get(player.getServer());
 
         for (BillEntry bill : bills) {
-            ItemStack stack = CoinMintService.mintStack(player, bill.count, bill.denominationMinor);
+            ItemStack stack = MoneyMintService.mintStack(player, bill.count, bill.denominationMinor);
 
-            CompoundTag coinData = stack.getOrCreateTag().getCompound(CoinNbtKeys.ROOT);
+            CompoundTag moneyData = stack.getOrCreateTag().getCompound(MoneyNbtKeys.ROOT);
+            // authorizedCount == batch size; the entire stack shares one mint ID so
+            // it remains stackable with itself across splits.
             mintData.registerMint(
-                    coinData.getString(CoinNbtKeys.MINT_ID),
+                    moneyData.getString(MoneyNbtKeys.MINT_ID),
                     player.getUUID(),
                     bill.denominationMinor,
                     bill.count,
-                    coinData.getLong(CoinNbtKeys.MINT_TIMESTAMP),
-                    coinData.getString(CoinNbtKeys.MINT_SERVER));
+                    moneyData.getLong(MoneyNbtKeys.MINT_TIMESTAMP),
+                    moneyData.getString(MoneyNbtKeys.MINT_SERVER));
 
-            // Fire CoinMintEvent (spec §33)
+            // Fire MoneyMintEvent (spec §33)
             net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
-                    new CoinMintEvent(player.getUUID(), bill.denominationMinor, bill.count,
-                            coinData.getString(CoinNbtKeys.MINT_ID)));
+                    new MoneyMintEvent(player.getUUID(), bill.denominationMinor, bill.count,
+                            moneyData.getString(MoneyNbtKeys.MINT_ID)));
 
             if (!player.getInventory().add(stack)) {
                 return false;

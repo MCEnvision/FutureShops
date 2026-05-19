@@ -7,6 +7,25 @@
 > **Transform your Minecraft server into a thriving marketplace.**
 > FutureShops brings a fully-featured, Amazon-style economy system to Minecraft — complete with server shops, player-owned storefronts, physical currency, bartering, promo sales, leaderboards, and a sleek modern UI — all without a single external texture.
 
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 HERO BANNER  (recommended: 1200×400 or wider, landscape)
+     Suggested shot: a row of decorated player-shop blocks in a market
+     district with the GUI open to one side. This is the first thing
+     visitors see, so make it pop.
+     ═══════════════════════════════════════════════════════════════════════ -->
+
+---
+
+## 🎬 Trailer / Showcase Video
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     🎥 OPTIONAL VIDEO EMBED
+     Paste a YouTube link below — CurseForge will auto-embed it.
+     Suggested: 30–60 sec showcase of placing a shop, listing items,
+     and a buyer walking up to purchase.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<!-- https://www.youtube.com/watch?v=YOUR_VIDEO_ID -->
+
 ---
 
 ## ✨ Feature Highlights
@@ -21,6 +40,14 @@ Browse an infinite-stock admin shop with a gorgeous dark-themed GUI. Categories,
 - 📜 **Transaction history** — filterable log with search, sort, time-window, and push updates
 - 💰 **Balance display** — always know how much you've got
 
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 SCREENSHOT — ShopMainScreen
+     Show: main grid, category sidebar, promo badges, balance footer.
+     ═══════════════════════════════════════════════════════════════════════ -->
+![Server Shop — main grid](https://placehold.co/900x500/1E293B/F8FAFC?text=Server+Shop+%E2%80%94+ShopMainScreen)
+
+---
+
 ### 🏠 Player-Owned Shop Blocks
 Place a **Shop Block**, configure your listings, link your chests, and open for business.
 
@@ -28,11 +55,26 @@ Place a **Shop Block**, configure your listings, link your chests, and open for 
 - 📦 **Single or multi-item mode** — sell one item or up to 12 per block
 - 🏷️ **Custom shop names** — brand your storefront
 - 💵 **Three trade modes**: Money, Barter, or **Both** simultaneously
-- 🔗 **Storage linking** — link chests/barrels for automatic stock management
+- 🔗 **Storage linking** — link chests, barrels, or an entire **Refined Storage network** for automatic stock management
 - 📊 **Owner dashboard** — revenue tracking, settlement claims, stock alerts
 - 🎁 **Owner promo editor** — set percentage discounts, Buy-X-Get-Y deals, flash sales, and scheduled windows
 - 👁️ **Owner preview** — Shift+right-click to test your shop as a visitor
 - 🛒 **Buyer experience** — same polished UI as the server shop, familiar and intuitive
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 SCREENSHOT — Shop Block in-world
+     Show: placed shop block with the 3D GeckoLib model, spinning listing
+     preview, floating nameplate, and owner skin decal on the front.
+     ═══════════════════════════════════════════════════════════════════════ -->
+![Shop Block — in-world](https://placehold.co/900x500/1E293B/F8FAFC?text=Shop+Block+%E2%80%94+3D+model+%2B+nameplate+%2B+owner+head)
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 SCREENSHOT — PlayerShopBlockScreen (owner config)
+     Show: listings list, price/barter fields, storage-link status.
+     ═══════════════════════════════════════════════════════════════════════ -->
+![Player Shop — owner config](https://placehold.co/900x500/1E293B/F8FAFC?text=Player+Shop+%E2%80%94+Owner+Config+Panel)
+
+---
 
 ### 💰 Full Economy System
 A server-authoritative economy that keeps your server fair.
@@ -45,6 +87,20 @@ A server-authoritative economy that keeps your server fair.
   - Example: `/withdraw 132 yes` → 1×$100 + 1×$20 + 1×$10 + 2×$1
 - `/deposit` — convert coins back to balance
 
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 SCREENSHOT — BalanceOverviewScreen
+     Show: player head, balance, revenue, shop count, low-stock warnings.
+     ═══════════════════════════════════════════════════════════════════════ -->
+![Balance Dashboard](https://placehold.co/900x500/1E293B/F8FAFC?text=Balance+Dashboard+%E2%80%94+profile+%2B+revenue)
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 SCREENSHOT — BalTopOverviewScreen
+     Show: top 10 with player heads, transaction/seller/product spotlights.
+     ═══════════════════════════════════════════════════════════════════════ -->
+![Leaderboard — /baltop](https://placehold.co/900x500/1E293B/F8FAFC?text=Leaderboard+%E2%80%94+Top+10+%2B+Spotlights)
+
+---
+
 ### 🪙 Physical Currency (CoinItem)
 Hold your wealth in your hands — or trade it in person.
 
@@ -53,6 +109,16 @@ Hold your wealth in your hands — or trade it in person.
 - 📝 **NBT-based denominations** — coins show their value on hover
 - ♻️ **Deposit validation** — previously spent mint IDs are permanently rejected and destroyed
 - 🗑️ **Invalid coin auto-destroy** — tampered or duplicated coins are automatically destroyed on use
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 SCREENSHOT — Coin Item showcase
+     Reference file: Mod Implementation/DollarBIll.png
+     Show: a Dollar Bill in hand / in inventory with the tooltip
+     visible (value + "Right-click to deposit" hint).
+     ═══════════════════════════════════════════════════════════════════════ -->
+![Coin Item — Dollar Bill](https://placehold.co/600x600/1E293B/F8FAFC?text=CoinItem+%E2%80%94+Dollar+Bill+%28Mod+Implementation%2FDollarBIll.png%29)
+
+---
 
 ### ⚒️ Bartering System
 Not everything has to be about money.
@@ -63,6 +129,15 @@ Not everything has to be about money.
 - 🤝 **Works in player shops too** — owners can set barter items and quantities
 - 🧮 **Smart Max button** — auto-calculates the most you can trade based on your inventory
 
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 SCREENSHOT — BarterScreen
+     Show: the half-and-half "You Receive ⟵⟶ You Give" layout with
+     recipe tabs and the Max button.
+     ═══════════════════════════════════════════════════════════════════════ -->
+![Barter Screen](https://placehold.co/900x500/1E293B/F8FAFC?text=Barter+%E2%80%94+You+Receive+%E2%9F%B5%E2%9F%B6+You+Give)
+
+---
+
 ### 📊 Dashboard & Leaderboards
 Know where you stand in the economy.
 
@@ -70,6 +145,14 @@ Know where you stand in the economy.
 - 🏆 **Baltop leaderboard** — top 10 balances with player heads
 - 📈 **Transaction spotlight** — most transactions, top seller, most popular product
 - 🏪 **Storefront management** — see all your placed shops, stock levels, and low-supply warnings
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 SCREENSHOT — FranchiseManagementScreen
+     Show: all of your owned shops listed with stock status and revenue.
+     ═══════════════════════════════════════════════════════════════════════ -->
+![Franchise Management](https://placehold.co/900x500/1E293B/F8FAFC?text=Franchise+Management+%E2%80%94+Multi-shop+Overview)
+
+---
 
 ### 🎉 Promo & Discount System
 Run sales like a real business.
@@ -80,9 +163,23 @@ Run sales like a real business.
 - 🔥 **Flash sale toggle** — limited-time urgency
 - 🏷️ **Works everywhere** — server shop, player shops, all trade modes
 
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 SCREENSHOT — PromoEditorModal
+     Show: the promo editor overlay with type picker, value slider,
+     BxGy config, and start/end time fields.
+     ═══════════════════════════════════════════════════════════════════════ -->
+![Promo Editor](https://placehold.co/900x500/1E293B/F8FAFC?text=Promo+Editor+%E2%80%94+Discount+Builder)
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 OPTIONAL ANIMATION / GIF — Pulsating promo badges
+     Show: a shop grid with several animated -X% badges.
+     GIFs embed fine on CurseForge — use imgur or similar hosting.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<!-- ![Promo Badges animated](https://i.imgur.com/YOUR_GIF.gif) -->
+
 ---
 
-## 🖼️ UI Showcase
+## 🖼️ Full UI Showcase
 
 > *All UI is rendered entirely with Minecraft's built-in drawing primitives — no external textures required!*
 
@@ -98,6 +195,17 @@ Run sales like a real business.
 | **Balance Dashboard** | Player head, balance, revenue, shop stats, low-stock warnings |
 | **Leaderboard** | Top 10 with heads, transaction/seller/product spotlights |
 | **Settlement History** | Paged revenue log with SALE/CLAIM/ROLLBACK filters |
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 SCREENSHOT GRID — Item Detail + Cart + Transaction History
+     These are the three most-used buyer-flow screens. Consider a 3×1
+     grid or three back-to-back full-width shots.
+     ═══════════════════════════════════════════════════════════════════════ -->
+![Item Detail](https://placehold.co/900x500/1E293B/F8FAFC?text=Item+Detail+%E2%80%94+Buy+Flow)
+
+![Cart & Checkout](https://placehold.co/900x500/1E293B/F8FAFC?text=Cart+%E2%80%94+Checkout)
+
+![Transaction History](https://placehold.co/900x500/1E293B/F8FAFC?text=Transaction+History+%E2%80%94+Filterable+Log)
 
 ---
 
@@ -160,10 +268,11 @@ FutureShops takes server integrity seriously:
 ## 📦 Installation
 
 1. Install **Minecraft Forge 1.20.1** (47.x)
-2. Drop the `futureshops-1.0.jar` into your `mods/` folder
-3. Launch the game — shop catalog and config files auto-generate
-4. Configure your shops in `config/futureshops/shops/`
-5. Use `/shop` in-game to open the storefront — you're in business! 🎉
+2. Install the **GeckoLib 4.4+** dependency (required on both client and server)
+3. Drop the `futureshops-1.0.jar` into your `mods/` folder
+4. Launch the game — shop catalog and config files auto-generate
+5. Configure your shops in `config/futureshops/shops/`
+6. Use `/shop` in-game to open the storefront — you're in business! 🎉
 
 ---
 
@@ -208,6 +317,12 @@ There are **two ways** to deposit coins back into your digital balance:
 When you hover over a coin in your inventory, you'll see:
 - 🟡 **Value: $X.XX** — the denomination of this coin
 - ⬜ **Right-click to deposit** — a reminder of the quick-deposit feature
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 SCREENSHOT — Coin tooltip close-up
+     Show: hover tooltip over a coin revealing value + deposit hint.
+     ═══════════════════════════════════════════════════════════════════════ -->
+![Coin Tooltip](https://placehold.co/700x400/1E293B/F8FAFC?text=Coin+Tooltip+%E2%80%94+Value+%2B+Deposit+Hint)
 
 ### Anti-Dupe Security
 
@@ -256,17 +371,88 @@ Every coin minted by FutureShops contains hidden security data:
 | **Mappings** | Official Mojang |
 | **Server-side required** | ✅ Yes |
 | **Client-side required** | ✅ Yes (for GUI) |
-| **Dependencies** | None — standalone mod |
+| **Dependencies** | 🦎 GeckoLib 4.4+ (client & server) |
+
+---
+
+## 🤝 Mod Compatibility
+
+### 🧠 Refined Storage integration (shipped)
+FutureShops ships with **native Refined Storage support** — link a shop directly to an **RS Controller, Grid, External Storage, or any RS network node**, and the shop will query and pull stock straight from the **entire RS network**.
+
+- 🔌 **Soft dependency** — integration auto-activates when RS is detected; if RS isn't installed, nothing changes.
+- 🌐 **Full-network aware** — unlike hopper-style adapters, the RS bridge traverses `INetworkNodeProxy → INetworkNode → INetwork` so your shop sees **every disk and every external-storage container** on the network, not just one block.
+- 🧪 **NBT-strict** — enchanted, named, and damage-data items are matched exactly (no more selling the "wrong" diamond pickaxe).
+- ⚛️ **Atomic extract/insert** — if anything fails mid-transaction, changes roll back cleanly on the RS network.
+- ♻️ **Graceful fallback** — if the RS API shifts, the adapter falls back to the standard Forge `IItemHandler` capability automatically.
+- 🏷️ **Supported mod IDs**: `refinedstorage`, `refinedstorage2`, and `refinedstorageaddons`.
+
+> 💡 **Just look at a Controller / Grid / Crafter / External Storage block and run `/link`** — that's it. The shop is now backed by your RS network.
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 SCREENSHOT — Shop linked to an RS network
+     Show: a shop block next to an RS Controller/Grid setup, the shop
+     GUI open with live stock counts pulled from the RS network.
+     Bonus: split-view showing disks on one side and shop inventory
+     on the other.
+     ═══════════════════════════════════════════════════════════════════════ -->
+![Shop linked to Refined Storage](https://placehold.co/900x500/1E293B/F8FAFC?text=Shop+%E2%9C%95+Refined+Storage+%E2%80%94+Network-backed+Stock)
+
+### 🔌 Other storage & transport
+- ✅ **Vanilla inventories** — chests, barrels, shulkers: link any `IItemHandler` container
+- ✅ **Vanilla hoppers** — pipe items into linked shop storage
+- ✅ **Common item-pipe mods** — anything exposing the Forge `IItemHandler` capability works out of the box
+- ✅ **CarryOn** — shops can be picked up and moved (ownership preserved)
+- ✅ **Dedicated servers** — fully supported; shops persist across restarts
+- 🧩 **Extensible** — third-party mods can register their own `ExternalStorageAdapter` via the addon API to expose custom storage networks
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 OPTIONAL — compatible-mods logo strip
+     Show: a small horizontal strip of logos of the mods FutureShops plays
+     nicely with. Keep each logo consistent in height.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<!-- ![Compatible Mods](https://placehold.co/900x120/1E293B/F8FAFC?text=Compatible+Mods+%E2%80%94+Logo+Strip) -->
 
 ---
 
 ## 🗺️ Roadmap
 
+- ✅ ~~Refined Storage integration~~ — **shipped**
+- 🔜 Applied Energistics 2 (AE2) adapter
 - 🔜 Dynamic pricing system (supply/demand curves)
 - 🔜 Stock refresh scheduler (timed restocks)
-- 🔜 Developer API & event hooks for addon mods
+- 🔜 Public `ExternalStorageAdapter` developer API & event hooks for addon mods
 - 🔜 Hopper/pipe compatibility matrix (Create, Mekanism, etc.)
 - 🔜 Advanced analytics & export tools
+- 🔜 Localization (ES, FR, DE, PT-BR, ZH-CN)
+
+---
+
+## ❓ FAQ
+
+**Q: Does this work on dedicated servers?**
+🟢 Yes. Built server-authoritative from day one.
+
+**Q: Will my shops survive a server restart?**
+🟢 Yes. Shops, balances, listings, and transaction history are all persisted to disk.
+
+**Q: Can players steal from my shop?**
+🔴 No. Only the owner (or server ops) can modify listings or pull from linked storage.
+
+**Q: Can I use this on an existing world?**
+🟢 Yes. Add the mod, restart, and your old world loads normally.
+
+**Q: Is it compatible with Fabric?**
+🔴 No — this is a **Forge-only** mod.
+
+**Q: Do I need GeckoLib?**
+🟢 Yes — GeckoLib 4.4+ is required for the 3D shop block model. CurseForge will prompt you to install it automatically.
+
+**Q: Can I link my shop to a Refined Storage network?**
+🟢 Yes! Look at any RS network block (Controller, Grid, External Storage, Crafter, etc.) and run `/link`. The shop will pull stock from your **entire** RS network — all disks, all external-storage containers — NBT-strict.
+
+**Q: What if I don't have Refined Storage installed?**
+🟢 Totally fine. RS is a **soft dependency** — everything else works without it. Standard chest/barrel linking still works out of the box.
 
 ---
 
@@ -276,7 +462,19 @@ Every coin minted by FutureShops contains hidden security data:
 - 💡 **Have an idea?** Drop it in the comments
 - ⭐ **Enjoying the mod?** Leave a rating — it helps a ton!
 
+<!-- ═══════════════════════════════════════════════════════════════════════
+     🔗 OPTIONAL LINKS
+     Fill in these once the repo/Discord/Ko-fi links are public.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<!-- - 💬 Discord: https://discord.gg/YOUR_INVITE                            -->
+<!-- - 🐙 GitHub:  https://github.com/YOUR_USER/FutureShops                  -->
+<!-- - ☕ Support: https://ko-fi.com/YOUR_USER                                -->
+
 ---
 
-> *Built with ❤️ for the Minecraft community. No external textures were harmed in the making of this mod.* 🟪⬛
+<!-- ═══════════════════════════════════════════════════════════════════════
+     📸 FOOTER IMAGE  (recommended: 1200×200 wide)
+     Suggested: a closing shot of a bustling market district at sunset.
+     ═══════════════════════════════════════════════════════════════════════ -->
 
+> *Built with ❤️ for the Minecraft community. No external textures were harmed in the making of this mod.* 🟪⬛

@@ -139,6 +139,17 @@ repositories {
     flatDir {
         dir 'libs'
      }
+
+    // GeckoLib (needed to transitively pull mclib:20, which is required by the
+    // flatDir geckolib jar at runtime).
+    maven {
+        name = 'GeckoLib'
+        url 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
+        content {
+            includeGroupByRegex("software\\.bernie.*")
+            includeGroup("com.eliotlash.mclib")
+        }
+    }
 }
 
 dependencies {
@@ -164,8 +175,22 @@ dependencies {
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
 
+    // GeckoLib for animated block rendering. Pulled from ./libs via flatDir
+    // (drop the jar in libs/ and resync gradle).
+    implementation fg.deobf("blank:geckolib-forge-1.20.1:4.8.3")
+    implementation("com.eliotlash.mclib:mclib:20")
+
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 
+    // Source-scan / invariant tests only — they never load the Minecraft classpath
+    // and therefore don't need ForgeGradle fixtures. JUnit 5 is sufficient.
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
+
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.

@@ -21,7 +21,9 @@ public record PlayerShopListingData(
         String department,
         int baseQuantity,
         int baseBarterItemCount,
-        String listingDescription) {
+        String listingDescription,
+        boolean barterNbtAware,
+        String barterNbtJson) {
 
     /** Item 11: Network DTO for a bundle output entry. */
     public record BundleOutputData(String itemId, int count, String nbtJson) {
@@ -56,6 +58,8 @@ public record PlayerShopListingData(
         buffer.writeVarInt(data.baseQuantity());
         buffer.writeVarInt(data.baseBarterItemCount());
         buffer.writeUtf(data.listingDescription());
+        buffer.writeBoolean(data.barterNbtAware());
+        buffer.writeUtf(data.barterNbtJson());
     }
 
     public static PlayerShopListingData decode(FriendlyByteBuf buffer) {
@@ -79,7 +83,10 @@ public record PlayerShopListingData(
         int baseQuantity = buffer.readVarInt();
         int baseBarterItemCount = buffer.readVarInt();
         String listingDescription = buffer.readUtf();
+        boolean barterNbtAware = buffer.readBoolean();
+        String barterNbtJson = buffer.readUtf();
         return new PlayerShopListingData(itemId, tradeMode, moneyPriceMinor, effectiveUnitPriceMinor,
-                barterItemId, barterItemCount, stock, promo, nbtAware, nbtJson, visible, bundleOutputs, department, baseQuantity, baseBarterItemCount, listingDescription);
+                barterItemId, barterItemCount, stock, promo, nbtAware, nbtJson, visible, bundleOutputs, department, baseQuantity, baseBarterItemCount, listingDescription,
+                barterNbtAware, barterNbtJson);
     }
 }

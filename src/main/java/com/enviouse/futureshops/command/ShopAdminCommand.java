@@ -1,8 +1,8 @@
 package com.enviouse.futureshops.command;
 
 import com.enviouse.futureshops.catalog.ShopCatalog;
-import com.enviouse.futureshops.coin.CoinMintRecord;
-import com.enviouse.futureshops.coin.SpentMintsSavedData;
+import com.enviouse.futureshops.money.MoneyMintRecord;
+import com.enviouse.futureshops.money.SpentMintsSavedData;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
 import com.enviouse.futureshops.server.economy.TransactionResult;
@@ -64,6 +64,46 @@ public final class ShopAdminCommand {
         return SharedSuggestionProvider.suggest(cats.stream().map(c -> c.contains(" ") ? "\"" + c + "\"" : c), builder);
     };
 
+    /**
+     * Suggests both runtime admin categories and bundled (JSON-defined) categories — used by
+     * {@code remove}, which can act on either set.
+     */
+    private static final SuggestionProvider<CommandSourceStack> SUGGEST_REMOVABLE_CATEGORIES = (ctx, builder) -> {
+        MinecraftServer server = ctx.getSource().getServer();
+        AdminCategorySavedData data = AdminCategorySavedData.get(server);
+        java.util.LinkedHashSet<String> names = new java.util.LinkedHashSet<>(data.getAllSorted());
+        for (com.enviouse.futureshops.catalog.ShopDefinition def : ShopCatalog.getAllDefinitions()) {
+            for (com.enviouse.futureshops.catalog.CategoryDef cat : def.categories()) {
+                if ("all".equalsIgnoreCase(cat.id())) continue;
+                if (data.isBaseCategoryHidden(cat.id())) continue;
+                names.add(cat.displayName());
+            }
+        }
+        return SharedSuggestionProvider.suggest(
+                names.stream().map(c -> c.contains(" ") ? "\"" + c + "\"" : c), builder);
+    };
+
+    /** Suggests bundled categories that have been hidden — used by {@code restore}. */
+    private static final SuggestionProvider<CommandSourceStack> SUGGEST_HIDDEN_CATEGORIES = (ctx, builder) -> {
+        MinecraftServer server = ctx.getSource().getServer();
+        AdminCategorySavedData data = AdminCategorySavedData.get(server);
+        java.util.Set<String> hiddenIds = data.getHiddenBaseCategoryIds();
+        java.util.LinkedHashSet<String> names = new java.util.LinkedHashSet<>();
+        for (com.enviouse.futureshops.catalog.ShopDefinition def : ShopCatalog.getAllDefinitions()) {
+            for (com.enviouse.futureshops.catalog.CategoryDef cat : def.categories()) {
+                if (hiddenIds.contains(cat.id().toLowerCase(java.util.Locale.ROOT))) {
+                    names.add(cat.displayName());
+                }
+            }
+        }
+        // Fall back to raw ids if the bundled definition is gone but the tombstone remains
+        for (String id : hiddenIds) {
+            if (names.stream().noneMatch(n -> n.equalsIgnoreCase(id))) names.add(id);
+        }
+        return SharedSuggestionProvider.suggest(
+                names.stream().map(c -> c.contains(" ") ? "\"" + c + "\"" : c), builder);
+    };
+
     /** Suggests all registered item resource locations (e.g. minecraft:diamond_sword). */
     private static final SuggestionProvider<CommandSourceStack> SUGGEST_ALL_ITEMS = (ctx, builder) ->
             SharedSuggestionProvider.suggest(
@@ -113,10 +153,20 @@ public final class ShopAdminCommand {
                                 .executes(ctx -> coinAudit(
                                         ctx, StringArgumentType.getString(ctx, "player")))))
 
-                // /shopadmin adminshop toggle
+                // /shopadmin adminshop toggle | add | remove
                 .then(Commands.literal("adminshop")
                         .then(Commands.literal("toggle")
-                                .executes(ctx -> toggleAdminShop(ctx.getSource()))))
+                                .executes(ctx -> toggleAdminShop(ctx.getSource())))
+                        .then(Commands.literal("add")
+                                .executes(ctx -> startAdminShopAdd(ctx.getSource())))
+                        .then(Commands.literal("remove")
+                                .executes(ctx -> adminShopRemoveHeld(ctx.getSource()))))
+
+                // /shopadmin respond <text> — answers the active adminshop add wizard
+                .then(Commands.literal("respond")
+                        .then(Commands.argument("text", StringArgumentType.greedyString())
+                                .executes(ctx -> respondToWizard(ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "text")))))
 
                 // /shopadmin bal add|remove|set|check|reset <player> [amount]
                 .then(Commands.literal("bal")
@@ -160,8 +210,12 @@ public final class ShopAdminCommand {
                                         .executes(ctx -> addCategory(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(Commands.literal("remove")
                                 .then(Commands.argument("name", StringArgumentType.greedyString())
-                                        .suggests(SUGGEST_CATEGORIES)
+                                        .suggests(SUGGEST_REMOVABLE_CATEGORIES)
                                         .executes(ctx -> removeCategory(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.literal("restore")
+                                .then(Commands.argument("name", StringArgumentType.greedyString())
+                                        .suggests(SUGGEST_HIDDEN_CATEGORIES)
+                                        .executes(ctx -> restoreCategory(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(Commands.literal("list")
                                 .executes(ctx -> listCategories(ctx.getSource())))
                         .then(Commands.literal("assign")
@@ -216,8 +270,9 @@ public final class ShopAdminCommand {
         ShopCatalog.reload(server);
         ShopDataService.resendActiveSessions(server);
 
-        source.sendSuccess(() -> Component.literal(
-                "Reloaded shop catalog and refreshed " + activeSessions + " active session(s).").withStyle(net.minecraft.ChatFormatting.GREEN), true);
+        source.sendSuccess(() -> Component.translatable(
+                "command.futureshops.admin.reload.success", activeSessions)
+                .withStyle(net.minecraft.ChatFormatting.GREEN), true);
         return 1;
     }
 
@@ -227,22 +282,25 @@ public final class ShopAdminCommand {
 
     private static int setPromo(CommandSourceStack source, String shopId, String itemId, String type, double value) {
         if (!ShopCatalog.setRuntimePromo(shopId, itemId, type, value)) {
-            source.sendFailure(Component.literal("Failed to set promo. Check shopId/itemId/type/value.")
+            source.sendFailure(Component.translatable("command.futureshops.admin.promo.set_failed")
                     .withStyle(net.minecraft.ChatFormatting.RED));
             return 0;
         }
-        source.sendSuccess(() -> Component.literal("Promo override applied: " + shopId + " :: " + itemId + " [" + type + "=" + value + "]")
+        source.sendSuccess(() -> Component.translatable(
+                "command.futureshops.admin.promo.set_success", shopId, itemId, type, value)
                 .withStyle(net.minecraft.ChatFormatting.GREEN), true);
         return 1;
     }
 
     private static int clearPromo(CommandSourceStack source, String shopId, String itemId) {
         if (!ShopCatalog.clearRuntimePromo(shopId, itemId)) {
-            source.sendFailure(Component.literal("No runtime promo override found for " + shopId + " :: " + itemId)
+            source.sendFailure(Component.translatable(
+                    "command.futureshops.admin.promo.clear_none", shopId, itemId)
                     .withStyle(net.minecraft.ChatFormatting.RED));
             return 0;
         }
-        source.sendSuccess(() -> Component.literal("Cleared runtime promo override for " + shopId + " :: " + itemId)
+        source.sendSuccess(() -> Component.translatable(
+                "command.futureshops.admin.promo.clear_success", shopId, itemId)
                 .withStyle(net.minecraft.ChatFormatting.GREEN), true);
         return 1;
     }
@@ -255,12 +313,68 @@ public final class ShopAdminCommand {
         MinecraftServer server = source.getServer();
         AdminShopToggleSavedData data = AdminShopToggleSavedData.get(server);
         boolean newState = data.toggle();
-        String stateText = newState ? "§aENABLED" : "§cDISABLED";
-        source.sendSuccess(() -> Component.literal("Admin shop is now " + stateText + "§r. "
-                + (newState ? "Players will see the admin catalog in /shop." : "Players will only see nearby player shops in /shop."))
+        String messageKey = newState
+                ? "command.futureshops.admin.adminshop.enabled"
+                : "command.futureshops.admin.adminshop.disabled";
+        source.sendSuccess(() -> Component.translatable(messageKey)
                 .withStyle(net.minecraft.ChatFormatting.YELLOW), true);
         // Refresh all active sessions so they immediately see the change
         ShopDataService.resendActiveSessions(server);
+        return 1;
+    }
+
+    // -------------------------------------------------------------------------
+    // /shopadmin adminshop add | remove
+    // -------------------------------------------------------------------------
+
+    private static int startAdminShopAdd(CommandSourceStack source) {
+        if (!(source.getEntity() instanceof ServerPlayer player)) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.adminshop.player_only")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        return AdminShopWizard.start(player) ? 1 : 0;
+    }
+
+    private static int respondToWizard(CommandSourceStack source, String text) {
+        if (!(source.getEntity() instanceof ServerPlayer player)) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.adminshop.player_only")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        return AdminShopWizard.respond(player, text);
+    }
+
+    private static int adminShopRemoveHeld(CommandSourceStack source) {
+        if (!(source.getEntity() instanceof ServerPlayer player)) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.adminshop.player_only")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        net.minecraft.world.item.ItemStack held = player.getMainHandItem();
+        if (held.isEmpty()) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.adminshop.remove.no_held")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        net.minecraft.resources.ResourceLocation key = ForgeRegistries.ITEMS.getKey(held.getItem());
+        if (key == null) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.adminshop.add.unknown_item")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        String itemId = key.toString();
+        boolean removed = com.enviouse.futureshops.catalog.AdminShopConfigWriter.removeItem(source.getServer(), itemId);
+        if (!removed) {
+            source.sendFailure(Component.translatable(
+                    "command.futureshops.admin.adminshop.remove.not_found", itemId)
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        ShopDataService.resendActiveSessions(source.getServer());
+        source.sendSuccess(() -> Component.translatable(
+                "command.futureshops.admin.adminshop.remove.success", itemId)
+                .withStyle(ChatFormatting.GREEN), true);
         return 1;
     }
 
@@ -274,7 +388,7 @@ public final class ShopAdminCommand {
         try {
             amountMinor = EconomyCommandUtil.parseAmountToMinorUnits(amountStr, provider.getDecimalPlaces());
         } catch (IllegalArgumentException e) {
-            source.sendFailure(Component.literal("Invalid amount: " + amountStr)
+            source.sendFailure(Component.translatable("command.futureshops.admin.bal.invalid_amount", amountStr)
                     .withStyle(ChatFormatting.RED));
             return 0;
         }
@@ -286,12 +400,14 @@ public final class ShopAdminCommand {
             String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, provider.getDecimalPlaces());
             if (result.success()) {
                 String newBal = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
-                source.sendSuccess(() -> Component.literal("§a+ " + formatted + " " + provider.getCurrencyName()
-                        + " §7→ §f" + profile.getName() + " §7(new balance: §a" + newBal + "§7)")
+                source.sendSuccess(() -> Component.translatable(
+                        "command.futureshops.admin.bal.add_success",
+                        formatted, provider.getCurrencyName(), profile.getName(), newBal)
                         .withStyle(ChatFormatting.GREEN), true);
                 successCount++;
             } else {
-                source.sendFailure(Component.literal("Failed for " + profile.getName() + ": " + result.errorCode())
+                source.sendFailure(Component.translatable(
+                        "command.futureshops.admin.bal.failed", profile.getName(), result.errorCode())
                         .withStyle(ChatFormatting.RED));
             }
         }
@@ -304,7 +420,7 @@ public final class ShopAdminCommand {
         try {
             amountMinor = EconomyCommandUtil.parseAmountToMinorUnits(amountStr, provider.getDecimalPlaces());
         } catch (IllegalArgumentException e) {
-            source.sendFailure(Component.literal("Invalid amount: " + amountStr)
+            source.sendFailure(Component.translatable("command.futureshops.admin.bal.invalid_amount", amountStr)
                     .withStyle(ChatFormatting.RED));
             return 0;
         }
@@ -316,12 +432,14 @@ public final class ShopAdminCommand {
             String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, provider.getDecimalPlaces());
             if (result.success()) {
                 String newBal = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
-                source.sendSuccess(() -> Component.literal("§c- " + formatted + " " + provider.getCurrencyName()
-                        + " §7→ §f" + profile.getName() + " §7(new balance: §a" + newBal + "§7)")
+                source.sendSuccess(() -> Component.translatable(
+                        "command.futureshops.admin.bal.remove_success",
+                        formatted, provider.getCurrencyName(), profile.getName(), newBal)
                         .withStyle(ChatFormatting.YELLOW), true);
                 successCount++;
             } else {
-                source.sendFailure(Component.literal("Failed for " + profile.getName() + ": " + result.errorCode())
+                source.sendFailure(Component.translatable(
+                        "command.futureshops.admin.bal.failed", profile.getName(), result.errorCode())
                         .withStyle(ChatFormatting.RED));
             }
         }
@@ -343,7 +461,7 @@ public final class ShopAdminCommand {
             }
             amountMinor = scaled.longValueExact();
         } catch (Exception e) {
-            source.sendFailure(Component.literal("Invalid amount: " + amountStr)
+            source.sendFailure(Component.translatable("command.futureshops.admin.bal.invalid_amount", amountStr)
                     .withStyle(ChatFormatting.RED));
             return 0;
         }
@@ -366,8 +484,9 @@ public final class ShopAdminCommand {
             long delta = setAmount - oldBalance;
             net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
                     new com.enviouse.futureshops.event.BalanceChangeEvent.Post(profile.getId(), delta, "ADMIN", setAmount));
-            source.sendSuccess(() -> Component.literal("§eSet §f" + profile.getName() + "§e balance to §a"
-                    + formatted + " " + provider.getCurrencyName())
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.bal.set_success",
+                    profile.getName(), formatted, provider.getCurrencyName())
                     .withStyle(ChatFormatting.YELLOW), true);
             successCount++;
         }
@@ -379,8 +498,9 @@ public final class ShopAdminCommand {
         for (GameProfile profile : targets) {
             long balance = provider.getBalance(profile.getId());
             String formatted = EconomyCommandUtil.formatMinorUnits(balance, provider.getDecimalPlaces());
-            source.sendSuccess(() -> Component.literal("§f" + profile.getName() + "§7 balance: §a"
-                    + formatted + " " + provider.getCurrencyName())
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.bal.check_line",
+                    profile.getName(), formatted, provider.getCurrencyName())
                     .withStyle(ChatFormatting.GRAY), false);
         }
         return targets.size();
@@ -405,8 +525,9 @@ public final class ShopAdminCommand {
             long delta = startingBalance - oldBalance;
             net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
                     new com.enviouse.futureshops.event.BalanceChangeEvent.Post(profile.getId(), delta, "ADMIN", startingBalance));
-            source.sendSuccess(() -> Component.literal("§eReset §f" + profile.getName()
-                    + "§e balance to starting value: §a" + formatted + " " + provider.getCurrencyName())
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.bal.reset_success",
+                    profile.getName(), formatted, provider.getCurrencyName())
                     .withStyle(ChatFormatting.YELLOW), true);
         }
         return targets.size();
@@ -418,7 +539,7 @@ public final class ShopAdminCommand {
 
     private static int adminView(CommandSourceStack source, Collection<GameProfile> targets) {
         if (!(source.getEntity() instanceof ServerPlayer admin)) {
-            source.sendFailure(Component.literal("This command can only be run by a player.")
+            source.sendFailure(Component.translatable("command.futureshops.admin.view.player_only")
                     .withStyle(ChatFormatting.RED));
             return 0;
         }
@@ -435,20 +556,25 @@ public final class ShopAdminCommand {
         if (targetPlayer != null) {
             // Build and send the target player's dashboard to the admin
             MarketplaceAnalyticsService.sendDashboardForViewer(admin, targetPlayer);
-            source.sendSuccess(() -> Component.literal("§7Opening marketplace dashboard for §f" + targetName + "§7...")
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.view.opening", targetName)
                     .withStyle(ChatFormatting.GRAY), false);
         } else {
             // Offline player — send a lightweight balance-only view
             EconomyProvider provider = BalanceManager.getProvider();
             long balance = provider.getBalance(targetUuid);
             String formatted = EconomyCommandUtil.formatMinorUnits(balance, provider.getDecimalPlaces());
-            source.sendSuccess(() -> Component.literal("§6═══ Profile: " + targetName + " (offline) ═══")
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.view.offline_header", targetName)
                     .withStyle(ChatFormatting.GOLD), false);
-            source.sendSuccess(() -> Component.literal("  §7Balance: §a" + formatted + " " + provider.getCurrencyName())
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.view.offline_balance", formatted, provider.getCurrencyName())
                     .withStyle(ChatFormatting.GRAY), false);
-            source.sendSuccess(() -> Component.literal("  §7UUID: §f" + targetUuid)
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.view.offline_uuid", targetUuid)
                     .withStyle(ChatFormatting.DARK_GRAY), false);
-            source.sendSuccess(() -> Component.literal("  §8(Full dashboard requires the player to be online)")
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.view.offline_hint")
                     .withStyle(ChatFormatting.DARK_GRAY), false);
         }
         return 1;
@@ -461,14 +587,18 @@ public final class ShopAdminCommand {
     private static int addCategory(CommandSourceStack source, String name) {
         MinecraftServer server = source.getServer();
         AdminCategorySavedData data = AdminCategorySavedData.get(server);
-        if (data.addCategory(name)) {
+        boolean addedSaved = data.addCategory(name);
+        boolean addedJson = com.enviouse.futureshops.catalog.AdminShopConfigWriter.addCategory(server, name);
+        if (addedSaved || addedJson) {
             // Also register in the player-shop department registry so they appear in autocomplete
             com.enviouse.futureshops.server.shop.DepartmentSavedData.get(server).addDepartment(name);
-            source.sendSuccess(() -> Component.literal("§aAdded catalog category: §f" + name.trim())
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.category.added", name.trim())
                     .withStyle(net.minecraft.ChatFormatting.GREEN), true);
             ShopDataService.resendActiveSessions(server);
         } else {
-            source.sendFailure(Component.literal("Category already exists or invalid: " + name)
+            source.sendFailure(Component.translatable(
+                    "command.futureshops.admin.category.add_failed", name)
                     .withStyle(net.minecraft.ChatFormatting.RED));
         }
         return 1;
@@ -477,15 +607,53 @@ public final class ShopAdminCommand {
     private static int removeCategory(CommandSourceStack source, String name) {
         MinecraftServer server = source.getServer();
         AdminCategorySavedData data = AdminCategorySavedData.get(server);
-        if (data.removeCategory(name)) {
-            source.sendSuccess(() -> Component.literal("§cRemoved catalog category: §f" + name.trim())
+
+        boolean removedSaved = data.removeCategory(name);
+        boolean removedJson = com.enviouse.futureshops.catalog.AdminShopConfigWriter.removeCategory(server, name);
+
+        if (removedSaved || removedJson) {
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.category.removed", name.trim())
                     .withStyle(net.minecraft.ChatFormatting.YELLOW), true);
             ShopDataService.resendActiveSessions(server);
-        } else {
-            source.sendFailure(Component.literal("Category not found: " + name)
-                    .withStyle(net.minecraft.ChatFormatting.RED));
+            return 1;
         }
-        return 1;
+        // Fall back to hiding a bundled (JSON) category that wasn't physically removable
+        // (e.g. extra shop file the admin doesn't want to edit directly).
+        Optional<com.enviouse.futureshops.catalog.CategoryDef> bundled =
+                ShopCatalog.findBundledCategory(name);
+        if (bundled.isPresent() && data.hideBaseCategory(bundled.get().id())) {
+            String shown = bundled.get().displayName();
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.category.hidden", shown)
+                    .withStyle(net.minecraft.ChatFormatting.YELLOW), true);
+            ShopDataService.resendActiveSessions(server);
+            return 1;
+        }
+        source.sendFailure(Component.translatable(
+                "command.futureshops.admin.category.remove_failed", name)
+                .withStyle(net.minecraft.ChatFormatting.RED));
+        return 0;
+    }
+
+    private static int restoreCategory(CommandSourceStack source, String name) {
+        MinecraftServer server = source.getServer();
+        AdminCategorySavedData data = AdminCategorySavedData.get(server);
+        Optional<com.enviouse.futureshops.catalog.CategoryDef> bundled =
+                ShopCatalog.findBundledCategory(name);
+        String idToRestore = bundled.map(com.enviouse.futureshops.catalog.CategoryDef::id).orElse(name);
+        if (data.restoreBaseCategory(idToRestore)) {
+            String shown = bundled.map(com.enviouse.futureshops.catalog.CategoryDef::displayName).orElse(name.trim());
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.category.restored", shown)
+                    .withStyle(net.minecraft.ChatFormatting.GREEN), true);
+            ShopDataService.resendActiveSessions(server);
+            return 1;
+        }
+        source.sendFailure(Component.translatable(
+                "command.futureshops.admin.category.restore_failed", name)
+                .withStyle(net.minecraft.ChatFormatting.RED));
+        return 0;
     }
 
     private static int listCategories(CommandSourceStack source) {
@@ -493,15 +661,41 @@ public final class ShopAdminCommand {
         AdminCategorySavedData data = AdminCategorySavedData.get(server);
         List<String> categories = data.getAllSorted();
         if (categories.isEmpty()) {
-            source.sendSuccess(() -> Component.literal("§7No admin catalog categories defined. Use §f/shopadmin category add <name>§7 to create one.")
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.category.list_empty")
                     .withStyle(net.minecraft.ChatFormatting.GRAY), false);
         } else {
-            source.sendSuccess(() -> Component.literal("§6═══ Admin Catalog Categories (" + categories.size() + ") ═══")
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.category.list_header", categories.size())
                     .withStyle(net.minecraft.ChatFormatting.GOLD), false);
             for (String cat : categories) {
                 int itemCount = data.getItemsInCategory(cat).size();
-                source.sendSuccess(() -> Component.literal("  • " + cat + " §7(" + itemCount + " items)")
+                source.sendSuccess(() -> Component.translatable(
+                        "command.futureshops.admin.category.list_row", cat, itemCount)
                         .withStyle(net.minecraft.ChatFormatting.WHITE), false);
+            }
+        }
+
+        java.util.Set<String> hiddenIds = data.getHiddenBaseCategoryIds();
+        if (!hiddenIds.isEmpty()) {
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.category.hidden_header", hiddenIds.size())
+                    .withStyle(net.minecraft.ChatFormatting.GOLD), false);
+            java.util.LinkedHashSet<String> shown = new java.util.LinkedHashSet<>();
+            for (com.enviouse.futureshops.catalog.ShopDefinition def : ShopCatalog.getAllDefinitions()) {
+                for (com.enviouse.futureshops.catalog.CategoryDef cat : def.categories()) {
+                    if (hiddenIds.contains(cat.id().toLowerCase(java.util.Locale.ROOT))) {
+                        shown.add(cat.displayName());
+                    }
+                }
+            }
+            for (String id : hiddenIds) {
+                if (shown.stream().noneMatch(n -> n.equalsIgnoreCase(id))) shown.add(id);
+            }
+            for (String name : shown) {
+                source.sendSuccess(() -> Component.translatable(
+                        "command.futureshops.admin.category.hidden_row", name)
+                        .withStyle(net.minecraft.ChatFormatting.GRAY), false);
             }
         }
         return 1;
@@ -511,11 +705,13 @@ public final class ShopAdminCommand {
         MinecraftServer server = source.getServer();
         AdminCategorySavedData data = AdminCategorySavedData.get(server);
         if (data.assignItem(itemId, categoryName)) {
-            source.sendSuccess(() -> Component.literal("§aAssigned §f" + itemId + " §ato category §f" + categoryName)
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.category.assigned", itemId, categoryName)
                     .withStyle(net.minecraft.ChatFormatting.GREEN), true);
             ShopDataService.resendActiveSessions(server);
         } else {
-            source.sendFailure(Component.literal("Failed to assign. Make sure the category '" + categoryName + "' exists (use /shopadmin category add first) and itemId is valid.")
+            source.sendFailure(Component.translatable(
+                    "command.futureshops.admin.category.assign_failed", categoryName)
                     .withStyle(net.minecraft.ChatFormatting.RED));
         }
         return 1;
@@ -525,11 +721,13 @@ public final class ShopAdminCommand {
         MinecraftServer server = source.getServer();
         AdminCategorySavedData data = AdminCategorySavedData.get(server);
         if (data.unassignItem(itemId)) {
-            source.sendSuccess(() -> Component.literal("§eUnassigned §f" + itemId + " §efrom its category. It will appear under 'All' again.")
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.category.unassigned", itemId)
                     .withStyle(net.minecraft.ChatFormatting.YELLOW), true);
             ShopDataService.resendActiveSessions(server);
         } else {
-            source.sendFailure(Component.literal("Item '" + itemId + "' was not assigned to any category.")
+            source.sendFailure(Component.translatable(
+                    "command.futureshops.admin.category.unassign_failed", itemId)
                     .withStyle(net.minecraft.ChatFormatting.RED));
         }
         return 1;
@@ -540,13 +738,16 @@ public final class ShopAdminCommand {
         AdminCategorySavedData data = AdminCategorySavedData.get(server);
         List<String> items = data.getItemsInCategory(categoryName);
         if (items.isEmpty()) {
-            source.sendSuccess(() -> Component.literal("§7No items assigned to category '" + categoryName + "'. Use §f/shopadmin category assign \"" + categoryName + "\" <itemId>§7.")
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.category.items_empty", categoryName, categoryName)
                     .withStyle(net.minecraft.ChatFormatting.GRAY), false);
         } else {
-            source.sendSuccess(() -> Component.literal("§6═══ Items in '" + categoryName + "' (" + items.size() + ") ═══")
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.category.items_header", categoryName, items.size())
                     .withStyle(net.minecraft.ChatFormatting.GOLD), false);
             for (String item : items) {
-                source.sendSuccess(() -> Component.literal("  • " + item)
+                source.sendSuccess(() -> Component.translatable(
+                        "command.futureshops.admin.category.items_row", item)
                         .withStyle(net.minecraft.ChatFormatting.WHITE), false);
             }
         }
@@ -560,48 +761,56 @@ public final class ShopAdminCommand {
         // 1. Resolve player name → UUID (online first, then profile cache)
         UUID targetUUID = resolveUUID(server, playerName);
         if (targetUUID == null) {
-            src.sendFailure(Component.literal("Unknown player: '" + playerName + "'. "
-                    + "They must have joined the server at least once, or be currently online.").withStyle(net.minecraft.ChatFormatting.RED));
+            src.sendFailure(Component.translatable(
+                    "command.futureshops.admin.coinaudit.unknown_player", playerName)
+                    .withStyle(net.minecraft.ChatFormatting.RED));
             return 0;
         }
 
         // 2. Pull the immutable snapshot of the mint registry
         SpentMintsSavedData mintData = SpentMintsSavedData.get(server);
-        Map<String, CoinMintRecord> snapshot = mintData.snapshotRegistry();
+        Map<String, MoneyMintRecord> snapshot = mintData.snapshotRegistry();
 
         // 3. Filter and sort by minted-at descending
-        List<CoinMintRecord> playerMints = snapshot.values().stream()
+        List<MoneyMintRecord> playerMints = snapshot.values().stream()
                 .filter(r -> targetUUID.equals(r.playerUUID()))
-                .sorted(Comparator.comparingLong(CoinMintRecord::mintedAt).reversed())
+                .sorted(Comparator.comparingLong(MoneyMintRecord::mintedAt).reversed())
                 .toList();
 
         // 4. Aggregate stats
         long activeCount   = playerMints.stream().filter(r -> !r.consumed()).count();
-        long consumedCount = playerMints.stream().filter(CoinMintRecord::consumed).count();
+        long consumedCount = playerMints.stream().filter(MoneyMintRecord::consumed).count();
         long activeValue   = playerMints.stream()
                 .filter(r -> !r.consumed())
-                .mapToLong(r -> r.denomination() * r.count())
+                .mapToLong(r -> r.denomination() * r.remainingCount())
                 .sum();
 
         // 5. Send output
-        src.sendSuccess(() -> Component.literal(
-                "═══ Coin Audit: " + playerName + " ═══").withStyle(net.minecraft.ChatFormatting.AQUA), false);
-        src.sendSuccess(() -> Component.literal(String.format(
-                "Mints total: %d  |  Active: %d  |  Consumed: %d",
-                playerMints.size(), activeCount, consumedCount)).withStyle(net.minecraft.ChatFormatting.GRAY), false);
-        src.sendSuccess(() -> Component.literal(String.format(
-                "Active value: %d minor units  (UUID: %s)", activeValue, targetUUID)).withStyle(net.minecraft.ChatFormatting.GREEN), false);
+        src.sendSuccess(() -> Component.translatable(
+                "command.futureshops.admin.coinaudit.header", playerName)
+                .withStyle(net.minecraft.ChatFormatting.AQUA), false);
+        src.sendSuccess(() -> Component.translatable(
+                "command.futureshops.admin.coinaudit.counts",
+                playerMints.size(), activeCount, consumedCount)
+                .withStyle(net.minecraft.ChatFormatting.GRAY), false);
+        src.sendSuccess(() -> Component.translatable(
+                "command.futureshops.admin.coinaudit.active_value", activeValue, targetUUID)
+                .withStyle(net.minecraft.ChatFormatting.GREEN), false);
 
         if (playerMints.isEmpty()) {
-            src.sendSuccess(() -> Component.literal("No coin mints on record for this player.").withStyle(net.minecraft.ChatFormatting.GOLD), false);
+            src.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.coinaudit.no_mints")
+                    .withStyle(net.minecraft.ChatFormatting.GOLD), false);
             return 1;
         }
 
-        src.sendSuccess(() -> Component.literal("─── Recent mints (newest first, max 15) ───").withStyle(net.minecraft.ChatFormatting.DARK_AQUA), false);
+        src.sendSuccess(() -> Component.translatable(
+                "command.futureshops.admin.coinaudit.recent_header")
+                .withStyle(net.minecraft.ChatFormatting.DARK_AQUA), false);
 
         int shown = Math.min(playerMints.size(), 15);
         for (int i = 0; i < shown; i++) {
-            CoinMintRecord r = playerMints.get(i);
+            MoneyMintRecord r = playerMints.get(i);
             String status  = r.consumed() ? "§cCONSUMED§r" : "§aACTIVE  §r";
             String mintTs  = TS_FMT.format(Instant.ofEpochSecond(r.mintedAt()));
             String eatTs   = r.consumed()
@@ -609,14 +818,18 @@ public final class ShopAdminCommand {
                     : "";
             // Show first 8 chars of mintId to keep lines tidy
             String shortId = r.mintId().length() > 8 ? r.mintId().substring(0, 8) + "…" : r.mintId();
-            src.sendSuccess(() -> Component.literal(String.format(
-                    "[%s] id=%s  denom=%d×%d  minted=%s%s",
-                    status, shortId, r.denomination(), r.count(), mintTs, eatTs)).withStyle(net.minecraft.ChatFormatting.GRAY), false);
+            final String countDisplay = r.remainingCount() + "/" + r.authorizedCount();
+            src.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.coinaudit.row",
+                    status, shortId, r.denomination(), countDisplay, mintTs, eatTs)
+                    .withStyle(net.minecraft.ChatFormatting.GRAY), false);
         }
 
         if (playerMints.size() > shown) {
             int extra = playerMints.size() - shown;
-            src.sendSuccess(() -> Component.literal("  ... and " + extra + " older record(s) not shown.").withStyle(net.minecraft.ChatFormatting.DARK_GRAY), false);
+            src.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.coinaudit.more", extra)
+                    .withStyle(net.minecraft.ChatFormatting.DARK_GRAY), false);
         }
 
         return 1;
@@ -628,7 +841,7 @@ public final class ShopAdminCommand {
 
     private static int setMaxListings(CommandSourceStack source, int amount) {
         if (!(source.getEntity() instanceof ServerPlayer player)) {
-            source.sendFailure(Component.literal("This command can only be run by a player looking at a shop block.")
+            source.sendFailure(Component.translatable("command.futureshops.admin.limits.player_only")
                     .withStyle(ChatFormatting.RED));
             return 0;
         }
@@ -636,13 +849,14 @@ public final class ShopAdminCommand {
         net.minecraft.world.phys.BlockHitResult hit = (net.minecraft.world.phys.BlockHitResult)
                 player.pick(6.0D, 0.0F, false);
         if (!(player.level().getBlockEntity(hit.getBlockPos()) instanceof ShopBlockEntity shop)) {
-            source.sendFailure(Component.literal("Look at a shop block first.")
+            source.sendFailure(Component.translatable("command.futureshops.admin.limits.no_shop_block")
                     .withStyle(ChatFormatting.RED));
             return 0;
         }
         shop.setMaxListings(amount);
-        String display = amount < 0 ? "unlimited" : String.valueOf(amount);
-        source.sendSuccess(() -> Component.literal("§aMax listings for this shop block set to: §f" + display)
+        Component display = unlimitedOr(amount);
+        source.sendSuccess(() -> Component.translatable(
+                "command.futureshops.admin.limits.maxlistings_set", display)
                 .withStyle(ChatFormatting.GREEN), true);
         return 1;
     }
@@ -650,44 +864,45 @@ public final class ShopAdminCommand {
     private static int setMaxBlocks(CommandSourceStack source, Collection<GameProfile> targets, int amount) {
         MinecraftServer server = source.getServer();
         ShopLimitsSavedData limits = ShopLimitsSavedData.get(server);
-        String display = amount < 0 ? "unlimited" : String.valueOf(amount);
+        Component display = unlimitedOr(amount);
         for (GameProfile profile : targets) {
             limits.setMaxShopBlocks(profile.getId(), amount);
-            source.sendSuccess(() -> Component.literal("§aMax shop blocks for §f" + profile.getName()
-                    + " §aset to: §f" + display).withStyle(ChatFormatting.GREEN), true);
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.limits.maxblocks_set", profile.getName(), display)
+                    .withStyle(ChatFormatting.GREEN), true);
         }
         return targets.size();
     }
 
     private static int limitsInfo(CommandSourceStack source) {
         if (!(source.getEntity() instanceof ServerPlayer player)) {
-            source.sendFailure(Component.literal("This command can only be run by a player looking at a shop block.")
+            source.sendFailure(Component.translatable("command.futureshops.admin.limits.player_only")
                     .withStyle(ChatFormatting.RED));
             return 0;
         }
         net.minecraft.world.phys.BlockHitResult hit = (net.minecraft.world.phys.BlockHitResult)
                 player.pick(6.0D, 0.0F, false);
         if (!(player.level().getBlockEntity(hit.getBlockPos()) instanceof ShopBlockEntity shop)) {
-            source.sendFailure(Component.literal("Look at a shop block first.")
+            source.sendFailure(Component.translatable("command.futureshops.admin.limits.no_shop_block")
                     .withStyle(ChatFormatting.RED));
             return 0;
         }
         int maxL = shop.getMaxListings();
-        String listingDisplay = maxL < 0 ? "unlimited" : String.valueOf(maxL);
+        Component listingDisplay = unlimitedOr(maxL);
         int currentListings = shop.getListings().size();
-        source.sendSuccess(() -> Component.literal("§6═══ Shop Block Limits ═══")
+        source.sendSuccess(() -> Component.translatable("command.futureshops.admin.limits.info_header")
                 .withStyle(ChatFormatting.GOLD), false);
-        source.sendSuccess(() -> Component.literal("  §7Max listings: §f" + listingDisplay
-                + " §7(current: §f" + currentListings + "§7)")
+        source.sendSuccess(() -> Component.translatable(
+                "command.futureshops.admin.limits.info_listings", listingDisplay, currentListings)
                 .withStyle(ChatFormatting.GRAY), false);
         if (shop.getOwnerUuid() != null) {
             MinecraftServer server = source.getServer();
             ShopLimitsSavedData limits = ShopLimitsSavedData.get(server);
             int maxB = limits.getMaxShopBlocks(shop.getOwnerUuid());
-            String blockDisplay = maxB < 0 ? "unlimited" : String.valueOf(maxB);
+            Component blockDisplay = unlimitedOr(maxB);
             int owned = PlayerShopRegistrySavedData.get(server).getOwnedShops(shop.getOwnerUuid()).size();
-            source.sendSuccess(() -> Component.literal("  §7Owner max blocks: §f" + blockDisplay
-                    + " §7(current: §f" + owned + "§7)")
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.limits.info_blocks", blockDisplay, owned)
                     .withStyle(ChatFormatting.GRAY), false);
         }
         return 1;
@@ -698,13 +913,27 @@ public final class ShopAdminCommand {
         ShopLimitsSavedData limits = ShopLimitsSavedData.get(server);
         for (GameProfile profile : targets) {
             int max = limits.getMaxShopBlocks(profile.getId());
-            String display = max < 0 ? "unlimited" : String.valueOf(max);
+            Component display = unlimitedOr(max);
             int owned = PlayerShopRegistrySavedData.get(server).getOwnedShops(profile.getId()).size();
-            source.sendSuccess(() -> Component.literal("§f" + profile.getName() + " §7— max blocks: §f"
-                    + display + " §7(current: §f" + owned + "§7)")
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.limits.info_player_row",
+                    profile.getName(), display, owned)
                     .withStyle(ChatFormatting.GRAY), false);
         }
         return targets.size();
+    }
+
+    /**
+     * Renders a shop-limit amount — negative values mean "no cap" and resolve through the
+     * {@code command.futureshops.admin.limits.unlimited} lang key so translators can
+     * localize the fallback word ("unlimited" / "illimité" / "無制限" / etc.) without a
+     * code change.
+     */
+    private static Component unlimitedOr(int amount) {
+        if (amount < 0) {
+            return Component.translatable("command.futureshops.admin.limits.unlimited");
+        }
+        return Component.literal(String.valueOf(amount));
     }
 
     // -------------------------------------------------------------------------

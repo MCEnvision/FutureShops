@@ -49,7 +49,7 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
                                 UUID topSellerUuid, String topSellerName, int topSellerCount,
                                 String popularItemId, int popularItemTrades, long popularItemQuantity,
                                 List<FranchiseLeaderboardEntry> franchises) {
-        super(Component.literal("Marketplace Leaders"));
+        super(Component.translatable("gui.futureshops.baltop.title"));
         this.page = page;
         this.totalPages = Math.max(1, totalPages);
         this.entries = List.copyOf(entries);
@@ -74,7 +74,7 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
         guiLeft = (this.width - guiW) / 2;
         guiTop = (this.height - guiH) / 2;
 
-        addRenderableWidget(Button.builder(Component.literal("§7← Back"), button ->
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.baltop.back"), button ->
                         ShopPackets.CHANNEL.sendToServer(new C2SOpenBalanceUiPacket()))
                 .bounds(guiLeft + 10, guiTop + guiH - 24, 48, 18)
                 .build());
@@ -84,7 +84,7 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
         addRenderableWidget(Button.builder(Component.literal(">"), button -> request(Math.min(totalPages, page + 1)))
                 .bounds(guiLeft + guiW - 84, guiTop + guiH - 24, 18, 18)
                 .build());
-        addRenderableWidget(Button.builder(Component.literal("Close"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.baltop.close"), button -> onClose())
                 .bounds(guiLeft + guiW - 62, guiTop + guiH - 24, 54, 18)
                 .build());
     }
@@ -127,7 +127,8 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
             String rank = "#" + (((page - 1) * 10) + i + 1);
             int rankColor = i == 0 ? ShopColors.ACCENT_CURRENCY : (i <= 2 ? ShopColors.TEXT_STRONG : ShopColors.TEXT_FAINT);
             graphics.drawString(this.font, rank, panelX + 34, y + 5, rankColor, false);
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(entry.playerName(), panelW - 136), panelX + 56, y + 5, ShopColors.TEXT_STRONG, false);
+            ShopUiUtil.renderScrollingString(graphics, this.font, entry.playerName(),
+                    panelX + 56, y + 5, panelW - 162, ShopColors.TEXT_STRONG);
             String balance = formatMinorUnits(entry.balanceMinorUnits()) + " " + currencyName;
             graphics.drawString(this.font, this.font.plainSubstrByWidth(balance, 90), panelX + panelW - 98, y + 5, ShopColors.TEXT_CURRENCY, false);
         }
@@ -179,9 +180,9 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.drawBorder(graphics, contentX, cursorY, contentW, productH, ShopColors.BORDER_SUBTLE);
         if (!popularItemId.isBlank()) {
             ShopUiUtil.renderItemIcon(graphics, this.font, popularItemId, contentX + 6, cursorY + 7);
-            graphics.drawString(this.font,
-                    this.font.plainSubstrByWidth("★ " + ShopUiUtil.getItemDisplayName(popularItemId), contentW - 32),
-                    contentX + 26, cursorY + 4, ShopColors.TEXT_STRONG, false);
+            ShopUiUtil.renderScrollingString(graphics, this.font,
+                    "★ " + ShopUiUtil.getItemDisplayName(popularItemId),
+                    contentX + 26, cursorY + 4, contentW - 32, ShopColors.TEXT_STRONG);
             graphics.drawString(this.font, popularItemTrades + " trades • " + popularItemQuantity + " qty",
                     contentX + 26, cursorY + 16, ShopColors.TEXT_CURRENCY, false);
         } else {
@@ -247,12 +248,15 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
             String rank = "#" + (i + 1);
             graphics.drawString(this.font, rank, panelX + 10, y + 3, ShopColors.TEXT_FAINT, false);
 
-            String fName = this.font.plainSubstrByWidth(f.name(), panelW / 2 - 30);
-            graphics.drawString(this.font, fName, panelX + 30, y + 3, ShopColors.TEXT_STRONG, false);
+            int nameWidth = panelW / 2 - 30;
+            ShopUiUtil.renderScrollingString(graphics, this.font, f.name(),
+                    panelX + 30, y + 3, nameWidth, ShopColors.TEXT_STRONG);
 
-            String detail = f.memberCount() + " mbr • " + this.font.plainSubstrByWidth(f.leaderName(), 50);
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(detail, panelW / 2 - 10),
-                    panelX + panelW / 2 + 4, y + 3, ShopColors.TEXT_BARTER_SOFT, false);
+            // Keep the detail right-anchored but allow scrolling within its half so long leader
+            // names + member counts don't truncate with a hard cut.
+            String detail = f.memberCount() + " mbr • " + f.leaderName();
+            ShopUiUtil.renderScrollingString(graphics, this.font, detail,
+                    panelX + panelW / 2 + 4, y + 3, panelW / 2 - 10, ShopColors.TEXT_BARTER_SOFT);
         }
     }
 
@@ -263,9 +267,11 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.renderPlayerFace(graphics, uuid, x + 6, y + (height - faceSize) / 2, faceSize);
         int textX = x + faceSize + 12;
         graphics.drawString(this.font, title, textX, y + 4, ShopColors.TEXT_SECONDARY, false);
-        graphics.drawString(this.font, this.font.plainSubstrByWidth(name, width - faceSize - 20), textX, y + 16, ShopColors.TEXT_PRIMARY, false);
+        ShopUiUtil.renderScrollingString(graphics, this.font, name,
+                textX, y + 16, width - faceSize - 20, ShopColors.TEXT_PRIMARY);
         if (height > 32) {
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(detail, width - faceSize - 20), textX, y + 28, accent, false);
+            ShopUiUtil.renderScrollingString(graphics, this.font, detail,
+                    textX, y + 28, width - faceSize - 20, accent);
         }
     }
 

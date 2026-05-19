@@ -40,7 +40,7 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
 
     // LGB#6: Accept initial quantity from parent screen
     public PlayerShopBarterScreen(Screen parent, int initialQuantity) {
-        super(Component.literal("Barter Confirmation"));
+        super(Component.translatable("gui.futureshops.player_shop_barter.title"));
         this.parent = parent;
         this.initialQuantity = Math.max(1, initialQuantity);
     }
@@ -56,7 +56,7 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
         quantity = Math.max(1, Math.min(resolveMaxQuantity(), initialQuantity));
 
         // Back button top-left
-        addRenderableWidget(Button.builder(Component.literal("§7← Back"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_barter.back"), button -> onClose())
                 .bounds(guiLeft + 6, guiTop + 6, 44, 14)
                 .build());
 
@@ -68,7 +68,7 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
         addRenderableWidget(Button.builder(Component.literal("-"), button -> setQuantity(quantity - 1))
                 .bounds(qtyX, bottomY, 16, 16)
                 .build());
-        qtyBox = new EditBox(this.font, qtyX + 18, bottomY, 32, 16, Component.literal("Qty"));
+        qtyBox = new EditBox(this.font, qtyX + 18, bottomY, 32, 16, Component.translatable("gui.futureshops.player_shop_barter.qty_placeholder"));
         qtyBox.setValue(Integer.toString(quantity));
         qtyBox.setMaxLength(4);
         qtyBox.setFilter(s -> s.isEmpty() || s.chars().allMatch(Character::isDigit));
@@ -89,10 +89,10 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
                     if (hasShiftDown()) setQuantity(resolveMaxQuantity());
                     else setQuantity(quantity + 1);
                 })
-                .tooltip(Tooltip.create(Component.literal("Shift+Click: Max")))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_barter.tooltip.shift_max")))
                 .bounds(qtyX + 52, bottomY, 16, 16)
                 .build());
-        addRenderableWidget(Button.builder(Component.literal("Max"), button -> setQuantity(resolveMaxQuantity()))
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_barter.max"), button -> setQuantity(resolveMaxQuantity()))
                 .bounds(qtyX + 70, bottomY, 28, 16)
                 .build());
 
@@ -159,7 +159,9 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
         // Confirm button active state
         String barterId = listing.barterItemId();
         int needed = listing.barterItemCount() * quantity;
-        int owned = (barterId != null && !barterId.isBlank()) ? ShopUiUtil.countPlayerInventory(barterId) : 0;
+        int owned = (barterId != null && !barterId.isBlank())
+                ? ShopUiUtil.countPlayerInventoryNbt(barterId, listing.barterNbtJson(), listing.barterNbtAware())
+                : 0;
         confirmButton.active = listing.stock() >= quantity && owned >= needed;
 
         super.render(graphics, mouseX, mouseY, partialTick);
@@ -229,7 +231,7 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
         }
 
         int needed = listing.barterItemCount() * quantity;
-        int owned = ShopUiUtil.countPlayerInventory(barterId);
+        int owned = ShopUiUtil.countPlayerInventoryNbt(barterId, listing.barterNbtJson(), listing.barterNbtAware());
         boolean canPay = owned >= needed;
 
         // Text stack: name, base-strikethrough, ×needed, have (4 lines max × 14px = 56px)
@@ -237,21 +239,33 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
         int textLines = hasBaseDiscount ? 4 : 3;
         int textStackH = textLines * 14;
 
-        // Item preview in available space
+        // Item preview in available space — NBT-aware so enchanted / tagged barter items
+        // render with their correct visual (enchantment glint, etc.).
         int previewAreaH = h - 22 - textStackH - 4;
+        boolean hasRealBarterNbt = listing.barterNbtAware()
+                && ShopUiUtil.hasNonDefaultNbt(barterId, listing.barterNbtJson());
         if (previewAreaH > 20) {
-            ShopUiUtil.renderLargeItemPreview(graphics, this.font, barterId, x + 4, y + 22, w - 8);
+            if (hasRealBarterNbt) {
+                ShopUiUtil.renderLargeItemPreviewWithNbt(graphics, this.font, barterId, listing.barterNbtJson(), x + 4, y + 22, w - 8);
+            } else {
+                ShopUiUtil.renderLargeItemPreview(graphics, this.font, barterId, x + 4, y + 22, w - 8);
+            }
         }
 
-        // LGB#19: Detect hover on barter item preview for tooltip
+        // LGB#19: Detect hover on barter item preview for tooltip (pass NBT so the
+        // tooltip shows enchantments / custom name when present).
         if (mouseX >= x + 4 && mouseX <= x + w - 4 && mouseY >= y + 22 && mouseY <= y + 22 + Math.min(60, previewAreaH)) {
             hoveredItemId = barterId;
-            hoveredNbtJson = "";
+            hoveredNbtJson = hasRealBarterNbt ? listing.barterNbtJson() : "";
         }
 
         // Text stack at bottom
         int stackY = y + h - textStackH;
-        String iName = this.font.plainSubstrByWidth(ShopUiUtil.getItemDisplayName(barterId), w - 16);
+        String iName = this.font.plainSubstrByWidth(
+                hasRealBarterNbt
+                        ? ShopUiUtil.getItemDisplayNameWithNbt(barterId, listing.barterNbtJson())
+                        : ShopUiUtil.getItemDisplayName(barterId),
+                w - 16);
         graphics.drawCenteredString(this.font, iName, x + w / 2, stackY, ShopColors.TEXT_STRONG);
         stackY += 14;
 
@@ -271,10 +285,23 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
     }
 
     private void confirm() {
+        // Fix: when trade mode is BOTH, the server previously defaulted to MONEY
+        // whenever the buyer could afford it, making the Barter button silently
+        // deduct coins instead of bartering. Explicitly signal BARTER here.
+        // Server ignores paymentMethod for MONEY-only (enforced MONEY) and
+        // MONEY_AND_BARTER (compound takes both) modes, so "BARTER" is a safe
+        // default to send from this screen in every trade mode.
+        PlayerShopListingData listing = PlayerShopClientState.selectedListing();
+        String mode = listing != null ? listing.tradeMode() : "";
+        // Send the explicit mode tag for compound so the server-side BOTH-mode
+        // guard (which rejects blank paymentMethod for BOTH listings) can tell
+        // a genuine compound intent apart from a missing/legacy field.
+        String paymentMethod = "MONEY_AND_BARTER".equalsIgnoreCase(mode) ? "MONEY_AND_BARTER" : "BARTER";
         ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopBuyPacket(
                 PlayerShopClientState.shopPos(),
                 PlayerShopClientState.selectedListingIndex(),
-                quantity));
+                quantity,
+                paymentMethod));
     }
 
     private void showBarterConfirmation() {
@@ -283,14 +310,48 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
         String receiveName = ShopUiUtil.getItemDisplayNameWithNbtAndQty(listing.itemId(), listing.nbtJson(), listing.baseQuantity());
         String barterId = listing.barterItemId();
         int needed = listing.barterItemCount() * quantity;
-        String giveName = barterId != null ? ShopUiUtil.getItemDisplayName(barterId) : "???";
+        boolean hasRealBarterNbt = listing.barterNbtAware()
+                && ShopUiUtil.hasNonDefaultNbt(barterId != null ? barterId : "", listing.barterNbtJson());
+        String giveName;
+        if (barterId == null) {
+            giveName = "???";
+        } else if (hasRealBarterNbt) {
+            giveName = ShopUiUtil.getItemDisplayNameWithNbt(barterId, listing.barterNbtJson());
+        } else {
+            giveName = ShopUiUtil.getItemDisplayName(barterId);
+        }
+
+        // MONEY_AND_BARTER (compound): server will also withdraw coins on top of the
+        // barter items, so surface the money cost here too — otherwise buyers get
+        // silently charged money from the "barter" screen.
+        boolean compound = "MONEY_AND_BARTER".equalsIgnoreCase(listing.tradeMode());
+        java.util.List<ConfirmationModal.SummaryLine> summary = new java.util.ArrayList<>();
+        // Order + colors mirror the on-screen arrows: §6⟵ (orange "give") above §9⟶ (blue "receive").
+        summary.add(ConfirmationModal.SummaryLine.item(
+                barterId != null ? barterId : "",
+                "§6Give: §f" + giveName + " ×" + needed,
+                hasRealBarterNbt ? listing.barterNbtJson() : ""));
+        summary.add(ConfirmationModal.SummaryLine.item(
+                listing.itemId(),
+                "§9Receive: §f" + receiveName + " ×" + quantity,
+                listing.nbtJson()));
+
+        String totalText;
+        if (compound) {
+            long money = Math.max(0L, listing.effectiveUnitPriceMinor()) * quantity;
+            String moneyStr = money <= 0 ? "Free"
+                    : ShopUiUtil.formatMinorUnits(money) + " " + com.enviouse.futureshops.client.ShopClientState.getCurrencyName();
+            // Unified compound total format — "Total: §a$X §f+ §9N× item" — matches cart row
+            // + cart summary bar + buy confirmation, so buyers see one consistent rendering.
+            totalText = "Total: §a" + moneyStr + " §f+ §9" + needed + "× " + giveName;
+        } else {
+            totalText = "Barter " + quantity + "× trade(s)";
+        }
+
         confirmationModal = new ConfirmationModal(
                 "Confirm Barter",
-                java.util.List.of(
-                        ConfirmationModal.SummaryLine.item(listing.itemId(), "Receive: " + receiveName + " ×" + quantity),
-                        ConfirmationModal.SummaryLine.item(barterId != null ? barterId : "", "Give: " + giveName + " ×" + needed)
-                ),
-                "Barter " + quantity + "× trade(s)",
+                summary,
+                totalText,
                 modal -> {
                     modal.setProcessing();
                     confirm();
@@ -324,7 +385,7 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
         if (barterId == null || barterId.isBlank() || barterCost <= 0) {
             return stock;
         }
-        int affordable = ShopUiUtil.countPlayerInventory(barterId) / barterCost;
+        int affordable = ShopUiUtil.countPlayerInventoryNbt(barterId, listing.barterNbtJson(), listing.barterNbtAware()) / barterCost;
         return Math.min(stock, affordable);
     }
 

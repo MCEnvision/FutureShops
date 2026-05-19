@@ -13,6 +13,7 @@ import com.enviouse.futureshops.server.session.ShopSession;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
 import com.enviouse.futureshops.server.shop.InventorySyncService;
 import com.enviouse.futureshops.server.shop.ShopDataService;
+import com.enviouse.futureshops.server.shop.ShopResultCode;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
@@ -65,51 +66,51 @@ public final class ShopBarterService {
         String shopId = ShopDataService.resolveShopId(packet.shopId());
         ShopSession session = ShopSessionManager.get(player.getUUID()).orElse(null);
         if (session == null || !session.shopId().equals(shopId)) {
-            return BarterResult.error(shopId, "SHOP_CLOSED");
+            return BarterResult.error(shopId, ShopResultCode.SHOP_CLOSED);
         }
 
         int multiplier = packet.multiplier();
         if (multiplier <= 0 || multiplier > ShopTransactionUtil.MAX_QUANTITY) {
-            return BarterResult.error(shopId, "INVALID_RECIPE");
+            return BarterResult.error(shopId, ShopResultCode.INVALID_RECIPE);
         }
 
         ReentrantLock lock = ShopTransactionUtil.lockFor(player.getUUID());
         if (!lock.tryLock()) {
-            return BarterResult.error(shopId, "COOLDOWN");
+            return BarterResult.error(shopId, ShopResultCode.COOLDOWN);
         }
 
         try {
             BarterRecipeDef recipe = ShopCatalog.getBarterRecipe(shopId, packet.recipeId()).orElse(null);
             if (recipe == null) {
-                return BarterResult.error(shopId, "INVALID_RECIPE");
+                return BarterResult.error(shopId, ShopResultCode.INVALID_RECIPE);
             }
 
             ItemDef targetDef = ShopCatalog.getItem(shopId, recipe.targetItemId()).orElse(null);
             if (targetDef == null) {
-                return BarterResult.error(shopId, "INVALID_RECIPE");
+                return BarterResult.error(shopId, ShopResultCode.INVALID_RECIPE);
             }
 
             int outputQuantity;
             try {
                 outputQuantity = Math.multiplyExact(recipe.outputCount(), multiplier);
             } catch (ArithmeticException ex) {
-                return BarterResult.error(shopId, "SERVER_ERROR");
+                return BarterResult.error(shopId, ShopResultCode.SERVER_ERROR);
             }
 
             int currentStock = ShopCatalog.getCurrentStock(shopId, recipe.targetItemId());
             if (currentStock >= 0 && currentStock < outputQuantity) {
-                return BarterResult.error(shopId, "OUT_OF_STOCK");
+                return BarterResult.error(shopId, ShopResultCode.OUT_OF_STOCK);
             }
 
             Inventory inventory = player.getInventory();
             List<ItemStack> rewards = new ArrayList<>();
             Item rewardItem = ShopTransactionUtil.resolveItem(recipe.targetItemId());
             if (rewardItem == null) {
-                return BarterResult.error(shopId, "INVALID_RECIPE");
+                return BarterResult.error(shopId, ShopResultCode.INVALID_RECIPE);
             }
             rewards.add(new ItemStack(rewardItem, outputQuantity));
             if (!ShopTransactionUtil.canFit(inventory, rewards)) {
-                return BarterResult.error(shopId, "INVENTORY_FULL");
+                return BarterResult.error(shopId, ShopResultCode.INVENTORY_FULL);
             }
 
             Map<String, Integer> mergedIngredientCounts = new LinkedHashMap<>();
@@ -121,21 +122,21 @@ public final class ShopBarterService {
             for (Map.Entry<String, Integer> ingredientEntry : mergedIngredientCounts.entrySet()) {
                 Item ingredientItem = ShopTransactionUtil.resolveItem(ingredientEntry.getKey());
                 if (ingredientItem == null) {
-                    return BarterResult.error(shopId, "INVALID_RECIPE");
+                    return BarterResult.error(shopId, ShopResultCode.INVALID_RECIPE);
                 }
 
                 int needed;
                 try {
                     needed = Math.multiplyExact(ingredientEntry.getValue(), multiplier);
                 } catch (ArithmeticException ex) {
-                    return BarterResult.error(shopId, "SERVER_ERROR");
+                    return BarterResult.error(shopId, ShopResultCode.SERVER_ERROR);
                 }
 
-                // NBT-strict: only vanilla/plain stacks (no damage, enchantments, fluid, etc.)
-                // qualify as barter ingredients — prevents exploits like handing over an
-                // enchanted chestplate or a tank with fluid in place of a plain item.
-                if (ShopTransactionUtil.countItems(inventory, ingredientItem, true, null) < needed) {
-                    return BarterResult.error(shopId, "MISSING_INGREDIENTS");
+                // NBT-agnostic: recipes only record ingredient item *ids*, so any variant
+                // of the item (damaged, enchanted, semi-full tanks, etc.) qualifies —
+                // matches vanilla villager behavior and the player's intuition.
+                if (ShopTransactionUtil.countItems(inventory, ingredientItem, false, null) < needed) {
+                    return BarterResult.error(shopId, ShopResultCode.MISSING_INGREDIENTS);
                 }
                 required.add(new IngredientConsumption(ingredientItem, needed));
             }
@@ -151,19 +152,19 @@ public final class ShopBarterService {
                     player.getUUID(), shopId, packet.recipeId(),
                     recipe.targetItemId(), outputQuantity, ingredientEntries);
             if (net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(preEvent)) {
-                return BarterResult.error(shopId, "CANCELLED_BY_EVENT");
+                return BarterResult.error(shopId, ShopResultCode.CANCELLED_BY_EVENT);
             }
 
             // Fire cancellable ShopTransactionEvent.Pre (spec §33) for the barter-as-transaction
             ShopTransactionEvent.Pre txPreEvent = new ShopTransactionEvent.Pre(
                     player, shopId, recipe.targetItemId(), outputQuantity, "BARTER", 0L);
             if (net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(txPreEvent)) {
-                return BarterResult.error(shopId, "CANCELLED_BY_EVENT");
+                return BarterResult.error(shopId, ShopResultCode.CANCELLED_BY_EVENT);
             }
 
             for (IngredientConsumption ingredient : required) {
-                if (!ShopTransactionUtil.removeItems(inventory, ingredient.item(), ingredient.count(), true, null)) {
-                    return BarterResult.error(shopId, "MISSING_INGREDIENTS");
+                if (!ShopTransactionUtil.removeItems(inventory, ingredient.item(), ingredient.count(), false, null)) {
+                    return BarterResult.error(shopId, ShopResultCode.MISSING_INGREDIENTS);
                 }
             }
 
@@ -171,7 +172,7 @@ public final class ShopBarterService {
                 for (IngredientConsumption ingredient : required) {
                     ShopTransactionUtil.insertIntoInventory(inventory, List.of(new ItemStack(ingredient.item(), ingredient.count())));
                 }
-                return BarterResult.error(shopId, "OUT_OF_STOCK");
+                return BarterResult.error(shopId, ShopResultCode.OUT_OF_STOCK);
             }
 
             if (!ShopTransactionUtil.insertIntoInventory(inventory, rewards)) {
@@ -179,7 +180,7 @@ public final class ShopBarterService {
                 for (IngredientConsumption ingredient : required) {
                     ShopTransactionUtil.insertIntoInventory(inventory, List.of(new ItemStack(ingredient.item(), ingredient.count())));
                 }
-                return BarterResult.error(shopId, "INVENTORY_FULL");
+                return BarterResult.error(shopId, ShopResultCode.INVENTORY_FULL);
             }
 
             inventory.setChanged();
@@ -193,14 +194,14 @@ public final class ShopBarterService {
     private record IngredientConsumption(Item item, int count) {
     }
 
-    private record BarterResult(boolean success, String shopId, String errorCode, String targetItemId,
+    private record BarterResult(boolean success, String shopId, ShopResultCode errorCode, String targetItemId,
                                int outputQuantity, List<BarterTradeEvent.IngredientEntry> ingredientEntries) {
         private static BarterResult success(String shopId, String targetItemId, int outputQuantity,
                                             List<BarterTradeEvent.IngredientEntry> ingredientEntries) {
-            return new BarterResult(true, shopId, "", targetItemId, outputQuantity, ingredientEntries);
+            return new BarterResult(true, shopId, ShopResultCode.OK, targetItemId, outputQuantity, ingredientEntries);
         }
 
-        private static BarterResult error(String shopId, String errorCode) {
+        private static BarterResult error(String shopId, ShopResultCode errorCode) {
             return new BarterResult(false, shopId, errorCode, "", 0, List.of());
         }
     }

@@ -16,7 +16,9 @@ import java.util.List;
 /**
  * Reads shop definitions from {@code config/futureshops/shops/*.json}.
  *
- * <p>If the directory is empty on first run, writes {@code default.json} and uses it.
+ * <p>The bundled admin shop lives in {@code admin.json}. If that file is missing on any load
+ * (e.g. removed or moved by the operator) it is rewritten from {@link #DEFAULT_SHOP_JSON}.
+ * A legacy {@code default.json} is auto-renamed to {@code admin.json} on first sight.
  * JSON schema: see {@code DEFAULT_SHOP_JSON} for a fully annotated example.
  * Prices are in minor currency units (e.g., 1500 = $15.00 at 2 dp).
  */
@@ -24,7 +26,18 @@ public final class ShopDefinitionLoader {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
+    /** Filename of the bundled admin shop config. */
+    public static final String ADMIN_SHOP_FILENAME = "admin.json";
+    private static final String LEGACY_DEFAULT_FILENAME = "default.json";
+
     private ShopDefinitionLoader() {
+    }
+
+    /**
+     * Returns the absolute path to the admin shop config file. Does not create the file.
+     */
+    public static Path adminShopPath() {
+        return FMLPaths.CONFIGDIR.get().resolve("futureshops").resolve("shops").resolve(ADMIN_SHOP_FILENAME);
     }
 
     // -------------------------------------------------------------------------
@@ -45,6 +58,24 @@ public final class ShopDefinitionLoader {
             return List.of(buildDefaultShop());
         }
 
+        // Migrate legacy default.json → admin.json (only if admin.json doesn't already exist).
+        Path adminFile  = shopsDir.resolve(ADMIN_SHOP_FILENAME);
+        Path legacyFile = shopsDir.resolve(LEGACY_DEFAULT_FILENAME);
+        if (!Files.exists(adminFile) && Files.exists(legacyFile)) {
+            try {
+                Files.move(legacyFile, adminFile);
+                LOGGER.info("[FutureShops] Migrated '{}' → '{}'.", LEGACY_DEFAULT_FILENAME, ADMIN_SHOP_FILENAME);
+            } catch (IOException e) {
+                LOGGER.error("[FutureShops] Could not migrate '{}' to '{}': {}",
+                        LEGACY_DEFAULT_FILENAME, ADMIN_SHOP_FILENAME, e.getMessage());
+            }
+        }
+
+        // Regenerate admin.json on every load if it's missing (operator deleted/moved it).
+        if (!Files.exists(adminFile)) {
+            writeFile(adminFile, DEFAULT_SHOP_JSON);
+        }
+
         // Collect .json files
         List<Path> jsonFiles = new ArrayList<>();
         try (var stream = Files.list(shopsDir)) {
@@ -52,13 +83,6 @@ public final class ShopDefinitionLoader {
                   .forEach(jsonFiles::add);
         } catch (IOException e) {
             LOGGER.error("[FutureShops] Failed to list files in '{}': {}", shopsDir, e.getMessage());
-        }
-
-        // First run: write and load the default shop
-        if (jsonFiles.isEmpty()) {
-            Path defaultFile = shopsDir.resolve("default.json");
-            writeFile(defaultFile, DEFAULT_SHOP_JSON);
-            jsonFiles.add(defaultFile);
         }
 
         List<ShopDefinition> result = new ArrayList<>();
@@ -200,9 +224,9 @@ public final class ShopDefinitionLoader {
     private static void writeFile(Path path, String content) {
         try {
             Files.writeString(path, content);
-            LOGGER.info("[FutureShops] Wrote default shop config to {}", path);
+            LOGGER.info("[FutureShops] Wrote admin shop config to {}", path);
         } catch (IOException e) {
-            LOGGER.error("[FutureShops] Failed to write default shop to '{}': {}", path, e.getMessage());
+            LOGGER.error("[FutureShops] Failed to write admin shop to '{}': {}", path, e.getMessage());
         }
     }
 

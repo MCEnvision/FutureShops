@@ -140,8 +140,15 @@ public final class MarketplaceAnalyticsService {
                 continue;
             }
 
+            String shopLabel = shop.getShopName() == null || shop.getShopName().isBlank()
+                    ? "Storage"
+                    : shop.getShopName();
+            String shopNameOrBlank = shop.getShopName() == null || shop.getShopName().isBlank()
+                    ? ""
+                    : shop.getShopName() + " ";
+
             if (shop.getLinkedStoragePos() == null) {
-                alerts.add("Unlinked storage at " + displayDimension(ref.dimension()) + " " + formatPos(pos));
+                alerts.add(shopLabel + " Unlinked at " + displayDimension(ref.dimension()) + " " + formatPos(pos));
             }
 
             int shopListingCount = shop.getListings().size();
@@ -153,7 +160,8 @@ public final class MarketplaceAnalyticsService {
                 shopTotalStock += stock;
                 if (stock <= LOW_STOCK_THRESHOLD) {
                     shopLowCount++;
-                    alerts.add(displayItemName(listing.itemId()) + " low at " + displayDimension(ref.dimension()) + " " + formatPos(pos) + " (" + stock + ")");
+                    alerts.add(displayItemName(listing.itemId()) + " low at " + shopNameOrBlank
+                            + displayDimension(ref.dimension()) + " " + formatPos(pos) + " (" + stock + ")");
                 }
             }
 

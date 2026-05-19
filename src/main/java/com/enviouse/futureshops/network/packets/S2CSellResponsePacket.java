@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.network.packets;
 
 import com.enviouse.futureshops.client.ShopClientPacketHandler;
+import com.enviouse.futureshops.server.shop.ShopResultCode;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
@@ -13,7 +14,7 @@ public record S2CSellResponsePacket(
         boolean success,
         String shopId,
         String itemId,
-        String errorCode,
+        ShopResultCode errorCode,
         long resultingBalanceMinorUnits,
         int quantity,
         long totalMinorUnits) {
@@ -22,21 +23,28 @@ public record S2CSellResponsePacket(
         buffer.writeBoolean(packet.success);
         buffer.writeUtf(packet.shopId);
         buffer.writeUtf(packet.itemId);
-        buffer.writeUtf(packet.errorCode);
+        // Serialize by name for enum-reorder tolerance.
+        buffer.writeUtf(packet.errorCode.name());
         buffer.writeLong(packet.resultingBalanceMinorUnits);
         buffer.writeVarInt(packet.quantity);
         buffer.writeLong(packet.totalMinorUnits);
     }
 
     public static S2CSellResponsePacket decode(FriendlyByteBuf buffer) {
-        return new S2CSellResponsePacket(
-                buffer.readBoolean(),
-                buffer.readUtf(),
-                buffer.readUtf(),
-                buffer.readUtf(),
-                buffer.readLong(),
-                buffer.readVarInt(),
-                buffer.readLong());
+        boolean success = buffer.readBoolean();
+        String shopId = buffer.readUtf();
+        String itemId = buffer.readUtf();
+        String rawCode = buffer.readUtf();
+        ShopResultCode code;
+        try {
+            code = ShopResultCode.valueOf(rawCode);
+        } catch (IllegalArgumentException ex) {
+            code = ShopResultCode.SERVER_ERROR;
+        }
+        long bal = buffer.readLong();
+        int qty = buffer.readVarInt();
+        long totalMu = buffer.readLong();
+        return new S2CSellResponsePacket(success, shopId, itemId, code, bal, qty, totalMu);
     }
 
     public static void handle(S2CSellResponsePacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

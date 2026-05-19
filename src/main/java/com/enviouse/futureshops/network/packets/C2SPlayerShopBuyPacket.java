@@ -15,7 +15,13 @@ import java.util.function.Supplier;
  */
 public record C2SPlayerShopBuyPacket(BlockPos shopPos, int listingIndex, int quantity, String paymentMethod) {
 
-    /** Legacy constructor for callers that don't specify payment method. */
+    /**
+     * Legacy constructor for callers that don't specify payment method.
+     * @deprecated BOTH-mode listings require an explicit "MONEY" or "BARTER" tag;
+     *             prefer the 4-arg constructor so the server-side guard in
+     *             {@code PlayerShopBlockService.buy} does not reject the request.
+     */
+    @Deprecated
     public C2SPlayerShopBuyPacket(BlockPos shopPos, int listingIndex, int quantity) {
         this(shopPos, listingIndex, quantity, "");
     }

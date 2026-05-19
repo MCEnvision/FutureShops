@@ -2,6 +2,7 @@ package com.enviouse.futureshops.server.economy;
 
 import com.enviouse.futureshops.Config;
 import com.enviouse.futureshops.event.BalanceChangeEvent;
+import com.enviouse.futureshops.server.shop.ShopResultCode;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraftforge.common.MinecraftForge;
@@ -31,18 +32,23 @@ public class InternalEconomyProvider implements EconomyProvider {
     @Override
     public TransactionResult withdraw(UUID playerUUID, long amountMinorUnits, String reason) {
         if (amountMinorUnits <= 0L) {
-            return TransactionResult.error("INVALID_AMOUNT", getBalance(playerUUID));
+            return TransactionResult.error(ShopResultCode.INVALID_AMOUNT, getBalance(playerUUID));
         }
 
         long currentBalance = getBalance(playerUUID);
-        if (!Config.economyAllowNegative && currentBalance < amountMinorUnits) {
-            return TransactionResult.error("INSUFFICIENT_FUNDS", currentBalance);
+        // Only admin-issued withdrawals may push a balance below zero (and only when the
+        // server has opted into negative balances). Every other reason — BUY, SELL, BARTER,
+        // TRANSFER, WITHDRAW, etc. — must leave the balance >= 0, so a player whose admin
+        // has put them in debt cannot purchase more and deepen the hole.
+        boolean canGoNegative = "ADMIN".equals(reason) && Config.economyAllowNegative;
+        if (!canGoNegative && currentBalance < amountMinorUnits) {
+            return TransactionResult.error(ShopResultCode.INSUFFICIENT_FUNDS, currentBalance);
         }
 
         // Fire cancellable BalanceChangeEvent.Pre (spec §33)
         BalanceChangeEvent.Pre preEvent = new BalanceChangeEvent.Pre(playerUUID, -amountMinorUnits, reason, currentBalance);
         if (MinecraftForge.EVENT_BUS.post(preEvent)) {
-            return TransactionResult.error("CANCELLED_BY_EVENT", currentBalance);
+            return TransactionResult.error(ShopResultCode.CANCELLED_BY_EVENT, currentBalance);
         }
 
         long newBalance = currentBalance - amountMinorUnits;
@@ -62,19 +68,19 @@ public class InternalEconomyProvider implements EconomyProvider {
     @Override
     public TransactionResult deposit(UUID playerUUID, long amountMinorUnits, String reason) {
         if (amountMinorUnits <= 0L) {
-            return TransactionResult.error("INVALID_AMOUNT", getBalance(playerUUID));
+            return TransactionResult.error(ShopResultCode.INVALID_AMOUNT, getBalance(playerUUID));
         }
 
         long currentBalance = getBalance(playerUUID);
         long newBalance = currentBalance + amountMinorUnits;
         if (newBalance > Config.economyMaxBalanceMinorUnits) {
-            return TransactionResult.error("MAX_BALANCE_EXCEEDED", currentBalance);
+            return TransactionResult.error(ShopResultCode.MAX_BALANCE_EXCEEDED, currentBalance);
         }
 
         // Fire cancellable BalanceChangeEvent.Pre (spec §33)
         BalanceChangeEvent.Pre preEvent = new BalanceChangeEvent.Pre(playerUUID, amountMinorUnits, reason, currentBalance);
         if (MinecraftForge.EVENT_BUS.post(preEvent)) {
-            return TransactionResult.error("CANCELLED_BY_EVENT", currentBalance);
+            return TransactionResult.error(ShopResultCode.CANCELLED_BY_EVENT, currentBalance);
         }
 
         getData().setBalance(playerUUID, newBalance);
@@ -88,7 +94,7 @@ public class InternalEconomyProvider implements EconomyProvider {
     @Override
     public TransactionResult transfer(UUID fromPlayerUUID, UUID toPlayerUUID, long amountMinorUnits) {
         if (fromPlayerUUID.equals(toPlayerUUID)) {
-            return TransactionResult.error("INVALID_TARGET", getBalance(fromPlayerUUID));
+            return TransactionResult.error(ShopResultCode.INVALID_TARGET, getBalance(fromPlayerUUID));
         }
         return EconomyProvider.super.transfer(fromPlayerUUID, toPlayerUUID, amountMinorUnits);
     }

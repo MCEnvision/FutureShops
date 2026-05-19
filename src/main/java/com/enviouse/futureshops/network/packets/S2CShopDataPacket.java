@@ -21,7 +21,9 @@ import java.util.function.Supplier;
  * Carries the full shop catalog (categories, items, promos, barter recipes) together with
  * the player's current balance, display-currency metadata, nearby player shops, and admin toggle.
  *
- * <p>Protocol version 13 — bumped for nearby shop + admin toggle fields.
+ * <p>Protocol version 14 — added {@code forceOpen} flag so silent refreshes (stock refresh,
+ * post-transaction sync, admin reload) can update an already-open screen without spawning one
+ * for players whose session is still alive but who have closed the GUI.
  */
 public record S2CShopDataPacket(
         String shopId,
@@ -33,13 +35,22 @@ public record S2CShopDataPacket(
         List<CatalogPromo> promos,
         List<CatalogBarterRecipe> barterRecipes,
         boolean adminShopEnabled,
-        List<NearbyShopEntry> nearbyShops) {
+        List<NearbyShopEntry> nearbyShops,
+        boolean forceOpen) {
 
-    /** Backward-compat constructor without nearby shops / admin toggle. */
+    /** Backward-compat constructor without nearby shops / admin toggle / forceOpen flag. */
     public S2CShopDataPacket(String shopId, long balanceMinorUnits, String currencyName, int currencyDecimals,
                              List<CatalogCategory> categories, List<CatalogItem> items,
                              List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes) {
-        this(shopId, balanceMinorUnits, currencyName, currencyDecimals, categories, items, promos, barterRecipes, true, List.of());
+        this(shopId, balanceMinorUnits, currencyName, currencyDecimals, categories, items, promos, barterRecipes, true, List.of(), true);
+    }
+
+    /** Backward-compat constructor without forceOpen (defaults to true — preserves legacy open behavior). */
+    public S2CShopDataPacket(String shopId, long balanceMinorUnits, String currencyName, int currencyDecimals,
+                             List<CatalogCategory> categories, List<CatalogItem> items,
+                             List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes,
+                             boolean adminShopEnabled, List<NearbyShopEntry> nearbyShops) {
+        this(shopId, balanceMinorUnits, currencyName, currencyDecimals, categories, items, promos, barterRecipes, adminShopEnabled, nearbyShops, true);
     }
 
     public static void encode(S2CShopDataPacket packet, FriendlyByteBuf buffer) {
@@ -62,6 +73,7 @@ public record S2CShopDataPacket(
             buffer.writeVarInt(entry.totalStock());
             buffer.writeDouble(entry.distance());
         }
+        buffer.writeBoolean(packet.forceOpen);
     }
 
     public static S2CShopDataPacket decode(FriendlyByteBuf buffer) {
@@ -86,7 +98,8 @@ public record S2CShopDataPacket(
             double distance = buffer.readDouble();
             nearbyShops.add(new NearbyShopEntry(pos, ownerUuid, ownerName, shopName, listingCount, totalStock, distance));
         }
-        return new S2CShopDataPacket(shopId, balance, currencyName, decimals, categories, items, promos, barterRecipes, adminShopEnabled, nearbyShops);
+        boolean forceOpen = buffer.readBoolean();
+        return new S2CShopDataPacket(shopId, balance, currencyName, decimals, categories, items, promos, barterRecipes, adminShopEnabled, nearbyShops, forceOpen);
     }
 
     public static void handle(S2CShopDataPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

@@ -14,6 +14,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
@@ -25,6 +26,39 @@ import java.util.UUID;
 
 public final class ShopUiUtil {
     private ShopUiUtil() {
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Trade-mode label helper — single source of truth for user-facing labels.
+    // Every client site that renders a trade mode MUST go through this so the
+    // BuyPacketCallSiteTest invariant scan stays clean and translators only
+    // have to edit en_us.json (keys under `gui.futureshops.trade_mode.*`).
+    // ═══════════════════════════════════════════════════════════════════════
+    private static final String TRADE_MODE_KEY_MONEY = "gui.futureshops.trade_mode.money";
+    private static final String TRADE_MODE_KEY_BARTER = "gui.futureshops.trade_mode.barter";
+    private static final String TRADE_MODE_KEY_BOTH = "gui.futureshops.trade_mode.both";
+    private static final String TRADE_MODE_KEY_COMPOUND = "gui.futureshops.trade_mode.compound";
+
+    /** Returns the localized, color-formatted trade-mode label for UI display. */
+    public static String tradeModeLabel(String mode) {
+        String key = switch (mode == null ? "" : mode.toUpperCase(java.util.Locale.ROOT)) {
+            case "BARTER" -> TRADE_MODE_KEY_BARTER;
+            case "BOTH" -> TRADE_MODE_KEY_BOTH;
+            case "MONEY_AND_BARTER" -> TRADE_MODE_KEY_COMPOUND;
+            default -> TRADE_MODE_KEY_MONEY; // MONEY or unknown/blank
+        };
+        return Component.translatable(key).getString();
+    }
+
+    /** Returns the full human-readable trade-mode name for tooltips on abbreviated badges. */
+    public static String tradeModeTooltip(String mode) {
+        String key = switch (mode == null ? "" : mode.toUpperCase(java.util.Locale.ROOT)) {
+            case "BARTER" -> TRADE_MODE_KEY_BARTER + ".tooltip";
+            case "BOTH" -> TRADE_MODE_KEY_BOTH + ".tooltip";
+            case "MONEY_AND_BARTER" -> TRADE_MODE_KEY_COMPOUND + ".tooltip";
+            default -> TRADE_MODE_KEY_MONEY + ".tooltip";
+        };
+        return Component.translatable(key).getString();
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -183,13 +217,17 @@ public final class ShopUiUtil {
             Item item = ForgeRegistries.ITEMS.getValue(ResourceLocation.parse(itemId));
             if (item != null) {
                 int total = 0;
+                // Count by item identity only (matches server-side barter/sell tolerance).
+                // Filtering out tagged stacks hid modded items whose "empty" state is an NBT
+                // marker (e.g. empty fueling tanks), making the UI report 0 owned even though
+                // the server would happily accept them.
                 for (ItemStack stack : minecraft.player.getInventory().items) {
-                    if (stack.getItem() == item && !stack.hasTag()) {
+                    if (stack.getItem() == item) {
                         total += stack.getCount();
                     }
                 }
                 for (ItemStack stack : minecraft.player.getInventory().offhand) {
-                    if (stack.getItem() == item && !stack.hasTag()) {
+                    if (stack.getItem() == item) {
                         total += stack.getCount();
                     }
                 }
@@ -197,6 +235,45 @@ public final class ShopUiUtil {
             }
         }
         return ShopClientState.getOwnedCount(itemId);
+    }
+
+    /**
+     * NBT-strict variant of {@link #countPlayerInventory(String)}. When {@code nbtAware}
+     * is true and {@code nbtJson} is non-blank, only stacks whose NBT equals the parsed
+     * tag count toward the total — mirroring the server's NBT-strict barter payment.
+     * Used on the barter screen so "owned" reflects what the server would actually
+     * accept (e.g. only empty tanks when the listing specified an empty tank).
+     */
+    public static int countPlayerInventoryNbt(String itemId, String nbtJson, boolean nbtAware) {
+        if (!nbtAware || nbtJson == null || nbtJson.isBlank()) {
+            return countPlayerInventory(itemId);
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null) {
+            return ShopClientState.getOwnedCount(itemId);
+        }
+        Item item = ForgeRegistries.ITEMS.getValue(ResourceLocation.parse(itemId));
+        if (item == null) {
+            return ShopClientState.getOwnedCount(itemId);
+        }
+        CompoundTag requiredTag;
+        try {
+            requiredTag = TagParser.parseTag(nbtJson);
+        } catch (Exception ignored) {
+            return countPlayerInventory(itemId);
+        }
+        int total = 0;
+        for (ItemStack stack : minecraft.player.getInventory().items) {
+            if (stack.getItem() == item && java.util.Objects.equals(stack.getTag(), requiredTag)) {
+                total += stack.getCount();
+            }
+        }
+        for (ItemStack stack : minecraft.player.getInventory().offhand) {
+            if (stack.getItem() == item && java.util.Objects.equals(stack.getTag(), requiredTag)) {
+                total += stack.getCount();
+            }
+        }
+        return total;
     }
 
     public static String getItemDisplayName(String itemId) {
@@ -292,8 +369,17 @@ public final class ShopUiUtil {
 
     /**
      * Subtle, readable discount badge. Static geometry + gentle glow pulse so the text stays sharp.
+     * Red body + black text with a 1px white outline, no drop-shadow — keeps the label crisp
+     * at every GUI scale instead of bleeding into the red background.
      */
     public static void renderAnimatedDiscountBadge(GuiGraphics graphics, Font font, int centerX, int centerY, String text) {
+        // Promotional badges often sit at the top-right corner of a card that also hosts an
+        // item icon.  GuiGraphics.renderItem internally translates the pose to z≈+150 so the
+        // item model doesn't z-fight with overlays; without matching that, our badge draws
+        // underneath the icon and gets visually clipped.  Lift to z=+200 (above stacks, below
+        // the +400 tooltip layer) so it always wins the depth test.
+        graphics.pose().pushPose();
+        graphics.pose().translate(0.0F, 0.0F, 200.0F);
         long time = System.currentTimeMillis();
         // Gentle glow — text does not move or rotate, so it remains legible.
         float glow = 0.5f + 0.5f * (float) Math.sin(time * 0.004D);
@@ -312,8 +398,18 @@ public final class ShopUiUtil {
         graphics.fill(x0 - 2, y0 - 2, x0 + badgeW + 2, y0 + badgeH + 2, glowColor);
         // Solid, readable pill
         graphics.fill(x0, y0, x0 + badgeW, y0 + badgeH, ShopColors.DISCOUNT_BG);
-        drawBorder(graphics, x0, y0, badgeW, badgeH, 0xFFCC0033);
-        graphics.drawString(font, text, centerX - textW / 2, y0 + 3, ShopColors.DISCOUNT_TEXT, true);
+        drawBorder(graphics, x0, y0, badgeW, badgeH, 0xFF000000);
+
+        // 1-pixel white outline via 4-directional offsets, then black center text — no drop shadow.
+        int textX = centerX - textW / 2;
+        int textY = y0 + 3;
+        int outline = 0xFFFFFFFF;
+        graphics.drawString(font, text, textX - 1, textY, outline, false);
+        graphics.drawString(font, text, textX + 1, textY, outline, false);
+        graphics.drawString(font, text, textX, textY - 1, outline, false);
+        graphics.drawString(font, text, textX, textY + 1, outline, false);
+        graphics.drawString(font, text, textX, textY, ShopColors.DISCOUNT_TEXT, false);
+        graphics.pose().popPose();
     }
 
     /**
@@ -339,6 +435,34 @@ public final class ShopUiUtil {
             graphics.drawString(font, lines.get(i), x, y + i * lineHeight, color, false);
         }
         return lines.size();
+    }
+
+    /**
+     * Draws a wrapped string clamped to {@code maxLines}. When the full text would
+     * require more than {@code maxLines} lines, the last drawn line is truncated
+     * with an ellipsis so callers can render a hover tooltip with the full text.
+     *
+     * @return int[]{ linesDrawn, truncatedFlag } — {@code truncatedFlag} is 1 when
+     *         content overflowed beyond {@code maxLines}.
+     */
+    public static int[] drawWrappedClamped(GuiGraphics graphics, Font font, Component component,
+                                           int x, int y, int width, int maxLines,
+                                           int color, int lineHeight) {
+        List<net.minecraft.util.FormattedCharSequence> lines = font.split(component, width);
+        int draw = Math.min(maxLines, lines.size());
+        boolean truncated = lines.size() > maxLines;
+        for (int i = 0; i < draw; i++) {
+            if (truncated && i == draw - 1) {
+                // Render the last visible line and overlay "…" at its end so buyers can tell
+                // the text was clipped and know to hover for the full description.
+                graphics.drawString(font, lines.get(i), x, y + i * lineHeight, color, false);
+                int lineW = Math.min(width, font.width(lines.get(i)));
+                graphics.drawString(font, "…", x + lineW - font.width("…"), y + i * lineHeight, color, false);
+            } else {
+                graphics.drawString(font, lines.get(i), x, y + i * lineHeight, color, false);
+            }
+        }
+        return new int[]{ draw, truncated ? 1 : 0 };
     }
 
     public static void renderPlayerFace(GuiGraphics graphics, UUID playerUuid, int x, int y, int size) {
@@ -511,7 +635,54 @@ public final class ShopUiUtil {
         }
         return stack.getHoverName().getString();
     }
+
+    /**
+     * Renders a string that automatically horizontally scrolls (ping-pongs) when the text is
+     * wider than {@code maxWidth}.  Mirrors the behaviour vanilla uses for button labels so
+     * long shop-alert lines (e.g. shop name + dimension + coords) stay fully readable instead
+     * of being hard-clipped.
+     *
+     * @param maxWidth  the visible horizontal budget starting at {@code x}
+     * @return the pixel width actually consumed (== text width when no scroll, else maxWidth)
+     */
+    public static int renderScrollingString(GuiGraphics graphics, Font font, Component text,
+                                            int x, int y, int maxWidth, int color) {
+        int textWidth = font.width(text);
+        if (textWidth <= maxWidth) {
+            graphics.drawString(font, text, x, y, color, false);
+            return textWidth;
+        }
+        int overflow = textWidth - maxWidth;
+        double seconds = (double) System.currentTimeMillis() / 1000.0D;
+        // Longer overflow → slower full cycle, with a 3s minimum so short overflows still read.
+        double period = Math.max((double) overflow * 0.5D, 3.0D);
+        double phase = Math.sin((Math.PI / 2.0D) * Math.cos((Math.PI * 2.0D) * seconds / period)) / 2.0D + 0.5D;
+        double offset = Mth.lerp(phase, 0.0D, (double) overflow);
+        graphics.enableScissor(x, y - 1, x + maxWidth, y + font.lineHeight + 1);
+        graphics.drawString(font, text, x - (int) offset, y, color, false);
+        graphics.disableScissor();
+        return maxWidth;
+    }
+
+    /** Overload that accepts a raw String. */
+    public static int renderScrollingString(GuiGraphics graphics, Font font, String text,
+                                            int x, int y, int maxWidth, int color) {
+        return renderScrollingString(graphics, font, Component.literal(text), x, y, maxWidth, color);
+    }
+
+    /**
+     * Centered variant of {@link #renderScrollingString}.  Draws the text centered inside the
+     * [x, x+width] band when it fits; otherwise anchors to the left edge of the band and
+     * ping-pongs horizontally.  Used by card layouts where the name is normally centered
+     * under an icon but should still stay fully readable when the name is too long.
+     */
+    public static void renderScrollingCentered(GuiGraphics graphics, Font font, String text,
+                                                int centerX, int y, int maxWidth, int color) {
+        int textWidth = font.width(text);
+        if (textWidth <= maxWidth) {
+            graphics.drawString(font, text, centerX - textWidth / 2, y, color, false);
+            return;
+        }
+        renderScrollingString(graphics, font, text, centerX - maxWidth / 2, y, maxWidth, color);
+    }
 }
-
-
-

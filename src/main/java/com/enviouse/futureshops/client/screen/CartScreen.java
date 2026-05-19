@@ -39,13 +39,14 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         guiTop = (this.height - guiH) / 2;
         visibleRows = Math.max(4, (guiH - 140) / 28);
 
-        addRenderableWidget(Button.builder(Component.literal("§7← Back"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.cart.back"), button -> onClose())
                 .bounds(guiLeft + 10, guiTop + guiH - 24, 48, 18)
                 .build());
-        addRenderableWidget(Button.builder(Component.literal("§cClear"), button -> ShopClientState.clearCart())
-                .bounds(guiLeft + 64, guiTop + guiH - 24, 48, 18)
-                .build());
-        checkoutButton = addRenderableWidget(Button.builder(Component.literal("§a$ Checkout"), button -> requestVerifyAndCheckout())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.cart.clear_btn"), button -> {
+            ShopClientState.clearCart();
+            ShopClientState.clearCartVerification();
+        }).bounds(guiLeft + 64, guiTop + guiH - 24, 48, 18).build());
+        checkoutButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.cart.checkout_btn"), button -> requestVerifyAndCheckout())
                 .bounds(guiLeft + guiW - 100, guiTop + guiH - 24, 90, 18)
                 .build());
     }
@@ -131,7 +132,7 @@ public class CartScreen extends Screen implements ShopScreenMarker {
             int y = rowY + row * 28;
             int ctrlX = listX + listW - 130;
             if (mouseX >= ctrlX + 24 && mouseX <= ctrlX + 38 && mouseY >= y && mouseY <= y + 22) {
-                graphics.renderTooltip(this.font, Component.literal("Shift+Click: Max"), mouseX, mouseY);
+                graphics.renderTooltip(this.font, Component.translatable("gui.futureshops.cart.tooltip.shift_max"), mouseX, mouseY);
                 break;
             }
         }
@@ -180,9 +181,9 @@ public class CartScreen extends Screen implements ShopScreenMarker {
             ShopUiUtil.renderPanel(graphics, listX + 6, y, listW - 12, 22, rowBg, ShopColors.BORDER_SUBTLE);
             ShopUiUtil.renderItemIcon(graphics, this.font, item.itemId(), listX + 10, y + 3);
 
-            // Name — truncated
-            String name = this.font.plainSubstrByWidth(item.displayName(), listW - 240);
-            graphics.drawString(this.font, name, listX + 30, y + 7, ShopColors.TEXT_STRONG, false);
+            // Name — scrolls (ping-pong) when too long so modded items with lengthy names stay readable.
+            ShopUiUtil.renderScrollingString(graphics, this.font, item.displayName(),
+                    listX + 30, y + 7, listW - 240, ShopColors.TEXT_STRONG);
 
             // Quantity controls
             int ctrlX = listX + listW - 130;

@@ -55,7 +55,7 @@ public class BarterScreen extends Screen implements ShopScreenMarker {
         ShopPackets.CHANNEL.sendToServer(new C2SInventorySyncPacket(ShopClientState.getActiveShopId()));
 
         // Back button top-left
-        addRenderableWidget(Button.builder(Component.literal("§7← Back"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.barter.back"), button -> onClose())
                 .bounds(guiLeft + 6, guiTop + 6, 44, 14)
                 .build());
 
@@ -67,7 +67,7 @@ public class BarterScreen extends Screen implements ShopScreenMarker {
         addRenderableWidget(Button.builder(Component.literal("-"), button -> setMultiplier(multiplier - 1))
                 .bounds(qtyX, bottomY, 16, 16)
                 .build());
-        qtyBox = new EditBox(this.font, qtyX + 18, bottomY, 32, 16, Component.literal("Qty"));
+        qtyBox = new EditBox(this.font, qtyX + 18, bottomY, 32, 16, Component.translatable("gui.futureshops.barter.qty_placeholder"));
         qtyBox.setValue("1");
         qtyBox.setMaxLength(4);
         qtyBox.setFilter(s -> s.isEmpty() || s.chars().allMatch(Character::isDigit));
@@ -88,15 +88,15 @@ public class BarterScreen extends Screen implements ShopScreenMarker {
                     if (hasShiftDown()) setMultiplier(resolveMaxMultiplier());
                     else setMultiplier(multiplier + 1);
                 })
-                .tooltip(Tooltip.create(Component.literal("Shift+Click: Max")))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.barter.tooltip.shift_max")))
                 .bounds(qtyX + 52, bottomY, 16, 16)
                 .build());
-        addRenderableWidget(Button.builder(Component.literal("Max"), button -> setMultiplier(resolveMaxMultiplier()))
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.barter.max"), button -> setMultiplier(resolveMaxMultiplier()))
                 .bounds(qtyX + 70, bottomY, 28, 16)
                 .build());
 
         // Add to Cart button — left of Confirm
-        addRenderableWidget(Button.builder(Component.literal("§e+ Cart"), button -> {
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.barter.add_cart"), button -> {
                     ShopClientState.addToCart(targetItemId, multiplier);
                 })
                 .bounds(guiLeft + guiW - 160, bottomY, 60, 16)

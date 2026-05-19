@@ -14,6 +14,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 
@@ -52,6 +53,12 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     private int hoveredMouseX;
     private int hoveredMouseY;
 
+    // Full per-listing description to surface as a hover tooltip when the inline
+    // 3-line preview is truncated with an ellipsis.
+    private String hoveredDescriptionFull = null;
+    private int hoveredDescriptionMouseX;
+    private int hoveredDescriptionMouseY;
+
     // Spec §8: Confirmation modal overlay
     private ConfirmationModal confirmationModal = null;
 
@@ -79,6 +86,11 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     private Button unlinkButton;
     private Button singleMultiButton;
     private Button barterStorageButton;
+    // Backing state for the two config toggles. Pre-i18n the code inferred state by
+    // parsing the button message ("contains("Multi")"), which breaks under translation.
+    // Keep the authoritative value here and resync button messages via helpers.
+    private boolean configSingleMode;
+    private boolean configBarterSame;
     private Button linkBarterButton;
     private Button unlinkBarterButton;
     private Button nbtAwareButton;
@@ -107,7 +119,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     }
 
     public PlayerShopBlockScreen(Screen parent) {
-        super(Component.literal("Player Shop"));
+        super(Component.translatable("gui.futureshops.player_shop_block.title"));
         this.parent = parent;
     }
 
@@ -123,7 +135,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         headerHeight = compact ? 30 : 50;
         listingRailW = Math.max(120, Math.min(200, guiW * 30 / 100));
 
-        addRenderableWidget(Button.builder(Component.literal("§c✕"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.close"), button -> onClose())
                 .bounds(guiLeft + guiW - 24, guiTop + 6, 18, 14)
                 .build());
 
@@ -163,46 +175,47 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
         // Shop name editor
         shopNameBox = new EditBox(this.font, guiLeft + 44, configRowY, Math.max(60, nameBoxW), 14,
-                Component.literal("Shop Name"));
+                Component.translatable("gui.futureshops.player_shop_block.config.shop_name_narration"));
         shopNameBox.setMaxLength(32);
         shopNameBox.setValue(PlayerShopClientState.shopName());
         addRenderableWidget(shopNameBox);
 
         // Single/Multi toggle — right of shop name
-        boolean single = PlayerShopClientState.singleItemMode();
+        configSingleMode = PlayerShopClientState.singleItemMode();
         int toggleX = guiLeft + 48 + Math.max(60, nameBoxW);
         int singleMultiW = compact ? 36 : 44;
         singleMultiButton = addRenderableWidget(Button.builder(
-                        Component.literal(single ? "§eSingle" : "§aMulti"),
+                        singleMultiMessage(),
                         button -> {
-                            boolean nowSingle = button.getMessage().getString().contains("Multi");
-                            button.setMessage(Component.literal(nowSingle ? "§eSingle" : "§aMulti"));
+                            configSingleMode = !configSingleMode;
+                            button.setMessage(singleMultiMessage());
                         })
-                .tooltip(Tooltip.create(Component.literal("Toggle single-item / multi-listing mode")))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.config.mode_tooltip")))
                 .bounds(toggleX, configRowY, singleMultiW, 14)
                 .build());
 
         // Barter storage toggle — right of Single/Multi
-        boolean same = PlayerShopClientState.barterStorageSame();
+        configBarterSame = PlayerShopClientState.barterStorageSame();
         int barterToggleX = toggleX + singleMultiW + 4;
         int barterToggleW = compact ? 36 : 52;
         barterStorageButton = addRenderableWidget(Button.builder(
-                        Component.literal(same ? (compact ? "§7Same" : "§7Same Chest") : (compact ? "§9Sep." : "§9Separate")),
+                        barterStorageMessage(),
                         button -> {
-                            boolean nowSame = button.getMessage().getString().contains("Same");
-                            button.setMessage(Component.literal(nowSame
-                                    ? (compact ? "§9Sep." : "§9Separate")
-                                    : (compact ? "§7Same" : "§7Same Chest")));
+                            configBarterSame = !configBarterSame;
+                            button.setMessage(barterStorageMessage());
                         })
-                .tooltip(Tooltip.create(Component.literal("Same chest or separate for barter items")))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.config.storage_tooltip")))
                 .bounds(barterToggleX, configRowY, barterToggleW, 14)
                 .build());
 
         // Save Config — right-aligned on same row
         int saveW = compact ? 36 : 50;
         saveConfigButton = addRenderableWidget(Button.builder(
-                        Component.literal(compact ? "§aSave" : "§aSave Config"), button -> saveConfig())
-                .tooltip(Tooltip.create(Component.literal("Save shop name, mode, and barter storage settings")))
+                        Component.translatable(compact
+                                ? "gui.futureshops.player_shop_block.config.save_short"
+                                : "gui.futureshops.player_shop_block.config.save_long"),
+                        button -> saveConfig())
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.config.save_tooltip")))
                 .bounds(guiLeft + guiW - saveW - 16, configRowY, saveW, 14)
                 .build());
 
@@ -246,82 +259,87 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         priceSecY = contentStartY + (sideBySide ? 8 : (compact ? 62 : 82));
         int ctrlY1 = priceSecY + (compact ? 14 : 18);
         int cx = ownerInfoX + 4;
-        int modeW = Math.max(28, this.font.width("Mode") + 8);
-        toggleModeButton = addRenderableWidget(Button.builder(Component.literal("Mode"), button -> sendAction("TOGGLE_MODE", 0))
-                .tooltip(Tooltip.create(Component.literal("Cycle: Money → Barter → Both → M+B")))
+        String modeLabel = I18n.get("gui.futureshops.player_shop_block.detail.mode_btn");
+        int modeW = Math.max(28, this.font.width(modeLabel) + 8);
+        toggleModeButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.detail.mode_btn"), button -> sendAction("TOGGLE_MODE", 0))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.trade_mode.cycle_tooltip")))
                 .bounds(cx, ctrlY1, modeW, bh).build());
         cx += modeW + gap;
         priceMinusButton = addRenderableWidget(Button.builder(Component.literal("-"), button -> adjustPrice(-100))
-                .tooltip(Tooltip.create(Component.literal("Decrease price")))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.detail.price_dec_tooltip")))
                 .bounds(cx, ctrlY1, pmW, bh).build());
         cx += pmW + 1;
         int priceBoxW = Math.max(36, Math.min(60, ownerInfoW / 3));
-        priceBox = new EditBox(this.font, cx, ctrlY1, priceBoxW, bh, Component.literal("Price"));
+        priceBox = new EditBox(this.font, cx, ctrlY1, priceBoxW, bh, Component.translatable("gui.futureshops.player_shop_block.detail.price_narration"));
         priceBox.setMaxLength(10);
         priceBox.setValue(currentPriceText());
         priceBox.setResponder(value -> priceEditTimestamp = System.currentTimeMillis());
         addRenderableWidget(priceBox);
         cx += priceBoxW + 1;
         pricePlusButton = addRenderableWidget(Button.builder(Component.literal("+"), button -> adjustPrice(100))
-                .tooltip(Tooltip.create(Component.literal("Increase price")))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.detail.price_inc_tooltip")))
                 .bounds(cx, ctrlY1, pmW, bh).build());
 
         // ═══ Section 2: Barter — [Set] [-] [count] [+] ═══
         barterSecY = priceSecY + sectionH + secGap;
         int ctrlY2 = barterSecY + (compact ? 14 : 18);
         cx = ownerInfoX + 4;
-        int setW = Math.max(22, this.font.width("Set") + 8);
-        barterSetButton = addRenderableWidget(Button.builder(Component.literal("§9Set"), button -> sendAction("SET_BARTER_MAINHAND", currentBarterCount()))
-                .tooltip(Tooltip.create(Component.literal("Set barter item from held item")))
+        String setLabel = I18n.get("gui.futureshops.player_shop_block.detail.barter_set");
+        int setW = Math.max(22, this.font.width(setLabel) + 8);
+        barterSetButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.detail.barter_set"), button -> sendAction("SET_BARTER_MAINHAND", currentBarterCount()))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.detail.barter_set_tooltip")))
                 .bounds(cx, ctrlY2, setW, bh).build());
         cx += setW + gap;
         barterMinusButton = addRenderableWidget(Button.builder(Component.literal("-"), button -> adjustBarterCount(-1))
-                .tooltip(Tooltip.create(Component.literal("Decrease barter count")))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.detail.barter_dec_tooltip")))
                 .bounds(cx, ctrlY2, pmW, bh).build());
         cx += pmW + 1;
         int barterBoxW = Math.max(24, Math.min(40, ownerInfoW / 4));
-        barterCountBox = new EditBox(this.font, cx, ctrlY2, barterBoxW, bh, Component.literal("Qty"));
+        barterCountBox = new EditBox(this.font, cx, ctrlY2, barterBoxW, bh, Component.translatable("gui.futureshops.player_shop_block.detail.qty_narration"));
         barterCountBox.setMaxLength(4);
         barterCountBox.setValue(String.valueOf(currentBarterCount()));
         barterCountBox.setResponder(value -> barterEditTimestamp = System.currentTimeMillis());
         addRenderableWidget(barterCountBox);
         cx += barterBoxW + 1;
         barterPlusButton = addRenderableWidget(Button.builder(Component.literal("+"), button -> adjustBarterCount(1))
-                .tooltip(Tooltip.create(Component.literal("Increase barter count")))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.detail.barter_inc_tooltip")))
                 .bounds(cx, ctrlY2, pmW, bh).build());
 
         // ═══ Section 3: Config — [Q-] [qty] [Q+] [NBT] [Vis] ═══
         configSecY = barterSecY + sectionH + secGap;
         int ctrlY3 = configSecY + (compact ? 14 : 18);
         cx = ownerInfoX + 4;
-        int qLabelW = Math.max(18, this.font.width("Q-") + 6);
-        qtyMinusButton = addRenderableWidget(Button.builder(Component.literal("§6Q-"), button -> adjustBaseQty(-1))
-                .tooltip(Tooltip.create(Component.literal("Decrease base quantity")))
+        String qMinusLabel = I18n.get("gui.futureshops.player_shop_block.detail.qty_dec");
+        int qLabelW = Math.max(18, this.font.width(qMinusLabel) + 6);
+        qtyMinusButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.detail.qty_dec"), button -> adjustBaseQty(-1))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.detail.qty_dec_tooltip")))
                 .bounds(cx, ctrlY3, qLabelW, bh).build());
         cx += qLabelW + 1;
         int bqBoxW = Math.max(24, Math.min(36, ownerInfoW / 5));
-        baseQtyBox = new EditBox(this.font, cx, ctrlY3, bqBoxW, bh, Component.literal("BQ"));
+        baseQtyBox = new EditBox(this.font, cx, ctrlY3, bqBoxW, bh, Component.translatable("gui.futureshops.player_shop_block.detail.bq_narration"));
         baseQtyBox.setMaxLength(4);
         baseQtyBox.setValue(String.valueOf(currentBaseQty()));
         baseQtyBox.setResponder(value -> baseQtyEditTimestamp = System.currentTimeMillis());
         addRenderableWidget(baseQtyBox);
         cx += bqBoxW + 1;
-        qtyPlusButton = addRenderableWidget(Button.builder(Component.literal("§6Q+"), button -> adjustBaseQty(1))
-                .tooltip(Tooltip.create(Component.literal("Increase base quantity")))
+        qtyPlusButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.detail.qty_inc"), button -> adjustBaseQty(1))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.detail.qty_inc_tooltip")))
                 .bounds(cx, ctrlY3, qLabelW, bh).build());
         cx += qLabelW + gap + 2;
-        int visW = Math.max(30, this.font.width("\uD83D\uDC41 Vis") + 8);
-        setVisibleButton = addRenderableWidget(Button.builder(Component.literal("§e\uD83D\uDC41 Vis"), button -> {
+        String visLabel = I18n.get("gui.futureshops.player_shop_block.detail.visible_btn");
+        int visW = Math.max(30, this.font.width(visLabel) + 8);
+        setVisibleButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.detail.visible_btn"), button -> {
                     int idx = PlayerShopClientState.selectedListingIndex();
                     sendAction("SELECT_VISIBLE_LISTING", idx);
                 })
-                .tooltip(Tooltip.create(Component.literal("Featured listing (single-item mode)")))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.detail.visible_tooltip")))
                 .bounds(cx, ctrlY3, visW, bh).build());
         cx += visW + gap;
         // NBT toggle — placed on config row under pricing mode
-        int nbtW = Math.max(24, this.font.width("NBT") + 8);
-        nbtAwareButton = addRenderableWidget(Button.builder(Component.literal("NBT"), button -> sendAction("TOGGLE_NBT_AWARE", 0))
-                .tooltip(Tooltip.create(Component.literal("Toggle NBT matching")))
+        String nbtLabel = I18n.get("gui.futureshops.player_shop_block.detail.nbt_btn");
+        int nbtW = Math.max(24, this.font.width(nbtLabel) + 8);
+        nbtAwareButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.detail.nbt_btn"), button -> sendAction("TOGGLE_NBT_AWARE", 0))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.detail.nbt_tooltip")))
                 .bounds(cx, ctrlY3, nbtW, bh).build());
 
         // ═══ Footer: action buttons on actionRowY, link buttons on linkRowY ═══
@@ -331,92 +349,163 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         int bx = guiLeft + 4;
 
         // Action buttons — initial positions are placeholders; reflowFooterButtons() sets real positions
-        int addBtnW = this.font.width("+ Add") + 12;
-        addListingButton = addRenderableWidget(Button.builder(Component.literal("§a+ Add"), button -> sendAction("ADD_LISTING_MAINHAND", 0))
-                .tooltip(Tooltip.create(Component.literal("Add held item as a new listing")))
+        String addLabel = I18n.get("gui.futureshops.player_shop_block.footer.add");
+        int addBtnW = this.font.width(addLabel) + 12;
+        addListingButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.footer.add"), button -> sendAction("ADD_LISTING_MAINHAND", 0))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.add_tooltip")))
                 .bounds(bx, actionRowY, addBtnW, bh).build());
         actionRowButtons.add(addListingButton);
 
-        int delBtnW = this.font.width("- Del") + 12;
-        removeListingButton = addRenderableWidget(Button.builder(Component.literal("§c- Del"), button -> sendAction("REMOVE_LISTING", 0))
-                .tooltip(Tooltip.create(Component.literal("Remove the selected listing")))
+        String delLabel = I18n.get("gui.futureshops.player_shop_block.footer.del");
+        int delBtnW = this.font.width(delLabel) + 12;
+        removeListingButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.footer.del"), button -> sendAction("REMOVE_LISTING", 0))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.del_tooltip")))
                 .bounds(bx, actionRowY, delBtnW, bh).build());
         actionRowButtons.add(removeListingButton);
 
-        int promoBtnW = this.font.width("Promo") + 12;
-        promoButton = addRenderableWidget(Button.builder(Component.literal("§6Promo"), button -> this.minecraft.setScreen(new PromoEditorModalScreen(this)))
-                .tooltip(Tooltip.create(Component.literal("Configure promo / discount for selected listing")))
+        String promoLabel = I18n.get("gui.futureshops.player_shop_block.footer.promo");
+        int promoBtnW = this.font.width(promoLabel) + 12;
+        promoButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.footer.promo"), button -> this.minecraft.setScreen(new PromoEditorModalScreen(this)))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.promo_tooltip")))
                 .bounds(bx, actionRowY, promoBtnW, bh).build());
         actionRowButtons.add(promoButton);
 
-        int collectBtnW = this.font.width("Collect") + 12;
-        claimButton = addRenderableWidget(Button.builder(Component.literal("§aCollect"), button -> sendAction("CLAIM_SETTLEMENT", 0))
-                .tooltip(Tooltip.create(Component.literal("Collect pending settlement revenue")))
+        String collectLabel = I18n.get("gui.futureshops.player_shop_block.footer.collect");
+        int collectBtnW = this.font.width(collectLabel) + 12;
+        claimButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.footer.collect"), button -> sendAction("CLAIM_SETTLEMENT", 0))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.collect_tooltip")))
                 .bounds(bx, actionRowY, collectBtnW, bh).build());
         actionRowButtons.add(claimButton);
 
-        int histBtnW = this.font.width("Hist") + 12;
-        historyButton = addRenderableWidget(Button.builder(Component.literal("Hist"), button -> this.minecraft.setScreen(new SettlementHistoryScreen(this)))
-                .tooltip(Tooltip.create(Component.literal("View settlement history")))
+        String histLabel = I18n.get("gui.futureshops.player_shop_block.footer.hist");
+        int histBtnW = this.font.width(histLabel) + 12;
+        historyButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.footer.hist"), button -> this.minecraft.setScreen(new SettlementHistoryScreen(this)))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.hist_tooltip")))
                 .bounds(bx, actionRowY, histBtnW, bh).build());
         actionRowButtons.add(historyButton);
 
-        int deptBtnW = this.font.width("Dept") + 12;
-        deptButton = addRenderableWidget(Button.builder(Component.literal("§6Dept"), button -> this.minecraft.setScreen(new DepartmentPickerScreen(this)))
-                .tooltip(Tooltip.create(Component.literal("Set department category for selected listing")))
+        String deptLabel = I18n.get("gui.futureshops.player_shop_block.footer.dept");
+        int deptBtnW = this.font.width(deptLabel) + 12;
+        deptButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.footer.dept"), button -> this.minecraft.setScreen(new DepartmentPickerScreen(this)))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.dept_tooltip")))
                 .bounds(bx, actionRowY, deptBtnW, bh).build());
         actionRowButtons.add(deptButton);
 
         // Description button — registers pending desc on server, then closes + prompts chat
-        int descBtnW = this.font.width("Desc") + 12;
-        descButton = addRenderableWidget(Button.builder(Component.literal("§bDesc"), button -> {
+        String descLabel = I18n.get("gui.futureshops.player_shop_block.footer.desc");
+        int descBtnW = this.font.width(descLabel) + 12;
+        descButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.footer.desc"), button -> {
                     if (this.minecraft != null && this.minecraft.player != null) {
                         sendAction("PENDING_DESC", 0);
                         this.minecraft.player.displayClientMessage(
-                                Component.literal("§e➤ Type in chat: §f/desc <your description> §7(supports §r§lcolor §7§ocodes§7)"), false);
+                                Component.translatable("gui.futureshops.player_shop_block.chat.desc_prompt"), false);
                         onClose();
                     }
                 })
-                .tooltip(Tooltip.create(Component.literal("Set a shop description (closes screen, type /desc in chat)")))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.desc_tooltip")))
                 .bounds(bx, actionRowY, descBtnW, bh).build());
         actionRowButtons.add(descButton);
 
         // Listing description button
-        int lDescBtnW = this.font.width("L.Desc") + 12;
-        lDescButton = addRenderableWidget(Button.builder(Component.literal("§3L.Desc"), button -> {
+        String lDescLabel = I18n.get("gui.futureshops.player_shop_block.footer.ldesc");
+        int lDescBtnW = this.font.width(lDescLabel) + 12;
+        lDescButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.footer.ldesc"), button -> {
                     if (this.minecraft != null && this.minecraft.player != null) {
                         sendAction("PENDING_LISTING_DESC", 0);
                         this.minecraft.player.displayClientMessage(
-                                Component.literal("§e➤ Type in chat: §f/desc <listing description> §7(applies to selected listing)"), false);
+                                Component.translatable("gui.futureshops.player_shop_block.chat.ldesc_prompt"), false);
                         onClose();
                     }
                 })
-                .tooltip(Tooltip.create(Component.literal("Set a description for the selected listing (closes screen, type /desc in chat)")))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.ldesc_tooltip")))
                 .bounds(bx, actionRowY, lDescBtnW, bh).build());
         actionRowButtons.add(lDescButton);
 
+        // Copy Config / Paste Config — clones all owner-editable shop data (name, description,
+        // listings incl. promos + barter items + bundle outputs) into a server-side per-player
+        // clipboard so the same catalogue can be stamped onto another shop block.
+        String copyLabel = I18n.get("gui.futureshops.player_shop_block.footer.copy_config");
+        int copyBtnW = this.font.width(copyLabel) + 12;
+        Button copyConfigButton = addRenderableWidget(Button.builder(
+                        Component.translatable("gui.futureshops.player_shop_block.footer.copy_config"),
+                        button -> sendAction("COPY_CONFIG", 0))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.copy_config_tooltip")))
+                .bounds(bx, actionRowY, copyBtnW, bh).build());
+        actionRowButtons.add(copyConfigButton);
+
+        String pasteLabel = I18n.get("gui.futureshops.player_shop_block.footer.paste_config");
+        int pasteBtnW = this.font.width(pasteLabel) + 12;
+        Button pasteConfigButton = addRenderableWidget(Button.builder(
+                        Component.translatable("gui.futureshops.player_shop_block.footer.paste_config"),
+                        button -> sendAction("PASTE_CONFIG", 0))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.paste_config_tooltip")))
+                .bounds(bx, actionRowY, pasteBtnW, bh).build());
+        actionRowButtons.add(pasteConfigButton);
+
+        // Display-item controls: nudge the floating listing preview up/down
+        // (step = 0.05 world units) and scale it bigger/smaller (step = 0.10×).
+        // Per-shop, persists with the block entity, owner-only.
+        Button dispUpButton = addRenderableWidget(Button.builder(
+                        Component.translatable("gui.futureshops.player_shop_block.footer.disp_up"),
+                        button -> sendAction("DISPLAY_Y_UP", 1))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.disp_up_tooltip")))
+                .bounds(bx, actionRowY, this.font.width(I18n.get("gui.futureshops.player_shop_block.footer.disp_up")) + 12, bh).build());
+        actionRowButtons.add(dispUpButton);
+
+        Button dispDownButton = addRenderableWidget(Button.builder(
+                        Component.translatable("gui.futureshops.player_shop_block.footer.disp_down"),
+                        button -> sendAction("DISPLAY_Y_DOWN", 1))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.disp_down_tooltip")))
+                .bounds(bx, actionRowY, this.font.width(I18n.get("gui.futureshops.player_shop_block.footer.disp_down")) + 12, bh).build());
+        actionRowButtons.add(dispDownButton);
+
+        Button dispBigButton = addRenderableWidget(Button.builder(
+                        Component.translatable("gui.futureshops.player_shop_block.footer.disp_bigger"),
+                        button -> sendAction("DISPLAY_SCALE_UP", 1))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.disp_bigger_tooltip")))
+                .bounds(bx, actionRowY, this.font.width(I18n.get("gui.futureshops.player_shop_block.footer.disp_bigger")) + 12, bh).build());
+        actionRowButtons.add(dispBigButton);
+
+        Button dispSmallButton = addRenderableWidget(Button.builder(
+                        Component.translatable("gui.futureshops.player_shop_block.footer.disp_smaller"),
+                        button -> sendAction("DISPLAY_SCALE_DOWN", 1))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.disp_smaller_tooltip")))
+                .bounds(bx, actionRowY, this.font.width(I18n.get("gui.futureshops.player_shop_block.footer.disp_smaller")) + 12, bh).build());
+        actionRowButtons.add(dispSmallButton);
+
+        Button toggleNameplateButton = addRenderableWidget(Button.builder(
+                        Component.translatable("gui.futureshops.player_shop_block.footer.toggle_nameplate"),
+                        button -> sendAction("TOGGLE_NAMEPLATE", 0))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.toggle_nameplate_tooltip")))
+                .bounds(bx, actionRowY, this.font.width(I18n.get("gui.futureshops.player_shop_block.footer.toggle_nameplate")) + 12, bh).build());
+        actionRowButtons.add(toggleNameplateButton);
+
         // Link buttons
-        int linkBtnW = this.font.width("Link") + 12;
-        linkButton = addRenderableWidget(Button.builder(Component.literal("Link"), button -> sendAction("LINK_LOOKING", 0))
-                .tooltip(Tooltip.create(Component.literal("Link main storage — look at a chest first")))
+        String linkLabel = I18n.get("gui.futureshops.player_shop_block.footer.link");
+        int linkBtnW = this.font.width(linkLabel) + 12;
+        linkButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.footer.link"), button -> sendAction("LINK_LOOKING", 0))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.link_tooltip")))
                 .bounds(bx, linkRowY, linkBtnW, bh).build());
         linkRowButtons.add(linkButton);
 
-        int unlkBtnW = this.font.width("Unlk") + 12;
-        unlinkButton = addRenderableWidget(Button.builder(Component.literal("Unlk"), button -> sendAction("UNLINK", 0))
-                .tooltip(Tooltip.create(Component.literal("Unlink main storage")))
+        String unlkLabel = I18n.get("gui.futureshops.player_shop_block.footer.unlink");
+        int unlkBtnW = this.font.width(unlkLabel) + 12;
+        unlinkButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.footer.unlink"), button -> sendAction("UNLINK", 0))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.unlink_tooltip")))
                 .bounds(bx, linkRowY, unlkBtnW, bh).build());
         linkRowButtons.add(unlinkButton);
 
-        int blnkBtnW = this.font.width("B.Lnk") + 12;
-        linkBarterButton = addRenderableWidget(Button.builder(Component.literal("§6B.Lnk"), button -> sendAction("LINK_BARTER_LOOKING", 0))
-                .tooltip(Tooltip.create(Component.literal("Link barter storage — look at a chest first")))
+        String blnkLabel = I18n.get("gui.futureshops.player_shop_block.footer.blink");
+        int blnkBtnW = this.font.width(blnkLabel) + 12;
+        linkBarterButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.footer.blink"), button -> sendAction("LINK_BARTER_LOOKING", 0))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.blink_tooltip")))
                 .bounds(bx, linkRowY, blnkBtnW, bh).build());
         linkRowButtons.add(linkBarterButton);
 
-        int bulkBtnW = this.font.width("B.Ulk") + 12;
-        unlinkBarterButton = addRenderableWidget(Button.builder(Component.literal("§6B.Ulk"), button -> sendAction("UNLINK_BARTER", 0))
-                .tooltip(Tooltip.create(Component.literal("Unlink barter storage")))
+        String bulkLabel = I18n.get("gui.futureshops.player_shop_block.footer.bulink");
+        int bulkBtnW = this.font.width(bulkLabel) + 12;
+        unlinkBarterButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.footer.bulink"), button -> sendAction("UNLINK_BARTER", 0))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.bulink_tooltip")))
                 .bounds(bx, linkRowY, bulkBtnW, bh).build());
         linkRowButtons.add(unlinkBarterButton);
 
@@ -425,10 +514,12 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     }
 
     private void initVisitorWidgets() {
-        // Item 4 & 9: Back button when navigated from another screen — placed above header to avoid overlap
+        // Item 4 & 9: Back button when navigated from another screen — placed LEFT of the
+        // close (×) button on the top-right so it never slides onto the owner's player head
+        // in the header (which sits at guiLeft+16, guiTop+8).
         if (parent != null) {
-            addRenderableWidget(Button.builder(Component.literal("§7← Back"), button -> onClose())
-                    .bounds(guiLeft + 6, Math.max(2, guiTop - 16), 44, 14)
+            addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.visitor.back"), button -> onClose())
+                    .bounds(guiLeft + guiW - 24 - 44 - 4, guiTop + 6, 44, 14)
                     .build());
         }
 
@@ -443,9 +534,11 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
         // Cart button (rightmost)
         int cartCount = PlayerShopCartState.size();
-        String cartLabel = cartCount > 0 ? "§6🛒 " + cartCount : "§7🛒";
+        Component cartLabel = cartCount > 0
+                ? Component.translatable("gui.futureshops.player_shop_block.visitor.cart_count", cartCount)
+                : Component.translatable("gui.futureshops.player_shop_block.visitor.cart_empty");
         int cartBtnW = tightFit ? 28 : 40;
-        addRenderableWidget(Button.builder(Component.literal(cartLabel), button -> {
+        addRenderableWidget(Button.builder(cartLabel, button -> {
                     if (this.minecraft != null)
                         this.minecraft.setScreen(new PlayerShopCartScreen(this));
                 })
@@ -454,13 +547,13 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
         // Add to Cart
         int cartAddW = tightFit ? 32 : 42;
-        addToCartButton = addRenderableWidget(Button.builder(Component.literal("§e+ Cart"), button -> addToCart())
+        addToCartButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.visitor.add_cart"), button -> addToCart())
                 .bounds(rightEdge - cartAddW, y, cartAddW, 14).build());
         rightEdge -= cartAddW + btnGap;
 
         // Barter button — LGB#6: pass current quantity
         int barterBtnW = tightFit ? 42 : 58;
-        visitorBarterButton = addRenderableWidget(Button.builder(Component.literal("§9⚒ Barter"), button -> {
+        visitorBarterButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.visitor.barter_btn"), button -> {
                     if (this.minecraft != null)
                         this.minecraft.setScreen(new PlayerShopBarterScreen(this, getQuantity()));
                 })
@@ -469,7 +562,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
         // Buy button (money)
         int buyBtnW = tightFit ? 40 : 56;
-        visitorBuyButton = addRenderableWidget(Button.builder(Component.literal("§a$ Buy"), button -> showBuyConfirmation(getQuantity()))
+        visitorBuyButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.visitor.buy_btn"), button -> showBuyConfirmation(getQuantity()))
                 .bounds(rightEdge - buyBtnW, y, buyBtnW, 14).build());
         rightEdge -= buyBtnW + btnGap + 4;
 
@@ -477,7 +570,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         int qtyX = Math.max(guiLeft + 8, rightEdge - 100);
         addRenderableWidget(Button.builder(Component.literal("-"), button -> setQuantity(getQuantity() - 1))
                 .bounds(qtyX, y, 14, 14).build());
-        quantityBox = new EditBox(this.font, qtyX + 16, y, 32, 14, Component.literal("Qty"));
+        quantityBox = new EditBox(this.font, qtyX + 16, y, 32, 14, Component.translatable("gui.futureshops.player_shop_block.visitor.qty"));
         quantityBox.setValue("1");
         quantityBox.setMaxLength(4);
         quantityBox.setFilter(s -> s.isEmpty() || s.chars().allMatch(Character::isDigit));
@@ -488,9 +581,9 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                     if (hasShiftDown()) setQuantity(resolveMaxQuantity());
                     else setQuantity(getQuantity() + 1);
                 })
-                .tooltip(Tooltip.create(Component.literal("Shift+Click: Max")))
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.visitor.shift_max")))
                 .bounds(qtyX + 50, y, 14, 14).build());
-        addRenderableWidget(Button.builder(Component.literal("Max"), button -> setQuantity(resolveMaxQuantity()))
+        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.visitor.max"), button -> setQuantity(resolveMaxQuantity()))
                 .bounds(qtyX + 66, y, 28, 14).build());
     }
 
@@ -499,6 +592,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         // Reset hover tooltip
         hoveredItemId = null;
         hoveredNbtJson = null;
+        hoveredDescriptionFull = null;
 
         ShopUiUtil.renderDimBackdrop(graphics, this.width, this.height);
 
@@ -535,6 +629,10 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         if (hoveredItemId != null) {
             ShopUiUtil.renderItemTooltip(graphics, this.font, hoveredItemId,
                     hoveredNbtJson != null ? hoveredNbtJson : "", mouseX, mouseY);
+        } else if (hoveredDescriptionFull != null && !hoveredDescriptionFull.isBlank()) {
+            // Let vanilla tooltip rendering handle its own wrapping/positioning for the full text.
+            graphics.renderTooltip(this.font, Component.literal(hoveredDescriptionFull),
+                    hoveredDescriptionMouseX, hoveredDescriptionMouseY);
         }
 
         // Spec §8: Render confirmation modal on top of everything
@@ -558,10 +656,12 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         if (compact) {
             // Compact header: single row — face + title + link status
             ShopUiUtil.renderPlayerFace(graphics, PlayerShopClientState.ownerUuid(), hx + 4, hy + 4, hh - 8);
-            String title = PlayerShopClientState.owner() ? "§6⚡ Manage Shop" : "§fPlayer Shop";
+            String title = I18n.get(PlayerShopClientState.owner()
+                    ? "gui.futureshops.player_shop_block.header.owner_compact"
+                    : "gui.futureshops.player_shop_block.header.visitor_compact");
             graphics.drawString(this.font, title, hx + hh, hy + 4, ShopColors.TEXT_PRIMARY, false);
             String shopName = PlayerShopClientState.shopName().isBlank()
-                    ? PlayerShopClientState.ownerName() + "'s Shop"
+                    ? I18n.get("gui.futureshops.player_shop_block.header.shop_suffix", PlayerShopClientState.ownerName())
                     : PlayerShopClientState.shopName();
             graphics.drawString(this.font, this.font.plainSubstrByWidth("§7" + shopName, hw / 2 - hh), hx + hh, hy + 14, ShopColors.TEXT_SECONDARY, false);
             // Franchise badge (compact)
@@ -571,36 +671,46 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                         "⚑ " + this.font.plainSubstrByWidth(compactFranchise, 60),
                         ShopColors.BG_PANEL, ShopColors.ACCENT_PURPLE, ShopColors.ACCENT_PURPLE);
             }
-            // Description in compact header (truncated)
+            // Description in compact header (scrolling)
             String compactDesc = PlayerShopClientState.description();
             if (!compactDesc.isBlank()) {
-                graphics.drawString(this.font, this.font.plainSubstrByWidth("§o" + compactDesc, hw / 2 - hh), hx + hh + this.font.width(this.font.plainSubstrByWidth("§7" + shopName, hw / 2 - hh)) + 6, hy + 14, ShopColors.TEXT_SECONDARY, false);
+                int descX = hx + hh + this.font.width(this.font.plainSubstrByWidth("§7" + shopName, hw / 2 - hh)) + 6;
+                int descMaxW = Math.max(20, hx + hw - 130 - descX);
+                ShopUiUtil.renderScrollingString(graphics, this.font, "§o" + compactDesc, descX, hy + 14, descMaxW, ShopColors.TEXT_SECONDARY);
             }
-            // Link chip — right aligned
-            ShopUiUtil.drawChip(graphics, this.font, hx + hw - 100, hy + 6,
+            // Link chip — right aligned, reserving 26px for the close (×) button
+            ShopUiUtil.drawChip(graphics, this.font, hx + hw - 124, hy + 6,
                     this.font.plainSubstrByWidth(
-                            PlayerShopClientState.linked() ? "✓ Linked" : "⚠ No Link", 80),
+                            I18n.get(PlayerShopClientState.linked()
+                                    ? "gui.futureshops.player_shop_block.header.linked_short"
+                                    : "gui.futureshops.player_shop_block.header.not_linked_short"), 80),
                     ShopColors.BG_PANEL,
                     PlayerShopClientState.linked() ? ShopColors.SUCCESS : ShopColors.ERROR,
                     PlayerShopClientState.linked() ? ShopColors.SUCCESS : ShopColors.ERROR);
         } else {
             // Normal header: face + two-line title + franchise/desc mid | link chip + revenue right
             ShopUiUtil.renderPlayerFace(graphics, PlayerShopClientState.ownerUuid(), hx + 8, hy + 8, 34);
-            String title = PlayerShopClientState.owner() ? "§6⚡ Manage Your Shop" : "§fBrowse Player Shop";
+            String title = I18n.get(PlayerShopClientState.owner()
+                    ? "gui.futureshops.player_shop_block.header.owner"
+                    : "gui.futureshops.player_shop_block.header.visitor");
             String shopName = PlayerShopClientState.shopName().isBlank()
-                    ? PlayerShopClientState.ownerName() + "'s Shop"
+                    ? I18n.get("gui.futureshops.player_shop_block.header.shop_suffix", PlayerShopClientState.ownerName())
                     : PlayerShopClientState.shopName();
 
             // Reserve right region for link chip + revenue. Narrows responsively so the mid
-            // region (franchise chip + description) cannot collide with it.
+            // region (franchise chip + description) cannot collide with it. Additionally
+            // pushed 26px further left so the chip never slides under the close (×) button.
+            int closeReserve = 26;
             int rightRegionW = Math.min(140, Math.max(90, hw / 3));
-            int rightRegionX = hx + hw - rightRegionW;
+            int rightRegionX = hx + hw - rightRegionW - closeReserve;
 
             int centerX = hx + 50;
             int centerMaxW = Math.max(60, rightRegionX - centerX - 6);
             graphics.drawString(this.font, this.font.plainSubstrByWidth(title, centerMaxW), centerX, hy + 8, ShopColors.TEXT_PRIMARY, false);
             graphics.drawString(this.font, this.font.plainSubstrByWidth("§7" + shopName, centerMaxW), centerX, hy + 20, ShopColors.TEXT_SECONDARY, false);
-            graphics.drawString(this.font, this.font.plainSubstrByWidth("Owner: " + PlayerShopClientState.ownerName(), Math.min(130, centerMaxW)), centerX, hy + 32, ShopColors.TEXT_SECONDARY, false);
+            graphics.drawString(this.font, this.font.plainSubstrByWidth(
+                    I18n.get("gui.futureshops.player_shop_block.header.owner_label", PlayerShopClientState.ownerName()),
+                    Math.min(130, centerMaxW)), centerX, hy + 32, ShopColors.TEXT_SECONDARY, false);
 
             // Mid region (after owner text) — franchise chip + description, only when there's room
             int midX = hx + 190;
@@ -614,20 +724,35 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
             }
             String normalDesc = PlayerShopClientState.description();
             if (!normalDesc.isBlank() && midAvailW > 20) {
-                graphics.drawString(this.font, this.font.plainSubstrByWidth("§7§o" + normalDesc, midAvailW), midX, hy + 32, ShopColors.TEXT_SECONDARY, false);
+                ShopUiUtil.renderScrollingString(graphics, this.font, "§7§o" + normalDesc, midX, hy + 32, midAvailW, ShopColors.TEXT_SECONDARY);
             }
 
-            // Right region — link chip + revenue, both width-capped to rightRegionW
-            int chipTextCap = Math.max(20, rightRegionW - 10);
-            ShopUiUtil.drawChip(graphics, this.font, rightRegionX, hy + 8,
-                    this.font.plainSubstrByWidth(
-                            PlayerShopClientState.linked() ? "✓ Storage Linked" : "⚠ Needs Link", chipTextCap),
+            // Right region — link chip + revenue. The revenue string (pending / total) sits
+            // to the LEFT of the storage-linked chip so that at GUI scale 4 it stays visible
+            // instead of being pushed under the chip and truncated.
+            String linkedText = I18n.get(PlayerShopClientState.linked()
+                    ? "gui.futureshops.player_shop_block.header.linked_long"
+                    : "gui.futureshops.player_shop_block.header.not_linked_long");
+            int chipTextCap = Math.max(20, Math.min(rightRegionW - 10, this.font.width(linkedText)));
+            String clippedChip = this.font.plainSubstrByWidth(linkedText, chipTextCap);
+            int chipW = this.font.width(clippedChip) + 10;
+            int chipX = rightRegionX + Math.max(0, rightRegionW - chipW);
+            ShopUiUtil.drawChip(graphics, this.font, chipX, hy + 8, clippedChip,
                     ShopColors.BG_PANEL,
                     PlayerShopClientState.linked() ? ShopColors.SUCCESS : ShopColors.ERROR,
                     PlayerShopClientState.linked() ? ShopColors.SUCCESS : ShopColors.ERROR);
-            String revenue = "Pending " + ShopUiUtil.formatMinorUnits(PlayerShopClientState.pendingSettlementMinor())
-                    + " • Total " + ShopUiUtil.formatMinorUnits(PlayerShopClientState.lifetimeRevenueMinor());
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(revenue, rightRegionW - 4), rightRegionX, hy + 30, ShopColors.TEXT_PRICE, false);
+            String revenue = I18n.get("gui.futureshops.player_shop_block.header.revenue",
+                    ShopUiUtil.formatMinorUnits(PlayerShopClientState.pendingSettlementMinor()),
+                    ShopUiUtil.formatMinorUnits(PlayerShopClientState.lifetimeRevenueMinor()));
+            int revenueAvail = Math.max(0, chipX - rightRegionX - 6);
+            if (revenueAvail >= 40) {
+                ShopUiUtil.renderScrollingString(graphics, this.font, revenue,
+                        rightRegionX, hy + 10, revenueAvail, ShopColors.TEXT_PRICE);
+            } else {
+                // Not enough horizontal room — fall back to the old below-chip placement.
+                ShopUiUtil.renderScrollingString(graphics, this.font, revenue,
+                        rightRegionX, hy + 30, Math.max(40, rightRegionW - 4), ShopColors.TEXT_PRICE);
+            }
         }
     }
 
@@ -639,7 +764,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.renderCard(graphics, cx, cy, cw, ch);
         graphics.fill(cx, cy, cx + cw, cy + 2, ShopColors.ACCENT_CURRENCY);
         int labelY = cy + (compact ? 6 : 12);
-        graphics.drawString(this.font, "§7Name:", cx + 6, labelY, ShopColors.TEXT_FAINT, false);
+        graphics.drawString(this.font, Component.translatable("gui.futureshops.player_shop_block.config.name_label"), cx + 6, labelY, ShopColors.TEXT_FAINT, false);
     }
 
     private void renderListingRail(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -649,10 +774,12 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         int railH = contentAreaH;
         ShopUiUtil.renderCard(graphics, railX, railY, railW, railH);
         graphics.fill(railX, railY, railX + railW, railY + 2, ShopColors.ACCENT_PRIMARY);
-        graphics.drawString(this.font, "§lListings", railX + 8, railY + 6, ShopColors.TEXT_STRONG, false);
+        graphics.drawString(this.font, Component.translatable("gui.futureshops.player_shop_block.rail.title"), railX + 8, railY + 6, ShopColors.TEXT_STRONG, false);
 
         List<PlayerShopListingData> listings = PlayerShopClientState.listings();
-        String countText = listings.isEmpty() ? "§7No items yet" : "§7" + listings.size() + " items";
+        String countText = listings.isEmpty()
+                ? I18n.get("gui.futureshops.player_shop_block.rail.count_empty")
+                : I18n.get("gui.futureshops.player_shop_block.rail.count", listings.size());
         graphics.drawString(this.font, countText, railX + 8, railY + 18, ShopColors.TEXT_SECONDARY, false);
 
         int cardY = railY + 32;
@@ -689,12 +816,11 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                 hoveredMouseY = mouseY;
             }
 
-            // Name — truncated to rail width
+            // Name — scrolls (ping-pong) when wider than the rail so long modded names stay readable.
             int nameW = railW - 42;
-            String name = this.font.plainSubstrByWidth(
-                    ShopUiUtil.getItemDisplayNameWithNbtAndQty(listing.itemId(), listing.nbtJson(), listing.baseQuantity()),
-                    nameW);
-            graphics.drawString(this.font, name, railX + 30, y + 4, selected ? ShopColors.TEXT_STRONG : ShopColors.TEXT_MUTED, false);
+            String fullName = ShopUiUtil.getItemDisplayNameWithNbtAndQty(listing.itemId(), listing.nbtJson(), listing.baseQuantity());
+            ShopUiUtil.renderScrollingString(graphics, this.font, fullName,
+                    railX + 30, y + 4, nameW, selected ? ShopColors.TEXT_STRONG : ShopColors.TEXT_MUTED);
 
             // Meta line — stock + mode
             String meta;
@@ -724,12 +850,14 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                     badgeX += this.font.width(deptLabel) + 12;
                 }
                 if (listing.nbtAware()) {
-                    ShopUiUtil.drawChip(graphics, this.font, badgeX, y + cardH - 16, "NBT",
+                    String nbtBadge = I18n.get("gui.futureshops.player_shop_block.rail.badge_nbt");
+                    ShopUiUtil.drawChip(graphics, this.font, badgeX, y + cardH - 16, nbtBadge,
                             ShopColors.BG_PANEL, ShopColors.ACCENT_ORANGE, ShopColors.ACCENT_ORANGE);
-                    badgeX += this.font.width("NBT") + 12;
+                    badgeX += this.font.width(nbtBadge) + 12;
                 }
                 if (PlayerShopClientState.owner() && PlayerShopClientState.singleItemMode() && listing.visible()) {
-                    ShopUiUtil.drawChip(graphics, this.font, badgeX, y + cardH - 16, "👁",
+                    ShopUiUtil.drawChip(graphics, this.font, badgeX, y + cardH - 16,
+                            I18n.get("gui.futureshops.player_shop_block.rail.badge_visible"),
                             ShopColors.BG_PANEL, ShopColors.ACCENT_CYAN, ShopColors.ACCENT_CYAN);
                 }
             }
@@ -762,7 +890,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
         PlayerShopListingData listing = PlayerShopClientState.selectedListing();
         if (listing == null) {
-            graphics.drawCenteredString(this.font, "§7Select a listing", detailX + detailW / 2, detailY + detailH / 2, ShopColors.TEXT_FAINT);
+            graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.player_shop_block.detail.select_listing"), detailX + detailW / 2, detailY + detailH / 2, ShopColors.TEXT_FAINT);
             return;
         }
 
@@ -784,23 +912,42 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
             hoveredNbtJson = detailHasRealNbt ? listing.nbtJson() : "";
         }
 
-        // Item name below preview
+        // Item name below preview — scrolls on overflow so long names stay fully visible.
         int nameY = detailY + (compact ? 62 : 82);
-        String name = this.font.plainSubstrByWidth(
-                ShopUiUtil.getItemDisplayNameWithNbtAndQty(listing.itemId(), listing.nbtJson(), listing.baseQuantity()),
-                previewW);
-        graphics.drawString(this.font, name, detailX + 8, nameY, ShopColors.TEXT_PRIMARY, false);
+        String detailName = ShopUiUtil.getItemDisplayNameWithNbtAndQty(listing.itemId(), listing.nbtJson(), listing.baseQuantity());
+        ShopUiUtil.renderScrollingString(graphics, this.font, detailName,
+                detailX + 8, nameY, previewW, ShopColors.TEXT_PRIMARY);
 
-        // Description below name (gray) — prefer listing description, fall back to shop desc
+        // Description below name (gray) — per-listing only; no fallback to shop description.
+        // Clamps to 3 lines; overflow is marked with "…" and the full text surfaces as a
+        // hover tooltip so buyers can read long listing notes without layout overflow.
         String listingDesc = listing.listingDescription();
-        String shopDesc = PlayerShopClientState.description();
-        String descDisplay = !listingDesc.isBlank() ? listingDesc : (!shopDesc.isBlank() ? shopDesc : "No description");
-        graphics.drawString(this.font, this.font.plainSubstrByWidth("§7§o" + descDisplay, previewW),
-                detailX + 8, nameY + 12, ShopColors.TEXT_SECONDARY, false);
+        int descTopY = nameY + 12;
+        int descLinesDrawn = 0;
+        boolean descTruncated = false;
+        if (listingDesc != null && !listingDesc.isBlank()) {
+            int[] descResult = ShopUiUtil.drawWrappedClamped(graphics, this.font,
+                    Component.literal("§7§o" + listingDesc),
+                    detailX + 8, descTopY, previewW, 3, ShopColors.TEXT_SECONDARY, 10);
+            descLinesDrawn = descResult[0];
+            descTruncated = descResult[1] == 1;
+            int descH = Math.max(10, descLinesDrawn * 10);
+            if (descTruncated
+                    && mouseX >= detailX + 8 && mouseX <= detailX + 8 + previewW
+                    && mouseY >= descTopY && mouseY <= descTopY + descH) {
+                hoveredDescriptionFull = listingDesc;
+                hoveredDescriptionMouseX = mouseX;
+                hoveredDescriptionMouseY = mouseY;
+            }
+        }
+        int afterDescY = descTopY + Math.max(12, descLinesDrawn * 10 + 2);
 
         // Stock below description
-        String stockStr = "Stock " + listing.stock() + (listing.stock() <= 16 ? " §c• low" : " §a• ok");
-        graphics.drawString(this.font, this.font.plainSubstrByWidth(stockStr, previewW), detailX + 8, nameY + 24,
+        String stockStr = I18n.get("gui.futureshops.player_shop_block.detail.stock_prefix", listing.stock())
+                + (listing.stock() <= 16
+                        ? I18n.get("gui.futureshops.player_shop_block.detail.stock_low")
+                        : I18n.get("gui.futureshops.player_shop_block.detail.stock_ok"));
+        graphics.drawString(this.font, this.font.plainSubstrByWidth(stockStr, previewW), detailX + 8, afterDescY,
                 listing.stock() <= 16 ? ShopColors.ERROR : ShopColors.SUCCESS, false);
 
         // Mode + effective price below stock
@@ -811,13 +958,19 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
             case "BOTH" -> ShopColors.TEXT_PRIMARY;
             default -> ShopColors.TEXT_PRICE;
         };
-        graphics.drawString(this.font, modeStr, detailX + 8, nameY + 36, modeColor, false);
+        graphics.drawString(this.font, modeStr, detailX + 8, afterDescY + 12, modeColor, false);
 
-        // Promo badge
+        // Promo indicator — the details panel used to paint an animated discount badge
+        // here, but the pricing section already carries the "(-X%)" inline suffix on the
+        // "Now:" line, so a second badge was redundant.  For non-percent promos (flat
+        // label / scheduled) we still surface a tiny static chip so the buyer knows a
+        // promo is active.
         if (listing.promo().configured()) {
             int percent = computeListingPromoPercent(listing);
-            String badge = percent >= 100 ? "Free!" : (percent > 0 ? "-" + percent + "%" : promoLabel(listing));
-            ShopUiUtil.renderAnimatedDiscountBadge(graphics, this.font, detailX + 50, nameY + 54, badge);
+            if (percent <= 0) {
+                ShopUiUtil.drawChip(graphics, this.font, detailX + 8, afterDescY + 26, promoLabel(listing),
+                        ShopColors.DISCOUNT_BG, ShopColors.DISCOUNT_BG, ShopColors.DISCOUNT_TEXT);
+            }
         }
 
         // ═══ Right info panels ═══
@@ -826,8 +979,10 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
             // Section 1: Pricing
             ShopUiUtil.renderPanel(graphics, ownerInfoX, priceSecY, ownerInfoW, sectionH, ShopColors.SURFACE_RAISED, ShopColors.BORDER_SUBTLE);
             graphics.fill(ownerInfoX, priceSecY, ownerInfoX + 2, priceSecY + sectionH, ShopColors.ACCENT_CURRENCY);
-            graphics.drawString(this.font, "§lPRICING", ownerInfoX + 6, priceSecY + 3, ShopColors.TEXT_FAINT, false);
-            String effectivePrice = listing.effectiveUnitPriceMinor() <= 0 ? "§aFree" : ShopUiUtil.formatMinorUnits(listing.effectiveUnitPriceMinor());
+            graphics.drawString(this.font, Component.translatable("gui.futureshops.player_shop_block.detail.section.pricing"), ownerInfoX + 6, priceSecY + 3, ShopColors.TEXT_FAINT, false);
+            String effectivePrice = listing.effectiveUnitPriceMinor() <= 0
+                    ? I18n.get("gui.futureshops.player_shop_block.detail.free")
+                    : ShopUiUtil.formatMinorUnits(listing.effectiveUnitPriceMinor());
             int epW = this.font.width(this.font.plainSubstrByWidth(effectivePrice, ownerInfoW / 2));
             graphics.drawString(this.font, this.font.plainSubstrByWidth(effectivePrice, ownerInfoW / 2),
                     ownerInfoX + ownerInfoW - epW - 4, priceSecY + 3, ShopColors.TEXT_CURRENCY, false);
@@ -835,7 +990,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
             // Section 2: Barter
             ShopUiUtil.renderPanel(graphics, ownerInfoX, barterSecY, ownerInfoW, sectionH, ShopColors.SURFACE_RAISED, ShopColors.BORDER_SUBTLE);
             graphics.fill(ownerInfoX, barterSecY, ownerInfoX + 2, barterSecY + sectionH, ShopColors.TEXT_BARTER_SOFT);
-            graphics.drawString(this.font, "§lBARTER", ownerInfoX + 6, barterSecY + 3, ShopColors.TEXT_BARTER_SOFT, false);
+            graphics.drawString(this.font, Component.translatable("gui.futureshops.player_shop_block.detail.section.barter"), ownerInfoX + 6, barterSecY + 3, ShopColors.TEXT_BARTER_SOFT, false);
             if (listing.barterItemId() != null && !listing.barterItemId().isBlank()) {
                 String barterLabel = listing.barterItemCount() + "× " + ShopUiUtil.getItemDisplayName(listing.barterItemId());
                 String truncBarter = this.font.plainSubstrByWidth(barterLabel, ownerInfoW / 2);
@@ -847,7 +1002,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
             // Section 3: Config
             ShopUiUtil.renderPanel(graphics, ownerInfoX, configSecY, ownerInfoW, sectionH, ShopColors.SURFACE_RAISED, ShopColors.BORDER_SUBTLE);
             graphics.fill(ownerInfoX, configSecY, ownerInfoX + 2, configSecY + sectionH, ShopColors.ACCENT_CURRENCY);
-            graphics.drawString(this.font, "§lCONFIG", ownerInfoX + 6, configSecY + 3, ShopColors.ACCENT_CURRENCY, false);
+            graphics.drawString(this.font, Component.translatable("gui.futureshops.player_shop_block.detail.section.config"), ownerInfoX + 6, configSecY + 3, ShopColors.ACCENT_CURRENCY, false);
             // Status badges at bottom of config section — only department (NBT and qty are redundant with inline controls)
             if (!compact) {
                 int badgeY = configSecY + sectionH - 14;
@@ -859,18 +1014,23 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                 }
             }
 
-            // ── Held item preview (bottom-left of detail panel) ──
+            // ── Held item preview (bottom-left of detail panel) — always shown for owners,
+            //    including an empty-hand placeholder so the slot never silently disappears. ──
             if (this.minecraft != null && this.minecraft.player != null) {
                 ItemStack heldItem = this.minecraft.player.getMainHandItem();
+                int heldY = detailY + detailH - 22;
+                int heldX = detailX + 6;
+                graphics.drawString(this.font, Component.translatable("gui.futureshops.player_shop_block.detail.held_label"), heldX, heldY - 10, ShopColors.TEXT_SECONDARY, false);
                 if (!heldItem.isEmpty()) {
-                    int heldY = detailY + detailH - 22;
-                    int heldX = detailX + 6;
-                    graphics.drawString(this.font, "§7Held:", heldX, heldY - 10, ShopColors.TEXT_SECONDARY, false);
                     ShopUiUtil.renderItemIcon(graphics, this.font,
                             net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(heldItem.getItem()).toString(),
                             heldX, heldY);
                     String heldName = this.font.plainSubstrByWidth(heldItem.getHoverName().getString(), previewW - 24);
                     graphics.drawString(this.font, "§f" + heldName, heldX + 20, heldY + 4, ShopColors.TEXT_PRIMARY, false);
+                } else {
+                    // Empty-slot placeholder keeps the row visible so owners always see where the held item goes.
+                    graphics.fill(heldX, heldY, heldX + 16, heldY + 16, 0x33000000);
+                    graphics.drawString(this.font, "§8(empty hand)", heldX + 20, heldY + 4, ShopColors.TEXT_FAINT, false);
                 }
             }
 
@@ -888,39 +1048,55 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
             if (infoX > detailX + previewW) {
                 ShopUiUtil.renderPanel(graphics, infoX, pricePanelY, infoW, panelH, ShopColors.SURFACE_RAISED, ShopColors.BORDER_SUBTLE);
                 graphics.fill(infoX, pricePanelY, infoX + infoW, pricePanelY + 1, ShopColors.ACCENT_CURRENCY);
-                graphics.drawString(this.font, "§lPRICING", infoX + 4, pricePanelY + 4, ShopColors.TEXT_FAINT, false);
+                graphics.drawString(this.font, I18n.get("gui.futureshops.player_shop_block.detail.visitor.pricing"), infoX + 4, pricePanelY + 4, ShopColors.TEXT_FAINT, false);
 
                 boolean hasMoney = !"BARTER".equalsIgnoreCase(listing.tradeMode());
                 boolean hasBarter = !"MONEY".equalsIgnoreCase(listing.tradeMode());
                 int py = pricePanelY + 16;
 
                 if (hasMoney) {
-                    graphics.drawString(this.font, this.font.plainSubstrByWidth("Base: " + ShopUiUtil.formatMinorUnits(listing.moneyPriceMinor()), infoW - 8),
+                    graphics.drawString(this.font, this.font.plainSubstrByWidth(
+                                    I18n.get("gui.futureshops.player_shop_block.detail.visitor.base", ShopUiUtil.formatMinorUnits(listing.moneyPriceMinor())),
+                                    infoW - 8),
                             infoX + 4, py, ShopColors.TEXT_SECONDARY, false);
                     py += 11;
-                    String nowLabel = listing.effectiveUnitPriceMinor() <= 0 ? "§aNow: Free" : "§aNow: " + ShopUiUtil.formatMinorUnits(listing.effectiveUnitPriceMinor());
+                    String nowLabel = listing.effectiveUnitPriceMinor() <= 0
+                            ? I18n.get("gui.futureshops.player_shop_block.detail.visitor.now_free")
+                            : I18n.get("gui.futureshops.player_shop_block.detail.visitor.now", ShopUiUtil.formatMinorUnits(listing.effectiveUnitPriceMinor()));
+                    // Inline discount suffix — replaces the redundant animated badge previously
+                    // painted over this panel.  "Now: 90.00 §7(-10%)" reads as a single price line
+                    // with secondary-muted discount info.
+                    int nowPct = ShopUiUtil.computePromoPercent(listing.moneyPriceMinor(), listing.effectiveUnitPriceMinor());
+                    if (nowPct > 0 && listing.effectiveUnitPriceMinor() > 0) {
+                        nowLabel = nowLabel + " §7(-" + nowPct + "%)";
+                    }
                     graphics.drawString(this.font, this.font.plainSubstrByWidth(nowLabel, infoW - 8),
                             infoX + 4, py, ShopColors.TEXT_PRICE, false);
                     py += 11;
                 }
                 if (hasBarter) {
-                    String barter = this.font.plainSubstrByWidth(listing.barterItemCount() + "× " + ShopUiUtil.getItemDisplayName(listing.barterItemId()), infoW - 8);
-                    graphics.drawString(this.font, barter, infoX + 4, py, ShopColors.TEXT_BARTER, false);
+                    String barter = listing.barterItemCount() + "× " + ShopUiUtil.getItemDisplayName(listing.barterItemId());
+                    ShopUiUtil.renderScrollingString(graphics, this.font, barter,
+                            infoX + 4, py, infoW - 8, ShopColors.TEXT_BARTER);
                     py += 11;
                     if (listing.baseBarterItemCount() > listing.barterItemCount()) {
                         String baseBarter = "§7§m" + listing.baseBarterItemCount() + "×";
                         graphics.drawString(this.font, baseBarter, infoX + 4, py, ShopColors.TEXT_SECONDARY, false);
                         py += 11;
                     }
-                    graphics.drawString(this.font, "Owned: " + ShopUiUtil.countPlayerInventory(listing.barterItemId()),
+                    graphics.drawString(this.font, this.font.plainSubstrByWidth(
+                                    I18n.get("gui.futureshops.player_shop_block.detail.visitor.owned",
+                                            ShopUiUtil.countPlayerInventory(listing.barterItemId())),
+                                    infoW - 8),
                             infoX + 4, py, ShopColors.TEXT_SECONDARY, false);
                     py += 13;
 
                     // Barter item icon preview — only render if it fits within the pricing panel with margin
                     if (py + 18 <= pricePanelY + panelH - 4) {
                         ShopUiUtil.renderItemIcon(graphics, this.font, listing.barterItemId(), infoX + 4, py);
-                        String barterName = this.font.plainSubstrByWidth("§9" + ShopUiUtil.getItemDisplayName(listing.barterItemId()), infoW - 28);
-                        graphics.drawString(this.font, barterName, infoX + 24, py + 4, ShopColors.TEXT_BARTER, false);
+                        String barterName = "§9" + ShopUiUtil.getItemDisplayName(listing.barterItemId());
+                        ShopUiUtil.renderScrollingString(graphics, this.font, barterName,
+                                infoX + 24, py + 4, infoW - 28, ShopColors.TEXT_BARTER);
                         // Hover detection for barter item icon
                         if (mouseX >= infoX + 4 && mouseX <= infoX + 20 && mouseY >= py && mouseY <= py + 16) {
                             hoveredItemId = listing.barterItemId();
@@ -935,35 +1111,35 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                 if (summaryH > 20) {
                     ShopUiUtil.renderPanel(graphics, infoX, summaryY, infoW, summaryH, ShopColors.SURFACE_RAISED, ShopColors.BORDER_SUBTLE);
                     graphics.fill(infoX, summaryY, infoX + infoW, summaryY + 1, ShopColors.ACCENT_PRIMARY);
-                    graphics.drawString(this.font, "§lTRADE", infoX + 4, summaryY + 4, ShopColors.TEXT_FAINT, false);
+                    graphics.drawString(this.font, I18n.get("gui.futureshops.player_shop_block.detail.visitor.trade"), infoX + 4, summaryY + 4, ShopColors.TEXT_FAINT, false);
 
                     if ("MONEY_AND_BARTER".equalsIgnoreCase(listing.tradeMode())) {
-                        ShopUiUtil.drawWrappedString(graphics, this.font, Component.literal("§6Pay coins §7AND §9barter."),
+                        ShopUiUtil.drawWrappedString(graphics, this.font,
+                                Component.translatable("gui.futureshops.player_shop_block.detail.visitor.trade.compound"),
                                 infoX + 4, summaryY + 16, infoW - 8, ShopColors.TEXT_PRIMARY, 10);
                     } else if ("BOTH".equalsIgnoreCase(listing.tradeMode())) {
-                        ShopUiUtil.drawWrappedString(graphics, this.font, Component.literal("Coins or barter items."),
+                        ShopUiUtil.drawWrappedString(graphics, this.font,
+                                Component.translatable("gui.futureshops.player_shop_block.detail.visitor.trade.both"),
                                 infoX + 4, summaryY + 16, infoW - 8, ShopColors.TEXT_PRIMARY, 10);
                     } else if ("MONEY".equalsIgnoreCase(listing.tradeMode())) {
-                        graphics.drawString(this.font, "Instant buy with balance.", infoX + 4, summaryY + 16, ShopColors.TEXT_PRIMARY, false);
+                        graphics.drawString(this.font, I18n.get("gui.futureshops.player_shop_block.detail.visitor.trade.money"),
+                                infoX + 4, summaryY + 16, ShopColors.TEXT_PRIMARY, false);
                     } else {
                         String barterItemName = ShopUiUtil.getItemDisplayName(listing.barterItemId());
                         String saleItemName = ShopUiUtil.getItemDisplayNameWithQty(listing.itemId(), listing.baseQuantity());
                         String summary = this.font.plainSubstrByWidth(
-                                listing.barterItemCount() + "× " + barterItemName + " per " + saleItemName,
+                                I18n.get("gui.futureshops.player_shop_block.detail.visitor.trade.barter_summary",
+                                        listing.barterItemCount(), barterItemName, saleItemName),
                                 infoW - 8);
                         graphics.drawString(this.font, summary, infoX + 4, summaryY + 16, ShopColors.TEXT_BARTER, false);
                     }
-                    // Description for visitor — prefer listing desc, fall back to shop desc
-                    String visitorListingDesc = listing.listingDescription();
-                    String visitorDesc = !visitorListingDesc.isBlank() ? visitorListingDesc : PlayerShopClientState.description();
-                    if (!visitorDesc.isBlank() && summaryH > 34) {
-                        graphics.drawString(this.font, "§7§o" + this.font.plainSubstrByWidth(visitorDesc, infoW - 8),
-                                infoX + 4, summaryY + summaryH - 12, ShopColors.TEXT_SECONDARY, false);
-                    } else {
-                        String promoStatus = listing.promo().configured() ? "§aPromo active" : "§7No promo";
-                        if (summaryH > 34) {
-                            graphics.drawString(this.font, promoStatus, infoX + 4, summaryY + summaryH - 12, ShopColors.TEXT_SECONDARY, false);
-                        }
+                    // Trade summary panel intentionally no longer shows the listing description —
+                    // buyers already see it under the item name. Fall back to promo status only.
+                    String promoStatus = listing.promo().configured()
+                            ? I18n.get("gui.futureshops.player_shop_block.detail.visitor.promo_active")
+                            : I18n.get("gui.futureshops.player_shop_block.detail.visitor.promo_none");
+                    if (summaryH > 34) {
+                        graphics.drawString(this.font, promoStatus, infoX + 4, summaryY + summaryH - 12, ShopColors.TEXT_SECONDARY, false);
                     }
                 }
             }
@@ -971,9 +1147,11 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
             // Visitor: total cost at bottom of detail
             if (!"BARTER".equalsIgnoreCase(listing.tradeMode())) {
                 long total = listing.effectiveUnitPriceMinor() * getQuantity();
-                String totalStr = total <= 0 ? "§6Total: §aFree" : "§6Total: §a" + ShopUiUtil.formatMinorUnits(total);
+                String totalStr = total <= 0
+                        ? I18n.get("gui.futureshops.player_shop_block.detail.visitor.total_free")
+                        : I18n.get("gui.futureshops.player_shop_block.detail.visitor.total", ShopUiUtil.formatMinorUnits(total));
                 if (listing.baseQuantity() > 1) {
-                    totalStr += " §7(×" + listing.baseQuantity() + " ea)";
+                    totalStr += I18n.get("gui.futureshops.player_shop_block.detail.visitor.per_base", listing.baseQuantity());
                 }
                 graphics.drawString(this.font, totalStr, detailX + 8, detailY + detailH - 18, ShopColors.TEXT_PRICE, false);
             }
@@ -1015,22 +1193,28 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         }
 
         // Name, owned count, total, stock — stacked at bottom of preview
-        int bottomStackY = detailY + detailH - (compact ? 42 : 58);
-        String dispName = this.font.plainSubstrByWidth(
-                ShopUiUtil.getItemDisplayNameWithNbtAndQty(listing.itemId(), listing.nbtJson(), listing.baseQuantity()),
-                previewW - 10);
-        graphics.drawCenteredString(this.font, dispName, detailX + 8 + previewW / 2, bottomStackY, ShopColors.TEXT_PRIMARY);
+        int bottomStackY = detailY + detailH - (compact ? 52 : 58);
+        String dispName = ShopUiUtil.getItemDisplayNameWithNbtAndQty(listing.itemId(), listing.nbtJson(), listing.baseQuantity());
+        ShopUiUtil.renderScrollingCentered(graphics, this.font, dispName,
+                detailX + 8 + previewW / 2, bottomStackY, previewW - 10, ShopColors.TEXT_PRIMARY);
 
         int owned = ShopUiUtil.countPlayerInventory(listing.itemId());
-        graphics.drawCenteredString(this.font, "§7Own: " + owned, detailX + 8 + previewW / 2, bottomStackY + 12, ShopColors.TEXT_SECONDARY);
+        graphics.drawCenteredString(this.font,
+                I18n.get("gui.futureshops.player_shop_block.detail.single.own", owned),
+                detailX + 8 + previewW / 2, bottomStackY + 12, ShopColors.TEXT_SECONDARY);
 
         if (!"BARTER".equalsIgnoreCase(listing.tradeMode())) {
             long total = listing.effectiveUnitPriceMinor() * getQuantity();
-            String totalLabel = total <= 0 ? "§aFree" : "§a" + ShopUiUtil.formatMinorUnits(total);
+            String totalLabel = total <= 0
+                    ? I18n.get("gui.futureshops.player_shop_block.detail.free")
+                    : "§a" + ShopUiUtil.formatMinorUnits(total);
             graphics.drawCenteredString(this.font, totalLabel, detailX + 8 + previewW / 2, bottomStackY + 24, ShopColors.TEXT_PRICE);
         }
 
-        String stockStr = listing.stock() + (listing.stock() <= 16 ? " §c• low" : " §a• ok");
+        String stockStr = listing.stock()
+                + (listing.stock() <= 16
+                        ? I18n.get("gui.futureshops.player_shop_block.detail.stock_low")
+                        : I18n.get("gui.futureshops.player_shop_block.detail.stock_ok"));
         graphics.drawCenteredString(this.font, this.font.plainSubstrByWidth(stockStr, previewW - 8),
                 detailX + 8 + previewW / 2, bottomStackY + 36,
                 listing.stock() <= 16 ? ShopColors.ERROR : ShopColors.SUCCESS);
@@ -1057,14 +1241,10 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
         int nextY = detailY + 42;
 
-        // Promo banner
+        // Promo schedule hint — the animated discount badge was removed from this panel
+        // in favour of an inline "(-X%)" suffix on the buy-price line below.  The schedule
+        // line still shows when the promo is time-boxed.
         if (listing.promo().configured()) {
-            int promoPercent = computeListingPromoPercent(listing);
-            if (promoPercent > 0) {
-                ShopUiUtil.renderAnimatedDiscountBadge(graphics, this.font,
-                        infoX + infoW / 2, nextY + 6, "-" + promoPercent + "% OFF!");
-                nextY += 20;
-            }
             String scheduleLine = formatPromoSchedule(listing.promo());
             if (scheduleLine != null) {
                 graphics.drawString(this.font, scheduleLine, infoX + 8, nextY, ShopColors.TEXT_FAINT, false);
@@ -1077,14 +1257,26 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         nextY += 6;
 
         // Mode
-        graphics.drawString(this.font, "Mode: " + prettyMode(listing.tradeMode()), infoX + 8, nextY, ShopColors.TEXT_SECONDARY, false);
+        graphics.drawString(this.font,
+                I18n.get("gui.futureshops.player_shop_block.detail.single.mode", prettyMode(listing.tradeMode())),
+                infoX + 8, nextY, ShopColors.TEXT_SECONDARY, false);
         nextY += 14;
 
         boolean hasMoney = !"BARTER".equalsIgnoreCase(listing.tradeMode());
         boolean hasBarter = !"MONEY".equalsIgnoreCase(listing.tradeMode());
 
         if (hasMoney) {
-            String priceLabel = listing.effectiveUnitPriceMinor() <= 0 ? "Buy: §aFree" : "Buy: " + ShopUiUtil.formatMinorUnits(listing.effectiveUnitPriceMinor());
+            String priceLabel = listing.effectiveUnitPriceMinor() <= 0
+                    ? I18n.get("gui.futureshops.player_shop_block.detail.single.buy_free")
+                    : I18n.get("gui.futureshops.player_shop_block.detail.single.buy",
+                            ShopUiUtil.formatMinorUnits(listing.effectiveUnitPriceMinor()));
+            // Inline promo discount — "Buy: 90.00 §7(-10%)" replaces the previous animated
+            // badge.  The §m strikethrough base price below still shows, giving buyers both
+            // the old price and the percent off at a glance.
+            int singlePct = ShopUiUtil.computePromoPercent(listing.moneyPriceMinor(), listing.effectiveUnitPriceMinor());
+            if (singlePct > 0 && listing.effectiveUnitPriceMinor() > 0) {
+                priceLabel = priceLabel + " §7(-" + singlePct + "%)";
+            }
             graphics.drawString(this.font, this.font.plainSubstrByWidth(priceLabel, infoW - 16),
                     infoX + 8, nextY, ShopColors.TEXT_PRICE, false);
             if (listing.moneyPriceMinor() != listing.effectiveUnitPriceMinor()) {
@@ -1108,7 +1300,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                         infoX + 8, nextY, ShopColors.TEXT_BARTER, false);
                 nextY += 12;
                 int ownedBarter = ShopUiUtil.countPlayerInventory(barterId);
-                graphics.drawString(this.font, "Owned: " + ownedBarter,
+                graphics.drawString(this.font, this.font.plainSubstrByWidth("Owned: " + ownedBarter, infoW - 16),
                         infoX + 8, nextY, ownedBarter >= listing.barterItemCount() ? ShopColors.SUCCESS : ShopColors.ERROR, false);
                 nextY += 14;
 
@@ -1129,7 +1321,9 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         }
 
         // Stock
-        String stockLabel = listing.stock() > 0 ? "§a" + listing.stock() + " in stock" : "§cOut of stock";
+        String stockLabel = listing.stock() > 0
+                ? I18n.get("gui.futureshops.player_shop_block.detail.single.stock_in", listing.stock())
+                : I18n.get("gui.futureshops.player_shop_block.detail.single.stock_out");
         graphics.drawString(this.font, stockLabel, infoX + 8, nextY, ShopColors.TEXT_SECONDARY, false);
         nextY += 14;
 
@@ -1140,15 +1334,25 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
             nextY += 16;
         }
 
-        // Description for single-item visitor — prefer listing desc, fall back to shop desc
+        // Description for single-item visitor — per-listing only, no fallback to shop desc.
+        // Clamps to 3 lines with ellipsis; full text appears as a hover tooltip.
         String singleListingDesc = listing.listingDescription();
-        String singleDesc = !singleListingDesc.isBlank() ? singleListingDesc : PlayerShopClientState.description();
-        if (!singleDesc.isBlank()) {
+        if (singleListingDesc != null && !singleListingDesc.isBlank()) {
             nextY += 4;
             graphics.fill(infoX + 8, nextY, infoX + infoW - 8, nextY + 1, ShopColors.BORDER_DEFAULT);
             nextY += 4;
-            ShopUiUtil.drawWrappedString(graphics, this.font, Component.literal("§7§o" + singleDesc),
-                    infoX + 8, nextY, infoW - 16, ShopColors.TEXT_SECONDARY, 10);
+            int descW = infoW - 16;
+            int[] r = ShopUiUtil.drawWrappedClamped(graphics, this.font,
+                    Component.literal("§7§o" + singleListingDesc),
+                    infoX + 8, nextY, descW, 3, ShopColors.TEXT_SECONDARY, 10);
+            int descH = Math.max(10, r[0] * 10);
+            if (r[1] == 1
+                    && mouseX >= infoX + 8 && mouseX <= infoX + 8 + descW
+                    && mouseY >= nextY && mouseY <= nextY + descH) {
+                hoveredDescriptionFull = singleListingDesc;
+                hoveredDescriptionMouseX = mouseX;
+                hoveredDescriptionMouseY = mouseY;
+            }
         }
     }
 
@@ -1178,31 +1382,57 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     }
 
     /**
-     * Item 25: Returns a buyer-friendly message for known result codes. Returns null for codes buyers shouldn't see.
+     * Item 25: Returns a buyer-friendly message for known result codes. Returns null for
+     * codes buyers shouldn't see.
+     *
+     * Messages are resolved from the lang file under
+     * {@code gui.futureshops.player_shop.buyer.<code>} so translators can override without
+     * code edits. The allow-list below defines which codes are buyer-visible; every entry
+     * maps 1:1 to an en_us.json key. The BuyPacketCallSiteTest invariant forbids any
+     * hard-coded English fallback for these codes elsewhere in the client tree.
      */
     private String buyerFriendlyMessage(String code) {
-        return switch (code.toUpperCase(Locale.ROOT)) {
-            case "BOUGHT" -> "§a✓ Purchase complete!";
-            case "NO_MONEY" -> "§cInsufficient balance.";
-            case "OUT_OF_STOCK" -> "§cThis item is out of stock.";
-            case "MISSING_BARTER_ITEMS" -> "§cYou don't have enough barter items.";
-            case "STORAGE_FULL" -> "§cThe shop's storage is full.";
-            case "INVALID_ITEM" -> "§cInvalid item.";
-            case "NO_LINK" -> "§cShop storage not linked.";
-            case "ROLLBACK" -> "§cTransaction failed. No items were taken.";
-            case "UNCONFIGURED" -> "§cThis listing is not yet configured by the shop owner.";
-            case "RS_NOT_CONTROLLER" -> "§cBlock not supported — link directly to the System Controller.";
-            default -> null; // Hide all other codes from buyers
+        String upper = code.toUpperCase(Locale.ROOT);
+        boolean buyerVisible = switch (upper) {
+            case "BOUGHT", "INSUFFICIENT_FUNDS", "OUT_OF_STOCK", "MISSING_BARTER_ITEMS", "STORAGE_FULL",
+                 "INVALID_ITEM", "NO_LINK", "ROLLBACK", "UNCONFIGURED", "RS_NOT_CONTROLLER",
+                 "INVALID_REQUEST" -> true;
+            default -> false;
         };
+        if (!buyerVisible) return null;
+        return Component.translatable("gui.futureshops.player_shop.buyer." + upper.toLowerCase(Locale.ROOT))
+                .getString();
     }
 
     private void saveConfig() {
         String name = shopNameBox == null ? "" : shopNameBox.getValue().trim();
-        boolean singleItem = singleMultiButton != null && singleMultiButton.getMessage().getString().contains("Single");
-        boolean barterSame = barterStorageButton != null && barterStorageButton.getMessage().getString().contains("Same");
+        // Read authoritative state from backing fields — button messages are translatable
+        // and locale-dependent, so string-inspecting them is unsafe.
+        boolean singleItem = singleMultiButton != null && configSingleMode;
+        boolean barterSame = barterStorageButton != null && configBarterSame;
         // LGB#24: Pass selected listing index for single-item mode
         ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopConfigPacket(
                 PlayerShopClientState.shopPos(), name, singleItem, barterSame, PlayerShopClientState.selectedListingIndex()));
+    }
+
+    private Component singleMultiMessage() {
+        return Component.translatable(configSingleMode
+                ? "gui.futureshops.player_shop_block.config.single"
+                : "gui.futureshops.player_shop_block.config.multi");
+    }
+
+    private Component barterStorageMessage() {
+        String key;
+        if (configBarterSame) {
+            key = compact
+                    ? "gui.futureshops.player_shop_block.config.same_short"
+                    : "gui.futureshops.player_shop_block.config.same_long";
+        } else {
+            key = compact
+                    ? "gui.futureshops.player_shop_block.config.sep_short"
+                    : "gui.futureshops.player_shop_block.config.sep_long";
+        }
+        return Component.translatable(key);
     }
 
     private void syncOwnerFields() {
@@ -1515,8 +1745,12 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     }
 
     private void buy(int quantity) {
+        buy(quantity, "MONEY");
+    }
+
+    private void buy(int quantity, String paymentMethod) {
         ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopBuyPacket(
-                PlayerShopClientState.shopPos(), PlayerShopClientState.selectedListingIndex(), quantity));
+                PlayerShopClientState.shopPos(), PlayerShopClientState.selectedListingIndex(), quantity, paymentMethod));
     }
 
     private void showBuyConfirmation(int quantity) {
@@ -1524,16 +1758,58 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         if (listing == null) return;
         String itemName = ShopUiUtil.getItemDisplayNameWithNbtAndQty(listing.itemId(), listing.nbtJson(), listing.baseQuantity());
         long total = listing.effectiveUnitPriceMinor() * quantity;
-        String totalStr = total <= 0 ? "Free" : ShopUiUtil.formatMinorUnits(total) + " " + ShopClientState.getCurrencyName();
+        String totalStr = total <= 0
+                ? I18n.get("gui.futureshops.player_shop_block.confirm.free")
+                : ShopUiUtil.formatMinorUnits(total) + " " + ShopClientState.getCurrencyName();
+
+        boolean compound = "MONEY_AND_BARTER".equalsIgnoreCase(listing.tradeMode());
+        java.util.List<ConfirmationModal.SummaryLine> summary = new java.util.ArrayList<>();
+        summary.add(ConfirmationModal.SummaryLine.item(listing.itemId(),
+                I18n.get("gui.futureshops.player_shop_block.confirm.item_line", itemName, quantity),
+                listing.nbtJson()));
+
+        String totalLine;
+        String paymentMethod;
+        if (compound) {
+            // MONEY_AND_BARTER (compound) — server withdraws both coins AND the barter items.
+            // Surface the barter cost in the confirmation and use the unified
+            //   "Total: §a$X §f+ §9N× item"
+            // rendering that cart rows + cart summary bar use end-to-end.
+            int barterAmount = listing.barterItemCount() * quantity;
+            String barterId = listing.barterItemId();
+            boolean hasRealBarterNbt = listing.barterNbtAware()
+                    && ShopUiUtil.hasNonDefaultNbt(barterId != null ? barterId : "", listing.barterNbtJson());
+            String barterName;
+            if (barterId == null || barterId.isBlank()) {
+                barterName = I18n.get("gui.futureshops.player_shop_block.confirm.unknown_item");
+            } else if (hasRealBarterNbt) {
+                barterName = ShopUiUtil.getItemDisplayNameWithNbt(barterId, listing.barterNbtJson());
+            } else {
+                barterName = ShopUiUtil.getItemDisplayName(barterId);
+            }
+            summary.add(ConfirmationModal.SummaryLine.item(
+                    barterId != null ? barterId : "",
+                    I18n.get("gui.futureshops.player_shop_block.confirm.plus_give", barterAmount, barterName),
+                    hasRealBarterNbt ? listing.barterNbtJson() : ""));
+            totalLine = I18n.get("gui.futureshops.player_shop_block.confirm.total_compound",
+                    totalStr, barterAmount, barterName);
+            // Server treats MONEY_AND_BARTER as compound regardless of paymentMethod.
+            paymentMethod = "";
+        } else {
+            totalLine = I18n.get("gui.futureshops.player_shop_block.confirm.total", totalStr);
+            // Fix: BOTH mode previously relied on the server's "can afford?" fallback,
+            // meaning the Buy button could unintentionally pick barter. Signal MONEY
+            // explicitly so the BOTH branch on the server always honours the button.
+            paymentMethod = "MONEY";
+        }
+
         confirmationModal = new ConfirmationModal(
-                "Confirm Purchase",
-                java.util.List.of(
-                        ConfirmationModal.SummaryLine.item(listing.itemId(), itemName + " ×" + quantity)
-                ),
-                "Total: " + totalStr,
+                I18n.get("gui.futureshops.player_shop_block.confirm.title"),
+                summary,
+                totalLine,
                 modal -> {
                     modal.setProcessing();
-                    buy(quantity);
+                    buy(quantity, paymentMethod);
                 },
                 () -> confirmationModal = null
         );
@@ -1601,7 +1877,14 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     }
 
     private int clampQuantity(int quantity) {
-        return Math.max(1, Math.min(resolveMaxQuantity(), quantity));
+        // Only clamp against shop stock at input time. Don't reject based on affordability
+        // (balance / inventory) — before the client balance sync arrives those numbers read
+        // as zero, which previously pinned the quantity at 1 until the player ran /shop to
+        // force a balance refresh. The server-side buy path re-validates both stock and
+        // funds, so letting the user freely dial up a number here is safe.
+        PlayerShopListingData listing = PlayerShopClientState.selectedListing();
+        int stockCap = listing == null ? 999 : Math.max(1, listing.stock());
+        return Math.max(1, Math.min(stockCap, quantity));
     }
 
     // ═══ Common helpers ═══
@@ -1629,10 +1912,10 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         long start = promo.startEpochSeconds();
         long end = promo.endEpochSeconds();
         if (start > now) {
-            return "§7starts in §f" + humanDuration(start - now);
+            return I18n.get("gui.futureshops.player_shop_block.promo.starts_in", humanDuration(start - now));
         }
         if (end > 0L && end > now) {
-            return "§7ends in §f" + humanDuration(end - now);
+            return I18n.get("gui.futureshops.player_shop_block.promo.ends_in", humanDuration(end - now));
         }
         return null;
     }
@@ -1650,25 +1933,23 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     }
 
     private String promoLabel(PlayerShopListingData listing) {
-        if (listing == null || !listing.promo().configured()) return "sale";
+        if (listing == null || !listing.promo().configured()) return I18n.get("gui.futureshops.player_shop_block.promo.label.sale");
         return switch (listing.promo().promoType()) {
-            case "BUY_X_GET_Y" -> "B" + listing.promo().buyX() + "G" + listing.promo().buyY();
-            case "FLAT" -> "-$" + ShopUiUtil.formatMinorUnits(
-                    Math.round(listing.promo().promoValue() * Math.pow(10, ShopClientState.getCurrencyDecimals())));
-            case "FLASH" -> "flash";
-            default -> "sale";
+            case "BUY_X_GET_Y" -> I18n.get("gui.futureshops.player_shop_block.promo.label.buy_x_get_y",
+                    listing.promo().buyX(), listing.promo().buyY());
+            case "FLAT" -> I18n.get("gui.futureshops.player_shop_block.promo.label.flat",
+                    ShopUiUtil.formatMinorUnits(
+                            Math.round(listing.promo().promoValue() * Math.pow(10, ShopClientState.getCurrencyDecimals()))));
+            case "FLASH" -> I18n.get("gui.futureshops.player_shop_block.promo.label.flash");
+            default -> I18n.get("gui.futureshops.player_shop_block.promo.label.sale");
         };
     }
 
-    // LGB#11: Use short abbreviations for the listing rail to avoid text cut-off
+    // LGB#11: Listing-rail meta label. Delegates to ShopUiUtil.tradeModeLabel so every
+    // user-facing trade-mode string resolves through the lang file (keys under
+    // `gui.futureshops.trade_mode.*`). Invariant enforced by BuyPacketCallSiteTest.
     private String prettyMode(String mode) {
-        if (mode == null || mode.isBlank()) return "§aMoney";
-        return switch (mode.toUpperCase(Locale.ROOT)) {
-            case "BARTER" -> "§9Barter";
-            case "BOTH" -> "§aMoney§7/§9Barter";
-            case "MONEY_AND_BARTER" -> "§6M+B";
-            default -> "§aMoney";
-        };
+        return ShopUiUtil.tradeModeLabel(mode);
     }
 
     private String localizeResultCode(String code) {

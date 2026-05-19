@@ -42,8 +42,22 @@ public final class PlayerShopCartState {
                                  String tradeMode, String barterItemId, int barterItemCount, String nbtJson,
                                  boolean nbtAware) {
         if (quantity <= 0) return;
-        // LGB#4: Default chosen payment for BOTH = MONEY
-        String defaultPayment = "BOTH".equalsIgnoreCase(tradeMode) ? "MONEY" : "";
+        // Reject blank / air listings outright so they can't enter the cart or the
+        // transaction history. Modded bundles sometimes expose a primary item as "air"
+        // (e.g. Create's metal-block variants) — add-to-cart should no-op in that case.
+        if (itemId == null || itemId.isBlank() || "minecraft:air".equals(itemId)) return;
+        // LGB#4: Default chosen payment per mode.
+        //  - BOTH             → "MONEY" (toggleable to "BARTER" via togglePayment)
+        //  - MONEY_AND_BARTER → "MONEY_AND_BARTER" (locked; compound trade takes both)
+        //  - anything else    → "" (server enforces the single valid mode)
+        String defaultPayment;
+        if ("BOTH".equalsIgnoreCase(tradeMode)) {
+            defaultPayment = "MONEY";
+        } else if ("MONEY_AND_BARTER".equalsIgnoreCase(tradeMode)) {
+            defaultPayment = "MONEY_AND_BARTER";
+        } else {
+            defaultPayment = "";
+        }
         synchronized (entries) {
             for (CartEntry entry : entries) {
                 if (entry.shopPos().equals(shopPos) && entry.listingIndex() == listingIndex) {
@@ -78,6 +92,8 @@ public final class PlayerShopCartState {
 
     /**
      * LGB#4: Toggles the chosen payment method for a BOTH-mode entry between MONEY and BARTER.
+     * Intentionally a no-op for MONEY_AND_BARTER (compound) entries — those always take both
+     * and the cart row surfaces a locked "M+B" badge rather than a toggle.
      */
     public static void togglePayment(int cartIndex) {
         synchronized (entries) {

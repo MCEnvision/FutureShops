@@ -23,10 +23,16 @@ import java.util.stream.Collectors;
  */
 public class AdminCategorySavedData extends SavedData {
     private static final String DATA_NAME = "futureshops_admin_categories";
-    private static final int CURRENT_VERSION = 1;
+    private static final int CURRENT_VERSION = 2;
     private final Set<String> categories = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
     /** Maps itemId → categoryName (e.g., "minecraft:diamond_sword" → "Weapons") */
     private final Map<String, String> itemAssignments = new HashMap<>();
+    /**
+     * Bundled (JSON-defined) category ids the admin has hidden via {@code /shopadmin category remove}.
+     * Stored as the lowercase id (e.g. "tools") so it matches both the displayName lookup and the
+     * normalized id used by {@link com.enviouse.futureshops.catalog.ShopCatalog#buildCategories}.
+     */
+    private final Set<String> hiddenBaseCategoryIds = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
 
     public AdminCategorySavedData() {
     }
@@ -150,6 +156,38 @@ public class AdminCategorySavedData extends SavedData {
                 .collect(Collectors.toList());
     }
 
+    // ─── Bundled-category tombstones ────────────────────────────────────────────
+
+    /** Hides a JSON-defined category by its normalized id (lowercase, spaces→underscores). */
+    public boolean hideBaseCategory(String idOrName) {
+        if (idOrName == null || idOrName.isBlank()) return false;
+        boolean added = hiddenBaseCategoryIds.add(normalizeId(idOrName));
+        if (added) setDirty();
+        return added;
+    }
+
+    /** Restores a previously hidden bundled category. */
+    public boolean restoreBaseCategory(String idOrName) {
+        if (idOrName == null || idOrName.isBlank()) return false;
+        boolean removed = hiddenBaseCategoryIds.remove(normalizeId(idOrName));
+        if (removed) setDirty();
+        return removed;
+    }
+
+    public boolean isBaseCategoryHidden(String idOrName) {
+        if (idOrName == null || idOrName.isBlank()) return false;
+        return hiddenBaseCategoryIds.contains(normalizeId(idOrName));
+    }
+
+    /** Returns the normalized ids of all currently hidden bundled categories. */
+    public Set<String> getHiddenBaseCategoryIds() {
+        return Collections.unmodifiableSet(hiddenBaseCategoryIds);
+    }
+
+    private static String normalizeId(String s) {
+        return s.trim().toLowerCase(Locale.ROOT).replace(' ', '_');
+    }
+
     @Override
     public CompoundTag save(CompoundTag tag) {
         SavedDataMigrations.writeVersion(tag, CURRENT_VERSION);
@@ -165,6 +203,12 @@ public class AdminCategorySavedData extends SavedData {
             assignTag.putString(entry.getKey(), entry.getValue());
         }
         tag.put("ItemAssignments", assignTag);
+
+        ListTag hidden = new ListTag();
+        for (String id : hiddenBaseCategoryIds) {
+            hidden.add(StringTag.valueOf(id));
+        }
+        tag.put("HiddenBaseCategories", hidden);
 
         return tag;
     }
@@ -184,6 +228,12 @@ public class AdminCategorySavedData extends SavedData {
             CompoundTag assignTag = tag.getCompound("ItemAssignments");
             for (String key : assignTag.getAllKeys()) {
                 data.itemAssignments.put(key, assignTag.getString(key));
+            }
+        }
+        if (tag.contains("HiddenBaseCategories", Tag.TAG_LIST)) {
+            ListTag hidden = tag.getList("HiddenBaseCategories", Tag.TAG_STRING);
+            for (Tag t : hidden) {
+                data.hiddenBaseCategoryIds.add(t.getAsString());
             }
         }
         return data;
