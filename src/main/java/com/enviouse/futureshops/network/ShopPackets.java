@@ -14,8 +14,10 @@ import com.enviouse.futureshops.network.packets.C2SOpenBalanceUiPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenShopPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopActionPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuyPacket;
+import com.enviouse.futureshops.network.packets.C2SPlayerShopBuybackConfigPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopConfigPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopPromoPacket;
+import com.enviouse.futureshops.network.packets.C2SPlayerShopSellPacket;
 import com.enviouse.futureshops.network.packets.C2SSellRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SSetDepartmentPacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyAdminCartPacket;
@@ -44,7 +46,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ShopPackets {
-    public static final String PROTOCOL_VERSION = "22";
+    public static final String PROTOCOL_VERSION = "23";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))
@@ -131,6 +133,18 @@ public final class ShopPackets {
             .decoder(C2SPlayerShopBuyPacket::decode)
             .encoder(C2SPlayerShopBuyPacket::encode)
             .consumerMainThread(C2SPlayerShopBuyPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SPlayerShopSellPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SPlayerShopSellPacket::decode)
+            .encoder(C2SPlayerShopSellPacket::encode)
+            .consumerMainThread(C2SPlayerShopSellPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SPlayerShopBuybackConfigPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SPlayerShopBuybackConfigPacket::decode)
+            .encoder(C2SPlayerShopBuybackConfigPacket::encode)
+            .consumerMainThread(C2SPlayerShopBuybackConfigPacket::handle)
             .add();
 
         CHANNEL.messageBuilder(C2SPlayerShopPromoPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)

@@ -8,6 +8,7 @@ import com.enviouse.futureshops.data.PlayerShopListingData;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopActionPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuyPacket;
+import com.enviouse.futureshops.network.packets.C2SPlayerShopBuybackConfigPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopConfigPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -112,7 +113,15 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     // Visitor controls
     private Button visitorBuyButton;
     private Button visitorBarterButton;
+    private Button visitorSellButton;
     private Button addToCartButton; // LGB#5: field reference for greying out
+
+    // Owner buyback controls
+    private Button dirButton;
+    private Button buybackPriceButton;
+    private Button buybackCapButton;
+    private static final long[] BUYBACK_PRICE_CYCLE_MINOR = new long[]{0L, 100L, 1000L, 5000L, 10000L, 50000L, 100000L};
+    private static final int[] BUYBACK_CAP_CYCLE = new int[]{0, 16, 64, 256, 1024, 9999};
 
     public PlayerShopBlockScreen() {
         this(null);
@@ -421,6 +430,34 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                 .bounds(bx, actionRowY, lDescBtnW, bh).build());
         actionRowButtons.add(lDescButton);
 
+        // Buyback / direction controls (owner-only). Labels reflect current per-listing state.
+        String dirLabel = I18n.get("gui.futureshops.player_shop_block.footer.dir", currentDirection());
+        int dirBtnW = this.font.width(dirLabel) + 12;
+        dirButton = addRenderableWidget(Button.builder(
+                        Component.literal(dirLabel),
+                        button -> cycleDirection())
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.dir_tooltip")))
+                .bounds(bx, actionRowY, dirBtnW, bh).build());
+        actionRowButtons.add(dirButton);
+
+        String bpLabel = I18n.get("gui.futureshops.player_shop_block.footer.buyback_price");
+        int bpBtnW = this.font.width(bpLabel) + 12;
+        buybackPriceButton = addRenderableWidget(Button.builder(
+                        Component.translatable("gui.futureshops.player_shop_block.footer.buyback_price"),
+                        button -> cycleBuybackPrice())
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.buyback_price_tooltip")))
+                .bounds(bx, actionRowY, bpBtnW, bh).build());
+        actionRowButtons.add(buybackPriceButton);
+
+        String bcLabel = I18n.get("gui.futureshops.player_shop_block.footer.buyback_cap");
+        int bcBtnW = this.font.width(bcLabel) + 12;
+        buybackCapButton = addRenderableWidget(Button.builder(
+                        Component.translatable("gui.futureshops.player_shop_block.footer.buyback_cap"),
+                        button -> cycleBuybackCap())
+                .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_block.footer.buyback_cap_tooltip")))
+                .bounds(bx, actionRowY, bcBtnW, bh).build());
+        actionRowButtons.add(buybackCapButton);
+
         // Copy Config / Paste Config — clones all owner-editable shop data (name, description,
         // listings incl. promos + barter items + bundle outputs) into a server-side per-player
         // clipboard so the same catalogue can be stamped onto another shop block.
@@ -559,6 +596,17 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                 })
                 .bounds(rightEdge - barterBtnW, y, barterBtnW, 14).build());
         rightEdge -= barterBtnW + btnGap;
+
+        // Sell-to-shop button (buyback). Visibility/active state managed in syncButtonStates.
+        int sellBtnW = tightFit ? 44 : 60;
+        visitorSellButton = addRenderableWidget(Button.builder(
+                        Component.translatable("gui.futureshops.player_shop_block.visitor.sell_button"),
+                        button -> {
+                            if (this.minecraft != null)
+                                this.minecraft.setScreen(new PlayerShopSellScreen(this, getQuantity()));
+                        })
+                .bounds(rightEdge - sellBtnW, y, sellBtnW, 14).build());
+        rightEdge -= sellBtnW + btnGap;
 
         // Buy button (money)
         int buyBtnW = tightFit ? 40 : 56;
@@ -818,19 +866,27 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
             // Name — scrolls (ping-pong) when wider than the rail so long modded names stay readable.
             int nameW = railW - 42;
-            String fullName = ShopUiUtil.getItemDisplayNameWithNbtAndQty(listing.itemId(), listing.nbtJson(), listing.baseQuantity());
+            String dirPrefix = "";
+            if (listing.direction() != null) {
+                String dirU = listing.direction().toUpperCase(Locale.ROOT);
+                if ("BUY".equals(dirU)) dirPrefix = "§6[BUY] ";
+                else if ("BOTH".equals(dirU)) dirPrefix = "§e[B+S] ";
+            }
+            String fullName = dirPrefix + ShopUiUtil.getItemDisplayNameWithNbtAndQty(listing.itemId(), listing.nbtJson(), listing.baseQuantity());
             ShopUiUtil.renderScrollingString(graphics, this.font, fullName,
                     railX + 30, y + 4, nameW, selected ? ShopColors.TEXT_STRONG : ShopColors.TEXT_MUTED);
 
             // Meta line — stock + mode
+            boolean admin = PlayerShopClientState.adminShopMode();
+            String stockStr = admin ? "∞" : (listing.stock() + " stk");
             String meta;
-            if (listing.baseQuantity() == 0) {
-                meta = "§c⚠ " + listing.stock() + " stk • " + prettyMode(listing.tradeMode());
+            if (!admin && listing.baseQuantity() == 0) {
+                meta = "§c⚠ " + stockStr + " • " + prettyMode(listing.tradeMode());
             } else if (listing.baseQuantity() > 1 && !PlayerShopClientState.owner()) {
                 // Show ×qty badge only for visitors; owners have Q-/Q+ controls
-                meta = "×" + listing.baseQuantity() + " • " + listing.stock() + " stk • " + prettyMode(listing.tradeMode());
+                meta = "×" + listing.baseQuantity() + " • " + stockStr + " • " + prettyMode(listing.tradeMode());
             } else {
-                meta = listing.stock() + " stk • " + prettyMode(listing.tradeMode());
+                meta = stockStr + " • " + prettyMode(listing.tradeMode());
             }
             meta = this.font.plainSubstrByWidth(meta, nameW);
             int metaColor = switch (listing.tradeMode().toUpperCase(Locale.ROOT)) {
@@ -942,13 +998,16 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         }
         int afterDescY = descTopY + Math.max(12, descLinesDrawn * 10 + 2);
 
-        // Stock below description
-        String stockStr = I18n.get("gui.futureshops.player_shop_block.detail.stock_prefix", listing.stock())
-                + (listing.stock() <= 16
-                        ? I18n.get("gui.futureshops.player_shop_block.detail.stock_low")
-                        : I18n.get("gui.futureshops.player_shop_block.detail.stock_ok"));
+        // Stock below description (∞ in admin mode)
+        boolean adminDetail = PlayerShopClientState.adminShopMode();
+        String stockStr = adminDetail
+                ? "§d∞ §7unlimited"
+                : I18n.get("gui.futureshops.player_shop_block.detail.stock_prefix", listing.stock())
+                        + (listing.stock() <= 16
+                                ? I18n.get("gui.futureshops.player_shop_block.detail.stock_low")
+                                : I18n.get("gui.futureshops.player_shop_block.detail.stock_ok"));
         graphics.drawString(this.font, this.font.plainSubstrByWidth(stockStr, previewW), detailX + 8, afterDescY,
-                listing.stock() <= 16 ? ShopColors.ERROR : ShopColors.SUCCESS, false);
+                adminDetail ? ShopColors.SUCCESS : (listing.stock() <= 16 ? ShopColors.ERROR : ShopColors.SUCCESS), false);
 
         // Mode + effective price below stock
         String modeStr = prettyMode(listing.tradeMode());
@@ -1211,13 +1270,16 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
             graphics.drawCenteredString(this.font, totalLabel, detailX + 8 + previewW / 2, bottomStackY + 24, ShopColors.TEXT_PRICE);
         }
 
-        String stockStr = listing.stock()
-                + (listing.stock() <= 16
-                        ? I18n.get("gui.futureshops.player_shop_block.detail.stock_low")
-                        : I18n.get("gui.futureshops.player_shop_block.detail.stock_ok"));
+        boolean adminVisitor = PlayerShopClientState.adminShopMode();
+        String stockStr = adminVisitor
+                ? "§d∞ §7unlimited"
+                : listing.stock()
+                        + (listing.stock() <= 16
+                                ? I18n.get("gui.futureshops.player_shop_block.detail.stock_low")
+                                : I18n.get("gui.futureshops.player_shop_block.detail.stock_ok"));
         graphics.drawCenteredString(this.font, this.font.plainSubstrByWidth(stockStr, previewW - 8),
                 detailX + 8 + previewW / 2, bottomStackY + 36,
-                listing.stock() <= 16 ? ShopColors.ERROR : ShopColors.SUCCESS);
+                adminVisitor ? ShopColors.SUCCESS : (listing.stock() <= 16 ? ShopColors.ERROR : ShopColors.SUCCESS));
 
         // ═══ Right: Info panels ═══
         int infoX = detailX + previewW + 20;
@@ -1320,10 +1382,12 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
             }
         }
 
-        // Stock
-        String stockLabel = listing.stock() > 0
-                ? I18n.get("gui.futureshops.player_shop_block.detail.single.stock_in", listing.stock())
-                : I18n.get("gui.futureshops.player_shop_block.detail.single.stock_out");
+        // Stock (∞ in admin mode)
+        String stockLabel = PlayerShopClientState.adminShopMode()
+                ? "§d∞ §7unlimited stock"
+                : (listing.stock() > 0
+                        ? I18n.get("gui.futureshops.player_shop_block.detail.single.stock_in", listing.stock())
+                        : I18n.get("gui.futureshops.player_shop_block.detail.single.stock_out"));
         graphics.drawString(this.font, stockLabel, infoX + 8, nextY, ShopColors.TEXT_SECONDARY, false);
         nextY += 14;
 
@@ -1533,25 +1597,38 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
         // Visitor button states
         if (hasSelection && !PlayerShopClientState.owner()) {
-            boolean inStock = listing.stock() > 0;
+            boolean inStock = listing.stock() > 0 || PlayerShopClientState.adminShopMode();
             boolean hasMoney = !"BARTER".equalsIgnoreCase(listing.tradeMode());
             boolean hasBarter = !"MONEY".equalsIgnoreCase(listing.tradeMode());
 
+            // Direction-aware buy/barter visibility — SELL/BOTH allow visitors to buy.
+            String dir = listing.direction() == null ? "SELL" : listing.direction().toUpperCase(Locale.ROOT);
+            boolean allowsBuy = !"BUY".equals(dir); // SELL or BOTH
+            boolean allowsSell = "BUY".equals(dir) || "BOTH".equals(dir);
+
             if (visitorBuyButton != null) {
-                visitorBuyButton.visible = hasMoney;
-                visitorBuyButton.active = hasMoney && inStock;
+                visitorBuyButton.visible = hasMoney && allowsBuy;
+                visitorBuyButton.active = hasMoney && inStock && allowsBuy;
             }
             if (visitorBarterButton != null) {
-                visitorBarterButton.visible = hasBarter;
-                visitorBarterButton.active = hasBarter && inStock;
+                visitorBarterButton.visible = hasBarter && allowsBuy;
+                visitorBarterButton.active = hasBarter && inStock && allowsBuy;
+            }
+            if (visitorSellButton != null) {
+                boolean capOk = listing.buybackCap() == 0 || listing.buybackRemaining() > 0;
+                boolean canSell = allowsSell && listing.buybackPriceMinor() > 0 && capOk;
+                visitorSellButton.visible = canSell;
+                visitorSellButton.active = canSell;
             }
             // LGB#5: Grey out +Cart when out of stock
             if (addToCartButton != null) {
-                addToCartButton.active = inStock;
+                addToCartButton.active = inStock && allowsBuy;
+                addToCartButton.visible = allowsBuy;
             }
         } else if (!PlayerShopClientState.owner()) {
             if (visitorBuyButton != null) { visitorBuyButton.active = false; visitorBuyButton.visible = true; }
             if (visitorBarterButton != null) { visitorBarterButton.active = false; visitorBarterButton.visible = true; }
+            if (visitorSellButton != null) { visitorSellButton.active = false; visitorSellButton.visible = false; }
             if (addToCartButton != null) { addToCartButton.active = false; }
         }
 
@@ -1568,6 +1645,36 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
         // L.Desc visibility tied to selection (like Del, Promo, Dept)
         if (lDescButton != null) lDescButton.visible = hasSelection;
+
+        // Buyback controls: owner-only and require a selected listing.
+        boolean ownerSel = PlayerShopClientState.owner() && hasSelection;
+        if (dirButton != null) {
+            dirButton.visible = ownerSel;
+            dirButton.active = ownerSel;
+            if (ownerSel) {
+                dirButton.setMessage(Component.literal(
+                        I18n.get("gui.futureshops.player_shop_block.footer.dir", currentDirection())));
+            }
+        }
+        if (buybackPriceButton != null) {
+            buybackPriceButton.visible = ownerSel;
+            buybackPriceButton.active = ownerSel;
+            if (ownerSel) {
+                buybackPriceButton.setMessage(Component.literal(
+                        I18n.get("gui.futureshops.player_shop_block.footer.buyback_price")
+                                + " §7" + ShopUiUtil.formatMinorUnits(listing.buybackPriceMinor())));
+            }
+        }
+        if (buybackCapButton != null) {
+            buybackCapButton.visible = ownerSel;
+            buybackCapButton.active = ownerSel;
+            if (ownerSel) {
+                int cap = listing.buybackCap();
+                buybackCapButton.setMessage(Component.literal(
+                        I18n.get("gui.futureshops.player_shop_block.footer.buyback_cap")
+                                + " §7" + (cap == 0 ? "∞" : Integer.toString(cap))));
+            }
+        }
 
         // Reflow footer buttons so visible ones fill space without gaps
         reflowFooterButtons();
@@ -1722,7 +1829,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
     private void addToCart() {
         PlayerShopListingData listing = PlayerShopClientState.selectedListing();
-        if (listing == null || listing.stock() <= 0) return;
+        if (listing == null || (listing.stock() <= 0 && !PlayerShopClientState.adminShopMode())) return;
         int qty = getQuantity();
         String shopName = PlayerShopClientState.shopName().isBlank()
                 ? PlayerShopClientState.ownerName() + "'s Shop"
@@ -1888,6 +1995,55 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     }
 
     // ═══ Common helpers ═══
+
+    private String currentDirection() {
+        PlayerShopListingData listing = PlayerShopClientState.selectedListing();
+        if (listing == null || listing.direction() == null || listing.direction().isBlank()) return "SELL";
+        return listing.direction().toUpperCase(Locale.ROOT);
+    }
+
+    private void cycleDirection() {
+        PlayerShopListingData listing = PlayerShopClientState.selectedListing();
+        if (listing == null) return;
+        String dir = currentDirection();
+        String next = switch (dir) {
+            case "SELL" -> "BUY";
+            case "BUY" -> "BOTH";
+            default -> "SELL";
+        };
+        sendBuybackConfig(next, listing.buybackPriceMinor(), listing.buybackCap());
+    }
+
+    private void cycleBuybackPrice() {
+        PlayerShopListingData listing = PlayerShopClientState.selectedListing();
+        if (listing == null) return;
+        long cur = listing.buybackPriceMinor();
+        long next = BUYBACK_PRICE_CYCLE_MINOR[0];
+        for (int i = 0; i < BUYBACK_PRICE_CYCLE_MINOR.length; i++) {
+            if (BUYBACK_PRICE_CYCLE_MINOR[i] > cur) { next = BUYBACK_PRICE_CYCLE_MINOR[i]; break; }
+            if (i == BUYBACK_PRICE_CYCLE_MINOR.length - 1) next = BUYBACK_PRICE_CYCLE_MINOR[0];
+        }
+        sendBuybackConfig(currentDirection(), next, listing.buybackCap());
+    }
+
+    private void cycleBuybackCap() {
+        PlayerShopListingData listing = PlayerShopClientState.selectedListing();
+        if (listing == null) return;
+        int cur = listing.buybackCap();
+        int next = BUYBACK_CAP_CYCLE[0];
+        for (int i = 0; i < BUYBACK_CAP_CYCLE.length; i++) {
+            if (BUYBACK_CAP_CYCLE[i] > cur) { next = BUYBACK_CAP_CYCLE[i]; break; }
+            if (i == BUYBACK_CAP_CYCLE.length - 1) next = BUYBACK_CAP_CYCLE[0];
+        }
+        sendBuybackConfig(currentDirection(), listing.buybackPriceMinor(), next);
+    }
+
+    private void sendBuybackConfig(String direction, long priceMinor, int cap) {
+        ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopBuybackConfigPacket(
+                PlayerShopClientState.shopPos(),
+                PlayerShopClientState.selectedListingIndex(),
+                direction, priceMinor, cap));
+    }
 
     private void sendAction(String action, int amount) {
         ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopActionPacket(

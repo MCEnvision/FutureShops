@@ -175,7 +175,9 @@ public final class ShopClientPacketHandler {
                     packet.singleItemMode(),
                     packet.barterStorageSame(),
                     packet.description(),
-                    packet.franchiseName());
+                    packet.franchiseName(),
+                    packet.placedByCreative(),
+                    packet.adminShopMode());
             if (!(mc.screen instanceof PlayerShopBlockScreen)) {
                 // Pass current screen as parent for back-button navigation (Items 4, 9)
                 mc.setScreen(new PlayerShopBlockScreen(mc.screen));
@@ -371,14 +373,14 @@ public final class ShopClientPacketHandler {
             case MISSING_INGREDIENTS -> "gui.futureshops.status.barter.error.missing_ingredients";
             // Codes not specific to transaction chat — fall back to the generic server-error
             // line so nothing ever renders the raw enum name to the player.
-            case OK, BOUGHT, CONFIG_SAVED, CONFIG_COPIED, DEPARTMENT_SET, PROMO_SET, PROMO_CLEARED,
+            case OK, BOUGHT, SOLD, CONFIG_SAVED, CONFIG_COPIED, DEPARTMENT_SET, PROMO_SET, PROMO_CLEARED,
                  LINKED, BARTER_LINKED, LINK_PENDING, LINK_NONE, BARTER_LINK_PENDING,
                  DESC_PENDING, LISTING_DESC_PENDING, NOT_OWNER, HOLD_ITEM, LISTING_LIMIT,
                  NO_LISTING, UNCONFIGURED, NOT_SINGLE_MODE, USE_SET_DEPARTMENT_ACTION,
                  NO_LINK, BAD_LINK_TARGET, RS_NOT_CONTROLLER, STORAGE_FULL,
                  MISSING_BARTER_ITEMS, ROLLBACK, NOTHING_TO_CLAIM, CLAIM_FAILED,
                  PROMO_FAILED, NO_CLIPBOARD, INVALID_REQUEST, INVALID_TARGET, SERVER_ERROR,
-                 CANCELLED_BY_EVENT
+                 CANCELLED_BY_EVENT, SHOP_OUT_OF_MONEY, BUYBACK_CAP_REACHED
                     -> "command.futureshops.error.server";
         };
     }

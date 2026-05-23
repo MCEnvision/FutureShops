@@ -114,6 +114,12 @@ public class ShopBlock extends BaseEntityBlock {
     public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
         super.setPlacedBy(level, pos, state, placer, stack);
         if (level.getBlockEntity(pos) instanceof ShopBlockEntity shop) {
+            // Stamp admin-shop eligibility when the placer was in creative mode.
+            // One-time at placement; persists with the block entity.
+            if (placer instanceof Player creativePlacer && creativePlacer.getAbilities().instabuild) {
+                shop.setPlacedByCreative(true);
+                shop.setChanged();
+            }
             if (shop.getOwnerUuid() == null && placer instanceof Player player) {
                 // Check per-player shop block limit before assigning ownership
                 if (!level.isClientSide && level.getServer() != null) {

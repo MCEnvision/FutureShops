@@ -20,6 +20,7 @@ public enum ShopResultCode {
     // ── Success / neutral ────────────────────────────────────────────────
     OK,
     BOUGHT,
+    SOLD,
     CONFIG_SAVED,
     CONFIG_COPIED,
     DEPARTMENT_SET,
@@ -55,6 +56,8 @@ public enum ShopResultCode {
     STORAGE_FULL,
     INVENTORY_FULL,
     INSUFFICIENT_FUNDS,
+    SHOP_OUT_OF_MONEY,
+    BUYBACK_CAP_REACHED,
     MISSING_BARTER_ITEMS,
     MISSING_INGREDIENTS,
     MISSING_ITEMS,

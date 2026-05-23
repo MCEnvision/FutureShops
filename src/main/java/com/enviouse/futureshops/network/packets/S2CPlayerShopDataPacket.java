@@ -26,7 +26,9 @@ public record S2CPlayerShopDataPacket(
         boolean singleItemMode,
         boolean barterStorageSame,
         String description,
-        String franchiseName) {
+        String franchiseName,
+        boolean placedByCreative,
+        boolean adminShopMode) {
 
     public static void encode(S2CPlayerShopDataPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.shopPos());
@@ -43,6 +45,8 @@ public record S2CPlayerShopDataPacket(
         buffer.writeBoolean(packet.barterStorageSame());
         buffer.writeUtf(packet.description());
         buffer.writeUtf(packet.franchiseName());
+        buffer.writeBoolean(packet.placedByCreative());
+        buffer.writeBoolean(packet.adminShopMode());
     }
 
     public static S2CPlayerShopDataPacket decode(FriendlyByteBuf buffer) {
@@ -60,7 +64,9 @@ public record S2CPlayerShopDataPacket(
                 buffer.readBoolean(),
                 buffer.readBoolean(),
                 buffer.readUtf(),
-                buffer.readUtf());
+                buffer.readUtf(),
+                buffer.readBoolean(),
+                buffer.readBoolean());
     }
 
     public static void handle(S2CPlayerShopDataPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

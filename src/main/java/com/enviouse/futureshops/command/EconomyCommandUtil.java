@@ -62,7 +62,7 @@ public final class EconomyCommandUtil {
             // Codes not meaningful for direct economy commands fall through to a single
             // generic server-error line. The explicit enumeration is a deliberate
             // "intentionally generic" contract — see the exhaustive-switch unit test.
-            case OK, BOUGHT, CONFIG_SAVED, CONFIG_COPIED, DEPARTMENT_SET, PROMO_SET, PROMO_CLEARED,
+            case OK, BOUGHT, SOLD, CONFIG_SAVED, CONFIG_COPIED, DEPARTMENT_SET, PROMO_SET, PROMO_CLEARED,
                  LINKED, BARTER_LINKED, LINK_PENDING, LINK_NONE, BARTER_LINK_PENDING,
                  DESC_PENDING, LISTING_DESC_PENDING, NOT_OWNER, HOLD_ITEM, LISTING_LIMIT,
                  NO_LISTING, INVALID_ITEM, UNCONFIGURED, NOT_SINGLE_MODE,
@@ -70,7 +70,8 @@ public final class EconomyCommandUtil {
                  OUT_OF_STOCK, STORAGE_FULL, INVENTORY_FULL, MISSING_BARTER_ITEMS,
                  MISSING_INGREDIENTS, MISSING_ITEMS, INVALID_RECIPE, ROLLBACK,
                  NOTHING_TO_CLAIM, CLAIM_FAILED, PROMO_FAILED, NO_CLIPBOARD, INVALID_REQUEST,
-                 SERVER_ERROR, CANCELLED_BY_EVENT, COOLDOWN, SHOP_CLOSED
+                 SERVER_ERROR, CANCELLED_BY_EVENT, COOLDOWN, SHOP_CLOSED,
+                 SHOP_OUT_OF_MONEY, BUYBACK_CAP_REACHED
                     -> "command.futureshops.error.server";
         };
 

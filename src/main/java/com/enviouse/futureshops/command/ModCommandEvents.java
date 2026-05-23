@@ -19,6 +19,7 @@ public final class ModCommandEvents {
         WithdrawCommand.register(event.getDispatcher());
         DepositCommand.register(event.getDispatcher());
         ShopAdminCommand.register(event.getDispatcher());
+        AdminModeCommand.register(event.getDispatcher());
         LinkCommand.register(event.getDispatcher());
         FranchiseCommand.register(event.getDispatcher());
         DescCommand.register(event.getDispatcher());

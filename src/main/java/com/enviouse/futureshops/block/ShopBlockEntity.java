@@ -95,6 +95,18 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     private float displayScale = 1.0F;
     /** When true the block-top nameplate is suppressed even while a player is looking at the shop. */
     private boolean nameplateHidden = false;
+    /**
+     * Admin Shop eligibility — stamped at placement time when a creative-mode
+     * player placed the block. Persists with the block entity. Required to ever
+     * enable {@link #adminShopMode}.
+     */
+    private boolean placedByCreative = false;
+    /**
+     * When true the shop is in Admin Shop mode: infinite stock, money sunk on
+     * buys (owner not credited), barter/sell inputs voided. Only togglable when
+     * {@link #placedByCreative} is true.
+     */
+    private boolean adminShopMode = false;
 
     public ShopBlockEntity(BlockPos pos, BlockState blockState) {
         super(ModBlockEntities.SHOP_BLOCK_ENTITY.get(), pos, blockState);
@@ -149,6 +161,35 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         this.nameplateHidden = !this.nameplateHidden;
         setChanged();
         syncTopItemsToClients();
+    }
+
+    public boolean isPlacedByCreative() {
+        return placedByCreative;
+    }
+
+    public void setPlacedByCreative(boolean placedByCreative) {
+        this.placedByCreative = placedByCreative;
+        if (!placedByCreative) {
+            this.adminShopMode = false;
+        }
+        setChanged();
+    }
+
+    public boolean isAdminShopMode() {
+        return adminShopMode;
+    }
+
+    /**
+     * Sets admin-shop mode. No-ops and returns {@code false} when the block is
+     * not creative-placed (admin mode requires {@link #isPlacedByCreative()}).
+     */
+    public boolean setAdminShopMode(boolean adminShopMode) {
+        if (adminShopMode && !placedByCreative) {
+            return false;
+        }
+        this.adminShopMode = adminShopMode;
+        setChanged();
+        return true;
     }
 
     private static float clamp(float v, float lo, float hi) {
@@ -364,6 +405,7 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         tag.putInt("VisibleListingIndex", visibleListingIndex);
         tag.putBoolean("BarterStorageSame", barterStorageSame);
         tag.putInt("MaxListings", maxListings);
+        tag.putBoolean("AdminShopMode", adminShopMode);
         ListTag listingTags = new ListTag();
         for (Listing listing : listings) {
             listingTags.add(listing.save());
@@ -385,6 +427,10 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         if (tag.contains("VisibleListingIndex")) visibleListingIndex = tag.getInt("VisibleListingIndex");
         if (tag.contains("BarterStorageSame")) barterStorageSame = tag.getBoolean("BarterStorageSame");
         if (tag.contains("MaxListings")) maxListings = tag.getInt("MaxListings");
+        if (tag.contains("AdminShopMode")) {
+            // Pasting onto a non-creative-eligible shop forces admin mode off.
+            adminShopMode = placedByCreative && tag.getBoolean("AdminShopMode");
+        }
         if (tag.contains("Listings", Tag.TAG_LIST)) {
             listings.clear();
             ListTag listingTags = tag.getList("Listings", Tag.TAG_COMPOUND);
@@ -418,6 +464,8 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         tag.putFloat("DisplayYOffset", displayYOffset);
         tag.putFloat("DisplayScale", displayScale);
         tag.putBoolean("NameplateHidden", nameplateHidden);
+        tag.putBoolean("PlacedByCreative", placedByCreative);
+        tag.putBoolean("AdminShopMode", adminShopMode);
         ListTag listingTags = new ListTag();
         for (Listing listing : listings) {
             listingTags.add(listing.save());
@@ -451,6 +499,8 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         displayScale = clamp(tag.contains("DisplayScale") ? tag.getFloat("DisplayScale") : 1.0F,
                 DISPLAY_SCALE_MIN, DISPLAY_SCALE_MAX);
         nameplateHidden = tag.getBoolean("NameplateHidden");
+        placedByCreative = tag.getBoolean("PlacedByCreative");
+        adminShopMode = placedByCreative && tag.getBoolean("AdminShopMode");
         listings.clear();
         if (tag.contains("Listings", Tag.TAG_LIST)) {
             ListTag listingTags = tag.getList("Listings", Tag.TAG_COMPOUND);
@@ -477,6 +527,9 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         barterStoragePos = tag.contains("BarterStoragePos") ? BlockPos.of(tag.getLong("BarterStoragePos")) : null;
     }
 
+    /** Per-listing trade direction: does the shop sell, buy, or both? */
+    public enum Direction { SELL, BUY, BOTH }
+
     public static final class Listing {
         private String itemId = "";
         private TradeMode tradeMode = TradeMode.MONEY;
@@ -488,6 +541,11 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         private int baseQuantity = 0; // Item 32 fix: Default 0 prevents sales during listing setup
         private boolean nbtAware = false;
         private CompoundTag nbtTag = null;
+        // Buyback / sell-to-shop fields (default to SELL for legacy compat).
+        private Direction direction = Direction.SELL;
+        private long buybackPriceMinor = 0L;
+        private int buybackCap = 0;
+        private int buybackBought = 0;
         // NBT-strict barter payment: when the owner registers a barter item with a non-null
         // tag (e.g. an empty tank, a specific enchanted chestplate), the listing captures
         // that tag and the buy/barter pipeline enforces strict equality against the buyer's
@@ -583,6 +641,24 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
             return promo.active() ? promo.calculateTotal(moneyPriceMinor, quantity) : moneyPriceMinor * quantity;
         }
 
+        // ── Buyback / direction accessors ───────────────────────────────────
+        public Direction direction() { return direction == null ? Direction.SELL : direction; }
+        public void setDirection(Direction direction) { this.direction = direction == null ? Direction.SELL : direction; }
+        public long buybackPriceMinor() { return buybackPriceMinor; }
+        public void setBuybackPriceMinor(long buybackPriceMinor) { this.buybackPriceMinor = Math.max(0L, buybackPriceMinor); }
+        public int buybackCap() { return buybackCap; }
+        public void setBuybackCap(int buybackCap) { this.buybackCap = Math.max(0, buybackCap); }
+        public int buybackBought() { return buybackBought; }
+        public void setBuybackBought(int buybackBought) { this.buybackBought = Math.max(0, buybackBought); }
+
+        public boolean allowsSell() { return direction() == Direction.SELL || direction() == Direction.BOTH; }
+        public boolean allowsBuy()  { return direction() == Direction.BUY  || direction() == Direction.BOTH; }
+        public int buybackRemaining() {
+            return buybackCap == 0 ? Integer.MAX_VALUE : Math.max(0, buybackCap - buybackBought);
+        }
+        public long effectiveBuybackUnitPriceMinor() { return buybackPriceMinor; }
+        public long calculateBuybackTotal(int qty) { return effectiveBuybackUnitPriceMinor() * Math.max(0, qty); }
+
         private CompoundTag save() {
             CompoundTag tag = new CompoundTag();
             tag.putString("ItemId", itemId);
@@ -602,6 +678,11 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
                 tag.put("BarterNbtTag", barterNbtTag.copy());
             }
             tag.put("Promo", promo.save());
+            // Buyback / direction
+            tag.putString("Direction", direction().name());
+            tag.putLong("BuybackPriceMinor", buybackPriceMinor);
+            tag.putInt("BuybackCap", buybackCap);
+            tag.putInt("BuybackBought", buybackBought);
             // Item 11: Save bundle outputs
             if (!bundleOutputs.isEmpty()) {
                 ListTag bundleTag = new ListTag();
@@ -637,6 +718,14 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
             if (tag.contains("Promo", Tag.TAG_COMPOUND)) {
                 listing.promo.load(tag.getCompound("Promo"));
             }
+            // Buyback / direction — legacy listings will default to SELL/0/0/0.
+            if (tag.contains("Direction")) {
+                try { listing.setDirection(Direction.valueOf(tag.getString("Direction"))); }
+                catch (IllegalArgumentException ignored) { listing.setDirection(Direction.SELL); }
+            }
+            if (tag.contains("BuybackPriceMinor")) listing.setBuybackPriceMinor(tag.getLong("BuybackPriceMinor"));
+            if (tag.contains("BuybackCap")) listing.setBuybackCap(tag.getInt("BuybackCap"));
+            if (tag.contains("BuybackBought")) listing.setBuybackBought(tag.getInt("BuybackBought"));
             // Item 11: Load bundle outputs
             if (tag.contains("BundleOutputs", Tag.TAG_LIST)) {
                 ListTag bundleTag = tag.getList("BundleOutputs", Tag.TAG_COMPOUND);

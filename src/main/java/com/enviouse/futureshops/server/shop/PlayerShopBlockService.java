@@ -120,7 +120,9 @@ public final class PlayerShopBlockService {
                 shop.isSingleItemMode(),
                 shop.isBarterStorageSame(),
                 shop.getDescription(),
-                franchiseName));
+                franchiseName,
+                shop.isPlacedByCreative(),
+                shop.isAdminShopMode()));
     }
 
     public static void applyConfig(ServerPlayer player, BlockPos pos, String shopName, boolean singleItemMode, boolean barterStorageSame, int selectedListingIndex) {
@@ -529,6 +531,14 @@ public final class PlayerShopBlockService {
 
             // Item 32: actual items to deliver = baseQuantity * qty
             int deliverCount = listing.baseQuantity() * qty;
+
+            // ═══ Admin shop short-circuit ═══
+            // Infinite stock, money sunk on buys, barter inputs voided. No
+            // linked-storage or barter-storage required.
+            if (shop.isAdminShopMode()) {
+                handleAdminShopBuy(buyer, shop, pos, listing, qty, deliverCount, saleItem, paymentMethod);
+                return;
+            }
 
             LinkedStorage linkedStorage = resolveLinkedStorage(buyer.level(), shop, pos);
             if (linkedStorage == null) {
@@ -962,12 +972,159 @@ public final class PlayerShopBlockService {
         ShopPackets.sendToPlayer(player, new S2CSettlementHistoryPacket(shopPos, safePage, totalPages, rows));
     }
 
+    /**
+     * Admin-shop buy path: infinite stock, money sunk (owner not credited),
+     * barter inputs voided. Mirrors the validation of {@link #buy} (mode
+     * resolution, payment-method dispatch, inventory full handling) but skips
+     * all storage interactions and settlement bookkeeping.
+     */
+    private static void handleAdminShopBuy(ServerPlayer buyer, ShopBlockEntity shop, BlockPos pos,
+                                           ShopBlockEntity.Listing listing, int qty, int deliverCount,
+                                           Item saleItem, String paymentMethod) {
+        EconomyProvider provider = BalanceManager.getProvider();
+        long cost = Math.max(0L, listing.calculatePrice(qty));
+        boolean isBundle = !listing.bundleOutputs().isEmpty();
+
+        // Resolve trade-mode dispatch identically to the normal path.
+        boolean compoundTrade = listing.tradeMode() == ShopBlockEntity.TradeMode.MONEY_AND_BARTER;
+        boolean barterTrade;
+        if (compoundTrade) {
+            barterTrade = false;
+        } else if (listing.tradeMode() == ShopBlockEntity.TradeMode.BOTH) {
+            if (paymentMethod == null || paymentMethod.isBlank()) {
+                sendResult(buyer, false, ShopResultCode.INVALID_REQUEST);
+                return;
+            }
+            if ("BARTER".equalsIgnoreCase(paymentMethod)) {
+                barterTrade = true;
+            } else if ("MONEY".equalsIgnoreCase(paymentMethod)) {
+                barterTrade = false;
+            } else {
+                sendResult(buyer, false, ShopResultCode.INVALID_REQUEST);
+                return;
+            }
+        } else {
+            barterTrade = listing.tradeMode() == ShopBlockEntity.TradeMode.BARTER;
+        }
+
+        // Money requires price > 0 for MONEY trades.
+        if (!barterTrade && !compoundTrade && cost <= 0L
+                && listing.tradeMode() == ShopBlockEntity.TradeMode.MONEY) {
+            sendResult(buyer, false, ShopResultCode.UNCONFIGURED);
+            return;
+        }
+
+        // Fire pre-event so external mods still get a hook.
+        String tradeTypeForEvent = compoundTrade ? "MONEY_AND_BARTER" : (barterTrade ? "BARTER" : "BUY");
+        String shopIdForEvent = "player_shop:" + pos.asLong();
+        if (com.enviouse.futureshops.Config.eventsTransactionEnabled) {
+            var preEvent = new com.enviouse.futureshops.event.ShopTransactionEvent.Pre(
+                    buyer, shopIdForEvent, listing.itemId(), qty, tradeTypeForEvent, cost);
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(preEvent);
+            if (preEvent.isCanceled()) {
+                sendResult(buyer, false, ShopResultCode.CANCELLED_BY_EVENT);
+                return;
+            }
+            cost = preEvent.getPriceMinor();
+        }
+
+        // Validate barter availability without consuming yet.
+        Item barterItem = null;
+        int barterAmount = 0;
+        if (compoundTrade || barterTrade) {
+            barterItem = ShopTransactionUtil.resolveItem(listing.barterItemId());
+            barterAmount = listing.effectiveBarterTotal(qty);
+            if (barterItem == null || barterItem == Items.AIR
+                    || ShopTransactionUtil.countItems(buyer.getInventory(), barterItem,
+                            listing.barterNbtAware(), listing.barterNbtTag()) < barterAmount) {
+                sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS,
+                        "§cTrade cancelled: you don't have enough barter items.");
+                return;
+            }
+        }
+
+        // Charge money (sunk — never deposited to owner).
+        boolean withdrewFromBuyer = false;
+        if ((compoundTrade || !barterTrade) && cost > 0L) {
+            TransactionResult withdraw = provider.withdraw(buyer.getUUID(), cost, "BUY");
+            if (!withdraw.success()) {
+                sendResult(buyer, false, ShopResultCode.INSUFFICIENT_FUNDS);
+                return;
+            }
+            withdrewFromBuyer = true;
+        }
+
+        // Consume barter items — voided (NOT inserted into any storage).
+        if (compoundTrade || barterTrade) {
+            List<ItemStack> paymentStacks = ShopTransactionUtil.collectAndRemoveItems(
+                    buyer.getInventory(), barterItem, barterAmount,
+                    listing.barterNbtAware(), listing.barterNbtTag());
+            if (paymentStacks.isEmpty()) {
+                if (withdrewFromBuyer) provider.deposit(buyer.getUUID(), cost, "BUY");
+                sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS,
+                        "§cTrade cancelled: barter items could not be taken.");
+                return;
+            }
+            // Stacks are intentionally discarded — admin shop voids them.
+        }
+
+        // Deliver freshly minted sale items.
+        List<ItemStack> delivered = new ArrayList<>();
+        if (isBundle) {
+            for (ShopBlockEntity.BundleEntry entry : listing.bundleOutputs()) {
+                Item bundleItem = ShopTransactionUtil.resolveItem(entry.itemId());
+                if (bundleItem == null || bundleItem == Items.AIR) continue;
+                delivered.addAll(splitStacks(bundleItem, entry.count() * qty, entry.nbtTag()));
+            }
+        } else {
+            delivered.addAll(splitStacks(saleItem, deliverCount, listing.nbtAware() ? listing.nbtTag() : null));
+        }
+
+        if (!ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), delivered)) {
+            for (ItemStack stack : delivered) {
+                if (!stack.isEmpty()) buyer.drop(stack, false);
+            }
+        }
+
+        // History: record the buyer's spend but no owner settlement.
+        if (buyer.getServer() != null) {
+            String historyNote = (barterTrade || compoundTrade) && barterItem != null
+                    ? "paid=" + net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(barterItem)
+                            + "\u00d7" + barterAmount + " [ADMIN_SHOP]"
+                    : "ADMIN_SHOP";
+            TransactionHistoryService.record(
+                    buyer,
+                    shop.getShopId(),
+                    tradeTypeForEvent,
+                    listing.itemId(),
+                    qty,
+                    barterTrade ? 0L : cost,
+                    historyNote);
+
+            if (com.enviouse.futureshops.Config.eventsTransactionEnabled) {
+                long resultingBal = provider.getBalance(buyer.getUUID());
+                net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                        new com.enviouse.futureshops.event.ShopTransactionEvent.Post(
+                                buyer.getUUID(), shopIdForEvent, listing.itemId(),
+                                qty, tradeTypeForEvent, barterTrade ? 0L : cost, resultingBal));
+            }
+        }
+
+        openFor(buyer, pos, isOwnerOrFranchiseMember(shop, buyer));
+        sendResult(buyer, true, ShopResultCode.BOUGHT);
+    }
+
     public static int countStock(Level level, ShopBlockEntity shop, BlockPos shopPos) {
         return shop.getListings().stream().mapToInt(listing -> countStock(level, shop, shopPos, listing)).sum();
     }
 
     public static int countStock(Level level, ShopBlockEntity shop, BlockPos shopPos, ShopBlockEntity.Listing listing) {
         if (listing == null) return 0;
+
+        // Admin shops have infinite stock — short-circuit before storage lookup.
+        if (shop.isAdminShopMode()) {
+            return Integer.MAX_VALUE;
+        }
 
         // Bundle listing: stock = min count across all bundle entries
         if (!listing.bundleOutputs().isEmpty()) {
@@ -1044,7 +1201,11 @@ public final class PlayerShopBlockService {
                 listing.barterItemCount(), // LGB#1: base (undiscounted) barter count for display
                 listing.listingDescription(),
                 listing.barterNbtAware(),
-                barterNbtJson);
+                barterNbtJson,
+                listing.direction().name(),
+                listing.buybackPriceMinor(),
+                listing.buybackCap(),
+                listing.buybackRemaining());
     }
 
     private static String resolveOwnerName(ServerPlayer viewer, UUID ownerUuid) {
@@ -1351,5 +1512,243 @@ public final class PlayerShopBlockService {
         boolean hasAdapter() {
             return adapter != null;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Buyback / sell-to-shop (visitor sells to the shop)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Owner-side: apply the per-listing direction + buyback price/cap settings. */
+    public static void applyBuybackConfig(ServerPlayer player,
+                                          com.enviouse.futureshops.network.packets.C2SPlayerShopBuybackConfigPacket packet) {
+        if (!(player.level().getBlockEntity(packet.shopPos()) instanceof ShopBlockEntity shop)) return;
+        if (!isOwnerOrFranchiseMember(shop, player)) {
+            sendResult(player, false, ShopResultCode.NOT_OWNER);
+            return;
+        }
+        ShopBlockEntity.Listing listing = shop.getListing(packet.listingIndex());
+        if (listing == null) {
+            sendResult(player, false, ShopResultCode.NO_LISTING);
+            return;
+        }
+        ShopBlockEntity.Direction dir;
+        try {
+            dir = ShopBlockEntity.Direction.valueOf(packet.direction());
+        } catch (IllegalArgumentException ignored) {
+            dir = ShopBlockEntity.Direction.SELL;
+        }
+        listing.setDirection(dir);
+        listing.setBuybackPriceMinor(Math.max(0L, packet.buybackPriceMinor()));
+        listing.setBuybackCap(Math.max(0, packet.buybackCap()));
+        shop.setChanged();
+        openFor(player, packet.shopPos());
+        sendResult(player, true, ShopResultCode.CONFIG_SAVED);
+    }
+
+    /** Visitor-side: handle a "Sell to Shop" buyback transaction. */
+    public static void handleSell(ServerPlayer seller,
+                                  com.enviouse.futureshops.network.packets.C2SPlayerShopSellPacket packet) {
+        BlockPos pos = packet.shopPos();
+        if (!(seller.level().getBlockEntity(pos) instanceof ShopBlockEntity shop)) return;
+
+        ReentrantLock lock = SHOP_LOCKS.computeIfAbsent(pos.asLong(), ignored -> new ReentrantLock());
+        lock.lock();
+        try {
+            if (shop.getOwnerUuid() == null) {
+                sendResult(seller, false, ShopResultCode.UNCONFIGURED);
+                return;
+            }
+            ShopBlockEntity.Listing listing = shop.getListing(packet.listingIndex());
+            if (listing == null || listing.itemId().isBlank() || !listing.allowsBuy()) {
+                sendResult(seller, false, ShopResultCode.UNCONFIGURED);
+                return;
+            }
+            Item saleItem = ShopTransactionUtil.resolveItem(listing.itemId());
+            if (saleItem == null || saleItem == Items.AIR) {
+                sendResult(seller, false, ShopResultCode.INVALID_ITEM);
+                return;
+            }
+            int qty = Math.max(1, Math.min(packet.quantity(), ShopTransactionUtil.MAX_SELL_QUANTITY));
+            int baseQty = listing.baseQuantity();
+            if (baseQty <= 0) {
+                sendResult(seller, false, ShopResultCode.UNCONFIGURED);
+                return;
+            }
+            int needItems = baseQty * qty;
+            boolean nbtAware = listing.nbtAware();
+            CompoundTag nbtTag = listing.nbtTag();
+            int have = ShopTransactionUtil.countItems(seller.getInventory(), saleItem, nbtAware, nbtTag);
+            if (have < needItems) {
+                sendResultWithChat(seller, false, ShopResultCode.MISSING_ITEMS,
+                        "§cYou don't have enough of that item.");
+                return;
+            }
+            long total = listing.calculateBuybackTotal(qty);
+            if (total <= 0L) {
+                sendResult(seller, false, ShopResultCode.UNCONFIGURED);
+                return;
+            }
+            if (listing.buybackRemaining() < qty) {
+                sendResultWithChat(seller, false, ShopResultCode.BUYBACK_CAP_REACHED,
+                        "§cThe shop has reached its buy-back cap for this item.");
+                return;
+            }
+
+            String shopIdForEvent = "player_shop:" + pos.asLong();
+            if (com.enviouse.futureshops.Config.eventsTransactionEnabled) {
+                var pre = new com.enviouse.futureshops.event.ShopTransactionEvent.Pre(
+                        seller, shopIdForEvent, listing.itemId(), qty, "SELL_TO_SHOP", total);
+                net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(pre);
+                if (pre.isCanceled()) {
+                    sendResult(seller, false, ShopResultCode.CANCELLED_BY_EVENT);
+                    return;
+                }
+                total = pre.getPriceMinor();
+            }
+
+            EconomyProvider provider = BalanceManager.getProvider();
+
+            if (shop.isAdminShopMode()) {
+                // Void the items, mint the money.
+                List<ItemStack> taken = ShopTransactionUtil.collectAndRemoveItems(
+                        seller.getInventory(), saleItem, needItems, nbtAware, nbtTag);
+                if (taken.isEmpty()) {
+                    sendResultWithChat(seller, false, ShopResultCode.MISSING_ITEMS,
+                            "§cYou don't have enough of that item.");
+                    return;
+                }
+                TransactionResult dep = provider.deposit(seller.getUUID(), total, "SELL_TO_SHOP");
+                if (!dep.success()) {
+                    // Roll back: return items to seller.
+                    ShopTransactionUtil.insertIntoInventory(seller.getInventory(), taken);
+                    sendResult(seller, false, ShopResultCode.SERVER_ERROR);
+                    return;
+                }
+                incrementBuyback(listing, qty);
+                recordSellHistory(seller, shop, listing, qty, total, "ADMIN_SHOP_BUYBACK");
+                firePostSellEvent(seller, shopIdForEvent, listing.itemId(), qty, total, provider);
+                shop.setChanged();
+                openFor(seller, pos, false);
+                sendResultWithChat(seller, true, ShopResultCode.SOLD, "§a✓ Sold to shop.");
+                return;
+            }
+
+            // ── Player shop path ──
+            UUID ownerUuid = shop.getOwnerUuid();
+            if (provider.getBalance(ownerUuid) < total) {
+                sendResultWithChat(seller, false, ShopResultCode.SHOP_OUT_OF_MONEY,
+                        "§cThe shop owner can't afford this — try again later or sell less.");
+                return;
+            }
+            LinkedStorage storage = resolveLinkedStorage(seller.level(), shop, pos);
+            if (storage == null) {
+                sendResultWithChat(seller, false, ShopResultCode.NO_LINK,
+                        "§cThis shop has no linked storage.");
+                return;
+            }
+
+            // Collect actual stacks (NBT intact) from seller — but only after we've verified insertion is possible.
+            List<ItemStack> paymentStacks = ShopTransactionUtil.collectAndRemoveItems(
+                    seller.getInventory(), saleItem, needItems, nbtAware, nbtTag);
+            if (paymentStacks.isEmpty()) {
+                sendResultWithChat(seller, false, ShopResultCode.MISSING_ITEMS,
+                        "§cYou don't have enough of that item.");
+                return;
+            }
+            // Capacity check, then atomic insert.
+            boolean canInsert = storage.hasAdapter()
+                    ? storage.adapter().canInsert(storage.blockEntity(), paymentStacks)
+                    : canInsertAll(storage.handler(), paymentStacks);
+            if (!canInsert) {
+                ShopTransactionUtil.insertIntoInventory(seller.getInventory(), paymentStacks);
+                sendResultWithChat(seller, false, ShopResultCode.STORAGE_FULL,
+                        "§cThe shop's storage is full and can't accept those items.");
+                return;
+            }
+            boolean inserted = storage.hasAdapter()
+                    ? storage.adapter().insert(storage.blockEntity(), paymentStacks)
+                    : insertAll(storage.handler(), paymentStacks);
+            if (!inserted) {
+                ShopTransactionUtil.insertIntoInventory(seller.getInventory(), paymentStacks);
+                sendResultWithChat(seller, false, ShopResultCode.STORAGE_FULL,
+                        "§cThe shop's storage is full and can't accept those items.");
+                return;
+            }
+
+            // Withdraw from owner.
+            TransactionResult ownerWd = provider.withdraw(ownerUuid, total, "BUYBACK");
+            if (!ownerWd.success()) {
+                // Roll back the inserted items.
+                rollbackInsertedItems(storage, seller, saleItem, needItems, nbtAware, nbtTag);
+                sendResultWithChat(seller, false, ShopResultCode.SHOP_OUT_OF_MONEY,
+                        "§cThe shop owner can't afford this — try again later or sell less.");
+                return;
+            }
+
+            // Credit seller.
+            TransactionResult sellerDep = provider.deposit(seller.getUUID(), total, "SELL_TO_SHOP");
+            if (!sellerDep.success()) {
+                // Refund owner, undo storage.
+                provider.deposit(ownerUuid, total, "BUYBACK_REFUND");
+                rollbackInsertedItems(storage, seller, saleItem, needItems, nbtAware, nbtTag);
+                sendResult(seller, false, ShopResultCode.MAX_BALANCE_EXCEEDED);
+                return;
+            }
+
+            incrementBuyback(listing, qty);
+            recordSellHistory(seller, shop, listing, qty, total, "BUYBACK");
+            firePostSellEvent(seller, shopIdForEvent, listing.itemId(), qty, total, provider);
+            shop.setChanged();
+            openFor(seller, pos, false);
+            sendResultWithChat(seller, true, ShopResultCode.SOLD, "§a✓ Sold to shop.");
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private static void incrementBuyback(ShopBlockEntity.Listing listing, int qty) {
+        int newCount = listing.buybackBought() + qty;
+        if (listing.buybackCap() > 0) {
+            newCount = Math.min(newCount, listing.buybackCap());
+        }
+        listing.setBuybackBought(newCount);
+    }
+
+    private static void rollbackInsertedItems(LinkedStorage storage, ServerPlayer seller, Item item, int amount,
+                                              boolean nbtAware, @Nullable CompoundTag nbtTag) {
+        if (storage.hasAdapter()) {
+            List<ItemStack> recovered = storage.adapter().extract(storage.blockEntity(), item, amount, nbtAware, nbtTag);
+            if (!recovered.isEmpty()) {
+                ShopTransactionUtil.insertIntoInventory(seller.getInventory(), recovered);
+            }
+        } else if (storage.handler() != null) {
+            int got = extractAmount(storage.handler(), item, amount, nbtAware, nbtTag);
+            if (got > 0) {
+                ShopTransactionUtil.insertIntoInventory(seller.getInventory(),
+                        splitStacks(item, got, nbtTag));
+            }
+        }
+    }
+
+    private static void recordSellHistory(ServerPlayer seller, ShopBlockEntity shop,
+                                          ShopBlockEntity.Listing listing, int qty, long total, String note) {
+        if (seller.getServer() == null) return;
+        TransactionHistoryService.record(
+                seller,
+                shop.getShopId(),
+                "SELL_TO_SHOP",
+                listing.itemId(),
+                qty,
+                total,
+                note);
+    }
+
+    private static void firePostSellEvent(ServerPlayer seller, String shopIdForEvent, String itemId,
+                                          int qty, long total, EconomyProvider provider) {
+        if (!com.enviouse.futureshops.Config.eventsTransactionEnabled) return;
+        long bal = provider.getBalance(seller.getUUID());
+        net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                new com.enviouse.futureshops.event.ShopTransactionEvent.Post(
+                        seller.getUUID(), shopIdForEvent, itemId, qty, "SELL_TO_SHOP", total, bal));
     }
 }

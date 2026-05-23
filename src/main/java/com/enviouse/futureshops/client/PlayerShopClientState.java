@@ -17,6 +17,8 @@ public final class PlayerShopClientState {
     private static String franchiseName = "";
     private static boolean singleItemMode = false;
     private static boolean barterStorageSame = true;
+    private static boolean placedByCreative = false;
+    private static boolean adminShopMode = false;
     private static List<PlayerShopListingData> listings = List.of();
     private static int selectedListingIndex = 0;
     private static boolean linked = false;
@@ -43,7 +45,8 @@ public final class PlayerShopClientState {
                              long pendingSettlementMinorValue, long lifetimeRevenueMinorValue,
                              List<String> recentRevenueRowsValue,
                              String shopNameValue, boolean singleItemModeValue, boolean barterStorageSameValue,
-                             String descriptionValue, String franchiseNameValue) {
+                             String descriptionValue, String franchiseNameValue,
+                             boolean placedByCreativeValue, boolean adminShopModeValue) {
         shopPos = pos;
         owner = ownerFlag;
         ownerUuid = ownerUuidValue;
@@ -53,6 +56,8 @@ public final class PlayerShopClientState {
         franchiseName = franchiseNameValue == null ? "" : franchiseNameValue;
         singleItemMode = singleItemModeValue;
         barterStorageSame = barterStorageSameValue;
+        placedByCreative = placedByCreativeValue;
+        adminShopMode = adminShopModeValue;
         listings = List.copyOf(listingsValue);
         // Honor an outstanding "visit this specific listing" request when the incoming
         // payload is for the matching shop; otherwise fall back to clamping the previous
@@ -79,6 +84,8 @@ public final class PlayerShopClientState {
     public static String franchiseName() { return franchiseName; }
     public static boolean singleItemMode() { return singleItemMode; }
     public static boolean barterStorageSame() { return barterStorageSame; }
+    public static boolean placedByCreative() { return placedByCreative; }
+    public static boolean adminShopMode() { return adminShopMode; }
     public static List<PlayerShopListingData> listings() { return listings; }
     public static boolean linked() { return linked; }
     public static long pendingSettlementMinor() { return pendingSettlementMinor; }

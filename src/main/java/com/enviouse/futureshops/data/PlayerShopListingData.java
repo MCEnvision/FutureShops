@@ -23,7 +23,12 @@ public record PlayerShopListingData(
         int baseBarterItemCount,
         String listingDescription,
         boolean barterNbtAware,
-        String barterNbtJson) {
+        String barterNbtJson,
+        // Buyback / sell-to-shop additions
+        String direction,
+        long buybackPriceMinor,
+        int buybackCap,
+        int buybackRemaining) {
 
     /** Item 11: Network DTO for a bundle output entry. */
     public record BundleOutputData(String itemId, int count, String nbtJson) {
@@ -60,6 +65,10 @@ public record PlayerShopListingData(
         buffer.writeUtf(data.listingDescription());
         buffer.writeBoolean(data.barterNbtAware());
         buffer.writeUtf(data.barterNbtJson());
+        buffer.writeUtf(data.direction());
+        buffer.writeLong(data.buybackPriceMinor());
+        buffer.writeVarInt(data.buybackCap());
+        buffer.writeVarInt(data.buybackRemaining());
     }
 
     public static PlayerShopListingData decode(FriendlyByteBuf buffer) {
@@ -85,8 +94,12 @@ public record PlayerShopListingData(
         String listingDescription = buffer.readUtf();
         boolean barterNbtAware = buffer.readBoolean();
         String barterNbtJson = buffer.readUtf();
+        String direction = buffer.readUtf();
+        long buybackPriceMinor = buffer.readLong();
+        int buybackCap = buffer.readVarInt();
+        int buybackRemaining = buffer.readVarInt();
         return new PlayerShopListingData(itemId, tradeMode, moneyPriceMinor, effectiveUnitPriceMinor,
                 barterItemId, barterItemCount, stock, promo, nbtAware, nbtJson, visible, bundleOutputs, department, baseQuantity, baseBarterItemCount, listingDescription,
-                barterNbtAware, barterNbtJson);
+                barterNbtAware, barterNbtJson, direction, buybackPriceMinor, buybackCap, buybackRemaining);
     }
 }
