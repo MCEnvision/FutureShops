@@ -74,6 +74,7 @@ Old source (read-only) in `SourceCodeOld/FutureShops`. New mod = repo root.
 | Step | What | `./gradlew build` result |
 |---|---|---|
 | 0 | Skeleton reconciled (modid→futureshops, parchment→1.21.1/2024.11.17, namespace dir, mixins filename, main class `Futureshops`); empty build | **SUCCESSFUL in 5s** → `futureshops-2.2.0.jar`. (1 fix: skeleton `Config.java` still referenced old `Futureshopsp.MODID`.) NeoForge 21.1.233 + MC 1.21.1 + Parchment resolve OK. |
+| 1 | Leaf tranche: real `Config` (`ForgeConfigSpec`→`ModConfigSpec`, 1:1) + 17 pure value/enum/util classes + 15 `data/` DTOs. FQN package rename only (`com.enviouse.futureshops`→`...futureshopsp`); bare `"futureshops"` namespace strings untouched. | **compileJava SUCCESSFUL** (data DTOs use no removed `writeItem`/`readItem`/`new ResourceLocation`) |
 
 ## Sequencing refinement (compile-unit order ≠ API-migration order)
 
