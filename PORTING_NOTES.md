@@ -69,6 +69,21 @@ Old source (read-only) in `SourceCodeOld/FutureShops`. New mod = repo root.
 - L CarryOn IMC name vs the `data/carryon` datapack tag (prefer the tag if it covers our use).
 - M `GuiGraphics.blit` RenderType overload is **1.21.2+**; on 1.21.1 use the `blit(ResourceLocation, ...)` family.
 
+## Check-in protocol (as of economy tranche)
+
+Stream the mechanical work; **hard-stop only for**: (1) irreversible / user-facing-behavior calls
+— legacy-coin landing dump before the rescue, anything touching existing worlds / player data /
+a command's contract — show the actual evidence (dump, before/after); (2) a genuinely ambiguous
+fork that reading the jar/source CANNOT settle. Do **not** stop for green builds, "big cluster"
+notes, or sequencing — those stream. The verification (javap/compile/behavior-preserving) is the
+quality bar; a green-build sign-off adds nothing it doesn't already have.
+
+**Tests-as-gate for high-blast-radius clusters only** (where a silent runtime regression would pass
+a quick playtest): money / ledger / balances, the vanish/visibility packet path, anything wrong-under-
+concurrent-load. For those, a runnable invariant test is part of the cluster gate (as the ledger is).
+Not everywhere — only where silent runtime regression is the real risk. Networking ledger-touching
+C2S handlers get a concurrency/round-trip guard when those batches land.
+
 ## Build log
 
 | Step | What | `./gradlew build` result |
@@ -79,6 +94,7 @@ Old source (read-only) in `SourceCodeOld/FutureShops`. New mod = repo root.
 | 3t | **Test harness** (own commit, pre-economy). MDG `neoForge.unitTest{ enable(); testedMod = mods."$mod_id" }` + JUnit 5.10.2 + `test{ useJUnitPlatform() }`. `SpentMintsSavedDataTest`: (a) load→save→load stability, (b) anti-dupe — N clones of one mint_id ≤ authorized_count. **From here, "tests green" is a tranche gate alongside "build green."** Broader old suite (WireRoundTripTest, ProtocolVersionConstantTest, …) revived opportunistically alongside the code each covers. | **./gradlew test SUCCESSFUL — 2/2 passed** |
 | 3a/3b | Events (9: `Event` import swap; `@Cancelable`→`implements ICancellableEvent` ×4 incl. top-level `ShopOpenEvent`) + economy (`InternalBalanceSavedData` SavedData-migrated; `BalanceManager` rename-only; `InternalEconomyProvider`: `MinecraftForge.EVENT_BUS`→`NeoForge.EVENT_BUS`, **`if(post(e)){…}`→`post(e); if(e.isCanceled()){…}`** ×2, `computeIfAbsent`→`SavedData.Factory`). **GOTCHA (recurring):** an FQN sed (`net.minecraftforge.common.MinecraftForge`→`NeoForge`) swaps the *import* but leaves bare `MinecraftForge.EVENT_BUS` *usages* — swap both (`MinecraftForge.`→`NeoForge.`). | **build+test SUCCESSFUL — 2/2** |
 | 3c | `DynamicPricingSavedData` SavedData-migrated (load/save+`HolderLookup.Provider`, `SavedData.Factory`). `DynamicPricingEngine` **deferred** to the catalog tranche (depends on un-ported `ShopCatalog`). | **build+test SUCCESSFUL — 2/2** |
+| Catalog | `ShopCatalog` (`MinecraftForge`→`NeoForge` on fire-and-forget `ShopReloadEvent` post), `ShopDefinitionLoader` (`FMLPaths` pkg), `AdminShopConfigWriter`, `TagDepartmentClassifier` (`ForgeRegistries.ITEMS.getValue`→`BuiltInRegistries.ITEM.getOptional(...).orElse(null)`, `getKey` direct), `DynamicPricingEngine`, + `AdminCategorySavedData` (pulled in; SavedData-migrated). | **build+test SUCCESSFUL — 2/2** |
 | 2 | Data components: new `CoinData` record + `ModDataComponents` (`createDataComponents`/`registerComponentType`/`.persistent(CODEC)`/`.networkSynchronized(STREAM_CODEC)`). Codec field names = legacy `MoneyNbtKeys` strings; component id `futureshops:coin_data` (namespace continuity). 7-field hand-written `StreamCodec.of(encoder,decoder)` — composite() caps at 6; **confirms answer D: encoder-first**. Bus registration deferred to entrypoint tranche. | **compileJava SUCCESSFUL** — NeoForge data-component API compiler-verified real |
 
 ## Sequencing refinement (compile-unit order ≠ API-migration order)
