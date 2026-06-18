@@ -27,6 +27,12 @@ Old source (read-only) in `SourceCodeOld/FutureShops`. New mod = repo root.
 - **MANDATORY STOP:** empirically confirm the legacy-NBT landing location on a real pre-port
   world (mint on old jar → load on new build → dump stack components) BEFORE finalizing the
   rescue path. Do not assume `custom_data` is where it lands.
+- **RESOLVED + signed off.** DataFixer probe (3465→3955, the real vanilla chain) confirmed legacy
+  `coin_data` lands in `minecraft:custom_data` under the identical key, all 7 fields byte-intact.
+  Rescue implemented in `MoneyValidationService.rescueLegacy`: promote to typed component, strip the
+  remnant, and remove `custom_data` entirely if empty so a rescued coin is component-identical to a
+  fresh one (they stack). Guarded by `LegacyCoinDataFixLandingTest` (landing) + `CoinRescueTest`
+  (stack-equivalence, tampered-fails-on-checksum, other-keys-survive). `consume()` untouched.
 
 ## Deliberate omissions / decisions
 
@@ -96,6 +102,7 @@ C2S handlers get a concurrency/round-trip guard when those batches land.
 | 3c | `DynamicPricingSavedData` SavedData-migrated (load/save+`HolderLookup.Provider`, `SavedData.Factory`). `DynamicPricingEngine` **deferred** to the catalog tranche (depends on un-ported `ShopCatalog`). | **build+test SUCCESSFUL — 2/2** |
 | Catalog | `ShopCatalog` (`MinecraftForge`→`NeoForge` on fire-and-forget `ShopReloadEvent` post), `ShopDefinitionLoader` (`FMLPaths` pkg), `AdminShopConfigWriter`, `TagDepartmentClassifier` (`ForgeRegistries.ITEMS.getValue`→`BuiltInRegistries.ITEM.getOptional(...).orElse(null)`, `getKey` direct), `DynamicPricingEngine`, + `AdminCategorySavedData` (pulled in; SavedData-migrated). | **build+test SUCCESSFUL — 2/2** |
 | SavedData | Remaining 8 SavedData migrated (AdminShopToggle, Department, Franchise, PlayerShopRegistry, PlayerShopSettlement, ShopLimits, StockRefresh, TransactionHistory). **All 12 SavedData classes now done.** Gotcha: `computeIfAbsent` is multiline in several → whitespace-tolerant `perl -0777` (`\s*` between args), not line sed. | **build+test SUCCESSFUL — 2/2** |
+| Coin vertical | `MoneyMintService`/`MoneyValidationService`(+rescue)/`MoneyItem` (NBT→`CoinData` component; `appendHoverText`→`Item.TooltipContext`; `MinecraftForge`→`NeoForge`), minimal `ModItems` (MONEY_ITEM only; `registerItem(name,factory,props)`), `EconomyCommandUtil`. Entrypoint rewritten minimal: register ITEMS+COMPONENTS, **`addAlias(futureshops:coin→money)`** (NeoForge MissingMappings replacement). **Tests-as-gate:** MDG `EphemeralTestServerProvider` boots a server with our registries → `CoinRescueTest` (3: stack-equivalence, tampered-fails, other-keys) + `LegacyCoinDataFixLandingTest` (1). | **build+test SUCCESSFUL — 6/6** |
 | 2 | Data components: new `CoinData` record + `ModDataComponents` (`createDataComponents`/`registerComponentType`/`.persistent(CODEC)`/`.networkSynchronized(STREAM_CODEC)`). Codec field names = legacy `MoneyNbtKeys` strings; component id `futureshops:coin_data` (namespace continuity). 7-field hand-written `StreamCodec.of(encoder,decoder)` — composite() caps at 6; **confirms answer D: encoder-first**. Bus registration deferred to entrypoint tranche. | **compileJava SUCCESSFUL** — NeoForge data-component API compiler-verified real |
 
 ## Sequencing refinement (compile-unit order ≠ API-migration order)

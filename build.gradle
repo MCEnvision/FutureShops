@@ -106,6 +106,9 @@ dependencies {
     // source set by the neoForge.unitTest block below (MDG wiring).
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // NeoForge test framework: EphemeralTestServerProvider boots a MinecraftServer with the mod's
+    // registries (item + data component) loaded, so registration-dependent invariants are testable.
+    testImplementation "net.neoforged:testframework:${neo_version}"
 
     // Example mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime

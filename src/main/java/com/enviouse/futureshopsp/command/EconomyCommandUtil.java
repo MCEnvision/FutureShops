@@ -1,0 +1,96 @@
+package com.enviouse.futureshopsp.command;
+
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.ChatFormatting;
+
+import java.math.BigDecimal;
+import java.util.Locale;
+
+public final class EconomyCommandUtil {
+    private EconomyCommandUtil() {
+    }
+
+    public static long parseAmountToMinorUnits(String raw, int decimals) {
+        try {
+            BigDecimal parsed = new BigDecimal(raw.trim());
+            if (parsed.signum() <= 0) {
+                throw new IllegalArgumentException("NON_POSITIVE");
+            }
+
+            BigDecimal scaled = parsed.movePointRight(decimals);
+            if (scaled.stripTrailingZeros().scale() > 0) {
+                throw new IllegalArgumentException("TOO_MANY_DECIMALS");
+            }
+
+            return scaled.longValueExact();
+        } catch (NumberFormatException | ArithmeticException ex) {
+            throw new IllegalArgumentException("INVALID_NUMBER", ex);
+        }
+    }
+
+    public static String formatMinorUnits(long value, int decimals) {
+        if (decimals <= 0) {
+            return Long.toString(value);
+        }
+
+        long absValue = Math.abs(value);
+        long scale = (long) Math.pow(10.0D, decimals);
+        long whole = absValue / scale;
+        long fractional = absValue % scale;
+        String sign = value < 0L ? "-" : "";
+        return String.format(Locale.ROOT, "%s%d.%0" + decimals + "d", sign, whole, fractional);
+    }
+
+    /**
+     * Maps a server {@link com.enviouse.futureshopsp.server.shop.ShopResultCode} to the
+     * chat-log lang key used for direct economy commands (/pay, /bal, etc.).
+     *
+     * <p>The switch is exhaustive — every enum constant must appear as a case label so
+     * that adding a new code is a compile error until an intentional mapping (specific
+     * or generic) is chosen. This prevents the silent-fall-through to the generic
+     * {@code command.futureshops.error.server} line that a {@code default ->} branch
+     * would allow.
+     */
+    public static void sendProviderError(ServerPlayer player, com.enviouse.futureshopsp.server.shop.ShopResultCode errorCode) {
+        String key = switch (errorCode) {
+            case INVALID_AMOUNT -> "command.futureshops.error.invalid_amount";
+            case INSUFFICIENT_FUNDS -> "command.futureshops.error.insufficient_funds";
+            case MAX_BALANCE_EXCEEDED -> "command.futureshops.error.max_balance_exceeded";
+            case INVALID_TARGET -> "command.futureshops.pay.self";
+            // Codes not meaningful for direct economy commands fall through to a single
+            // generic server-error line. The explicit enumeration is a deliberate
+            // "intentionally generic" contract — see the exhaustive-switch unit test.
+            case OK, BOUGHT, SOLD, CONFIG_SAVED, CONFIG_COPIED, DEPARTMENT_SET, PROMO_SET, PROMO_CLEARED,
+                 LINKED, BARTER_LINKED, LINK_PENDING, LINK_NONE, BARTER_LINK_PENDING,
+                 DESC_PENDING, LISTING_DESC_PENDING, NOT_OWNER, HOLD_ITEM, LISTING_LIMIT,
+                 NO_LISTING, INVALID_ITEM, UNCONFIGURED, NOT_SINGLE_MODE,
+                 USE_SET_DEPARTMENT_ACTION, NO_LINK, BAD_LINK_TARGET, RS_NOT_CONTROLLER,
+                 OUT_OF_STOCK, STORAGE_FULL, INVENTORY_FULL, MISSING_BARTER_ITEMS,
+                 MISSING_INGREDIENTS, MISSING_ITEMS, INVALID_RECIPE, ROLLBACK,
+                 NOTHING_TO_CLAIM, CLAIM_FAILED, PROMO_FAILED, NO_CLIPBOARD, INVALID_REQUEST,
+                 SERVER_ERROR, CANCELLED_BY_EVENT, COOLDOWN, SHOP_CLOSED,
+                 SHOP_OUT_OF_MONEY, BUYBACK_CAP_REACHED
+                    -> "command.futureshops.error.server";
+        };
+
+        player.sendSystemMessage(error(Component.translatable(key)));
+    }
+
+    public static MutableComponent info(Component component) {
+        return component.copy().withStyle(ChatFormatting.GRAY);
+    }
+
+    public static MutableComponent success(Component component) {
+        return component.copy().withStyle(ChatFormatting.GREEN);
+    }
+
+    public static MutableComponent warning(Component component) {
+        return component.copy().withStyle(ChatFormatting.GOLD);
+    }
+
+    public static MutableComponent error(Component component) {
+        return component.copy().withStyle(ChatFormatting.RED);
+    }
+}
