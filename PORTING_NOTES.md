@@ -90,6 +90,31 @@ concurrent-load. For those, a runnable invariant test is part of the cluster gat
 Not everywhere — only where silent runtime regression is the real risk. Networking ledger-touching
 C2S handlers get a concurrency/round-trip guard when those batches land.
 
+**Networking `enqueueWork` concurrency test (spec, from user):** old `SimpleChannel.consumerMainThread`
+ran handlers on the main thread implicitly; the payload system does NOT — every C2S handler is on the
+network thread until proven otherwise, and every one touching ledger/balance/SavedData is
+guilty-until-proven-on-main. The guard must fire the SAME mint redemption from multiple threads and
+assert the ledger still refuses over-redeem: **total redeemed ≤ authorized_count, and total balance
+conserved under parallel debit/credit.** That catches the missing `enqueueWork` — the bug passes a
+single-threaded playtest and only corrupts under concurrent load. Pin conservation under concurrency,
+not just round-trip correctness. (EphemeralTestServer makes this feasible.)
+
+**`NbtMatchUtil` "equal item" semantics (transaction services, beat of care):** `stack.getTag()` exact
+`CompoundTag` equality → component world. `isSameItemSameComponents` vs a `DataComponentPatch` compare
+changes what "equal item" means for listing-match and barter; the empty-patch-vs-`null` edge can shift
+match results. Verify match outcomes against real listings — do NOT flatten into a mechanical swap;
+"equal item" semantics drifting is a behavior change wearing a compile-fix's clothes.
+
+**NbtMatchUtil design (decided, to implement with the block/caps/transaction cluster):** `requiredTag`
+originates from player-created listings (`ShopBlockEntity.nbtTag`, persisted) + SNBT (`ShopSellService`
+`TagParser.parseTag`); consumed by caps adapters, transaction services, `PlayerShopBlockService`.
+Plan: match on `DataComponentPatch` — candidate `stack.getComponentsPatch()` vs the listing's required
+patch; old `null` requiredTag (matched only no-tag items) → empty patch (preserves the edge);
+`nbtAware=false` → any variant. Existing stored `nbtTag` listings: lazy-migrate old CompoundTag →
+component patch via the vanilla item DataFixer (wrap `{id,Count,tag}`, fix, take patch) at load —
+analogous to the coin rescue. Verify match outcomes against real listing shapes (bare / NBT-variant /
+empty-patch edge) with a test, since this touches player-created listing data.
+
 ## Build log
 
 | Step | What | `./gradlew build` result |
