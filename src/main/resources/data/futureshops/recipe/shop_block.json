@@ -6,12 +6,12 @@
     "SRS"
   ],
   "key": {
-    "D": "minecraft:diamond",
-    "S": "minecraft:deepslate",
-    "O": "minecraft:obsidian",
-    "C": "minecraft:comparator",
-    "L": "minecraft:daylight_detector",
-    "R": "minecraft:redstone_block"
+    "D": { "item": "minecraft:diamond" },
+    "S": { "item": "minecraft:deepslate" },
+    "O": { "item": "minecraft:obsidian" },
+    "C": { "item": "minecraft:comparator" },
+    "L": { "item": "minecraft:daylight_detector" },
+    "R": { "item": "minecraft:redstone_block" }
   },
   "result": {
     "id": "futureshops:shop_block",
