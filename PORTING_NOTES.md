@@ -115,6 +115,34 @@ component patch via the vanilla item DataFixer (wrap `{id,Count,tag}`, fix, take
 analogous to the coin rescue. Verify match outcomes against real listing shapes (bare / NBT-variant /
 empty-patch edge) with a test, since this touches player-created listing data.
 
+## Green floor reached — full port compiles + 8/8 tests (250+ → 0 errors)
+
+The whole remaining port (106 files) is transformed and the tree is GREEN: `./gradlew build` SUCCESSFUL,
+8/8 tests pass (coin rescue 3, DataFix landing 1, ledger 2, listing-match 2), full jar builds. Done:
+networking (37 payloads → `CustomPacketPayload`+`StreamCodec.ofMember`+`PayloadRegistrar.versioned("24")`;
+`CHANNEL`→`PacketDistributor`), caps, all registries wired in entrypoint (`BLOCKS`/`ITEMS`/`BE`/`TABS`/
+`COMPONENTS`), RS2 **stubbed**, GeckoLib (packages + `VertexConsumer` `setColor/setUv/setOverlay/setLight/
+setNormal`, no `endVertex`), `ForgeRegistries`→`BuiltInRegistries`, events/`post()`→`isCanceled()`,
+`mouseScrolled` +scrollX, `isSameItemSameComponents`, `ShopBlock.codec()`+`useWithoutItem`, BE plumbing
+(`saveAdditional`/`loadAdditional`/`getUpdateTag`/`handleUpdateTag`/`onDataPacket` +`HolderLookup.Provider`),
+skin read API (`DefaultPlayerSkin.get(uuid).texture()`, `PlayerInfo.getSkin().texture()`),
+`getTooltipLines(Item.TooltipContext,…)`, command coin reads → `CoinData`.
+
+**DEFERRED to follow-up clusters (each its own tested/green commit — NOT in the floor):**
+- **Listing-variant persistence (player-data; tested cluster, top priority).** In-memory variant is a
+  `DataComponentPatch` (capture `getComponentsPatch()`, match passes patch — guarded by `ListingMatchTest`),
+  but BE save/load + network `nbtJson` + client `ShopUiUtil` display + admin-SNBT capture (`AdminShopWizard`/
+  `ShopAdminCommand`) are **deferred** (TODO comments in code). Cluster: thread registries through
+  `Listing.save/load`, store `NbtPatch` (legacy `NbtTag`→`legacyTagToPatch`), patch↔SNBT for network/client.
+  **Gate: save→load→match round-trip test joins `ListingMatchTest`.** Until then, listing variant criteria
+  don't persist across reload / aren't shown client-side (matching falls back to item-type).
+- **Owner-head live skin fetch** stubbed (default skin shows) — `SkullBlockEntity`/`SkinManager` pipeline
+  changed (PlayerSkin/ResolvableProfile).
+- **Entrypoint lifecycle glue** (onServerStarting → BalanceManager/ShopCatalog/SpentMints init, commonSetup
+  ExternalStorageRegistry+RS2, tick/session/command-register events, client renderer registration).
+- **RS2 real integration** (currently stubbed). **Resources** (models/blockstates/lang for shop_block+money).
+- Then `runClient`/`runGameTestServer` clean.
+
 ## Build log
 
 | Step | What | `./gradlew build` result |

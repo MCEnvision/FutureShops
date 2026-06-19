@@ -1,6 +1,7 @@
 package com.enviouse.futureshopsp.init;
 
 import com.enviouse.futureshopsp.Futureshops;
+import com.enviouse.futureshopsp.item.ShopBlockItem;
 import com.enviouse.futureshopsp.money.MoneyItem;
 import net.minecraft.world.item.Item;
 import net.neoforged.neoforge.registries.DeferredItem;
@@ -18,7 +19,9 @@ public final class ModItems {
             props -> new MoneyItem(props, MONEY_DENOMINATION_MINOR_UNITS),
             new Item.Properties().stacksTo(64));
 
-    // NOTE: SHOP_BLOCK_ITEM is added with the block cluster (it needs ModBlocks.SHOP_BLOCK).
+    public static final DeferredItem<ShopBlockItem> SHOP_BLOCK_ITEM = ITEMS.registerItem("shop_block",
+            props -> new ShopBlockItem(ModBlocks.SHOP_BLOCK.get(), props),
+            new Item.Properties());
 
     private ModItems() {
     }

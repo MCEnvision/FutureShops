@@ -1,5 +1,8 @@
 package com.enviouse.futureshopsp;
 
+import com.enviouse.futureshopsp.init.ModBlockEntities;
+import com.enviouse.futureshopsp.init.ModBlocks;
+import com.enviouse.futureshopsp.init.ModCreativeTabs;
 import com.enviouse.futureshopsp.init.ModItems;
 import com.enviouse.futureshopsp.money.ModDataComponents;
 import com.mojang.logging.LogUtils;
@@ -34,8 +37,11 @@ public class Futureshops {
                 ResourceLocation.fromNamespaceAndPath(MODID, "coin"),
                 ResourceLocation.fromNamespaceAndPath(MODID, "money"));
 
-        // Mod content registration (incremental).
+        // Mod content registration.
+        ModBlocks.BLOCKS.register(modEventBus);
         ModItems.ITEMS.register(modEventBus);
+        ModBlockEntities.BLOCK_ENTITY_TYPES.register(modEventBus);
+        ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
         ModDataComponents.COMPONENTS.register(modEventBus);
 
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);

@@ -10,6 +10,10 @@ group = mod_group_id
 
 repositories {
     mavenLocal()
+    maven {
+        name = 'GeckoLib'
+        url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
+    }
 }
 
 base {
@@ -102,6 +106,9 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 
 dependencies {
+    // GeckoLib — animated shop block (GeoBlockEntity + renderers).
+    implementation 'software.bernie.geckolib:geckolib-neoforge-1.21.1:4.8.4'
+
     // Unit tests (JUnit 5). The Minecraft/NeoForge classpath is provided to the test
     // source set by the neoForge.unitTest block below (MDG wiring).
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
