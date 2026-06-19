@@ -5,6 +5,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.neoforged.testframework.junit.EphemeralTestServerProvider;
@@ -90,5 +91,41 @@ class ListingMatchTest {
 
         // A bare legacy listing (empty/absent tag) migrates to the empty patch — identical to a fresh bare listing.
         assertEquals(DataComponentPatch.EMPTY, NbtMatchUtil.legacyTagToPatch(registries, key(), new CompoundTag()));
+    }
+
+    /**
+     * PERSISTENCE GATE: the listing variant must survive the BE save→load round-trip (patchToTag→tagToPatch)
+     * with identical match behaviour, and a legacy 1.20.1 nbtTag must migrate, persist as NbtPatch, and reload
+     * stably. A silent serialization bug here corrupts persisted player listings on world reload.
+     */
+    @Test
+    void persistedVariantRoundTripsAndMatchesIdentically(MinecraftServer server) {
+        var registries = server.registryAccess();
+
+        ItemStack damaged = new ItemStack(Items.DIAMOND_PICKAXE);
+        damaged.setDamageValue(5);
+        DataComponentPatch patch = damaged.getComponentsPatch();
+
+        // BE save (patchToTag) -> reload (tagToPatch) must be identity.
+        Tag saved = NbtMatchUtil.patchToTag(registries, patch);
+        DataComponentPatch reloaded = NbtMatchUtil.tagToPatch(registries, saved);
+        assertEquals(patch, reloaded, "persisted variant patch must round-trip save->load");
+
+        ItemStack bare = new ItemStack(Items.DIAMOND_PICKAXE);
+        assertTrue(NbtMatchUtil.matches(damaged, Items.DIAMOND_PICKAXE, true, reloaded));
+        assertFalse(NbtMatchUtil.matches(bare, Items.DIAMOND_PICKAXE, true, reloaded));
+
+        // Legacy listing: stored 1.20.1 NbtTag -> migrate on load -> re-saved as NbtPatch -> reloads stably,
+        // and equals the fresh-variant patch (listing-side rescued==fresh).
+        CompoundTag legacyTag = new CompoundTag();
+        legacyTag.putInt("Damage", 5);
+        DataComponentPatch migrated = NbtMatchUtil.legacyTagToPatch(registries, key(), legacyTag);
+        assertEquals(patch, migrated, "migrated legacy listing patch must equal a fresh variant patch");
+        DataComponentPatch afterReload = NbtMatchUtil.tagToPatch(registries, NbtMatchUtil.patchToTag(registries, migrated));
+        assertEquals(migrated, afterReload, "migrated legacy listing must persist as NbtPatch and reload stably");
+
+        // Empty (bare listing) persists and reloads as empty — not "matches everything".
+        assertEquals(DataComponentPatch.EMPTY,
+                NbtMatchUtil.tagToPatch(registries, NbtMatchUtil.patchToTag(registries, DataComponentPatch.EMPTY)));
     }
 }

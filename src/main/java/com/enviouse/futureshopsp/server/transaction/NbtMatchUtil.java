@@ -83,4 +83,22 @@ public final class NbtMatchUtil {
                 .map(ItemStack::getComponentsPatch)
                 .orElse(DataComponentPatch.EMPTY);
     }
+
+    /** Serializes a variant patch to NBT (registry-aware) for persisted listings. */
+    public static Tag patchToTag(HolderLookup.Provider registries, @Nullable DataComponentPatch patch) {
+        if (patch == null || patch.isEmpty()) {
+            return new CompoundTag();
+        }
+        var ops = registries.createSerializationContext(NbtOps.INSTANCE);
+        return DataComponentPatch.CODEC.encodeStart(ops, patch).getOrThrow();
+    }
+
+    /** Reads a previously {@link #patchToTag persisted} variant patch (registry-aware). */
+    public static DataComponentPatch tagToPatch(HolderLookup.Provider registries, @Nullable Tag tag) {
+        if (tag == null) {
+            return DataComponentPatch.EMPTY;
+        }
+        var ops = registries.createSerializationContext(NbtOps.INSTANCE);
+        return DataComponentPatch.CODEC.parse(ops, tag).result().orElse(DataComponentPatch.EMPTY);
+    }
 }

@@ -10,6 +10,8 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.resources.ResourceLocation;
+import com.enviouse.futureshopsp.server.transaction.NbtMatchUtil;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -47,18 +49,19 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
      * Item 11: A single entry in a bundle listing — represents one output item and its quantity.
      */
     public record BundleEntry(String itemId, int count,  DataComponentPatch nbtPatch) {
-        public CompoundTag save() {
+        public CompoundTag save(HolderLookup.Provider registries) {
             CompoundTag tag = new CompoundTag();
             tag.putString("ItemId", itemId);
             tag.putInt("Count", count);
-            // variant persistence deferred to listing-migration cluster
+            if (nbtPatch != null && !nbtPatch.isEmpty()) tag.put("NbtPatch", NbtMatchUtil.patchToTag(registries, nbtPatch));
             return tag;
         }
 
-        public static BundleEntry load(CompoundTag tag) {
+        public static BundleEntry load(CompoundTag tag, HolderLookup.Provider registries) {
             String id = tag.getString("ItemId");
             int count = Math.max(1, tag.getInt("Count"));
-            return new BundleEntry(id, count, DataComponentPatch.EMPTY);
+            DataComponentPatch patch = tag.contains("NbtPatch", Tag.TAG_COMPOUND) ? NbtMatchUtil.tagToPatch(registries, tag.getCompound("NbtPatch")) : (tag.contains("NbtTag", Tag.TAG_COMPOUND) ? NbtMatchUtil.legacyTagToPatch(registries, ResourceLocation.parse(id), tag.getCompound("NbtTag")) : DataComponentPatch.EMPTY);
+            return new BundleEntry(id, count, patch);
         }
     }
 
@@ -433,6 +436,7 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
      * at the destination) or the owner UUID (which must stay whoever placed the block).
      */
     public CompoundTag exportConfigSnapshot() {
+        HolderLookup.Provider registries = level.registryAccess();
         CompoundTag tag = new CompoundTag();
         tag.putString("ShopName", shopName);
         tag.putString("Description", description);
@@ -443,7 +447,7 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         tag.putBoolean("AdminShopMode", adminShopMode);
         ListTag listingTags = new ListTag();
         for (Listing listing : listings) {
-            listingTags.add(listing.save());
+            listingTags.add(listing.save(registries));
         }
         tag.put("Listings", listingTags);
         return tag;
@@ -456,6 +460,7 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
      */
     public void applyConfigSnapshot(CompoundTag tag) {
         if (tag == null) return;
+        HolderLookup.Provider registries = level.registryAccess();
         if (tag.contains("ShopName")) shopName = tag.getString("ShopName");
         if (tag.contains("Description")) description = tag.getString("Description");
         if (tag.contains("SingleItemMode")) singleItemMode = tag.getBoolean("SingleItemMode");
@@ -470,7 +475,7 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
             listings.clear();
             ListTag listingTags = tag.getList("Listings", Tag.TAG_COMPOUND);
             for (Tag lt : listingTags) {
-                listings.add(Listing.load((CompoundTag) lt));
+                listings.add(Listing.load((CompoundTag) lt, registries));
             }
             if (visibleListingIndex >= listings.size()) {
                 visibleListingIndex = listings.isEmpty() ? -1 : 0;
@@ -503,7 +508,7 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         tag.putBoolean("AdminShopMode", adminShopMode);
         ListTag listingTags = new ListTag();
         for (Listing listing : listings) {
-            listingTags.add(listing.save());
+            listingTags.add(listing.save(registries));
         }
         tag.put("Listings", listingTags);
         if (linkedStoragePos != null) {
@@ -540,7 +545,7 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         if (tag.contains("Listings", Tag.TAG_LIST)) {
             ListTag listingTags = tag.getList("Listings", Tag.TAG_COMPOUND);
             for (Tag listingTag : listingTags) {
-                listings.add(Listing.load((CompoundTag) listingTag));
+                listings.add(Listing.load((CompoundTag) listingTag, registries));
             }
         } else {
             String listedItemId = tag.getString("ListedItemId");
@@ -694,7 +699,7 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         public long effectiveBuybackUnitPriceMinor() { return buybackPriceMinor; }
         public long calculateBuybackTotal(int qty) { return effectiveBuybackUnitPriceMinor() * Math.max(0, qty); }
 
-        private CompoundTag save() {
+        private CompoundTag save(HolderLookup.Provider registries) {
             CompoundTag tag = new CompoundTag();
             tag.putString("ItemId", itemId);
             tag.putString("TradeMode", tradeMode.name());
@@ -705,8 +710,9 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
             tag.putString("ListingDescription", listingDescription);
             tag.putInt("BaseQuantity", baseQuantity);
             tag.putBoolean("NbtAware", nbtAware);
-            // variant persistence deferred to listing-migration cluster
+            if (nbtPatch != null && !nbtPatch.isEmpty()) tag.put("NbtPatch", NbtMatchUtil.patchToTag(registries, nbtPatch));
             tag.putBoolean("BarterNbtAware", barterNbtAware);
+            if (barterNbtPatch != null && !barterNbtPatch.isEmpty()) tag.put("BarterNbtPatch", NbtMatchUtil.patchToTag(registries, barterNbtPatch));
             tag.put("Promo", promo.save());
             // Buyback / direction
             tag.putString("Direction", direction().name());
@@ -717,14 +723,14 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
             if (!bundleOutputs.isEmpty()) {
                 ListTag bundleTag = new ListTag();
                 for (BundleEntry entry : bundleOutputs) {
-                    bundleTag.add(entry.save());
+                    bundleTag.add(entry.save(registries));
                 }
                 tag.put("BundleOutputs", bundleTag);
             }
             return tag;
         }
 
-        private static Listing load(CompoundTag tag) {
+        private static Listing load(CompoundTag tag, HolderLookup.Provider registries) {
             Listing listing = new Listing(tag.getString("ItemId"));
             try {
                 listing.setTradeMode(TradeMode.valueOf(tag.getString("TradeMode")));
@@ -738,7 +744,11 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
             listing.setListingDescription(tag.getString("ListingDescription"));
             listing.setBaseQuantity(tag.contains("BaseQuantity") ? tag.getInt("BaseQuantity") : 0);
             listing.setNbtAware(tag.getBoolean("NbtAware"));
+            if (tag.contains("NbtPatch", Tag.TAG_COMPOUND)) listing.setNbtPatch(NbtMatchUtil.tagToPatch(registries, tag.getCompound("NbtPatch")));
+            else if (tag.contains("NbtTag", Tag.TAG_COMPOUND)) listing.setNbtPatch(NbtMatchUtil.legacyTagToPatch(registries, ResourceLocation.parse(tag.getString("ItemId")), tag.getCompound("NbtTag")));
             listing.setBarterNbtAware(tag.getBoolean("BarterNbtAware"));
+            if (tag.contains("BarterNbtPatch", Tag.TAG_COMPOUND)) listing.setBarterNbtPatch(NbtMatchUtil.tagToPatch(registries, tag.getCompound("BarterNbtPatch")));
+            else if (tag.contains("BarterNbtTag", Tag.TAG_COMPOUND)) listing.setBarterNbtPatch(NbtMatchUtil.legacyTagToPatch(registries, ResourceLocation.parse(tag.getString("BarterItemId")), tag.getCompound("BarterNbtTag")));
             if (tag.contains("Promo", Tag.TAG_COMPOUND)) {
                 listing.promo.load(tag.getCompound("Promo"));
             }
@@ -754,7 +764,7 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
             if (tag.contains("BundleOutputs", Tag.TAG_LIST)) {
                 ListTag bundleTag = tag.getList("BundleOutputs", Tag.TAG_COMPOUND);
                 for (Tag bt : bundleTag) {
-                    listing.bundleOutputs.add(BundleEntry.load((CompoundTag) bt));
+                    listing.bundleOutputs.add(BundleEntry.load((CompoundTag) bt, registries));
                 }
             }
             return listing;

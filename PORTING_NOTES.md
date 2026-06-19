@@ -128,14 +128,16 @@ setNormal`, no `endVertex`), `ForgeRegistries`→`BuiltInRegistries`, events/`po
 skin read API (`DefaultPlayerSkin.get(uuid).texture()`, `PlayerInfo.getSkin().texture()`),
 `getTooltipLines(Item.TooltipContext,…)`, command coin reads → `CoinData`.
 
-**DEFERRED to follow-up clusters (each its own tested/green commit — NOT in the floor):**
-- **Listing-variant persistence (player-data; tested cluster, top priority).** In-memory variant is a
-  `DataComponentPatch` (capture `getComponentsPatch()`, match passes patch — guarded by `ListingMatchTest`),
-  but BE save/load + network `nbtJson` + client `ShopUiUtil` display + admin-SNBT capture (`AdminShopWizard`/
-  `ShopAdminCommand`) are **deferred** (TODO comments in code). Cluster: thread registries through
-  `Listing.save/load`, store `NbtPatch` (legacy `NbtTag`→`legacyTagToPatch`), patch↔SNBT for network/client.
-  **Gate: save→load→match round-trip test joins `ListingMatchTest`.** Until then, listing variant criteria
-  don't persist across reload / aren't shown client-side (matching falls back to item-type).
+**Listing-variant PERSISTENCE — DONE + TESTED (commit after floor).** BE `Listing`/`BundleEntry` save/load
+thread `HolderLookup.Provider`; variant stored as `NbtPatch` via `NbtMatchUtil.patchToTag`/`tagToPatch`
+(CODEC, registry-aware); legacy `NbtTag`→`legacyTagToPatch` on load; clipboard snapshot too. Player-shop
+variants now persist+match end-to-end. **Gate green:** `ListingMatchTest.persistedVariantRoundTripsAndMatches`
+(save→load identity + legacy migrate→re-save→reload stable + empty stays empty). 9/9 tests.
+
+**Still DEFERRED (lower-stakes; own commits):**
+- Network `nbtJson` + client `ShopUiUtil` variant **display** (cosmetic — server matching is correct; client
+  shows bare item icon/tooltip) and **admin-shop** variant capture (`AdminShopWizard`/`ShopAdminCommand`
+  capture `""` — admins can't yet make NEW nbt-aware listings; player-shop capture works). TODO comments in code.
 - **Owner-head live skin fetch** stubbed (default skin shows) — `SkullBlockEntity`/`SkinManager` pipeline
   changed (PlayerSkin/ResolvableProfile).
 - **Entrypoint lifecycle glue** (onServerStarting → BalanceManager/ShopCatalog/SpentMints init, commonSetup
