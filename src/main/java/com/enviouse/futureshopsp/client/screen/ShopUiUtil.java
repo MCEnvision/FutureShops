@@ -552,7 +552,7 @@ public final class ShopUiUtil {
             // NbtMatchUtil.patchToSnbt (admin configs are normalized to this format before transmission).
             var connection = Minecraft.getInstance().getConnection();
             if (connection != null) {
-                DataComponentPatch patch = NbtMatchUtil.snbtToPatch(connection.registryAccess(), nbtJson);
+                DataComponentPatch patch = NbtMatchUtil.snbtToPatchMigrating(connection.registryAccess(), ResourceLocation.parse(itemId), nbtJson);
                 if (!patch.isEmpty()) {
                     stack.applyComponents(patch);
                 }

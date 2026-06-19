@@ -128,4 +128,42 @@ class ListingMatchTest {
         assertEquals(DataComponentPatch.EMPTY,
                 NbtMatchUtil.tagToPatch(registries, NbtMatchUtil.patchToTag(registries, DataComponentPatch.EMPTY)));
     }
+
+    /**
+     * ADMIN-CONFIG MIGRATION GATE (persisted server config; same blast radius as the player-listing
+     * migration): admin shop {@code nbtJson} is an SNBT string on disk. An existing 1.20.1 config holds a
+     * raw item tag ({@code {Damage:5}}); a config (re)written under 1.21 holds component-patch SNBT. Both
+     * must read to the same variant patch and match the same items, and a bare/blank listing must match
+     * ONLY bare items (not everything). A silent regression here corrupts which items admin shops accept.
+     */
+    @Test
+    void adminConfigVariantMigratesAndMatchesIdentically(MinecraftServer server) {
+        var registries = server.registryAccess();
+        ResourceLocation id = key();
+
+        ItemStack damaged = new ItemStack(Items.DIAMOND_PICKAXE);
+        damaged.setDamageValue(5);
+        DataComponentPatch freshPatch = damaged.getComponentsPatch();
+
+        // Legacy 1.20.1 admin config nbtJson (raw item-tag SNBT) and new 1.21 nbtJson (component-patch SNBT).
+        DataComponentPatch fromLegacy = NbtMatchUtil.snbtToPatchMigrating(registries, id, "{Damage:5}");
+        String newSnbt = NbtMatchUtil.patchToSnbt(registries, freshPatch);
+        DataComponentPatch fromNew = NbtMatchUtil.snbtToPatchMigrating(registries, id, newSnbt);
+
+        assertEquals(freshPatch, fromLegacy, "legacy admin SNBT must migrate to the fresh-variant patch");
+        assertEquals(freshPatch, fromNew, "new-format admin SNBT must round-trip (not double-migrate as legacy)");
+
+        ItemStack bare = new ItemStack(Items.DIAMOND_PICKAXE);
+        for (DataComponentPatch p : new DataComponentPatch[]{fromLegacy, fromNew}) {
+            assertTrue(NbtMatchUtil.matches(damaged, Items.DIAMOND_PICKAXE, true, p), "must match the damaged variant");
+            assertFalse(NbtMatchUtil.matches(bare, Items.DIAMOND_PICKAXE, true, p), "must NOT match the bare item");
+        }
+
+        // Blank admin nbtJson = bare listing: matches ONLY bare, NOT a variant, NOT everything.
+        DataComponentPatch empty = NbtMatchUtil.snbtToPatchMigrating(registries, id, "");
+        assertEquals(DataComponentPatch.EMPTY, empty);
+        assertTrue(NbtMatchUtil.matches(bare, Items.DIAMOND_PICKAXE, true, empty));
+        assertFalse(NbtMatchUtil.matches(damaged, Items.DIAMOND_PICKAXE, true, empty),
+                "a bare admin listing must not accept a tagged variant");
+    }
 }

@@ -74,7 +74,7 @@ public final class AdminShopWizard {
         // tridents, etc. survive admin-shop round-trip. We snapshot here (not at
         // wizard finalize) so the admin can switch what they're holding without
         // affecting what gets persisted.
-        String nbtSnbt = ""; // admin variant capture deferred to listing-migration cluster
+        String nbtSnbt = com.enviouse.futureshopsp.server.transaction.NbtMatchUtil.patchToSnbt(player.level().registryAccess(), held.getComponentsPatch());
         State state = new State(key.toString(), held.getHoverName().getString(), nbtSnbt);
         ACTIVE.put(id, state);
 

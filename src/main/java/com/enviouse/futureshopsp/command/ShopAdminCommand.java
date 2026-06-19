@@ -520,7 +520,7 @@ public final class ShopAdminCommand {
             return 0;
         }
 
-        String nbtJson = ""; // admin variant capture deferred to listing-migration cluster
+        String nbtJson = (nbtOn && !held.getComponentsPatch().isEmpty()) ? com.enviouse.futureshopsp.server.transaction.NbtMatchUtil.patchToSnbt(source.getServer().registryAccess(), held.getComponentsPatch()) : "";
         String rawCategory = StringArgumentType.getString(ctx, "category");
         String categoryId = normalizeId(rawCategory);
         ensureCategory(source.getServer(), rawCategory);

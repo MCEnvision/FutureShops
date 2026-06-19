@@ -103,7 +103,7 @@ public final class ShopSellService {
             // NBT-aware match: for an NBT-keyed listing (enchanted book, Tacz gun, …) the player must
             // hand over the exact tagged variant; for a bare listing requiredTag stays null so only
             // plain/tag-less stacks match (prevents dumping enchanted/damaged gear as a plain item).
-            net.minecraft.core.component.DataComponentPatch requiredTag = net.minecraft.core.component.DataComponentPatch.EMPTY; // variant matching restored in listing-migration cluster
+            net.minecraft.core.component.DataComponentPatch requiredTag = NbtMatchUtil.snbtToPatchMigrating(player.level().registryAccess(), net.minecraft.resources.ResourceLocation.parse(itemId), itemDef.nbtJson());
 
             Inventory inventory = player.getInventory();
             if (ShopTransactionUtil.countItems(inventory, item, true, requiredTag) < quantity) {

@@ -143,16 +143,21 @@ Forge build worked), so both handlers guard `if (overworld()==null) return` (no-
 tick NPE → log-appender `ExceptionInInitializerError` → `runServer` crash → null injected test server.
 `./gradlew build` SUCCESSFUL, 9/9.
 
-**Still DEFERRED (lower-stakes; own commits):**
-- Network `nbtJson` + client `ShopUiUtil` variant **display** (cosmetic — server matching is correct; client
-  shows bare item icon/tooltip) and **admin-shop** variant capture (`AdminShopWizard`/`ShopAdminCommand`
-  capture `""` — admins can't yet make NEW nbt-aware listings; player-shop capture works). TODO comments in code.
-- **Owner-head live skin fetch** stubbed (default skin shows) — `SkullBlockEntity`/`SkinManager` pipeline
-  changed (PlayerSkin/ResolvableProfile).
-- **Entrypoint lifecycle glue** (onServerStarting → BalanceManager/ShopCatalog/SpentMints init, commonSetup
-  ExternalStorageRegistry+RS2, tick/session/command-register events, client renderer registration).
-- **RS2 real integration** (currently stubbed). **Resources** (models/blockstates/lang for shop_block+money).
-- Then `runClient`/`runGameTestServer` clean.
+**Variant DISPLAY (#1) + admin CAPTURE/MIGRATION (#2) — DONE.** Shared `NbtMatchUtil.patchToSnbt`/
+`snbtToPatch` (new component-patch SNBT) + `snbtToPatchMigrating` (distinguishes old raw-NBT keys from new
+`namespace:component` keys; legacy → `legacyTagToPatch`). #1 (cosmetic commit): player-shop `nbtJson`
+produced server-side (PSBS/aggregator) + displayed client-side (`buildItemStack`). #2 (tested commit, persisted
+server config — same tier as player-listing migration): admin capture writes new-format SNBT
+(`ShopAdminCommand`/`AdminShopWizard`), match sites migrate-on-read (`ShopSell`/`ShopBuy`), client display
+migrates old admin configs too. **Gate green:** `ListingMatchTest.adminConfigVariantMigratesAndMatchesIdentically`
+(legacy `{Damage:5}` → == fresh; new-format round-trips; bare stays bare-only). 10/10 tests.
+
+**Still DEFERRED (genuinely blocked / explicitly stubbed — need a jar, a pipeline, or a display):**
+- **RS2 real integration** — stubbed behind the guard per the "stub first" decision; stays stubbed until the
+  actual Refined Storage 2 (2.0.9) jar is available to reverse-engineer (a guessed integration is worse).
+- **Owner-head live skin fetch** — stubbed (default skin shows); needs the new `PlayerSkin`/`ResolvableProfile`
+  async pipeline. Cosmetic; doesn't block a functional server.
+- **`runClient`** — can't validate headless (no display). `runGameTestServer` crashes by design without gametests.
 
 ## Build log
 

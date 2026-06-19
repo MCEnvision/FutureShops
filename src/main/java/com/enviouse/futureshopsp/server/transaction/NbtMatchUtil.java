@@ -129,4 +129,28 @@ public final class NbtMatchUtil {
             return DataComponentPatch.EMPTY;
         }
     }
+
+    /**
+     * Reads an admin-shop config {@code nbtJson} SNBT string to a variant patch, lazily migrating the
+     * legacy 1.20.1 format. Admin shop configs persist the variant as an SNBT string on disk, and existing
+     * configs from 1.20.1 hold a raw item {@code tag} ({@code {Damage:5}}); a config (re)written under
+     * 1.21 holds the new component-patch SNBT ({@code {"minecraft:damage":5}}). They are distinguished by
+     * their top-level keys: new-format keys are component IDs ({@code namespace:path}, or {@code !id} for
+     * removals) and always contain {@code ':'}; legacy item-tag keys never do. Blank/invalid → EMPTY
+     * (a bare listing — matches only bare items, NOT everything).
+     */
+    public static DataComponentPatch snbtToPatchMigrating(HolderLookup.Provider registries,
+                                                          ResourceLocation itemId, @Nullable String snbt) {
+        if (snbt == null || snbt.isBlank()) {
+            return DataComponentPatch.EMPTY;
+        }
+        CompoundTag tag;
+        try {
+            tag = TagParser.parseTag(snbt);
+        } catch (CommandSyntaxException e) {
+            return DataComponentPatch.EMPTY;
+        }
+        boolean newFormat = tag.getAllKeys().stream().anyMatch(k -> k.indexOf(':') >= 0);
+        return newFormat ? tagToPatch(registries, tag) : legacyTagToPatch(registries, itemId, tag);
+    }
 }

@@ -148,7 +148,7 @@ public final class ShopBuyService {
                 String nbt = itemDef.nbtJson();
                 if (nbt != null && !nbt.isBlank()) {
                     try {
-                        net.minecraft.core.component.DataComponentPatch tag = net.minecraft.core.component.DataComponentPatch.EMPTY; // variant matching restored in listing-migration cluster
+                        net.minecraft.core.component.DataComponentPatch tag = NbtMatchUtil.snbtToPatchMigrating(player.level().registryAccess(), net.minecraft.resources.ResourceLocation.parse(itemId), nbt);
                         if (!tag.isEmpty()) rewardStack.applyComponents(tag);
                     } catch (Exception ignored) {
                         // Invalid SNBT — log once and deliver the bare item rather than fail the buy.
