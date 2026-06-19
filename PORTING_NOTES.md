@@ -134,6 +134,15 @@ thread `HolderLookup.Provider`; variant stored as `NbtPatch` via `NbtMatchUtil.p
 variants now persist+match end-to-end. **Gate green:** `ListingMatchTest.persistedVariantRoundTripsAndMatches`
 (save→load identity + legacy migrate→re-save→reload stable + empty stays empty). 9/9 tests.
 
+**Entrypoint lifecycle glue — DONE + GREEN (own commit).** Full `Futureshops.java`: registries + `commonSetup`
+(ExternalStorageRegistry + RS2 init) + CarryOn IMC + server start/stop/tick game-bus handlers + `ClientModEvents`
+(block-entity renderer + `RegisterClientExtensionsEvent` item BEWLR). **Found + fixed a real issue:**
+`onServerStarting`/`onServerTick` reach overworld-backed `SavedData`; `MinecraftServer.overworld()` is null
+while the minimal `EphemeralTestServer` boots/ticks (a real server has worlds loaded by then — why the 1.20.1
+Forge build worked), so both handlers guard `if (overworld()==null) return` (no-op in prod). Without it the
+tick NPE → log-appender `ExceptionInInitializerError` → `runServer` crash → null injected test server.
+`./gradlew build` SUCCESSFUL, 9/9.
+
 **Still DEFERRED (lower-stakes; own commits):**
 - Network `nbtJson` + client `ShopUiUtil` variant **display** (cosmetic — server matching is correct; client
   shows bare item icon/tooltip) and **admin-shop** variant capture (`AdminShopWizard`/`ShopAdminCommand`
