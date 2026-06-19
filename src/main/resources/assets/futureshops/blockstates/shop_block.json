@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "futureshops:block/shop_block" },
+    "facing=south": { "model": "futureshops:block/shop_block" },
+    "facing=east":  { "model": "futureshops:block/shop_block" },
+    "facing=west":  { "model": "futureshops:block/shop_block" }
+  }
+}

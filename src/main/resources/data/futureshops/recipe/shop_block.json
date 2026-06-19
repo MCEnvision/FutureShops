@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "DSD",
+    "COL",
+    "SRS"
+  ],
+  "key": {
+    "D": "minecraft:diamond",
+    "S": "minecraft:deepslate",
+    "O": "minecraft:obsidian",
+    "C": "minecraft:comparator",
+    "L": "minecraft:daylight_detector",
+    "R": "minecraft:redstone_block"
+  },
+  "result": {
+    "id": "futureshops:shop_block",
+    "count": 1
+  }
+}
