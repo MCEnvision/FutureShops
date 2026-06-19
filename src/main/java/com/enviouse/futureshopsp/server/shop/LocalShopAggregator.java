@@ -1,5 +1,7 @@
 package com.enviouse.futureshopsp.server.shop;
 
+import com.enviouse.futureshopsp.server.transaction.NbtMatchUtil;
+
 import com.enviouse.futureshopsp.Config;
 import com.enviouse.futureshopsp.block.ShopBlockEntity;
 import com.enviouse.futureshopsp.data.LocalShopOwnerEntry;
@@ -122,9 +124,7 @@ public final class LocalShopAggregator {
                     boolean hasPromo = listing.promo().active();
                     long promoPrice = hasPromo ? listing.promo().applyUnitPrice(price) : price;
 
-                    String nbtJson = "";
-                    
-
+                    String nbtJson = NbtMatchUtil.patchToSnbt(level.registryAccess(), listing.nbtPatch());
                     LocalListing ll = new LocalListing(
                             listing.itemId(), displayName, stock, price,
                             listing.tradeMode().name(),

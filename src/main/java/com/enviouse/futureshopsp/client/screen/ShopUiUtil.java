@@ -5,6 +5,8 @@ import com.enviouse.futureshopsp.client.ShopClientState;
 import com.enviouse.futureshopsp.client.ShopColors;
 import com.enviouse.futureshopsp.data.CatalogBarterIngredient;
 import com.enviouse.futureshopsp.data.CatalogBarterRecipe;
+import com.enviouse.futureshopsp.server.transaction.NbtMatchUtil;
+import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.resources.DefaultPlayerSkin;
@@ -546,11 +548,14 @@ public final class ShopUiUtil {
         }
         ItemStack stack = new ItemStack(item);
         if (nbtJson != null && !nbtJson.isBlank()) {
-            try {
-                CompoundTag tag = TagParser.parseTag(nbtJson);
-                /* variant display deferred to listing-migration cluster */
-            } catch (Exception ignored) {
-                // Invalid NBT — use plain stack
+            // nbtJson is the new (1.21 component-patch) SNBT produced server-side by
+            // NbtMatchUtil.patchToSnbt (admin configs are normalized to this format before transmission).
+            var connection = Minecraft.getInstance().getConnection();
+            if (connection != null) {
+                DataComponentPatch patch = NbtMatchUtil.snbtToPatch(connection.registryAccess(), nbtJson);
+                if (!patch.isEmpty()) {
+                    stack.applyComponents(patch);
+                }
             }
         }
         return stack;

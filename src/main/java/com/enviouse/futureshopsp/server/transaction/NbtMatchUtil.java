@@ -1,11 +1,13 @@
 package com.enviouse.futureshopsp.server.transaction;
 
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.serialization.Dynamic;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.TagParser;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.datafix.DataFixers;
@@ -100,5 +102,31 @@ public final class NbtMatchUtil {
         }
         var ops = registries.createSerializationContext(NbtOps.INSTANCE);
         return DataComponentPatch.CODEC.parse(ops, tag).result().orElse(DataComponentPatch.EMPTY);
+    }
+
+    /**
+     * Serializes a variant patch to an SNBT string for the network/display layer (the {@code nbtJson}
+     * field on the wire). Empty patch → empty string (a bare listing). New (1.21 component-patch) format.
+     */
+    public static String patchToSnbt(HolderLookup.Provider registries, @Nullable DataComponentPatch patch) {
+        if (patch == null || patch.isEmpty()) {
+            return "";
+        }
+        return patchToTag(registries, patch).toString();
+    }
+
+    /**
+     * Parses a new-format ({@link #patchToSnbt}) SNBT string back to a variant patch. Blank/invalid → EMPTY.
+     * Does NOT migrate legacy 1.20.1 raw-NBT SNBT — that path is admin-config-only (see snbtToPatchMigrating).
+     */
+    public static DataComponentPatch snbtToPatch(HolderLookup.Provider registries, @Nullable String snbt) {
+        if (snbt == null || snbt.isBlank()) {
+            return DataComponentPatch.EMPTY;
+        }
+        try {
+            return tagToPatch(registries, TagParser.parseTag(snbt));
+        } catch (CommandSyntaxException e) {
+            return DataComponentPatch.EMPTY;
+        }
     }
 }

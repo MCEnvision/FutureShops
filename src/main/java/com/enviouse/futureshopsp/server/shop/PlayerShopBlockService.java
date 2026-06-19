@@ -1179,14 +1179,13 @@ public final class PlayerShopBlockService {
     private static PlayerShopListingData toData(Level level, ShopBlockEntity shop, BlockPos shopPos,
                                                 ShopBlockEntity.Listing listing, boolean visible) {
         ShopBlockEntity.Promo promo = listing.promo();
-        String nbtJson = "";
-        
-        String barterNbtJson = "";
+        String nbtJson = NbtMatchUtil.patchToSnbt(level.registryAccess(), listing.nbtPatch());
+        String barterNbtJson = NbtMatchUtil.patchToSnbt(level.registryAccess(), listing.barterNbtPatch());
         
         // Build bundle output data
         List<PlayerShopListingData.BundleOutputData> bundleData = listing.bundleOutputs().stream()
                 .map(e -> new PlayerShopListingData.BundleOutputData(
-                        e.itemId(), e.count(), ""))
+                        e.itemId(), e.count(), NbtMatchUtil.patchToSnbt(level.registryAccess(), e.nbtPatch())))
                 .toList();
         return new PlayerShopListingData(
                 listing.itemId(),
