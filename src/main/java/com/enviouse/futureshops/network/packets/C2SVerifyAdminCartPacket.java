@@ -15,10 +15,11 @@ import java.util.function.Supplier;
  */
 public record C2SVerifyAdminCartPacket(String shopId, List<AdminCartLine> lines) {
 
-    public record AdminCartLine(String itemId, int quantity, long expectedPriceMinor) {
+    /** One admin-cart line. {@code listingId} is the catalog resolution key (see C2SBuyRequestPacket.LineItem). */
+    public record AdminCartLine(String listingId, int quantity, long expectedPriceMinor) {
 
         public static void encode(FriendlyByteBuf buffer, AdminCartLine line) {
-            buffer.writeUtf(line.itemId);
+            buffer.writeUtf(line.listingId);
             buffer.writeVarInt(line.quantity);
             buffer.writeLong(line.expectedPriceMinor);
         }

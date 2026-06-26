@@ -76,7 +76,10 @@ public final class StockRefreshScheduler {
                     continue;
                 }
 
-                String compositeKey = shopId + ":" + item.itemId();
+                // Key by the listing resolution key (== itemId for legacy entries, so the persisted
+                // compositeKey is byte-identical and the STOCKS slot matches what transactions mutate).
+                String listingKey = item.resolutionKey();
+                String compositeKey = shopId + ":" + listingKey;
                 long lastRefresh = data.getLastRefresh(compositeKey);
 
                 // If never refreshed, initialize the timestamp to now (don't refresh immediately on first load)
@@ -91,12 +94,12 @@ public final class StockRefreshScheduler {
                 if (elapsedMillis >= intervalMillis) {
                     // Reset stock to the catalog-defined value
                     int configuredStock = item.stock();
-                    int currentStock = ShopCatalog.getCurrentStock(shopId, item.itemId());
+                    int currentStock = ShopCatalog.getCurrentStock(shopId, listingKey);
 
                     if (currentStock != configuredStock) {
-                        ShopCatalog.setStock(shopId, item.itemId(), configuredStock);
+                        ShopCatalog.setStock(shopId, listingKey, configuredStock);
                         LOGGER.debug("[FutureShops] Stock refresh: {}:{} reset to {} (was {})",
-                                shopId, item.itemId(), configuredStock, currentStock);
+                                shopId, listingKey, configuredStock, currentStock);
                     }
 
                     data.setLastRefresh(compositeKey, nowMillis);

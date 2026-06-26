@@ -14,9 +14,14 @@ import java.util.function.Supplier;
  */
 public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<LineItem> lineItems) {
 
-    public record LineItem(String itemId, int quantity) {
+    /**
+     * One buy line. {@code listingId} is the catalog resolution key (== registry itemId for legacy
+     * single-variant listings, a distinct stable id for multi-variant NBT listings) — the server
+     * resolves the exact {@code ItemDef} by it, then mints from that def's registry itemId + NBT.
+     */
+    public record LineItem(String listingId, int quantity) {
         public static void encode(FriendlyByteBuf buffer, LineItem lineItem) {
-            buffer.writeUtf(lineItem.itemId);
+            buffer.writeUtf(lineItem.listingId);
             buffer.writeVarInt(lineItem.quantity);
         }
 
@@ -25,8 +30,8 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
         }
     }
 
-    public static C2SBuyRequestPacket single(String shopId, String itemId, int quantity) {
-        return new C2SBuyRequestPacket(shopId, false, List.of(new LineItem(itemId, quantity)));
+    public static C2SBuyRequestPacket single(String shopId, String listingId, int quantity) {
+        return new C2SBuyRequestPacket(shopId, false, List.of(new LineItem(listingId, quantity)));
     }
 
     public static C2SBuyRequestPacket cart(String shopId, List<LineItem> lineItems) {

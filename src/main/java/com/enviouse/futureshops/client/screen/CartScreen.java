@@ -69,9 +69,12 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         List<ShopClientState.CartEntry> entries = ShopClientState.getCartEntries();
         List<ConfirmationModal.SummaryLine> lines = new java.util.ArrayList<>();
         for (ShopClientState.CartEntry entry : entries) {
-            CatalogItem item = ShopClientState.getCatalogItem(entry.itemId()).orElse(null);
-            String name = item != null ? item.displayName() : entry.itemId();
-            lines.add(ConfirmationModal.SummaryLine.item(entry.itemId(), name + " ×" + entry.quantity()));
+            CatalogItem item = ShopClientState.getCatalogItem(entry.listingId()).orElse(null);
+            String name = item != null ? item.displayName() : entry.listingId();
+            // Icon id must be a registry itemId (a valid ResourceLocation); the listingId is only the
+            // cart key and may not parse. Fall back to the listingId string only when the row is unknown.
+            String iconId = item != null ? item.itemId() : entry.listingId();
+            lines.add(ConfirmationModal.SummaryLine.item(iconId, name + " ×" + entry.quantity()));
         }
         String totalStr = ShopUiUtil.formatMinorUnits(ShopClientState.getCartTotalMinorUnits());
         confirmationModal = new ConfirmationModal(
@@ -174,7 +177,7 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         int rowY = listY + 8;
         for (int row = 0; row < visibleRows && row + scrollIndex < entries.size(); row++) {
             ShopClientState.CartEntry entry = entries.get(row + scrollIndex);
-            CatalogItem item = ShopClientState.getCatalogItem(entry.itemId()).orElse(null);
+            CatalogItem item = ShopClientState.getCatalogItem(entry.listingId()).orElse(null);
             if (item == null) continue;
             int y = rowY + row * 28;
             int rowBg = row % 2 == 0 ? ShopColors.SURFACE_RAISED : ShopColors.SURFACE_OVERLAY;
@@ -232,12 +235,12 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         String shopId = ShopClientState.getActiveShopId();
         List<C2SVerifyAdminCartPacket.AdminCartLine> lines = entries.stream()
                 .map(e -> {
-                    CatalogItem item = ShopClientState.getCatalogItem(e.itemId()).orElse(null);
+                    CatalogItem item = ShopClientState.getCatalogItem(e.listingId()).orElse(null);
                     long expectedPrice = 0;
                     if (item != null) {
                         expectedPrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
                     }
-                    return new C2SVerifyAdminCartPacket.AdminCartLine(e.itemId(), e.quantity(), expectedPrice);
+                    return new C2SVerifyAdminCartPacket.AdminCartLine(e.listingId(), e.quantity(), expectedPrice);
                 })
                 .toList();
         ShopClientState.clearCartVerification();
@@ -247,7 +250,7 @@ public class CartScreen extends Screen implements ShopScreenMarker {
 
     private void sendCheckout() {
         List<C2SBuyRequestPacket.LineItem> lines = ShopClientState.getCartEntries().stream()
-                .map(entry -> new C2SBuyRequestPacket.LineItem(entry.itemId(), entry.quantity()))
+                .map(entry -> new C2SBuyRequestPacket.LineItem(entry.listingId(), entry.quantity()))
                 .toList();
         if (!lines.isEmpty()) {
             ShopPackets.CHANNEL.sendToServer(C2SBuyRequestPacket.cart(ShopClientState.getActiveShopId(), lines));
@@ -279,13 +282,13 @@ public class CartScreen extends Screen implements ShopScreenMarker {
             int ctrlX = listX + listW - 130;
             // Minus
             if (mouseX >= ctrlX && mouseX <= ctrlX + 10 && mouseY >= y && mouseY <= y + 22) {
-                ShopClientState.setCartQuantity(entry.itemId(), entry.quantity() - 1);
+                ShopClientState.setCartQuantity(entry.listingId(), entry.quantity() - 1);
                 return true;
             }
             // Plus (Shift+Click = Max)
             if (mouseX >= ctrlX + 24 && mouseX <= ctrlX + 38 && mouseY >= y && mouseY <= y + 22) {
                 if (hasShiftDown()) {
-                    CatalogItem item = ShopClientState.getCatalogItem(entry.itemId()).orElse(null);
+                    CatalogItem item = ShopClientState.getCatalogItem(entry.listingId()).orElse(null);
                     int max = 2304;
                     if (item != null) {
                         if (!item.unlimited()) max = Math.min(max, Math.max(1, item.stock()));
@@ -295,15 +298,15 @@ public class CartScreen extends Screen implements ShopScreenMarker {
                             max = Math.min(max, (int) Math.min(bal / price, 2304));
                         }
                     }
-                    ShopClientState.setCartQuantity(entry.itemId(), Math.max(1, max));
+                    ShopClientState.setCartQuantity(entry.listingId(), Math.max(1, max));
                 } else {
-                    ShopClientState.setCartQuantity(entry.itemId(), entry.quantity() + 1);
+                    ShopClientState.setCartQuantity(entry.listingId(), entry.quantity() + 1);
                 }
                 return true;
             }
             // Remove
             if (mouseX >= listX + listW - 24 && mouseX <= listX + listW - 10 && mouseY >= y && mouseY <= y + 22) {
-                ShopClientState.removeFromCart(entry.itemId());
+                ShopClientState.removeFromCart(entry.listingId());
                 return true;
             }
         }

@@ -42,6 +42,9 @@ public final class ShopClientState {
     private static volatile List<S2CVerifyCartResponsePacket.CartWarning> cartWarnings = List.of();
     private static volatile boolean cartVerified = false;
 
+    // Cart is keyed by listingId (the catalog resolution key), NOT registry itemId — two NBT
+    // variants of one base item are distinct cart lines. ownedItemCounts stays keyed by registry
+    // itemId (InventorySyncService reports registry-id counts).
     private static final Map<String, Integer> cart = new LinkedHashMap<>();
     private static final Map<String, Integer> ownedItemCounts = new HashMap<>();
     private static volatile ShopStatus status = null;
@@ -101,32 +104,32 @@ public final class ShopClientState {
         currentBalanceMinorUnits = balanceMinorUnits;
     }
 
-    public static void addToCart(String itemId, int quantity) {
+    public static void addToCart(String listingId, int quantity) {
         if (quantity <= 0) {
             return;
         }
 
         synchronized (cart) {
-            int newQuantity = cart.getOrDefault(itemId, 0) + quantity;
-            cart.put(itemId, clampCartQuantity(itemId, newQuantity));
+            int newQuantity = cart.getOrDefault(listingId, 0) + quantity;
+            cart.put(listingId, clampCartQuantity(listingId, newQuantity));
             sanitizeCartLocked();
         }
     }
 
-    public static void setCartQuantity(String itemId, int quantity) {
+    public static void setCartQuantity(String listingId, int quantity) {
         synchronized (cart) {
             if (quantity <= 0) {
-                cart.remove(itemId);
+                cart.remove(listingId);
             } else {
-                cart.put(itemId, clampCartQuantity(itemId, quantity));
+                cart.put(listingId, clampCartQuantity(listingId, quantity));
             }
             sanitizeCartLocked();
         }
     }
 
-    public static void removeFromCart(String itemId) {
+    public static void removeFromCart(String listingId) {
         synchronized (cart) {
-            cart.remove(itemId);
+            cart.remove(listingId);
         }
     }
 
@@ -188,8 +191,9 @@ public final class ShopClientState {
         return catalogBarterRecipes.stream().filter(recipe -> recipe.targetItemId().equals(itemId)).toList();
     }
 
-    public static Optional<CatalogItem> getCatalogItem(String itemId) {
-        return catalogItems.stream().filter(item -> item.itemId().equals(itemId)).findFirst();
+    /** Resolves a catalog row by its listingId (the cart/buy/sell key), NOT its registry itemId. */
+    public static Optional<CatalogItem> getCatalogItem(String listingId) {
+        return catalogItems.stream().filter(item -> item.listingId().equals(listingId)).findFirst();
     }
 
     public static int getOwnedCount(String itemId) {
@@ -274,7 +278,7 @@ public final class ShopClientState {
                 return true;
             }
 
-            int clamped = clampCartQuantity(item.itemId(), entry.getValue());
+            int clamped = clampCartQuantity(item.listingId(), entry.getValue());
             if (clamped <= 0) {
                 return true;
             }
@@ -283,8 +287,8 @@ public final class ShopClientState {
         });
     }
 
-    private static int clampCartQuantity(String itemId, int quantity) {
-        CatalogItem item = getCatalogItem(itemId).orElse(null);
+    private static int clampCartQuantity(String listingId, int quantity) {
+        CatalogItem item = getCatalogItem(listingId).orElse(null);
         if (item == null) {
             return 0;
         }
@@ -296,7 +300,8 @@ public final class ShopClientState {
         return clamped;
     }
 
-    public record CartEntry(String itemId, int quantity) {
+    /** {@code listingId} is the catalog resolution key for this cart line (see {@link CatalogItem}). */
+    public record CartEntry(String listingId, int quantity) {
     }
 
     public record ShopStatus(Component message, boolean success, long expiresAtMillis) {

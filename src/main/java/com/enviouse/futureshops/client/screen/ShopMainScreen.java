@@ -708,19 +708,20 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                     CatalogItem item = filteredItems.get(index);
                     selectedGridIndex = index;
                     if (button == 0) {
-                        // Shift+Click → quick-add to cart
+                        // Shift+Click → quick-add to cart (keyed by listingId so NBT variants stay distinct)
                         if (hasShiftDown() && item.buyPrice() > 0L && (item.unlimited() || item.stock() > 0)) {
-                            ShopClientState.addToCart(item.itemId(), 1);
+                            ShopClientState.addToCart(item.listingId(), 1);
                             return true;
                         }
-                        // Item 13: When in barter mode (barter tab selected), open BarterScreen directly
+                        // Item 13: When in barter mode (barter tab selected), open BarterScreen directly.
+                        // Barter is registry-itemId keyed; the detail screen is listingId keyed.
                         if ((barterMode || isBarterTabSelected()) && item.hasBarterRecipes()) {
                             Minecraft.getInstance().setScreen(new BarterScreen(this, item.itemId()));
                         } else {
-                            Minecraft.getInstance().setScreen(new ItemDetailScreen(this, item.itemId()));
+                            Minecraft.getInstance().setScreen(new ItemDetailScreen(this, item.listingId()));
                         }
                     } else if (button == 1 && item.buyPrice() > 0L) {
-                        ShopClientState.addToCart(item.itemId(), 1);
+                        ShopClientState.addToCart(item.listingId(), 1);
                     }
                     return true;
                 }
@@ -885,7 +886,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                         if ((barterMode || isBarterTabSelected()) && item.hasBarterRecipes()) {
                             Minecraft.getInstance().setScreen(new BarterScreen(this, item.itemId()));
                         } else {
-                            Minecraft.getInstance().setScreen(new ItemDetailScreen(this, item.itemId()));
+                            Minecraft.getInstance().setScreen(new ItemDetailScreen(this, item.listingId()));
                         }
                         return true;
                     }

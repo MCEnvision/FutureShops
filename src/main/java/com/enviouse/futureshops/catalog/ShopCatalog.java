@@ -66,9 +66,12 @@ public final class ShopCatalog {
             ConcurrentHashMap<String, Integer> stockMap = new ConcurrentHashMap<>();
             Map<String, ItemDef> byId = new LinkedHashMap<>(def.items().size() * 2);
             for (ItemDef item : def.items()) {
-                byId.putIfAbsent(item.itemId(), item);
+                // Index by the stable listing resolution key (== itemId for legacy single-variant
+                // entries) so two listings that share a registry itemId but differ by NBT no longer
+                // collapse onto the first. STOCKS is keyed the same way.
+                byId.putIfAbsent(item.resolutionKey(), item);
                 if (!item.isUnlimited()) {
-                    stockMap.put(item.itemId(), item.stock());
+                    stockMap.put(item.resolutionKey(), item.stock());
                 }
             }
             STOCKS.put(def.shopId(), stockMap);
@@ -149,11 +152,40 @@ public final class ShopCatalog {
         return Optional.ofNullable(def);
     }
 
+    /**
+     * Resolves a single listing by its stable resolution key. NOTE: the {@code itemId} parameter is
+     * the listing's {@link ItemDef#resolutionKey()} (== registry itemId for legacy single-variant
+     * entries, a distinct stable id for multi-variant NBT listings) — NOT necessarily a registry id.
+     * All stock/price/promo lookups below take the same key. To mint/render, read {@link ItemDef#itemId()}
+     * off the returned def.
+     */
     public static Optional<ItemDef> getItem(String shopId, String itemId) {
         String resolved = resolveShopId(shopId);
         Map<String, ItemDef> byId = CATALOG_BY_ITEM.get(resolved);
         if (byId == null) return Optional.empty();
         return Optional.ofNullable(byId.get(itemId));
+    }
+
+    /**
+     * Resolves a listing by its registry {@code itemId} rather than its listingId — the first listing
+     * whose registry id matches. Used by the barter path, whose recipes target registry ids. For a
+     * legacy single-variant item this is the listing itself (listingId == itemId); for a fully
+     * multi-variant item it returns the first-loaded variant (barter outputs a bare item regardless).
+     * Always drive stock operations off the returned def's {@link ItemDef#resolutionKey()}.
+     */
+    public static Optional<ItemDef> getItemByRegistryId(String shopId, String registryItemId) {
+        if (registryItemId == null) return Optional.empty();
+        // Fast path: a legacy entry is indexed under its own itemId.
+        Optional<ItemDef> direct = getItem(shopId, registryItemId);
+        if (direct.isPresent() && registryItemId.equals(direct.get().itemId())) {
+            return direct;
+        }
+        ShopDefinition def = getOrDefault(shopId).orElse(null);
+        if (def == null) return Optional.empty();
+        for (ItemDef it : def.items()) {
+            if (registryItemId.equals(it.itemId())) return Optional.of(it);
+        }
+        return Optional.empty();
     }
 
     public static int getCurrentStock(String shopId, String itemId) {
@@ -388,24 +420,33 @@ public final class ShopCatalog {
         ConcurrentHashMap<String, Integer> stockMap = STOCKS.get(resolvedShopId);
         Set<String> barterTargets = BARTER_TARGETS.getOrDefault(resolvedShopId, Set.of());
 
+        long now = nowEpochSeconds();
         return def.items().stream()
+                // Hide listings whose availability window has elapsed (expiresAtEpoch > 0 && now >= it).
+                .filter(item -> !item.isExpired(now))
                 .map(item -> {
-                    PromoDef promo = promoByItem.get(item.itemId());
+                    // A promo may target the listingId (a runtime sale on one specific variant) or the
+                    // registry itemId (a static JSON promo). For legacy entries resolutionKey()==itemId
+                    // so both coincide; the dual lookup keeps static JSON promos applying.
+                    PromoDef promo = promoByItem.get(item.resolutionKey());
+                    if (promo == null) promo = promoByItem.get(item.itemId());
                     boolean hasPromo = promo != null;
                     long promoPrice = hasPromo ? applyPromo(item.buyPriceMinorUnits(), promo) : 0L;
+                    // Barter targets are registry ids — keep itemId here.
                     boolean hasBarterRecipes = barterTargets.contains(item.itemId());
                     int stock = item.isUnlimited()
                             ? -1
-                            : (stockMap == null ? item.stock() : stockMap.getOrDefault(item.itemId(), item.stock()));
+                            : (stockMap == null ? item.stock() : stockMap.getOrDefault(item.resolutionKey(), item.stock()));
                     CatalogItem catalogItem = item.toCatalogItem(stock, hasPromo, promoPrice, hasBarterRecipes);
 
-                    // Override category from admin assignments if item has no explicit category
+                    // Override category from admin assignments if the item has no explicit category.
+                    // AdminCategorySavedData is keyed by registry itemId (not rekeyed), so look up by itemId.
                     if ("all".equals(catalogItem.categoryId())) {
                         String adminCat = adminAssignments.get(item.itemId());
                         if (adminCat != null && !adminCat.isBlank()) {
                             String catId = adminCat.toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
                             return new CatalogItem(
-                                    catalogItem.itemId(), catalogItem.displayName(),
+                                    catalogItem.listingId(), catalogItem.itemId(), catalogItem.displayName(),
                                     catalogItem.buyPrice(), catalogItem.sellPrice(),
                                     catalogItem.stock(), catalogItem.unlimited(),
                                     catalogItem.barterEnabled(), catId,

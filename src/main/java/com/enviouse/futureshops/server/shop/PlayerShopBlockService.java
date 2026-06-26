@@ -185,16 +185,27 @@ public final class PlayerShopBlockService {
                     sendResult(player, false, ShopResultCode.HOLD_ITEM);
                     return;
                 }
-                int idx = shop.addOrSelectListing(key.toString());
+                // Pass the held item's NBT so addOrSelectListing can distinguish
+                // variants (Tacz guns, enchanted books, etc.) instead of
+                // collapsing them onto the first listing with a matching id.
+                // The block entity also auto-enables NBT-awareness on fresh
+                // listings that carry a tag so the manage-screen icon and the
+                // minted buy-output both keep their original NBT.
+                CompoundTag heldTag = held.hasTag() ? held.getTag().copy() : null;
+                int idx = shop.addOrSelectListing(key.toString(), heldTag);
                 if (idx < 0) {
                     sendResult(player, false, ShopResultCode.LISTING_LIMIT);
                     return;
                 }
-                // Store NBT if the held item has a tag (enchants, lore, etc.)
-                ShopBlockEntity.Listing newListing = shop.getListing(idx);
-                if (newListing != null && held.hasTag()) {
-                    newListing.setNbtTag(held.getTag().copy());
-                }
+                // No setNbtTag() stomp here — that used to silently rewrite the
+                // existing listing's tag every time the player clicked Add with
+                // the same item in hand. Identity is now (itemId, nbt) so we
+                // either matched the exact listing (no rewrite needed) or
+                // added a fresh one (already populated by addOrSelectListing).
+                // Reopen so the client sees the new/updated listing immediately
+                // — without this the screen sometimes still shows the stale
+                // HOLD_ITEM banner from a prior failed click.
+                openFor(player, pos);
             }
             case "ADD_BUNDLE_ITEM_MAINHAND" -> {
                 // Item 11: Add held item to listing's bundle outputs

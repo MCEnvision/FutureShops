@@ -111,7 +111,8 @@ public final class ShopDefinitionLoader {
     // JSON parsing
     // -------------------------------------------------------------------------
 
-    private static ShopDefinition parseJson(String json, String filename) {
+    // package-private for unit testing (listingId defaulting + expiresAtEpoch parsing)
+    static ShopDefinition parseJson(String json, String filename) {
         try {
             JsonObject root = JsonParser.parseString(json).getAsJsonObject();
 
@@ -135,15 +136,35 @@ public final class ShopDefinitionLoader {
                 for (JsonElement el : root.getAsJsonArray("items")) {
                     JsonObject o = el.getAsJsonObject();
                     if (!o.has("itemId")) continue;
+                    String itemId = o.get("itemId").getAsString();
+                    // Optional stable per-listing id. getString() only falls back on absent/JSON-null
+                    // (NOT on blank), so the explicit isBlank() check is required — a literal "" must
+                    // default to itemId rather than become a blank listingId. Absent/blank => listingId
+                    // == itemId, which keeps legacy single-variant entries (and their stock/pricing
+                    // persisted keys, which are itemId strings) byte-identical with zero migration.
+                    // Lowercase the id so the stored catalog key matches the client echo and the
+                    // case-insensitive command lookups (registry itemIds are already lowercase).
+                    String rawId = getString(o, "id", null);
+                    String listingId = (rawId != null && !rawId.isBlank())
+                            ? rawId.trim().toLowerCase(java.util.Locale.ROOT)
+                            : itemId;
                     items.add(new ItemDef(
-                            o.get("itemId").getAsString(),
+                            listingId,
+                            itemId,
                             getString(o, "displayName", null),
                             getLong(o, "buyPrice", 0L),
                             getLong(o, "sellPrice", 0L),
                             getInt(o, "stock", -1),
                             getBool(o, "barterEnabled", false),
                             getString(o, "categoryId", "all"),
-                            getInt(o, "stockRefreshSeconds", 0)));
+                            getInt(o, "stockRefreshSeconds", 0),
+                            // SNBT for items whose identity lives in NBT (enchanted books,
+                            // Tacz guns, named/lored items). Empty string falls through to
+                            // the bare-item code path so legacy admin.json entries that
+                            // predate the field continue to work without a migration.
+                            getString(o, "nbt", ""),
+                            // Listing availability window (unix seconds); 0 = never expires.
+                            getLong(o, "expiresAtEpoch", 0L)));
                 }
             }
 

@@ -278,18 +278,55 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     }
 
     public int addOrSelectListing(String itemId) {
+        return addOrSelectListing(itemId, null);
+    }
+
+    /**
+     * Resolves the listing slot for {@code itemId} with optional NBT discriminator.
+     *
+     * <p>Two items with the same registry id but different NBT (Tacz guns, enchanted
+     * books with different enchant sets, Create staged blocks, etc.) are treated as
+     * distinct listings — without this an admin holding ten Tacz pistols with
+     * different attachments would only ever populate one slot. When {@code nbtTag}
+     * is {@code null} we fall back to itemId-only matching to keep legacy behaviour
+     * for vanilla stackables.
+     *
+     * @return existing index if a matching listing is found, the new index if one
+     *         was appended, or {@code -1} when the per-block cap is hit.
+     */
+    public int addOrSelectListing(String itemId, @Nullable CompoundTag nbtTag) {
         if (itemId == null || itemId.isBlank()) {
             return -1;
         }
         for (int i = 0; i < listings.size(); i++) {
-            if (itemId.equals(listings.get(i).itemId())) {
+            Listing existing = listings.get(i);
+            if (!itemId.equals(existing.itemId())) continue;
+            // Treat (itemId, nbt) as the listing identity. Two Tacz guns share an
+            // itemId but their gun-id lives in NBT — collapsing them by itemId
+            // alone breaks multi-listing for any modded item that encodes
+            // variants in NBT, and silently overwrites the previous variant's
+            // saved tag if we then re-stamp setNbtTag from the caller.
+            if (nbtTag == null && existing.nbtTag() == null) return i;
+            if (nbtTag != null && existing.nbtTag() != null
+                    && nbtTag.equals(existing.nbtTag())) {
                 return i;
             }
         }
         if (listings.size() >= effectiveMaxListings()) {
             return -1;
         }
-        listings.add(new Listing(itemId));
+        Listing fresh = new Listing(itemId);
+        if (nbtTag != null) {
+            fresh.setNbtTag(nbtTag.copy());
+            // Auto-enable NBT-awareness whenever the listing was registered with
+            // a non-null tag. Without this the manage-screen icon falls through
+            // to the bare-itemId renderer (missing texture for Tacz guns and
+            // similar NBT-keyed items), and minted output stacks ship without
+            // their original NBT — i.e. a Tacz gun comes out of the shop as a
+            // textureless ghost.
+            fresh.setNbtAware(true);
+        }
+        listings.add(fresh);
         setChanged();
         syncTopItemsToClients();
         return listings.size() - 1;

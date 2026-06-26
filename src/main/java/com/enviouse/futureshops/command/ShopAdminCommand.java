@@ -1,5 +1,9 @@
 package com.enviouse.futureshops.command;
 
+import com.enviouse.futureshops.Config;
+import com.enviouse.futureshops.catalog.AdminShopConfigWriter;
+import com.enviouse.futureshops.catalog.AdminShopItemSpec;
+import com.enviouse.futureshops.catalog.ItemDef;
 import com.enviouse.futureshops.catalog.ShopCatalog;
 import com.enviouse.futureshops.money.MoneyMintRecord;
 import com.enviouse.futureshops.money.SpentMintsSavedData;
@@ -27,8 +31,10 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.GameProfileArgument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.time.Instant;
@@ -117,6 +123,25 @@ public final class ShopAdminCommand {
                 AdminCategorySavedData.get(server).getAllAssignments().keySet(), builder);
     };
 
+    /** The admin/server-shop id that {@code admin.json} loads as. */
+    private static final String ADMIN_SHOP_ID = "default";
+
+    /**
+     * Suggests the stable listing ids of the admin shop (from the in-memory catalog). Ids containing
+     * characters Brigadier won't read unquoted (e.g. the ':' of a legacy itemId-as-listingId) are
+     * offered pre-quoted so the suggestion parses back cleanly.
+     */
+    private static final SuggestionProvider<CommandSourceStack> SUGGEST_LISTING_IDS = (ctx, builder) -> {
+        java.util.List<String> ids = new java.util.ArrayList<>();
+        ShopCatalog.get(ADMIN_SHOP_ID).ifPresent(def -> {
+            for (ItemDef it : def.items()) {
+                String id = it.resolutionKey();
+                ids.add(id.matches("[a-zA-Z0-9_.+-]+") ? id : "\"" + id + "\"");
+            }
+        });
+        return SharedSuggestionProvider.suggest(ids, builder);
+    };
+
     private ShopAdminCommand() {
     }
 
@@ -161,6 +186,56 @@ public final class ShopAdminCommand {
                                 .executes(ctx -> startAdminShopAdd(ctx.getSource())))
                         .then(Commands.literal("remove")
                                 .executes(ctx -> adminShopRemoveHeld(ctx.getSource()))))
+
+                // /shopadmin items add|edit|remove|list|info|refresh|sale — single-command admin shop
+                // listing management with stable per-listing ids (supports multiple NBT variants of
+                // one base item). Top-level sibling; distinct from /shopadmin category items.
+                .then(Commands.literal("items")
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("price", StringArgumentType.word())
+                                        .then(Commands.argument("quantity", StringArgumentType.word())
+                                                .then(Commands.argument("expire", StringArgumentType.word())
+                                                        .then(Commands.argument("nbt", StringArgumentType.word())
+                                                                .then(Commands.argument("category", StringArgumentType.string())
+                                                                        .executes(ctx -> itemsAddOrEdit(ctx, null, null))
+                                                                        .then(Commands.argument("sellprice", StringArgumentType.word())
+                                                                                .executes(ctx -> itemsAddOrEdit(ctx, null,
+                                                                                        StringArgumentType.getString(ctx, "sellprice"))))))))))
+                        .then(Commands.literal("edit")
+                                .then(Commands.argument("id", StringArgumentType.string()).suggests(SUGGEST_LISTING_IDS)
+                                        .then(Commands.argument("price", StringArgumentType.word())
+                                                .then(Commands.argument("quantity", StringArgumentType.word())
+                                                        .then(Commands.argument("expire", StringArgumentType.word())
+                                                                .then(Commands.argument("nbt", StringArgumentType.word())
+                                                                        .then(Commands.argument("category", StringArgumentType.string())
+                                                                                .executes(ctx -> itemsAddOrEdit(ctx,
+                                                                                        StringArgumentType.getString(ctx, "id"), null))
+                                                                                .then(Commands.argument("sellprice", StringArgumentType.word())
+                                                                                        .executes(ctx -> itemsAddOrEdit(ctx,
+                                                                                                StringArgumentType.getString(ctx, "id"),
+                                                                                                StringArgumentType.getString(ctx, "sellprice")))))))))))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("id", StringArgumentType.string()).suggests(SUGGEST_LISTING_IDS)
+                                        .executes(ctx -> itemsRemove(ctx.getSource(), StringArgumentType.getString(ctx, "id")))))
+                        .then(Commands.literal("list")
+                                .executes(ctx -> itemsList(ctx.getSource(), null))
+                                .then(Commands.argument("category", StringArgumentType.greedyString())
+                                        .executes(ctx -> itemsList(ctx.getSource(), StringArgumentType.getString(ctx, "category")))))
+                        .then(Commands.literal("info")
+                                .then(Commands.argument("id", StringArgumentType.string()).suggests(SUGGEST_LISTING_IDS)
+                                        .executes(ctx -> itemsInfo(ctx.getSource(), StringArgumentType.getString(ctx, "id")))))
+                        .then(Commands.literal("refresh")
+                                .then(Commands.argument("id", StringArgumentType.string()).suggests(SUGGEST_LISTING_IDS)
+                                        .then(Commands.argument("interval", StringArgumentType.word())
+                                                .executes(ctx -> itemsRefresh(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "id"),
+                                                        StringArgumentType.getString(ctx, "interval"))))))
+                        .then(Commands.literal("sale")
+                                .then(Commands.argument("id", StringArgumentType.string()).suggests(SUGGEST_LISTING_IDS)
+                                        .then(Commands.argument("price", StringArgumentType.word())
+                                                .executes(ctx -> itemsSale(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "id"),
+                                                        StringArgumentType.getString(ctx, "price")))))))
 
                 // /shopadmin respond <text> — answers the active adminshop add wizard
                 .then(Commands.literal("respond")
@@ -376,6 +451,340 @@ public final class ShopAdminCommand {
                 "command.futureshops.admin.adminshop.remove.success", itemId)
                 .withStyle(ChatFormatting.GREEN), true);
         return 1;
+    }
+
+    // -------------------------------------------------------------------------
+    // /shopadmin items add|edit|remove|list|info|refresh|sale
+    // -------------------------------------------------------------------------
+
+    /**
+     * Handles {@code items add} ({@code editId == null}) and {@code items edit <id>}. Both capture the
+     * held item's registry id + NBT and read the price / quantity / expire / nbt-flag / category
+     * positionals; {@code sellPriceStr} is the optional trailing sell price (null ⇒ not sellable).
+     */
+    private static int itemsAddOrEdit(CommandContext<CommandSourceStack> ctx, String editId, String sellPriceStr) {
+        CommandSourceStack source = ctx.getSource();
+        if (!(source.getEntity() instanceof ServerPlayer player)) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.player_only").withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        ItemStack held = player.getMainHandItem();
+        if (held.isEmpty()) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.no_held").withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        ResourceLocation key = ForgeRegistries.ITEMS.getKey(held.getItem());
+        if (key == null) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.unknown_item").withStyle(ChatFormatting.RED));
+            return 0;
+        }
+
+        long buyMinor;
+        try {
+            buyMinor = parsePriceMinor(StringArgumentType.getString(ctx, "price"));
+        } catch (IllegalArgumentException e) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.invalid_price",
+                    StringArgumentType.getString(ctx, "price")).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        long sellMinor = 0L;
+        if (sellPriceStr != null && !sellPriceStr.isBlank()) {
+            try {
+                sellMinor = parsePriceMinor(sellPriceStr);
+            } catch (IllegalArgumentException e) {
+                source.sendFailure(Component.translatable("command.futureshops.admin.items.invalid_price", sellPriceStr)
+                        .withStyle(ChatFormatting.RED));
+                return 0;
+            }
+        }
+        int stock;
+        try {
+            stock = parseQuantity(StringArgumentType.getString(ctx, "quantity"));
+        } catch (NumberFormatException e) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.invalid_quantity",
+                    StringArgumentType.getString(ctx, "quantity")).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        long expiresAt;
+        try {
+            expiresAt = parseExpiry(StringArgumentType.getString(ctx, "expire"));
+        } catch (IllegalArgumentException e) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.invalid_expire",
+                    StringArgumentType.getString(ctx, "expire")).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        Boolean nbtOn = parseOnOff(StringArgumentType.getString(ctx, "nbt"));
+        if (nbtOn == null) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.invalid_nbt",
+                    StringArgumentType.getString(ctx, "nbt")).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+
+        String nbtJson = (nbtOn && held.hasTag()) ? held.getTag().toString() : "";
+        String rawCategory = StringArgumentType.getString(ctx, "category");
+        String categoryId = normalizeId(rawCategory);
+        ensureCategory(source.getServer(), rawCategory);
+        String displayName = held.getHoverName().getString();
+        String itemId = key.toString();
+
+        MinecraftServer server = source.getServer();
+        AdminShopItemSpec spec = new AdminShopItemSpec(
+                editId == null ? "" : editId, itemId, displayName, buyMinor, sellMinor,
+                stock, 0, categoryId, nbtJson, expiresAt);
+
+        if (editId == null) {
+            String assignedId = AdminShopConfigWriter.addWithGeneratedId(server, spec);
+            if (assignedId == null || assignedId.isBlank()) {
+                source.sendFailure(Component.translatable("command.futureshops.admin.items.write_failed").withStyle(ChatFormatting.RED));
+                return 0;
+            }
+            ShopDataService.resendActiveSessions(server);
+            final String fid = assignedId;
+            final String fbuy = EconomyCommandUtil.formatMinorUnits(buyMinor, Config.economyCurrencyDecimals);
+            final String fsell = EconomyCommandUtil.formatMinorUnits(sellMinor, Config.economyCurrencyDecimals);
+            final String fstock = stockDisplay(stock);
+            final String fexpire = expireDisplay(expiresAt);
+            source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.added",
+                    fid, itemId, fbuy, fsell, fstock, fexpire, categoryId).withStyle(ChatFormatting.GREEN), true);
+            return 1;
+        }
+
+        boolean ok = AdminShopConfigWriter.editById(server, editId, spec);
+        if (!ok) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.not_found", editId).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        ShopDataService.resendActiveSessions(server);
+        source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.edited", editId).withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    private static int itemsRemove(CommandSourceStack source, String id) {
+        if (!AdminShopConfigWriter.removeById(source.getServer(), id)) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.not_found", id).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        ShopDataService.resendActiveSessions(source.getServer());
+        source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.removed", id).withStyle(ChatFormatting.YELLOW), true);
+        return 1;
+    }
+
+    private static int itemsList(CommandSourceStack source, String categoryFilter) {
+        List<AdminShopConfigWriter.AdminListingView> views = AdminShopConfigWriter.listItems(source.getServer(), categoryFilter);
+        if (views.isEmpty()) {
+            source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.list_empty").withStyle(ChatFormatting.GRAY), false);
+            return 1;
+        }
+        source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.list_header", views.size()).withStyle(ChatFormatting.GOLD), false);
+        for (AdminShopConfigWriter.AdminListingView v : views) {
+            String buy = EconomyCommandUtil.formatMinorUnits(v.buyPriceMinor(), Config.economyCurrencyDecimals);
+            String stockStr = stockDisplay(v.stock());
+            String nbtFlag = nbtDisplay(v.nbtPresent());
+            source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.list_row",
+                    v.listingId(), v.itemId(), buy, stockStr, nbtFlag).withStyle(ChatFormatting.WHITE), false);
+        }
+        return 1;
+    }
+
+    private static int itemsInfo(CommandSourceStack source, String id) {
+        AdminShopConfigWriter.AdminListingView found = null;
+        for (AdminShopConfigWriter.AdminListingView v : AdminShopConfigWriter.listItems(source.getServer(), null)) {
+            if (v.listingId().equalsIgnoreCase(id)) {
+                found = v;
+                break;
+            }
+        }
+        if (found == null) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.not_found", id).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        AdminShopConfigWriter.AdminListingView v = found;
+        String buy = EconomyCommandUtil.formatMinorUnits(v.buyPriceMinor(), Config.economyCurrencyDecimals);
+        String sell = v.sellPriceMinor() > 0L
+                ? EconomyCommandUtil.formatMinorUnits(v.sellPriceMinor(), Config.economyCurrencyDecimals)
+                : Component.translatable("command.futureshops.admin.items.sell_none").getString();
+        source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.info_header", v.listingId()).withStyle(ChatFormatting.GOLD), false);
+        source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.info_item", v.itemId(), v.displayName()).withStyle(ChatFormatting.GRAY), false);
+        source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.info_price", buy, sell).withStyle(ChatFormatting.GRAY), false);
+        source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.info_stock", stockDisplay(v.stock()), refreshDisplay(v.stockRefreshSeconds())).withStyle(ChatFormatting.GRAY), false);
+        source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.info_expire", expireDisplay(v.expiresAtEpoch())).withStyle(ChatFormatting.GRAY), false);
+        source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.info_category", v.categoryId()).withStyle(ChatFormatting.GRAY), false);
+        source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.info_nbt", nbtDisplay(v.nbtPresent())).withStyle(ChatFormatting.GRAY), false);
+        return 1;
+    }
+
+    private static int itemsRefresh(CommandSourceStack source, String id, String intervalStr) {
+        String t = intervalStr.trim().toLowerCase(java.util.Locale.ROOT);
+        boolean off = t.equals("off") || t.equals("0") || t.equals("none") || t.equals("false");
+        int secs = 0;
+        if (!off) {
+            long parsed;
+            try {
+                parsed = parseDurationSeconds(t);
+            } catch (IllegalArgumentException e) {
+                source.sendFailure(Component.translatable("command.futureshops.admin.items.invalid_interval", intervalStr).withStyle(ChatFormatting.RED));
+                return 0;
+            }
+            if (parsed <= 0L || parsed > Integer.MAX_VALUE) {
+                source.sendFailure(Component.translatable("command.futureshops.admin.items.invalid_interval", intervalStr).withStyle(ChatFormatting.RED));
+                return 0;
+            }
+            secs = (int) parsed;
+        }
+        if (!AdminShopConfigWriter.setStockRefresh(source.getServer(), id, secs)) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.not_found", id).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        ShopDataService.resendActiveSessions(source.getServer());
+        if (off) {
+            source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.refresh_off", id).withStyle(ChatFormatting.YELLOW), true);
+        } else {
+            final String shown = secs + "s";
+            source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.refresh_set", id, shown).withStyle(ChatFormatting.GREEN), true);
+        }
+        return 1;
+    }
+
+    private static int itemsSale(CommandSourceStack source, String id, String priceStr) {
+        MinecraftServer server = source.getServer();
+        String t = priceStr.trim().toLowerCase(java.util.Locale.ROOT);
+        if (t.equals("off") || t.equals("none") || t.equals("0") || t.equals("clear")) {
+            if (!ShopCatalog.clearRuntimePromo(ADMIN_SHOP_ID, id)) {
+                source.sendFailure(Component.translatable("command.futureshops.admin.items.sale_none", id).withStyle(ChatFormatting.RED));
+                return 0;
+            }
+            ShopDataService.resendActiveSessions(server);
+            source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.sale_off", id).withStyle(ChatFormatting.YELLOW), true);
+            return 1;
+        }
+
+        ItemDef def = ShopCatalog.getItem(ADMIN_SHOP_ID, id).orElse(null);
+        if (def == null) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.not_found", id).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        long saleMinor;
+        try {
+            saleMinor = parsePriceMinor(priceStr);
+        } catch (IllegalArgumentException e) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.invalid_price", priceStr).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        long basePrice = def.buyPriceMinorUnits();
+        if (saleMinor <= 0L || saleMinor >= basePrice) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.sale_failed", id).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        // FLAT promo: discountValue is amount-off in MAJOR units (see ShopCatalog.calculateLineCost),
+        // so converting a desired final sale price -> (base - sale) / 10^decimals. Runtime promo,
+        // not persisted (mirrors /shopadmin promo set); clears on reload/restart.
+        double discountMajor = (basePrice - saleMinor) / Math.pow(10, Config.economyCurrencyDecimals);
+        if (!ShopCatalog.setRuntimePromo(ADMIN_SHOP_ID, id, "FLAT", discountMajor)) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.sale_failed", id).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        ShopDataService.resendActiveSessions(server);
+        final String fsale = EconomyCommandUtil.formatMinorUnits(saleMinor, Config.economyCurrencyDecimals);
+        source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.sale_set", id, fsale).withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    // ─── items parsing / display helpers ─────────────────────────────────────
+
+    /** Parses a price in major units to minor; accepts {@code 0}/{@code free}/{@code none} as 0 (not buyable/sellable). */
+    private static long parsePriceMinor(String raw) {
+        String t = raw.trim();
+        if (t.equals("0") || t.equalsIgnoreCase("free") || t.equalsIgnoreCase("none")) return 0L;
+        return EconomyCommandUtil.parseAmountToMinorUnits(t, Config.economyCurrencyDecimals);
+    }
+
+    /** Parses a stock quantity; {@code inf}/{@code infinity}/{@code unlimited}/{@code -1} ⇒ unlimited (-1). */
+    private static int parseQuantity(String raw) {
+        String t = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        if (t.equals("inf") || t.equals("infinity") || t.equals("infinite") || t.equals("unlimited") || t.equals("-1")) {
+            return -1;
+        }
+        int v = Integer.parseInt(t);
+        return v < 0 ? -1 : v;
+    }
+
+    /** Parses the availability window into an absolute epoch; {@code inf}/{@code never}/{@code 0} ⇒ 0 (never). */
+    private static long parseExpiry(String raw) {
+        String t = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        if (t.isEmpty() || t.equals("inf") || t.equals("infinity") || t.equals("never") || t.equals("0") || t.equals("none")) {
+            return 0L;
+        }
+        long durationSec = parseDurationSeconds(t);
+        if (durationSec <= 0L) throw new IllegalArgumentException("expire must be > 0");
+        try {
+            return Math.addExact(System.currentTimeMillis() / 1000L, durationSec);
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException("expire overflow", e);
+        }
+    }
+
+    /** Plain seconds, or a suffixed shorthand: {@code 30s}, {@code 5m}, {@code 1h}, {@code 7d}. */
+    private static long parseDurationSeconds(String raw) {
+        String t = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        if (t.isEmpty()) return 0L;
+        char last = t.charAt(t.length() - 1);
+        long mult;
+        String numPart;
+        if (last == 's') { mult = 1L; numPart = t.substring(0, t.length() - 1); }
+        else if (last == 'm') { mult = 60L; numPart = t.substring(0, t.length() - 1); }
+        else if (last == 'h') { mult = 3600L; numPart = t.substring(0, t.length() - 1); }
+        else if (last == 'd') { mult = 86400L; numPart = t.substring(0, t.length() - 1); }
+        else { mult = 1L; numPart = t; }
+        try {
+            return Math.multiplyExact(Long.parseLong(numPart.trim()), mult);
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException("duration overflow", e);
+        }
+    }
+
+    /** {@code on/true/yes/1} ⇒ TRUE, {@code off/false/no/0} ⇒ FALSE, otherwise {@code null}. */
+    private static Boolean parseOnOff(String raw) {
+        String t = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        if (t.equals("on") || t.equals("true") || t.equals("yes") || t.equals("1")) return Boolean.TRUE;
+        if (t.equals("off") || t.equals("false") || t.equals("no") || t.equals("0")) return Boolean.FALSE;
+        return null;
+    }
+
+    private static String normalizeId(String s) {
+        return s == null ? "all" : s.trim().toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
+    }
+
+    /** Registers a category (admin.json + saved data + department) so its tab appears — mirrors the wizard. */
+    private static void ensureCategory(MinecraftServer server, String rawCategory) {
+        if (rawCategory == null) return;
+        String trimmed = rawCategory.trim();
+        if (trimmed.isEmpty() || "all".equalsIgnoreCase(trimmed)) return;
+        AdminShopConfigWriter.addCategory(server, trimmed);
+        AdminCategorySavedData.get(server).addCategory(trimmed);
+        com.enviouse.futureshops.server.shop.DepartmentSavedData.get(server).addDepartment(trimmed);
+    }
+
+    private static String stockDisplay(int stock) {
+        return stock < 0
+                ? Component.translatable("command.futureshops.admin.limits.unlimited").getString()
+                : Integer.toString(stock);
+    }
+
+    private static String refreshDisplay(int secs) {
+        return secs > 0 ? secs + "s"
+                : Component.translatable("command.futureshops.admin.items.refresh_none").getString();
+    }
+
+    private static String expireDisplay(long epoch) {
+        return epoch <= 0L
+                ? Component.translatable("command.futureshops.admin.items.expire_never").getString()
+                : TS_FMT.format(Instant.ofEpochSecond(epoch));
+    }
+
+    private static String nbtDisplay(boolean present) {
+        return Component.translatable(present
+                ? "command.futureshops.admin.items.nbt_present"
+                : "command.futureshops.admin.items.nbt_absent").getString();
     }
 
     // -------------------------------------------------------------------------

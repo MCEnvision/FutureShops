@@ -69,7 +69,13 @@ public final class AdminShopWizard {
             return false;
         }
 
-        State state = new State(key.toString(), held.getHoverName().getString());
+        // Capture the held item's full NBT as SNBT at wizard-start. This is what
+        // lets Mending books, Tacz guns, named/lored items, dyed armor, charged
+        // tridents, etc. survive admin-shop round-trip. We snapshot here (not at
+        // wizard finalize) so the admin can switch what they're holding without
+        // affecting what gets persisted.
+        String nbtSnbt = held.hasTag() ? held.getTag().toString() : "";
+        State state = new State(key.toString(), held.getHoverName().getString(), nbtSnbt);
         ACTIVE.put(id, state);
 
         player.sendSystemMessage(Component.translatable(
@@ -229,7 +235,8 @@ public final class AdminShopWizard {
         AdminShopItemSpec spec = new AdminShopItemSpec(
                 state.itemId, state.displayName,
                 state.buyPriceMinor, state.sellPriceMinor,
-                state.stock, state.stockRefreshSeconds, state.categoryId);
+                state.stock, state.stockRefreshSeconds, state.categoryId,
+                state.nbtJson);
         boolean ok = AdminShopConfigWriter.addOrUpdateItem(player.server, spec);
         if (!ok) {
             player.sendSystemMessage(Component.translatable("command.futureshops.admin.adminshop.add.write_failed")
@@ -331,6 +338,12 @@ public final class AdminShopWizard {
     private static final class State {
         final String itemId;
         final String displayName;
+        /**
+         * SNBT snapshot of the held item's tag at wizard-start, or empty string when bare.
+         * Carried through to {@link AdminShopItemSpec} on finalize so it lands in admin.json
+         * and survives buys via the catalog path.
+         */
+        final String nbtJson;
         Step step = Step.BUY_PRICE;
         long buyPriceMinor;
         long sellPriceMinor;
@@ -339,9 +352,10 @@ public final class AdminShopWizard {
         String categoryId = "all";
         long lastTouchMs = System.currentTimeMillis();
 
-        State(String itemId, String displayName) {
+        State(String itemId, String displayName, String nbtJson) {
             this.itemId = itemId;
             this.displayName = displayName;
+            this.nbtJson = nbtJson == null ? "" : nbtJson;
         }
 
         void touch() {

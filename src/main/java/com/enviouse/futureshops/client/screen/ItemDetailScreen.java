@@ -28,7 +28,8 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
     private static final int PREVIEW_W = 130;
 
     private final Screen parent;
-    private final String itemId;
+    /** Catalog resolution key (listingId) this detail view is bound to — NOT the registry itemId. */
+    private final String listingId;
 
     private int guiLeft;
     private int guiTop;
@@ -47,10 +48,10 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
     // Spec §8: Confirmation modal overlay
     private ConfirmationModal confirmationModal = null;
 
-    public ItemDetailScreen(Screen parent, String itemId) {
+    public ItemDetailScreen(Screen parent, String listingId) {
         super(Component.translatable("gui.futureshops.detail.title"));
         this.parent = parent;
-        this.itemId = itemId;
+        this.listingId = listingId;
     }
 
     @Override
@@ -110,7 +111,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
 
         addToCartButton = Button.builder(Component.translatable("gui.futureshops.item_detail.add_cart"), button -> {
                     CatalogItem item = currentItem();
-                    if (item != null) ShopClientState.addToCart(item.itemId(), getQuantity());
+                    if (item != null) ShopClientState.addToCart(item.listingId(), getQuantity());
                 })
                 .bounds(startX, bottomY, btnW, 14)
                 .build();
@@ -131,7 +132,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                                 modal -> {
                                     modal.setProcessing();
                                     ShopPackets.CHANNEL.sendToServer(C2SBuyRequestPacket.single(
-                                            ShopClientState.getActiveShopId(), item.itemId(), qty));
+                                            ShopClientState.getActiveShopId(), item.listingId(), qty));
                                 },
                                 () -> confirmationModal = null
                         );
@@ -156,7 +157,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                                 modal -> {
                                     modal.setProcessing();
                                     ShopPackets.CHANNEL.sendToServer(new C2SSellRequestPacket(
-                                            ShopClientState.getActiveShopId(), item.itemId(), qty));
+                                            ShopClientState.getActiveShopId(), item.listingId(), qty));
                                 },
                                 () -> confirmationModal = null
                         );
@@ -359,7 +360,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
     }
 
     private CatalogItem currentItem() {
-        return ShopClientState.getCatalogItem(itemId).orElse(null);
+        return ShopClientState.getCatalogItem(listingId).orElse(null);
     }
 
     private int getQuantity() {

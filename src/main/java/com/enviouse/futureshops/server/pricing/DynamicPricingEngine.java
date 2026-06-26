@@ -94,15 +94,16 @@ public final class DynamicPricingEngine {
             String compositeKey = entry.getKey();
             DynamicPricingSavedData.ItemPricingState state = entry.getValue();
 
-            // Parse "shopId:itemId"
+            // Key format is "shopId:listingId". Split on the FIRST colon so a listingId that is itself
+            // a resource location (e.g. a legacy "minecraft:diamond" whose listingId == itemId) survives
+            // intact as the second component.
             int sep = compositeKey.indexOf(':');
             if (sep < 0) continue;
-            // Handle resource-location colons in itemId (e.g., "default:minecraft:diamond")
             String shopId = compositeKey.substring(0, sep);
-            String itemId = compositeKey.substring(sep + 1);
+            String listingId = compositeKey.substring(sep + 1);
 
-            // Resolve base price from catalog
-            long basePrice = ShopCatalog.getItem(shopId, itemId)
+            // Resolve base price from catalog (getItem resolves by listingId).
+            long basePrice = ShopCatalog.getItem(shopId, listingId)
                     .map(ItemDef::buyPriceMinorUnits)
                     .orElse(0L);
             if (basePrice <= 0) continue;

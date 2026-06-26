@@ -7,11 +7,15 @@ import net.minecraftforge.network.NetworkEvent;
 
 import java.util.function.Supplier;
 
-/** Client → server sell request from ItemDetailScreen. */
-public record C2SSellRequestPacket(String shopId, String itemId, int quantity) {
+/**
+ * Client → server sell request from ItemDetailScreen. {@code listingId} is the catalog resolution
+ * key; the server resolves the exact listing by it, then counts/removes from the player using that
+ * listing's registry itemId + NBT.
+ */
+public record C2SSellRequestPacket(String shopId, String listingId, int quantity) {
     public static void encode(C2SSellRequestPacket packet, FriendlyByteBuf buffer) {
         buffer.writeUtf(packet.shopId);
-        buffer.writeUtf(packet.itemId);
+        buffer.writeUtf(packet.listingId);
         buffer.writeVarInt(packet.quantity);
     }
 

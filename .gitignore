@@ -20,6 +20,9 @@ hs_err_pid*
 # Common working directory
 run
 
+# Runtime / dev logs
+logs/
+
 # Session-local / tooling
 .claude/
 CLAUDE.md

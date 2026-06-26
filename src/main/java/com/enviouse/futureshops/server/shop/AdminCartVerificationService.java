@@ -24,8 +24,8 @@ public final class AdminCartVerificationService {
         for (int i = 0; i < lines.size(); i++) {
             C2SVerifyAdminCartPacket.AdminCartLine line = lines.get(i);
 
-            // Check item still exists in catalog
-            var itemOpt = ShopCatalog.getItem(shopId, line.itemId());
+            // Check listing still exists in catalog (resolution key, not registry id)
+            var itemOpt = ShopCatalog.getItem(shopId, line.listingId());
             if (itemOpt.isEmpty()) {
                 warnings.add(new CartWarning(i, "ITEM_REMOVED", "Item no longer available in shop"));
                 continue;
@@ -34,14 +34,14 @@ public final class AdminCartVerificationService {
             ItemDef item = itemOpt.get();
 
             // Check price changed — use effective buy price (includes promos)
-            long currentPrice = ShopCatalog.getEffectiveBuyPrice(shopId, line.itemId());
+            long currentPrice = ShopCatalog.getEffectiveBuyPrice(shopId, line.listingId());
             if (line.expectedPriceMinor() > 0 && currentPrice != line.expectedPriceMinor()) {
                 warnings.add(new CartWarning(i, "PRICE_CHANGED", "Price changed"));
             }
 
             // Check stock
             if (!item.isUnlimited()) {
-                int stock = ShopCatalog.getCurrentStock(shopId, line.itemId());
+                int stock = ShopCatalog.getCurrentStock(shopId, line.listingId());
                 if (stock >= 0 && stock < line.quantity()) {
                     warnings.add(new CartWarning(i, "LOW_STOCK",
                             "Only " + stock + " available (you want " + line.quantity() + ")"));

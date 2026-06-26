@@ -85,10 +85,14 @@ public final class ShopBarterService {
                 return BarterResult.error(shopId, ShopResultCode.INVALID_RECIPE);
             }
 
-            ItemDef targetDef = ShopCatalog.getItem(shopId, recipe.targetItemId()).orElse(null);
+            // Barter recipes target a registry itemId. Resolve by registry id (works for legacy
+            // single-variant items and, for fully multi-variant items, the first variant), then drive
+            // all stock operations off the resolved listing's resolutionKey so they hit the right slot.
+            ItemDef targetDef = ShopCatalog.getItemByRegistryId(shopId, recipe.targetItemId()).orElse(null);
             if (targetDef == null) {
                 return BarterResult.error(shopId, ShopResultCode.INVALID_RECIPE);
             }
+            String targetKey = targetDef.resolutionKey();
 
             int outputQuantity;
             try {
@@ -97,7 +101,7 @@ public final class ShopBarterService {
                 return BarterResult.error(shopId, ShopResultCode.SERVER_ERROR);
             }
 
-            int currentStock = ShopCatalog.getCurrentStock(shopId, recipe.targetItemId());
+            int currentStock = ShopCatalog.getCurrentStock(shopId, targetKey);
             if (currentStock >= 0 && currentStock < outputQuantity) {
                 return BarterResult.error(shopId, ShopResultCode.OUT_OF_STOCK);
             }
@@ -168,7 +172,7 @@ public final class ShopBarterService {
                 }
             }
 
-            if (!ShopCatalog.reserveStock(shopId, recipe.targetItemId(), outputQuantity)) {
+            if (!ShopCatalog.reserveStock(shopId, targetKey, outputQuantity)) {
                 for (IngredientConsumption ingredient : required) {
                     ShopTransactionUtil.insertIntoInventory(inventory, List.of(new ItemStack(ingredient.item(), ingredient.count())));
                 }
@@ -176,7 +180,7 @@ public final class ShopBarterService {
             }
 
             if (!ShopTransactionUtil.insertIntoInventory(inventory, rewards)) {
-                ShopCatalog.restoreStock(shopId, recipe.targetItemId(), outputQuantity);
+                ShopCatalog.restoreStock(shopId, targetKey, outputQuantity);
                 for (IngredientConsumption ingredient : required) {
                     ShopTransactionUtil.insertIntoInventory(inventory, List.of(new ItemStack(ingredient.item(), ingredient.count())));
                 }
