@@ -36,6 +36,10 @@ public final class EscrowConfig {
         .comment("Maximum pending transaction records accepted before new value mutations fail closed.")
         .defineInRange("recovery.max_pending_transactions", 100000, 100, 10000000);
 
+    private static final ForgeConfigSpec.IntValue MIGRATION_WALLET_ENTRIES_PER_TICK = BUILDER
+        .comment("Maximum legacy wallet entries imported during one server tick.")
+        .defineInRange("migration.wallet_entries_per_tick", 256, 1, 1024);
+
     private static final ForgeConfigSpec.IntValue PERSISTENCE_CHECKPOINT_INTERVAL_SECONDS = BUILDER
         .comment("Target interval between durable escrow checkpoints in seconds.")
         .defineInRange("persistence.checkpoint_interval_seconds", 30, 5, 86400);
@@ -134,6 +138,7 @@ public final class EscrowConfig {
             RECOVERY_INITIAL_RETRY_DELAY_TICKS.get(),
             RECOVERY_MAXIMUM_RETRY_DELAY_TICKS.get(),
             RECOVERY_MAX_PENDING_TRANSACTIONS.get(),
+            MIGRATION_WALLET_ENTRIES_PER_TICK.get(),
             PERSISTENCE_CHECKPOINT_INTERVAL_SECONDS.get(),
             PERSISTENCE_CHECKPOINT_GENERATION_RETENTION.get(),
             PERSISTENCE_CHECKPOINT_MAXIMUM_JOURNAL_BYTES.get(),
@@ -158,6 +163,7 @@ public final class EscrowConfig {
         int initialRetryDelayTicks,
         int maximumRetryDelayTicks,
         int maximumPendingTransactions,
+        int walletMigrationEntriesPerTick,
         int checkpointIntervalSeconds,
         int checkpointGenerationRetention,
         long checkpointMaximumJournalBytes,
@@ -182,6 +188,8 @@ public final class EscrowConfig {
                 "Maximum retry delay must not be less than the initial retry delay.");
             ConfigValidation.require(maximumPendingTransactions > 0,
                 "Maximum pending transactions must be positive.");
+            ConfigValidation.require(walletMigrationEntriesPerTick > 0,
+                "Wallet migration entries per tick must be positive.");
             ConfigValidation.require(checkpointIntervalSeconds > 0, "Checkpoint interval must be positive.");
             ConfigValidation.require(checkpointGenerationRetention >= 2
                     && checkpointGenerationRetention <= 16,
@@ -207,7 +215,7 @@ public final class EscrowConfig {
 
         public static Settings defaults() {
             return new Settings(
-                64, 20, 1200, 100000, 30, 2, 67108864L, 50000, 365,
+                64, 20, 1200, 100000, 256, 30, 2, 67108864L, 50000, 365,
                 true, 64, 32, 256, 1048576, 8388608,
                 true, "wallet_claim", "standard", true, true
             );

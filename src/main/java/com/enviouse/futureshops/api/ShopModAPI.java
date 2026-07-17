@@ -73,6 +73,12 @@ public final class ShopModAPI {
         return BalanceManager.getProvider().withdraw(playerUUID, amountMinor);
     }
 
+    public static TransactionResult withdraw(UUID requestId, UUID playerUUID,
+                                             long amountMinor) {
+        return BalanceManager.withdraw(
+                requestId, playerUUID, amountMinor, "WITHDRAW");
+    }
+
     /**
      * Deposits currency into a player's balance.
      */
@@ -80,11 +86,23 @@ public final class ShopModAPI {
         return BalanceManager.getProvider().deposit(playerUUID, amountMinor);
     }
 
+    public static TransactionResult deposit(UUID requestId, UUID playerUUID,
+                                            long amountMinor) {
+        return BalanceManager.deposit(
+                requestId, playerUUID, amountMinor, "DEPOSIT");
+    }
+
     /**
      * Transfers currency between two players.
      */
     public static TransactionResult transfer(UUID fromPlayer, UUID toPlayer, long amountMinor) {
         return BalanceManager.transfer(fromPlayer, toPlayer, amountMinor);
+    }
+
+    public static TransactionResult transfer(UUID requestId, UUID fromPlayer,
+                                             UUID toPlayer, long amountMinor) {
+        return BalanceManager.transfer(
+                requestId, fromPlayer, toPlayer, amountMinor, "TRANSFER");
     }
 
     // ═══════════════════════════════════════════════
@@ -199,16 +217,25 @@ public final class ShopModAPI {
      * Fires {@link com.enviouse.futureshops.event.BalanceChangeEvent.Post} with reason "ADMIN".
      */
     public static void setBalance(MinecraftServer server, UUID playerUUID, long amountMinor) {
-        var overworld = server.overworld();
-        var balData = overworld.getDataStorage()
-                .computeIfAbsent(com.enviouse.futureshops.server.economy.InternalBalanceSavedData::load,
-                        com.enviouse.futureshops.server.economy.InternalBalanceSavedData::new,
-                        com.enviouse.futureshops.server.economy.InternalBalanceSavedData.DATA_NAME);
-        long oldBalance = BalanceManager.getBalance(playerUUID);
-        balData.setBalance(playerUUID, amountMinor);
-        long delta = amountMinor - oldBalance;
-        net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
-                new com.enviouse.futureshops.event.BalanceChangeEvent.Post(playerUUID, delta, "ADMIN", amountMinor));
+        TransactionResult result = setBalanceResult(
+                UUID.randomUUID(), server, playerUUID, amountMinor);
+        if (!result.success()) {
+            throw new IllegalStateException(
+                    "FutureShops balance update failed with " + result.errorCode());
+        }
+    }
+
+    public static TransactionResult setBalanceResult(
+            UUID requestId, MinecraftServer server, UUID playerUUID,
+            long amountMinor
+    ) {
+        java.util.Objects.requireNonNull(server, "server");
+        return BalanceManager.setBalance(
+                requestId,
+                playerUUID,
+                amountMinor,
+                com.enviouse.futureshops.Config.economyAllowNegative,
+                "ADMIN");
     }
 
     // ═══════════════════════════════════════════════
@@ -292,5 +319,4 @@ public final class ShopModAPI {
         return ShopSessionManager.snapshotSessions().size();
     }
 }
-
 

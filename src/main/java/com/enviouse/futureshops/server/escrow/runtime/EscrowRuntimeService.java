@@ -44,6 +44,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 public final class EscrowRuntimeService implements AutoCloseable {
@@ -361,6 +362,39 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 transaction.transactionId(), event);
         invalidateConservationAudit();
         return result;
+    }
+
+    synchronized long ledgerBalance(
+            com.enviouse.futureshops.server.escrow.ledger.LedgerAccountId account
+    ) {
+        assertServerThread();
+        return ledger.balance(account);
+    }
+
+    synchronized boolean ledgerContainsAccount(
+            com.enviouse.futureshops.server.escrow.ledger.LedgerAccountId account
+    ) {
+        assertServerThread();
+        return ledger.containsAccount(account);
+    }
+
+    synchronized Map<com.enviouse.futureshops.server.escrow.ledger.LedgerAccountId, Long>
+    ledgerSnapshot() {
+        assertServerThread();
+        return ledger.snapshotBalances();
+    }
+
+    synchronized boolean wasLedgerTransactionApplied(UUID transactionId) {
+        assertServerThread();
+        return ledger.wasApplied(transactionId);
+    }
+
+    synchronized Optional<LedgerTransaction> ledgerTransaction(
+            UUID transactionId
+    ) {
+        assertServerThread();
+        return ledger.transactionReceipt(transactionId)
+                .map(com.enviouse.futureshops.server.escrow.ledger.LedgerTransactionReceipt::transaction);
     }
 
     synchronized EscrowCommitResult createClaim(EscrowClaim claim) {

@@ -14,7 +14,8 @@ public enum LedgerAccountType {
     BAZAAR_FEE(false),
     SERVER_TREASURY(false),
     ADMIN_SOURCE(true),
-    ADMIN_SINK(false);
+    ADMIN_SINK(false),
+    PLAYER_DEBT(true);
 
     private final boolean negativeAllowed;
 

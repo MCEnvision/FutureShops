@@ -26,19 +26,11 @@ public interface EconomyProvider {
         return deposit(playerUUID, amountMinorUnits);
     }
 
-    default TransactionResult transfer(UUID fromPlayerUUID, UUID toPlayerUUID, long amountMinorUnits) {
-        TransactionResult withdrawal = withdraw(fromPlayerUUID, amountMinorUnits, "TRANSFER");
-        if (!withdrawal.success()) {
-            return withdrawal;
-        }
-
-        TransactionResult deposit = deposit(toPlayerUUID, amountMinorUnits, "TRANSFER");
-        if (!deposit.success()) {
-            deposit(fromPlayerUUID, amountMinorUnits, "TRANSFER");
-            return TransactionResult.error(deposit.errorCode(), withdrawal.resultingBalance());
-        }
-
-        return TransactionResult.ok(withdrawal.resultingBalance());
+    default TransactionResult transfer(UUID fromPlayerUUID, UUID toPlayerUUID,
+                                       long amountMinorUnits) {
+        return TransactionResult.error(
+                com.enviouse.futureshops.server.shop.ShopResultCode.SERVER_ERROR,
+                getBalance(fromPlayerUUID));
     }
 
     default List<BalanceEntry> getTopBalances(int page, int pageSize) {

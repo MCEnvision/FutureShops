@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 public final class InMemoryLedger {
@@ -94,8 +95,18 @@ public final class InMemoryLedger {
         return balances.getOrDefault(account, 0L);
     }
 
+    public synchronized boolean containsAccount(LedgerAccountId account) {
+        return balances.containsKey(account);
+    }
+
     public synchronized boolean wasApplied(UUID transactionId) {
         return appliedFingerprints.containsKey(transactionId);
+    }
+
+    public synchronized Optional<LedgerTransactionReceipt> transactionReceipt(
+            UUID transactionId
+    ) {
+        return Optional.ofNullable(transactionReceipts.get(transactionId));
     }
 
     public synchronized boolean hasMaterializedState() {

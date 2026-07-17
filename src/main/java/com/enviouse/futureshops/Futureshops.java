@@ -15,6 +15,7 @@ import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeManager;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeState;
+import com.enviouse.futureshops.server.economy.migration.LegacyBalanceMigrationManager;
 import com.enviouse.futureshops.server.pricing.DynamicPricingEngine;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
 import com.enviouse.futureshops.server.shop.ExternalStorageRegistry;
@@ -103,6 +104,7 @@ public class Futureshops {
         } else if (escrow.state() == EscrowRuntimeState.RECOVERING) {
             LOGGER.warn("FutureShops escrow is recovering before value mutations become available.");
         }
+        LegacyBalanceMigrationManager.initialize(event.getServer());
         BalanceManager.initialize(event.getServer());
         // Resolve the configured physical-currency adapter (built-in money item
         // or a foreign mod's items, e.g. Apocalypse Now cash).
@@ -122,6 +124,8 @@ public class Futureshops {
     public void onServerStopping(ServerStoppingEvent event) {
         // Force-close every open shop session so clients can dismiss their GUIs.
         ShopSessionManager.closeAllAndForceClose(event.getServer(), "SERVER_STOPPING");
+        BalanceManager.clear();
+        LegacyBalanceMigrationManager.shutdown(event.getServer());
         if (EscrowRuntimeManager.getOrNull() != null) {
             try {
                 EscrowRuntimeManager.shutdown(event.getServer());
@@ -129,7 +133,6 @@ public class Futureshops {
                 LOGGER.error("FutureShops escrow failed to close cleanly.", exception);
             }
         }
-        BalanceManager.clear();
         com.enviouse.futureshops.money.CurrencyManager.clear();
         DynamicPricingEngine.reset();
         StockRefreshScheduler.reset();
@@ -145,6 +148,7 @@ public class Futureshops {
             if (EscrowRuntimeManager.getOrNull() != null) {
                 EscrowRuntimeManager.tick(event.getServer());
             }
+            LegacyBalanceMigrationManager.tick(event.getServer());
             DynamicPricingEngine.onServerTick(event.getServer());
             StockRefreshScheduler.onServerTick(event.getServer());
         }

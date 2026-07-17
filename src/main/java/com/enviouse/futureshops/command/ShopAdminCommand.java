@@ -917,29 +917,26 @@ public final class ShopAdminCommand {
             return 0;
         }
 
-        // Direct set via the saved data — bypasses max_balance checks (admin override)
-        MinecraftServer server = source.getServer();
-        net.minecraft.server.level.ServerLevel overworld = server.overworld();
-        com.enviouse.futureshops.server.economy.InternalBalanceSavedData balData = overworld.getDataStorage()
-                .computeIfAbsent(com.enviouse.futureshops.server.economy.InternalBalanceSavedData::load,
-                        com.enviouse.futureshops.server.economy.InternalBalanceSavedData::new,
-                        com.enviouse.futureshops.server.economy.InternalBalanceSavedData.DATA_NAME);
-
         int successCount = 0;
         String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, provider.getDecimalPlaces());
         final long setAmount = amountMinor;
         for (GameProfile profile : targets) {
-            long oldBalance = provider.getBalance(profile.getId());
-            balData.setBalance(profile.getId(), setAmount);
-            // Fire BalanceChangeEvent.Post (spec §33) — admin set bypasses Pre since it's non-cancellable admin action
-            long delta = setAmount - oldBalance;
-            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
-                    new com.enviouse.futureshops.event.BalanceChangeEvent.Post(profile.getId(), delta, "ADMIN", setAmount));
-            source.sendSuccess(() -> Component.translatable(
-                    "command.futureshops.admin.bal.set_success",
-                    profile.getName(), formatted, provider.getCurrencyName())
-                    .withStyle(ChatFormatting.YELLOW), true);
-            successCount++;
+            TransactionResult result = BalanceManager.setBalance(
+                    profile.getId(), setAmount,
+                    com.enviouse.futureshops.Config.economyAllowNegative,
+                    "ADMIN");
+            if (result.success()) {
+                source.sendSuccess(() -> Component.translatable(
+                        "command.futureshops.admin.bal.set_success",
+                        profile.getName(), formatted, provider.getCurrencyName())
+                        .withStyle(ChatFormatting.YELLOW), true);
+                successCount++;
+            } else {
+                source.sendFailure(Component.translatable(
+                        "command.futureshops.admin.bal.failed",
+                        profile.getName(), result.errorCode())
+                        .withStyle(ChatFormatting.RED));
+            }
         }
         return successCount;
     }
@@ -962,26 +959,26 @@ public final class ShopAdminCommand {
         long startingBalance = com.enviouse.futureshops.Config.economyStartingBalanceMinorUnits;
         String formatted = EconomyCommandUtil.formatMinorUnits(startingBalance, provider.getDecimalPlaces());
 
-        MinecraftServer server = source.getServer();
-        net.minecraft.server.level.ServerLevel overworld = server.overworld();
-        com.enviouse.futureshops.server.economy.InternalBalanceSavedData balData = overworld.getDataStorage()
-                .computeIfAbsent(com.enviouse.futureshops.server.economy.InternalBalanceSavedData::load,
-                        com.enviouse.futureshops.server.economy.InternalBalanceSavedData::new,
-                        com.enviouse.futureshops.server.economy.InternalBalanceSavedData.DATA_NAME);
-
+        int successCount = 0;
         for (GameProfile profile : targets) {
-            long oldBalance = provider.getBalance(profile.getId());
-            balData.setBalance(profile.getId(), startingBalance);
-            // Fire BalanceChangeEvent.Post (spec §33) — admin reset
-            long delta = startingBalance - oldBalance;
-            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
-                    new com.enviouse.futureshops.event.BalanceChangeEvent.Post(profile.getId(), delta, "ADMIN", startingBalance));
-            source.sendSuccess(() -> Component.translatable(
-                    "command.futureshops.admin.bal.reset_success",
-                    profile.getName(), formatted, provider.getCurrencyName())
-                    .withStyle(ChatFormatting.YELLOW), true);
+            TransactionResult result = BalanceManager.setBalance(
+                    profile.getId(), startingBalance,
+                    com.enviouse.futureshops.Config.economyAllowNegative,
+                    "ADMIN");
+            if (result.success()) {
+                source.sendSuccess(() -> Component.translatable(
+                        "command.futureshops.admin.bal.reset_success",
+                        profile.getName(), formatted, provider.getCurrencyName())
+                        .withStyle(ChatFormatting.YELLOW), true);
+                successCount++;
+            } else {
+                source.sendFailure(Component.translatable(
+                        "command.futureshops.admin.bal.failed",
+                        profile.getName(), result.errorCode())
+                        .withStyle(ChatFormatting.RED));
+            }
         }
-        return targets.size();
+        return successCount;
     }
 
     // -------------------------------------------------------------------------
@@ -1422,4 +1419,3 @@ public final class ShopAdminCommand {
         return null;
     }
 }
-

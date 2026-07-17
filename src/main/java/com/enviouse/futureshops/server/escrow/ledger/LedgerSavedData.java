@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 public final class LedgerSavedData extends EscrowManagedSavedData {
@@ -212,8 +213,22 @@ public final class LedgerSavedData extends EscrowManagedSavedData {
         return ledger.balance(account);
     }
 
+    public synchronized boolean containsAccount(LedgerAccountId account) {
+        return ledger.containsAccount(account);
+    }
+
     public synchronized Map<LedgerAccountId, Long> snapshotBalances() {
         return ledger.snapshotBalances();
+    }
+
+    public synchronized boolean wasApplied(UUID transactionId) {
+        return ledger.wasApplied(transactionId);
+    }
+
+    public synchronized Optional<LedgerTransactionReceipt> transactionReceipt(
+            UUID transactionId
+    ) {
+        return ledger.transactionReceipt(transactionId);
     }
 
     public synchronized boolean hasMaterializedState() {
