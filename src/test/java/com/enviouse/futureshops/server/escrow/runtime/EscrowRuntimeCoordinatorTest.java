@@ -255,13 +255,11 @@ class EscrowRuntimeCoordinatorTest {
                 UUID.randomUUID(), "seed claim", "seed", List.of(
                 new LedgerLeg(LedgerAccountId.system(LedgerAccountType.ADMIN_SOURCE), -100L),
                 new LedgerLeg(claimAccount, 100L))));
-        ClaimDeliveryCommit delivery = new ClaimDeliveryCommit(
-                ownerId, claimId, "settle claim", 100L, now.plusSeconds(1));
-        LedgerTransaction settlementLedger = new LedgerTransaction(
-                UUID.randomUUID(), delivery.requestKey(), "claim settlement", List.of(
-                new LedgerLeg(claimAccount, -100L),
-                new LedgerLeg(walletAccount, 100L)));
-        MoneyClaimSettlement settlement = new MoneyClaimSettlement(delivery, settlementLedger);
+        UUID requestId = UUID.randomUUID();
+        MoneyClaimSettlement settlement = MoneyClaimSettlement.create(
+                requestId, ownerId, claimId, 0L, 0L, 0L,
+                100L, 100L, 1L, now.plusSeconds(1));
+        LedgerTransaction settlementLedger = settlement.ledgerTransaction();
         EscrowJournalEvent event = new EscrowJournalEvent(
                 EscrowJournalEventType.MONEY_CLAIM_SETTLEMENT,
                 MoneyClaimSettlementCodec.encode(settlement));
@@ -274,7 +272,7 @@ class EscrowRuntimeCoordinatorTest {
                 });
         assertEquals(EscrowRuntimeState.READY, first.start());
         assertThrows(EscrowRuntimeException.class,
-                () -> first.commit(settlementLedger.transactionId(), event));
+                () -> first.commit(settlement.requestId(), event));
         assertEquals(100L, ledger.balance(walletAccount));
         assertEquals(100L, claims.getClaim(claimId).remainingUnits());
         assertEquals(1L, cursor.lastAppliedSequence());

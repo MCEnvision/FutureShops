@@ -12,7 +12,8 @@ public record ServerRequestSecuritySettings(
         ActionLimit atmData,
         ActionLimit atmWithdrawal,
         ActionLimit atmCashCollection,
-        ActionLimit atmDeposit
+        ActionLimit atmDeposit,
+        ActionLimit pay
 ) {
     public ServerRequestSecuritySettings {
         if (trackedKeyCap <= 0) {
@@ -24,6 +25,20 @@ public record ServerRequestSecuritySettings(
         Objects.requireNonNull(atmWithdrawal, "atmWithdrawal");
         Objects.requireNonNull(atmCashCollection, "atmCashCollection");
         Objects.requireNonNull(atmDeposit, "atmDeposit");
+        Objects.requireNonNull(pay, "pay");
+    }
+
+    public ServerRequestSecuritySettings(
+            int trackedKeyCap,
+            Duration idleRetention,
+            ActionLimit atmData,
+            ActionLimit atmWithdrawal,
+            ActionLimit atmCashCollection,
+            ActionLimit atmDeposit
+    ) {
+        this(trackedKeyCap, idleRetention, atmData, atmWithdrawal,
+                atmCashCollection, atmDeposit,
+                new ActionLimit(4, 1, Duration.ofSeconds(1L)));
     }
 
     public Map<ServerRequestAction, ActionLimit> actionLimits() {
@@ -34,6 +49,7 @@ public record ServerRequestSecuritySettings(
         limits.put(ServerRequestAction.ATM_CASH_COLLECTION,
                 atmCashCollection);
         limits.put(ServerRequestAction.ATM_DEPOSIT, atmDeposit);
+        limits.put(ServerRequestAction.PAY, pay);
         return Collections.unmodifiableMap(limits);
     }
 
@@ -44,7 +60,8 @@ public record ServerRequestSecuritySettings(
                 new ActionLimit(4, 1, Duration.ofSeconds(1L)),
                 new ActionLimit(2, 1, Duration.ofSeconds(2L)),
                 new ActionLimit(2, 1, Duration.ofSeconds(2L)),
-                new ActionLimit(2, 1, Duration.ofSeconds(2L))
+                new ActionLimit(2, 1, Duration.ofSeconds(2L)),
+                new ActionLimit(4, 1, Duration.ofSeconds(1L))
         );
     }
 

@@ -11,6 +11,7 @@ import com.enviouse.futureshops.server.escrow.audit.EscrowConservationReport;
 import com.enviouse.futureshops.server.escrow.audit.EscrowCrossDomainConservationAudit;
 import com.enviouse.futureshops.server.escrow.checkpoint.EscrowSavedDataCheckpointBundle;
 import com.enviouse.futureshops.server.escrow.claim.ClaimSavedData;
+import com.enviouse.futureshops.server.escrow.claim.ClaimAttemptResult;
 import com.enviouse.futureshops.server.escrow.claim.EscrowClaim;
 import com.enviouse.futureshops.server.escrow.custody.CustodyAdapter;
 import com.enviouse.futureshops.server.escrow.custody.CustodyBatchCommit;
@@ -49,6 +50,16 @@ import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemption
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionSettlement;
 import com.enviouse.futureshops.server.escrow.store.EscrowTransactionByteCodec;
 import com.enviouse.futureshops.server.escrow.store.EscrowTransactionSavedData;
+import com.enviouse.futureshops.server.escrow.stock.CatalogStockState;
+import com.enviouse.futureshops.server.escrow.stock.StockCommandResult;
+import com.enviouse.futureshops.server.escrow.stock.StockConservationReport;
+import com.enviouse.futureshops.server.escrow.stock.StockKey;
+import com.enviouse.futureshops.server.escrow.stock.StockMutationCommand;
+import com.enviouse.futureshops.server.escrow.stock.StockMutationCommandCodec;
+import com.enviouse.futureshops.server.escrow.stock.StockMutationReceipt;
+import com.enviouse.futureshops.server.escrow.stock.StockReservation;
+import com.enviouse.futureshops.server.escrow.stock.StockSavedData;
+import com.enviouse.futureshops.server.escrow.stock.StockStoreSnapshot;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
@@ -75,6 +86,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
     private final ClaimSavedData claims;
     private final CustodySavedData custody;
     private final ProtectedMintSavedData protectedMints;
+    private final StockSavedData stock;
     private final PlayerInventoryCustodyAdapter playerInventoryAdapter;
     private final ProtectedCashRedemptionIntentStore protectedCashIntentStore;
     private final ProtectedCashRedemptionWorkflow protectedCashWorkflow;
@@ -82,6 +94,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
     private final ForeignCashDepositWorkflow foreignCashWorkflow;
     private final EscrowRecoveryScheduler recoveryScheduler;
     private final EscrowSavedDataCheckpointBundle checkpointBundle;
+    private final PlayerPaymentHistoryProjector paymentHistoryProjector;
     private final EscrowRuntimeMaintenanceController maintenanceController;
     private final EscrowCheckpointSchedule checkpointSchedule =
             new EscrowCheckpointSchedule();
@@ -94,6 +107,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
     private CustodyExecutionScope custodyExecutionScope;
     private Throwable custodyRecoveryFailure;
     private EscrowConservationReport conservationReport;
+    private StockConservationReport stockConservationReport;
     private Throwable conservationFailure;
     private boolean conservationAuditComplete;
     private final ArrayDeque<ProtectedCashRedemptionIntentStore.Inspection>
@@ -121,6 +135,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
                                  ClaimSavedData claims,
                                  CustodySavedData custody,
                                  ProtectedMintSavedData protectedMints,
+                                 StockSavedData stock,
                                  EscrowRecoveryScheduler recoveryScheduler,
                                  EscrowSavedDataCheckpointBundle checkpointBundle,
                                  EscrowRuntimeMaintenanceController maintenanceController,
@@ -134,9 +149,13 @@ public final class EscrowRuntimeService implements AutoCloseable {
         this.claims = claims;
         this.custody = custody;
         this.protectedMints = protectedMints;
+        this.stock = stock;
         this.playerInventoryAdapter = playerInventoryAdapter;
         this.recoveryScheduler = recoveryScheduler;
         this.checkpointBundle = checkpointBundle;
+        this.paymentHistoryProjector = coordinator == null ? null
+                : new PlayerPaymentHistoryProjector(
+                ownerServer, transactions, ledger, claims);
         this.maintenanceController = maintenanceController;
         this.unavailableState = unavailableState;
         this.startupFailure = startupFailure;
@@ -178,23 +197,26 @@ public final class EscrowRuntimeService implements AutoCloseable {
                     EscrowAdministrativeAuditSavedData.get(server);
             CustodySavedData custody = CustodySavedData.get(server);
             ProtectedMintSavedData protectedMints = ProtectedMintSavedData.get(server);
+            StockSavedData stock = StockSavedData.get(server);
             transactions.bindManagedMutationPermit(mutationPermit);
             ledger.bindManagedMutationPermit(mutationPermit);
             claims.bindManagedMutationPermit(mutationPermit);
             administrativeAudit.bindManagedMutationPermit(mutationPermit);
             custody.bindManagedMutationPermit(mutationPermit);
             protectedMints.bindManagedMutationPermit(mutationPermit);
+            stock.bindManagedMutationPermit(mutationPermit);
             EscrowRuntimeMaintenanceController maintenanceController =
                     new EscrowRuntimeMaintenanceController(cursor, mutationPermit);
             EscrowSavedDataMutationApplier applier = new EscrowSavedDataMutationApplier(
                     transactions, ledger, claims, administrativeAudit, custody, protectedMints,
-                    maintenanceController, AtmWithdrawalApplyFaultInjector.NONE,
-                    mutationPermit);
+                    stock, maintenanceController,
+                    AtmWithdrawalApplyFaultInjector.NONE, mutationPermit);
             EscrowRecoveryScheduler recoveryScheduler = new EscrowRecoveryScheduler(transactions);
             EscrowSavedDataCheckpointBundle checkpointBundle =
                     new EscrowSavedDataCheckpointBundle(
                             transactions, ledger, claims, administrativeAudit, custody,
-                            protectedMints, cursor, server::isSameThread, mutationPermit);
+                            protectedMints, stock, cursor, server::isSameThread,
+                            mutationPermit);
             openedCoordinator = new EscrowRuntimeCoordinator(
                     journalPath(server), cursor, applier,
                     () -> transactions.hasMaterializedState()
@@ -202,12 +224,13 @@ public final class EscrowRuntimeService implements AutoCloseable {
                             || claims.hasMaterializedState()
                             || administrativeAudit.hasMaterializedState()
                             || custody.hasMaterializedState()
-                            || protectedMints.hasMaterializedState(),
+                            || protectedMints.hasMaterializedState()
+                            || stock.hasMaterializedState(),
                     checkpointBundle, mutationPermit);
             openedCoordinator.start(initialRecoveryBatchSize);
             EscrowRuntimeService service = new EscrowRuntimeService(
                     server, openedCoordinator, applier, transactions, ledger, claims, custody,
-                    protectedMints, recoveryScheduler, checkpointBundle,
+                    protectedMints, stock, recoveryScheduler, checkpointBundle,
                     maintenanceController,
                     new PlayerInventoryCustodyAdapter(server, claims),
                     null, null);
@@ -226,8 +249,9 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 }
             }
             return new EscrowRuntimeService(
-                    server, null, null, null, null, null, null, null, null, null, null,
-                    null, EscrowRuntimeState.MAINTENANCE, exception);
+                    server, null, null, null, null, null, null, null, null,
+                    null, null, null, null, EscrowRuntimeState.MAINTENANCE,
+                    exception);
         }
     }
 
@@ -257,6 +281,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
             }
             if (!domainRecoveryInitialized || !protectedCashDiscoveryComplete
                     || !foreignCashDiscoveryComplete
+                    || !paymentHistoryProjector.complete()
                     || !recoveryScheduler.enumerationComplete()
                     || recoveryScheduler.hasRunnableWork()
                     || hasResolvableCustodyRecovery()
@@ -366,6 +391,14 @@ public final class EscrowRuntimeService implements AutoCloseable {
             worked += custodyWork;
             remaining -= custodyWork;
         }
+        if (remaining > 0
+                && recoveryScheduler.enumerationComplete()
+                && !recoveryScheduler.hasRunnableWork()
+                && !paymentHistoryProjector.complete()) {
+            int projected = paymentHistoryProjector.reconcileBatch(remaining);
+            worked += projected;
+            remaining -= projected;
+        }
         if (remaining > 0 && !protectedCashCleanupWork.isEmpty()) {
             worked += recoverOneProtectedCashCleanup();
             remaining--;
@@ -394,6 +427,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
             return !domainRecoveryInitialized
                     || !protectedCashDiscoveryComplete
                     || !foreignCashDiscoveryComplete
+                    || !paymentHistoryProjector.complete()
                     || !recoveryScheduler.enumerationComplete()
                     || !protectedCashCleanupWork.isEmpty()
                     || !foreignCashCleanupWork.isEmpty();
@@ -401,6 +435,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
         return !domainRecoveryInitialized
                 || !protectedCashDiscoveryComplete
                 || !foreignCashDiscoveryComplete
+                || !paymentHistoryProjector.complete()
                 || !recoveryScheduler.enumerationComplete()
                 || recoveryScheduler.hasRunnableWork()
                 || hasResolvableCustodyRecovery()
@@ -770,6 +805,19 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 transactionId, "transactionId"));
     }
 
+    synchronized Optional<ClaimAttemptResult> claimAttempt(
+            String requestKey
+    ) {
+        assertServerThread();
+        return claims.attempt(requestKey);
+    }
+
+    synchronized Optional<EscrowClaim> claim(UUID claimId) {
+        assertServerThread();
+        return Optional.ofNullable(claims.getClaim(
+                Objects.requireNonNull(claimId, "claimId")));
+    }
+
     synchronized EscrowCommitResult createClaim(EscrowClaim claim) {
         assertServerThread();
         Objects.requireNonNull(claim, "claim");
@@ -788,7 +836,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 EscrowJournalEventType.MONEY_CLAIM_SETTLEMENT,
                 MoneyClaimSettlementCodec.encode(settlement));
         EscrowCommitResult result = requireReadyCoordinator().commit(
-                settlement.ledgerTransaction().transactionId(), event);
+                settlement.requestId(), event);
         invalidateConservationAudit();
         return result;
     }
@@ -876,12 +924,19 @@ public final class EscrowRuntimeService implements AutoCloseable {
 
     public synchronized EscrowConservationReport maintenanceConservationReport() {
         assertServerThread();
-        EscrowConservationReport report = verifyConservation();
-        conservationReport = report;
-        conservationFailure = report.conserved() ? null : new EscrowRuntimeException(
-                "Escrow cross domain conservation failed");
-        conservationAuditComplete = true;
-        return report;
+        try {
+            EscrowConservationReport report = verifyConservation();
+            conservationReport = report;
+            conservationFailure = report.conserved() ? null
+                    : new EscrowRuntimeException(
+                    "Escrow cross domain conservation failed");
+            conservationAuditComplete = true;
+            return report;
+        } catch (RuntimeException exception) {
+            conservationFailure = exception;
+            conservationAuditComplete = true;
+            throw exception;
+        }
     }
 
     public synchronized CustodyBatchExecutionResult executeCustodyBatch(
@@ -994,6 +1049,91 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 .commitAtmWithdrawal(commit.requestId(), event);
         invalidateConservationAudit();
         return result;
+    }
+
+    synchronized EscrowCommitResult commitPlayerPayment(
+            PlayerPaymentCommit commit
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(commit, "commit");
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.PLAYER_PAYMENT_COMMIT,
+                PlayerPaymentCommitCodec.encode(commit));
+        EscrowCommitResult result = requireReadyCoordinator()
+                .commitPlayerPayment(commit.transactionId(), event);
+        invalidateConservationAudit();
+        return result;
+    }
+
+    public synchronized StockCommandResult commitStockMutation(
+            StockMutationCommand command
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(command, "command");
+        if (stock == null) {
+            throw new EscrowRuntimeException(
+                    "Escrow stock is unavailable", startupFailure);
+        }
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.STOCK_MUTATION,
+                StockMutationCommandCodec.encode(command));
+        EscrowCommitResult committed = requireReadyCoordinator()
+                .commitStockMutation(command.requestId(), event);
+        invalidateConservationAudit();
+        return stock.resultForRequest(command.requestId(),
+                committed.replayed());
+    }
+
+    public synchronized Optional<CatalogStockState> stockListing(StockKey key) {
+        assertServerThread();
+        if (stock == null) {
+            throw new EscrowRuntimeException(
+                    "Escrow stock is unavailable", startupFailure);
+        }
+        return Optional.ofNullable(stock.listing(
+                Objects.requireNonNull(key, "key")));
+    }
+
+    public synchronized List<StockReservation> stockReservations(
+            UUID transactionId
+    ) {
+        assertServerThread();
+        if (stock == null) {
+            throw new EscrowRuntimeException(
+                    "Escrow stock is unavailable", startupFailure);
+        }
+        return stock.reservationsForTransaction(Objects.requireNonNull(
+                transactionId, "transactionId"));
+    }
+
+    public synchronized Optional<StockMutationReceipt> stockReceipt(
+            UUID requestId
+    ) {
+        assertServerThread();
+        if (stock == null) {
+            throw new EscrowRuntimeException(
+                    "Escrow stock is unavailable", startupFailure);
+        }
+        return Optional.ofNullable(stock.receipt(Objects.requireNonNull(
+                requestId, "requestId")));
+    }
+
+    public synchronized StockStoreSnapshot stockSnapshot() {
+        assertServerThread();
+        if (stock == null) {
+            throw new EscrowRuntimeException(
+                    "Escrow stock is unavailable", startupFailure);
+        }
+        return stock.snapshot();
+    }
+
+    public synchronized StockConservationReport stockConservationReport() {
+        assertServerThread();
+        if (stock == null) {
+            throw new EscrowRuntimeException(
+                    "Escrow stock is unavailable", startupFailure);
+        }
+        return stock.conservation();
     }
 
     public List<CustodyPreparedBatch> unresolvedCustodyRecovery(int limit) {
@@ -1122,6 +1262,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 && protectedCashDiscoveryFailure == null
                 && foreignCashDiscoveryComplete
                 && foreignCashDiscoveryFailure == null
+                && paymentHistoryProjector.complete()
                 && recoveryScheduler.enumerationComplete()
                 && !recoveryScheduler.hasRunnableWork()
                 && !recoveryScheduler.hasBlockingWork()
@@ -1155,15 +1296,27 @@ public final class EscrowRuntimeService implements AutoCloseable {
 
     private boolean startupConservationVerified() {
         if (conservationAuditComplete) {
-            return conservationReport != null && conservationReport.conserved();
+            return conservationFailure == null
+                    && conservationReport != null
+                    && conservationReport.conserved()
+                    && stockConservationReport != null
+                    && stockConservationReport.conserved();
         }
         return maintenanceConservationVerified();
     }
 
     private EscrowConservationReport verifyConservation() {
-        if (ledger == null || claims == null || custody == null || protectedMints == null) {
+        if (ledger == null || claims == null || custody == null
+                || protectedMints == null || stock == null) {
             throw new EscrowRuntimeException(
                     "Escrow cross domain conservation is unavailable", startupFailure);
+        }
+        StockConservationReport verifiedStock = stock.conservation();
+        stockConservationReport = verifiedStock;
+        if (!verifiedStock.conserved()) {
+            throw new EscrowRuntimeException(
+                    "Escrow stock conservation failed. "
+                            + String.join(", ", verifiedStock.violations()));
         }
         return EscrowCrossDomainConservationAudit.verify(
                 ledger, claims, custody, protectedMints);
@@ -1172,6 +1325,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
     private void invalidateConservationAudit() {
         conservationAuditComplete = false;
         conservationReport = null;
+        stockConservationReport = null;
         conservationFailure = null;
     }
 
@@ -1558,6 +1712,10 @@ public final class EscrowRuntimeService implements AutoCloseable {
                                     ownerServer, this,
                                     foreignCashIntentStore,
                                     Clock.systemUTC())));
+            recoveryScheduler.register(
+                    EscrowOperation.PLAYER_PAYMENT,
+                    new PlayerPaymentRecoveryHandler(
+                            this, ledger, claims, Clock.systemUTC()));
             protectedCashDiscoveryWork.addAll(
                     protectedCashIntentStore.discover(ownerServer));
             protectedCashDiscoveryComplete =

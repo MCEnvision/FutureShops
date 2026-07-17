@@ -7,7 +7,8 @@ public enum EscrowCheckpointStore {
     ADMINISTRATIVE_AUDIT(4),
     CUSTODY(5),
     PROTECTED_MINT(6),
-    RUNTIME_METADATA(7);
+    RUNTIME_METADATA(7),
+    STOCK(8);
 
     private final int wireId;
 

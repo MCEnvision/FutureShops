@@ -35,6 +35,11 @@ import com.enviouse.futureshops.server.escrow.model.MoneyAmount;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowPreparedCheckpointRestore;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeSavedData;
 import com.enviouse.futureshops.server.escrow.store.EscrowTransactionSavedData;
+import com.enviouse.futureshops.server.escrow.stock.StockDefinition;
+import com.enviouse.futureshops.server.escrow.stock.StockKey;
+import com.enviouse.futureshops.server.escrow.stock.StockMutationCommand;
+import com.enviouse.futureshops.server.escrow.stock.StockPolicy;
+import com.enviouse.futureshops.server.escrow.stock.StockSavedData;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -61,7 +66,7 @@ class EscrowSavedDataCheckpointBundleTest {
     private static final Instant NOW = Instant.parse("2026-07-17T12:00:00.123456789Z");
 
     @Test
-    void roundTripRestoresNonemptyStateInAllSevenStores() {
+    void roundTripRestoresNonemptyStateInEveryStore() {
         StoreSet source = seededStores("roundtrip.source", lineage("roundtrip.source"), 3L);
         StoreSet live = seededStores("roundtrip.live", lineage("roundtrip.live"), 2L);
         Map<EscrowCheckpointStore, byte[]> expected = source.bundle().captureSnapshots();
@@ -82,6 +87,7 @@ class EscrowSavedDataCheckpointBundleTest {
                 live.custody().getLot(source.custodyLotId()));
         assertEquals(source.protectedMints().getBatch(source.mintBatchId()),
                 live.protectedMints().getBatch(source.mintBatchId()));
+        assertEquals(source.stock().snapshot(), live.stock().snapshot());
         assertEquals(Optional.of(source.lineage()), live.runtimeMetadata().journalLineage());
         assertEquals(source.sequence(), live.runtimeMetadata().lastAppliedSequence());
         assertAllStoresMaterialized(live);
@@ -232,6 +238,7 @@ class EscrowSavedDataCheckpointBundleTest {
                 new EscrowAdministrativeAuditSavedData();
         CustodySavedData custody = new CustodySavedData();
         ProtectedMintSavedData protectedMints = new ProtectedMintSavedData();
+        StockSavedData stock = new StockSavedData();
         EscrowRuntimeSavedData runtimeMetadata = new EscrowRuntimeSavedData();
         AtomicBoolean serverThread = new AtomicBoolean(true);
         UUID transactionId = id(key + ".transaction");
@@ -299,6 +306,11 @@ class EscrowSavedDataCheckpointBundleTest {
                                 + denomination + "." + count);
         protectedMints.authorizeCommitted(mintBatch);
 
+        StockKey stockKey = new StockKey("checkpoint", "minecraft:diamond");
+        stock.applyCommitted(new StockMutationCommand.Seed(
+                id(key + ".stock.seed"), new StockDefinition(stockKey,
+                StockPolicy.limited(12L), "a".repeat(64)), NOW));
+
         runtimeMetadata.establishLineage(lineage, 1L);
         for (long next = 2L; next <= sequence; next++) {
             runtimeMetadata.advance(lineage, next);
@@ -306,9 +318,10 @@ class EscrowSavedDataCheckpointBundleTest {
 
         EscrowSavedDataCheckpointBundle bundle = new EscrowSavedDataCheckpointBundle(
                 transactions, ledger, claims, administrativeAudit, custody,
-                protectedMints, runtimeMetadata, serverThread::get);
+                protectedMints, stock, runtimeMetadata, serverThread::get);
         return new StoreSet(lineage, sequence, transactions, ledger, claims,
-                administrativeAudit, custody, protectedMints, runtimeMetadata,
+                administrativeAudit, custody, protectedMints, stock,
+                runtimeMetadata,
                 serverThread, bundle, transactionId, claimId, auditId,
                 custodyLotId, mintBatchId);
     }
@@ -317,8 +330,9 @@ class EscrowSavedDataCheckpointBundleTest {
             StoreSet stores, int maximumStoreBytes, long maximumAggregateBytes) {
         return new EscrowSavedDataCheckpointBundle(stores.transactions(), stores.ledger(),
                 stores.claims(), stores.administrativeAudit(), stores.custody(),
-                stores.protectedMints(), stores.runtimeMetadata(),
-                stores.serverThread()::get, maximumStoreBytes, maximumAggregateBytes);
+                stores.protectedMints(), stores.stock(),
+                stores.runtimeMetadata(), stores.serverThread()::get,
+                maximumStoreBytes, maximumAggregateBytes, null);
     }
 
     private static void assertAllStoresMaterialized(StoreSet stores) {
@@ -328,6 +342,7 @@ class EscrowSavedDataCheckpointBundleTest {
         assertTrue(stores.administrativeAudit().hasMaterializedState());
         assertTrue(stores.custody().hasMaterializedState());
         assertTrue(stores.protectedMints().hasMaterializedState());
+        assertTrue(stores.stock().hasMaterializedState());
         assertNotNull(stores.runtimeMetadata().journalLineage().orElse(null));
     }
 
@@ -364,6 +379,7 @@ class EscrowSavedDataCheckpointBundleTest {
             EscrowAdministrativeAuditSavedData administrativeAudit,
             CustodySavedData custody,
             ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
             EscrowRuntimeSavedData runtimeMetadata,
             AtomicBoolean serverThread,
             EscrowSavedDataCheckpointBundle bundle,

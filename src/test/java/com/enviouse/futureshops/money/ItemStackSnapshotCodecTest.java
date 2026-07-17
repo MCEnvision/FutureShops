@@ -36,6 +36,17 @@ class ItemStackSnapshotCodecTest {
     void emptyOversizedTruncatedAndTrailingSnapshotsFailClosed() {
         assertThrows(IllegalArgumentException.class,
                 () -> ItemStackSnapshotCodec.encode(ItemStack.EMPTY));
+        ItemStack invalidCount = new ItemStack(Items.STONE, 1);
+        invalidCount.setCount(128);
+        assertThrows(IllegalArgumentException.class,
+                () -> ItemStackSnapshotCodec.encode(invalidCount));
+        ItemStack oversizedTag = new ItemStack(Items.STONE, 1);
+        for (int index = 0; index < 20; index++) {
+            oversizedTag.getOrCreateTag().putString(
+                    "large" + index, "x".repeat(60000));
+        }
+        assertThrows(IllegalArgumentException.class,
+                () -> ItemStackSnapshotCodec.encode(oversizedTag));
         assertThrows(IllegalArgumentException.class,
                 () -> ItemStackSnapshotCodec.decode(new byte[0]));
         assertThrows(IllegalArgumentException.class,

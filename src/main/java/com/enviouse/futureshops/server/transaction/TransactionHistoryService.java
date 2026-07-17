@@ -38,6 +38,42 @@ public final class TransactionHistoryService {
         pushLatestToSubscriber(server, player.getUUID(), ShopDataService.resolveShopId(shopId));
     }
 
+    public static void recordPlayerPayment(
+            MinecraftServer server,
+            UUID payerId,
+            UUID recipientId,
+            UUID transactionId,
+            long amountMinorUnits,
+            Instant occurredAt
+    ) {
+        java.util.Objects.requireNonNull(server, "server");
+        java.util.Objects.requireNonNull(payerId, "payerId");
+        java.util.Objects.requireNonNull(recipientId, "recipientId");
+        java.util.Objects.requireNonNull(transactionId, "transactionId");
+        long occurredAtEpochSeconds = java.util.Objects.requireNonNull(
+                occurredAt, "occurredAt").getEpochSecond();
+        TransactionHistorySavedData data =
+                TransactionHistorySavedData.get(server);
+        String sentMarker = "player.payment.sent." + transactionId;
+        String receivedMarker = "player.payment.received." + transactionId;
+        if (data.appendIfAbsent(payerId, sentMarker,
+                new TransactionHistoryEntry(
+                        occurredAtEpochSeconds, "PAY_SENT",
+                        "futureshops:wallet", 1,
+                        amountMinorUnits,
+                        "Paid " + recipientId, ""))) {
+            pushLatestToSubscriber(server, payerId, "");
+        }
+        if (data.appendIfAbsent(recipientId, receivedMarker,
+                new TransactionHistoryEntry(
+                        occurredAtEpochSeconds, "PAY_RECEIVED",
+                        "futureshops:wallet", 1,
+                        amountMinorUnits,
+                        "Received from " + payerId, ""))) {
+            pushLatestToSubscriber(server, recipientId, "");
+        }
+    }
+
     public static void sendHistoryPage(ServerPlayer player, String requestedShopId, int page, int pageSize,
                                        TransactionHistoryEntry.HistoryFilter filter,
                                        String searchText,
@@ -119,4 +155,3 @@ public final class TransactionHistoryService {
             TransactionHistoryEntry.TimeWindow timeWindow) {
     }
 }
-

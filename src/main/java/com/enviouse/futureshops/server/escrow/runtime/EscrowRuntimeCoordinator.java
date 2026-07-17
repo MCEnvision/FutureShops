@@ -252,6 +252,15 @@ public final class EscrowRuntimeCoordinator implements AutoCloseable {
             throw new IllegalArgumentException(
                     "Cash deposit requires its scoped composite lane");
         }
+        if (event.type()
+                == EscrowJournalEventType.PLAYER_PAYMENT_COMMIT) {
+            throw new IllegalArgumentException(
+                    "Player payment requires its scoped composite lane");
+        }
+        if (event.type() == EscrowJournalEventType.STOCK_MUTATION) {
+            throw new IllegalArgumentException(
+                    "Stock mutation requires its scoped stock lane");
+        }
         return commitReady(transactionId, event);
     }
 
@@ -275,6 +284,35 @@ public final class EscrowRuntimeCoordinator implements AutoCloseable {
         return type == EscrowJournalEventType.ATM_WITHDRAWAL_COMMIT
                 || type == EscrowJournalEventType
                 .FOREIGN_ATM_WITHDRAWAL_COMMIT;
+    }
+
+    synchronized EscrowCommitResult commitPlayerPayment(
+            UUID transactionId,
+            EscrowJournalEvent event
+    ) {
+        Objects.requireNonNull(transactionId, "transactionId");
+        Objects.requireNonNull(event, "event");
+        requireReady();
+        if (event.type()
+                != EscrowJournalEventType.PLAYER_PAYMENT_COMMIT) {
+            throw new IllegalArgumentException(
+                    "Scoped player payment lane only accepts player payment commits");
+        }
+        return commitReady(transactionId, event);
+    }
+
+    synchronized EscrowCommitResult commitStockMutation(
+            UUID requestId,
+            EscrowJournalEvent event
+    ) {
+        Objects.requireNonNull(requestId, "requestId");
+        Objects.requireNonNull(event, "event");
+        requireReady();
+        if (event.type() != EscrowJournalEventType.STOCK_MUTATION) {
+            throw new IllegalArgumentException(
+                    "Scoped stock lane only accepts stock mutations");
+        }
+        return commitReady(requestId, event);
     }
 
     public synchronized EscrowCommitResult commitProtectedCashReservation(

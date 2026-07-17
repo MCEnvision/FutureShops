@@ -14,21 +14,15 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraftforge.common.MinecraftForge;
 import org.slf4j.Logger;
 
-import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
 public class InternalEconomyProvider implements EconomyProvider {
     private static final Logger LOGGER = LogUtils.getLogger();
-    private static final ThreadLocal<Set<UUID>> ACTIVE_ACCOUNTS =
-            ThreadLocal.withInitial(HashSet::new);
-
     public InternalEconomyProvider(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
     }
@@ -336,26 +330,21 @@ public class InternalEconomyProvider implements EconomyProvider {
     private static TransactionResult guarded(List<UUID> playerIds,
                                              UUID primaryPlayer,
                                              Supplier<TransactionResult> operation) {
-        Set<UUID> active = ACTIVE_ACCOUNTS.get();
-        List<UUID> distinct = new ArrayList<>(playerIds.stream().distinct().toList());
-        if (distinct.stream().anyMatch(active::contains)) {
+        java.util.Optional<WalletMutationGuard.Lease> optionalLease =
+                WalletMutationGuard.tryAcquire(playerIds);
+        if (optionalLease.isEmpty()) {
             return TransactionResult.error(
                     ShopResultCode.SERVER_ERROR,
                     currentBalanceWithoutInitialization(primaryPlayer));
         }
-        active.addAll(distinct);
-        try {
+        try (WalletMutationGuard.Lease ignored =
+                     optionalLease.orElseThrow()) {
             return operation.get();
         } catch (RuntimeException exception) {
             LOGGER.error("FutureShops wallet operation failed.", exception);
             return TransactionResult.error(
                     ShopResultCode.SERVER_ERROR,
                     currentBalanceWithoutInitialization(primaryPlayer));
-        } finally {
-            active.removeAll(distinct);
-            if (active.isEmpty()) {
-                ACTIVE_ACCOUNTS.remove();
-            }
         }
     }
 

@@ -169,6 +169,22 @@ public final class EscrowConfig {
             REQUEST_SECURITY_DEFAULTS.atmDeposit().refillPeriod().toMillis(),
             50L, 3600000L);
 
+    private static final ForgeConfigSpec.IntValue REQUEST_SECURITY_PAY_CAPACITY = BUILDER
+        .comment("Player payment request burst capacity per player.")
+        .defineInRange("request_security.pay.capacity",
+            REQUEST_SECURITY_DEFAULTS.pay().capacity(), 1, 1000);
+
+    private static final ForgeConfigSpec.IntValue REQUEST_SECURITY_PAY_REFILL_TOKENS = BUILDER
+        .comment("Player payment tokens restored each refill period. This value cannot exceed capacity.")
+        .defineInRange("request_security.pay.refill_tokens",
+            REQUEST_SECURITY_DEFAULTS.pay().refillTokens(), 1, 1000);
+
+    private static final ForgeConfigSpec.LongValue REQUEST_SECURITY_PAY_REFILL_PERIOD_MILLIS = BUILDER
+        .comment("Player payment token refill period in milliseconds.")
+        .defineInRange("request_security.pay.refill_period_millis",
+            REQUEST_SECURITY_DEFAULTS.pay().refillPeriod().toMillis(),
+            50L, 3600000L);
+
     private static final ForgeConfigSpec.ConfigValue<String> CURRENCY_PHYSICAL_REFUND_POLICY = BUILDER
         .comment(
             Config.FOREIGN_CURRENCY_WARNING,
@@ -258,7 +274,11 @@ public final class EscrowConfig {
             new ServerRequestSecuritySettings.ActionLimit(
                 REQUEST_SECURITY_ATM_DEPOSIT_CAPACITY.get(),
                 REQUEST_SECURITY_ATM_DEPOSIT_REFILL_TOKENS.get(),
-                Duration.ofMillis(REQUEST_SECURITY_ATM_DEPOSIT_REFILL_PERIOD_MILLIS.get()))
+                Duration.ofMillis(REQUEST_SECURITY_ATM_DEPOSIT_REFILL_PERIOD_MILLIS.get())),
+            new ServerRequestSecuritySettings.ActionLimit(
+                REQUEST_SECURITY_PAY_CAPACITY.get(),
+                REQUEST_SECURITY_PAY_REFILL_TOKENS.get(),
+                Duration.ofMillis(REQUEST_SECURITY_PAY_REFILL_PERIOD_MILLIS.get()))
         );
     }
 

@@ -1,7 +1,11 @@
 package com.enviouse.futureshops.server.escrow.checkpoint;
 
+import com.enviouse.futureshops.server.escrow.stock.StockSavedData;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.EnumMap;
 import java.util.Map;
@@ -14,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EscrowCheckpointCodecTest {
     @Test
-    void roundTripPreservesAllSevenOpaqueStoresExactly() {
+    void roundTripPreservesEveryOpaqueStoreExactly() {
         EscrowCheckpoint checkpoint = EscrowCheckpointTestFixtures.firstCheckpoint();
         byte[] encoded = EscrowCheckpointCodec.encode(checkpoint);
         EscrowCheckpoint decoded = EscrowCheckpointCodec.decode(encoded);
@@ -110,10 +114,36 @@ class EscrowCheckpointCodecTest {
         byte[] newer = EscrowCheckpointCodec.encode(
                 EscrowCheckpointTestFixtures.firstCheckpoint());
         newer[4] = 0;
-        newer[5] = 2;
+        newer[5] = (byte) (EscrowCheckpointCodec.FORMAT_VERSION + 1);
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
                 () -> EscrowCheckpointCodec.decode(newer));
         assertTrue(failure.getCause().getMessage().contains("newer"));
+    }
+
+    @Test
+    void legacySevenStoreCheckpointRestoresWithEmptyConservedStock()
+            throws IOException {
+        Map<EscrowCheckpointStore, byte[]> snapshots =
+                EscrowCheckpointTestFixtures.snapshots("legacy");
+        byte[] encoded = encodeLegacyCheckpoint(snapshots);
+
+        EscrowCheckpoint decoded = EscrowCheckpointCodec.decode(encoded);
+
+        assertEquals(EscrowCheckpointTestFixtures.FIRST_CHECKPOINT,
+                decoded.checkpointId());
+        for (EscrowCheckpointStore store : EscrowCheckpointStore.values()) {
+            if (store != EscrowCheckpointStore.STOCK) {
+                assertArrayEquals(snapshots.get(store),
+                        decoded.snapshot(store));
+            }
+        }
+        StockSavedData stock = StockSavedData.load(
+                EscrowCheckpointComponentCodec.decode(
+                        EscrowCheckpointStore.STOCK,
+                        decoded.snapshot(EscrowCheckpointStore.STOCK),
+                        EscrowCheckpoint.MAX_STORE_BYTES));
+        assertTrue(stock.snapshot().listings().isEmpty());
+        assertTrue(stock.conservation().conserved());
     }
 
     @Test
@@ -139,5 +169,40 @@ class EscrowCheckpointCodecTest {
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
                 () -> EscrowCheckpointReferenceCodec.decode(encoded));
         assertTrue(failure.getMessage().contains("newer"));
+    }
+
+    private static byte[] encodeLegacyCheckpoint(
+            Map<EscrowCheckpointStore, byte[]> snapshots
+    ) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        DataOutputStream output = new DataOutputStream(bytes);
+        output.writeInt(0x46534350);
+        output.writeShort(1);
+        output.writeShort(0);
+        writeUuid(output, EscrowCheckpointTestFixtures.FIRST_CHECKPOINT);
+        writeUuid(output, EscrowCheckpointTestFixtures.SOURCE_LINEAGE);
+        writeUuid(output, EscrowCheckpointTestFixtures.FIRST_LINEAGE);
+        output.writeLong(41L);
+        output.writeLong(
+                EscrowCheckpointTestFixtures.CREATED_AT.getEpochSecond());
+        output.writeInt(EscrowCheckpointTestFixtures.CREATED_AT.getNano());
+        output.writeInt(7);
+        for (EscrowCheckpointStore store : EscrowCheckpointStore.values()) {
+            if (store == EscrowCheckpointStore.STOCK) {
+                continue;
+            }
+            byte[] snapshot = snapshots.get(store);
+            output.writeInt(store.wireId());
+            output.writeInt(snapshot.length);
+            output.write(snapshot);
+        }
+        output.flush();
+        return bytes.toByteArray();
+    }
+
+    private static void writeUuid(DataOutputStream output, java.util.UUID value)
+            throws IOException {
+        output.writeLong(value.getMostSignificantBits());
+        output.writeLong(value.getLeastSignificantBits());
     }
 }

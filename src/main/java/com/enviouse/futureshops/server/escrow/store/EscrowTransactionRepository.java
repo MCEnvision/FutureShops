@@ -19,6 +19,9 @@ public final class EscrowTransactionRepository {
     private final int maximumRecords;
     private final Map<EscrowTransactionId, EscrowTransaction> transactions = new LinkedHashMap<>();
     private final Map<EscrowRequestKey, EscrowTransactionId> requestKeys = new LinkedHashMap<>();
+    private final NavigableMap<EscrowTransactionId, EscrowTransaction>
+            orderedTransactions = new TreeMap<>(
+            Comparator.comparing(EscrowTransactionId::toString));
     private final NavigableMap<EscrowTransactionId, EscrowTransaction> recoveryCandidates =
             new TreeMap<>(Comparator.comparing(EscrowTransactionId::toString));
 
@@ -77,6 +80,18 @@ public final class EscrowTransactionRepository {
         return evaluateFoldedRefund(held, refunded, false);
     }
 
+    public synchronized EscrowStoreApplyResult applyFoldedAtomicCompletion(
+            EscrowTransaction completed
+    ) {
+        return evaluateFoldedAtomicCompletion(completed, true);
+    }
+
+    public synchronized EscrowStoreApplyResult preflightFoldedAtomicCompletion(
+            EscrowTransaction completed
+    ) {
+        return evaluateFoldedAtomicCompletion(completed, false);
+    }
+
     private EscrowStoreApplyResult evaluate(EscrowTransaction incoming, boolean commit) {
         Objects.requireNonNull(incoming, "incoming");
         EscrowTransactionNbtCodec.validateBounds(incoming);
@@ -90,6 +105,7 @@ public final class EscrowTransactionRepository {
             requireCapacity();
             if (commit) {
                 transactions.put(incoming.transactionId(), incoming);
+                orderedTransactions.put(incoming.transactionId(), incoming);
                 requestKeys.put(incoming.requestKey(), incoming.transactionId());
                 recoveryCandidates.put(incoming.transactionId(), incoming);
             }
@@ -124,6 +140,7 @@ public final class EscrowTransactionRepository {
         }
         if (commit) {
             transactions.put(incoming.transactionId(), incoming);
+            orderedTransactions.put(incoming.transactionId(), incoming);
             if (incoming.state().isTerminal()) {
                 recoveryCandidates.remove(incoming.transactionId());
             } else {
@@ -190,6 +207,7 @@ public final class EscrowTransactionRepository {
         }
         if (commit) {
             transactions.put(incoming.transactionId(), incoming);
+            orderedTransactions.put(incoming.transactionId(), incoming);
             requestKeys.put(incoming.requestKey(), incoming.transactionId());
             recoveryCandidates.put(incoming.transactionId(), incoming);
         }
@@ -255,6 +273,7 @@ public final class EscrowTransactionRepository {
         }
         if (commit) {
             transactions.put(completed.transactionId(), completed);
+            orderedTransactions.put(completed.transactionId(), completed);
             recoveryCandidates.remove(completed.transactionId());
         }
         return new EscrowStoreApplyResult(completed, true, false);
@@ -316,9 +335,97 @@ public final class EscrowTransactionRepository {
         }
         if (commit) {
             transactions.put(refunded.transactionId(), refunded);
+            orderedTransactions.put(refunded.transactionId(), refunded);
             recoveryCandidates.remove(refunded.transactionId());
         }
         return new EscrowStoreApplyResult(refunded, true, false);
+    }
+
+    private EscrowStoreApplyResult evaluateFoldedAtomicCompletion(
+            EscrowTransaction completed,
+            boolean commit
+    ) {
+        Objects.requireNonNull(completed, "completed");
+        EscrowTransactionNbtCodec.validateBounds(completed);
+        if (completed.state() != EscrowState.COMPLETED) {
+            throw new EscrowStoreConflictException(
+                    "Folded atomic escrow completion must end completed");
+        }
+        EscrowTransactionId requestOwner = requestKeys.get(
+                completed.requestKey());
+        if (requestOwner != null
+                && !requestOwner.equals(completed.transactionId())) {
+            throw new EscrowStoreConflictException(
+                    "Escrow request key belongs to another transaction");
+        }
+        java.time.Instant decisionAt = completed.timestamps()
+                .commitDecidedAt().orElseThrow(() ->
+                        new EscrowStoreConflictException(
+                                "Folded atomic completion lacks a decision time"));
+        java.time.Instant terminalAt = completed.timestamps()
+                .terminalAt().orElseThrow(() ->
+                        new EscrowStoreConflictException(
+                                "Folded atomic completion lacks a terminal time"));
+        List<EscrowTransaction> lifecycle;
+        try {
+            EscrowTransaction created = EscrowTransaction.create(
+                    completed.transactionId(),
+                    completed.parentTransactionId(),
+                    completed.requestKey(),
+                    completed.operation(),
+                    completed.participants(),
+                    completed.assetLots(),
+                    completed.timestamps().createdAt(),
+                    completed.configRevision(),
+                    completed.shopReference());
+            EscrowTransaction validated = created.transitionTo(
+                    EscrowState.VALIDATED, decisionAt);
+            EscrowTransaction holding = validated.transitionTo(
+                    EscrowState.HOLDING, decisionAt);
+            EscrowTransaction held = holding.transitionTo(
+                    EscrowState.HELD, decisionAt);
+            EscrowTransaction decided = held.transitionTo(
+                    EscrowState.COMMIT_DECIDED, decisionAt);
+            EscrowTransaction committed = decided.transitionTo(
+                    EscrowState.COMMITTED, decisionAt);
+            EscrowTransaction claimsCreated = committed.transitionTo(
+                    EscrowState.CLAIMS_CREATED, decisionAt);
+            EscrowTransaction terminal = claimsCreated.transitionTo(
+                    EscrowState.COMPLETED, terminalAt);
+            lifecycle = List.of(created, validated, holding, held, decided,
+                    committed, claimsCreated, terminal);
+        } catch (RuntimeException exception) {
+            throw new EscrowStoreConflictException(
+                    "Folded atomic completion transition is invalid",
+                    exception);
+        }
+        if (!lifecycle.get(lifecycle.size() - 1).equals(completed)) {
+            throw new EscrowStoreConflictException(
+                    "Folded atomic completion does not match its lifecycle");
+        }
+        EscrowTransaction existing = transactions.get(
+                completed.transactionId());
+        if (existing != null) {
+            requireImmutableFields(existing, completed);
+            if (existing.equals(completed)) {
+                return new EscrowStoreApplyResult(
+                        completed, false, true);
+            }
+            if (!lifecycle.contains(existing)) {
+                throw new EscrowStoreConflictException(
+                        "Folded atomic completion conflicts with persisted state");
+            }
+        } else {
+            requireCapacity();
+        }
+        if (commit) {
+            transactions.put(completed.transactionId(), completed);
+            orderedTransactions.put(completed.transactionId(), completed);
+            requestKeys.put(completed.requestKey(),
+                    completed.transactionId());
+            recoveryCandidates.remove(completed.transactionId());
+        }
+        return new EscrowStoreApplyResult(completed, true, false);
     }
 
     public synchronized EscrowTransaction get(EscrowTransactionId transactionId) {
@@ -332,6 +439,21 @@ public final class EscrowTransactionRepository {
 
     public synchronized Map<EscrowTransactionId, EscrowTransaction> snapshot() {
         return Map.copyOf(transactions);
+    }
+
+    public synchronized List<EscrowTransaction> transactionsAfter(
+            Optional<EscrowTransactionId> after,
+            int limit
+    ) {
+        Objects.requireNonNull(after, "after");
+        if (limit <= 0 || limit > maximumRecords) {
+            throw new IllegalArgumentException(
+                    "Escrow transaction scan limit is invalid");
+        }
+        NavigableMap<EscrowTransactionId, EscrowTransaction> source =
+                after.map(value -> orderedTransactions.tailMap(
+                        value, false)).orElse(orderedTransactions);
+        return source.values().stream().limit(limit).toList();
     }
 
     public synchronized int size() {
@@ -373,7 +495,9 @@ public final class EscrowTransactionRepository {
             }
         }
         transactions.clear();
+        orderedTransactions.clear();
         transactions.putAll(restoredTransactions);
+        orderedTransactions.putAll(restoredTransactions);
         requestKeys.clear();
         requestKeys.putAll(restoredRequestKeys);
         recoveryCandidates.clear();

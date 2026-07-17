@@ -10,6 +10,7 @@ import com.enviouse.futureshops.server.escrow.runtime.EscrowPreparedCheckpointRe
 import com.enviouse.futureshops.server.escrow.runtime.EscrowMutationPermit;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeSavedData;
 import com.enviouse.futureshops.server.escrow.store.EscrowTransactionSavedData;
+import com.enviouse.futureshops.server.escrow.stock.StockSavedData;
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.Collections;
@@ -27,6 +28,7 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
     private final EscrowAdministrativeAuditSavedData administrativeAudit;
     private final CustodySavedData custody;
     private final ProtectedMintSavedData protectedMints;
+    private final StockSavedData stock;
     private final EscrowRuntimeSavedData runtimeMetadata;
     private final BooleanSupplier serverThreadCheck;
     private final int maximumStoreBytes;
@@ -44,7 +46,8 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
             EscrowRuntimeSavedData runtimeMetadata,
             BooleanSupplier serverThreadCheck) {
         this(transactions, ledger, claims, administrativeAudit, custody, protectedMints,
-                runtimeMetadata, serverThreadCheck, EscrowCheckpoint.MAX_STORE_BYTES,
+                new StockSavedData(), runtimeMetadata, serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
                 EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES, null);
     }
 
@@ -59,7 +62,42 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
             BooleanSupplier serverThreadCheck,
             EscrowMutationPermit mutationPermit) {
         this(transactions, ledger, claims, administrativeAudit, custody, protectedMints,
-                runtimeMetadata, serverThreadCheck, EscrowCheckpoint.MAX_STORE_BYTES,
+                new StockSavedData(), runtimeMetadata, serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
+                EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES,
+                Objects.requireNonNull(mutationPermit, "mutationPermit"));
+    }
+
+    public EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, runtimeMetadata, serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
+                EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES, null);
+    }
+
+    public EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, runtimeMetadata, serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
                 EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES,
                 Objects.requireNonNull(mutationPermit, "mutationPermit"));
     }
@@ -76,7 +114,8 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
             int maximumStoreBytes,
             long maximumAggregateBytes) {
         this(transactions, ledger, claims, administrativeAudit, custody, protectedMints,
-                runtimeMetadata, serverThreadCheck, maximumStoreBytes,
+                new StockSavedData(), runtimeMetadata, serverThreadCheck,
+                maximumStoreBytes,
                 maximumAggregateBytes, null);
     }
 
@@ -92,6 +131,25 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
             int maximumStoreBytes,
             long maximumAggregateBytes,
             EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, new StockSavedData(), runtimeMetadata,
+                serverThreadCheck, maximumStoreBytes, maximumAggregateBytes,
+                mutationPermit);
+    }
+
+    EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            int maximumStoreBytes,
+            long maximumAggregateBytes,
+            EscrowMutationPermit mutationPermit) {
         this.transactions = Objects.requireNonNull(transactions, "transactions");
         this.ledger = Objects.requireNonNull(ledger, "ledger");
         this.claims = Objects.requireNonNull(claims, "claims");
@@ -99,6 +157,7 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
                 "administrativeAudit");
         this.custody = Objects.requireNonNull(custody, "custody");
         this.protectedMints = Objects.requireNonNull(protectedMints, "protectedMints");
+        this.stock = Objects.requireNonNull(stock, "stock");
         this.runtimeMetadata = Objects.requireNonNull(runtimeMetadata, "runtimeMetadata");
         this.serverThreadCheck = Objects.requireNonNull(serverThreadCheck,
                 "serverThreadCheck");
@@ -137,6 +196,9 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
             snapshots.put(EscrowCheckpointStore.PROTECTED_MINT,
                     encode(EscrowCheckpointStore.PROTECTED_MINT,
                             protectedMints.save(new CompoundTag())));
+            snapshots.put(EscrowCheckpointStore.STOCK,
+                    encode(EscrowCheckpointStore.STOCK,
+                            stock.save(new CompoundTag())));
             snapshots.put(EscrowCheckpointStore.RUNTIME_METADATA,
                     encode(EscrowCheckpointStore.RUNTIME_METADATA,
                             runtimeMetadata.save(new CompoundTag())));
@@ -190,11 +252,14 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
                 CustodySavedData::load);
         ProtectedMintSavedData decodedMints = load(EscrowCheckpointStore.PROTECTED_MINT,
                 snapshots, ProtectedMintSavedData::load);
+        StockSavedData decodedStock = load(EscrowCheckpointStore.STOCK,
+                snapshots, StockSavedData::load);
         EscrowRuntimeSavedData decodedRuntime = load(
                 EscrowCheckpointStore.RUNTIME_METADATA, snapshots,
                 EscrowRuntimeSavedData::load);
         return new PreparedStores(decodedTransactions, decodedLedger, decodedClaims,
-                decodedAudit, decodedCustody, decodedMints, decodedRuntime);
+                decodedAudit, decodedCustody, decodedMints, decodedStock,
+                decodedRuntime);
     }
 
     private <T> T load(EscrowCheckpointStore store,
@@ -281,6 +346,7 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
         administrativeAudit.replaceFromValidated(prepared.administrativeAudit());
         custody.replaceFromValidated(prepared.custody());
         protectedMints.replaceFromValidated(prepared.protectedMints());
+        stock.replaceFromValidated(prepared.stock());
         runtimeMetadata.replaceFromValidated(prepared.runtimeMetadata());
     }
 
@@ -306,6 +372,7 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
             EscrowAdministrativeAuditSavedData administrativeAudit,
             CustodySavedData custody,
             ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
             EscrowRuntimeSavedData runtimeMetadata) {
     }
 

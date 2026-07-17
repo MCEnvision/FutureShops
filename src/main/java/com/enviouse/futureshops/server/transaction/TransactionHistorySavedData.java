@@ -4,6 +4,7 @@ import com.enviouse.futureshops.data.TransactionHistoryEntry;
 import com.enviouse.futureshops.server.SavedDataMigrations;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -13,15 +14,19 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 /** Persistent per-player transaction history scaffold. */
 public final class TransactionHistorySavedData extends SavedData {
     public static final String DATA_NAME = "futureshops_tx_history";
-    private static final int CURRENT_VERSION = 2; // v2: added per-entry "nbt" key (SNBT string, "" = none)
+    private static final int CURRENT_VERSION = 3;
     private static final int MAX_ENTRIES_PER_PLAYER = 200;
 
     private final Map<UUID, List<TransactionHistoryEntry>> entriesByPlayer = new HashMap<>();
+    private final Map<UUID, Set<String>> idempotencyMarkersByPlayer =
+            new HashMap<>();
 
     public static TransactionHistorySavedData load(CompoundTag tag) {
         TransactionHistorySavedData data = new TransactionHistorySavedData();
@@ -49,6 +54,26 @@ public final class TransactionHistorySavedData extends SavedData {
             }
             data.entriesByPlayer.put(uuid, entries);
         }
+        ListTag markerOwners = tag.getList(
+                "idempotency_markers", Tag.TAG_COMPOUND);
+        for (Tag ownerTag : markerOwners) {
+            CompoundTag owner = (CompoundTag) ownerTag;
+            if (!owner.hasUUID("uuid")) {
+                continue;
+            }
+            Set<String> markers = new HashSet<>();
+            for (Tag markerTag : owner.getList(
+                    "markers", Tag.TAG_STRING)) {
+                String marker = markerTag.getAsString();
+                if (!marker.isBlank()) {
+                    markers.add(marker);
+                }
+            }
+            if (!markers.isEmpty()) {
+                data.idempotencyMarkersByPlayer.put(
+                        owner.getUUID("uuid"), markers);
+            }
+        }
         return data;
     }
 
@@ -75,6 +100,19 @@ public final class TransactionHistorySavedData extends SavedData {
             players.add(playerTag);
         }
         tag.put("players", players);
+        ListTag markerOwners = new ListTag();
+        for (Map.Entry<UUID, Set<String>> entry
+                : idempotencyMarkersByPlayer.entrySet()) {
+            CompoundTag owner = new CompoundTag();
+            owner.putUUID("uuid", entry.getKey());
+            ListTag markers = new ListTag();
+            entry.getValue().stream().sorted()
+                    .map(StringTag::valueOf)
+                    .forEach(markers::add);
+            owner.put("markers", markers);
+            markerOwners.add(owner);
+        }
+        tag.put("idempotency_markers", markerOwners);
         return tag;
     }
 
@@ -93,6 +131,38 @@ public final class TransactionHistorySavedData extends SavedData {
             entries.subList(MAX_ENTRIES_PER_PLAYER, entries.size()).clear();
         }
         setDirty();
+    }
+
+    public synchronized boolean appendIfAbsent(
+            UUID playerUUID,
+            String idempotencyMarker,
+            TransactionHistoryEntry entry
+    ) {
+        String marker = java.util.Objects.requireNonNull(
+                idempotencyMarker, "idempotencyMarker");
+        if (marker.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Transaction history marker cannot be blank");
+        }
+        UUID owner = java.util.Objects.requireNonNull(
+                playerUUID, "playerUUID");
+        TransactionHistoryEntry historyEntry =
+                java.util.Objects.requireNonNull(entry, "entry");
+        Set<String> markers = idempotencyMarkersByPlayer
+                .computeIfAbsent(owner, ignored -> new HashSet<>());
+        if (!markers.add(marker)) {
+            return false;
+        }
+        List<TransactionHistoryEntry> entries = entriesByPlayer
+                .computeIfAbsent(owner,
+                        ignored -> new ArrayList<>());
+        entries.add(0, historyEntry);
+        if (entries.size() > MAX_ENTRIES_PER_PLAYER) {
+            entries.subList(MAX_ENTRIES_PER_PLAYER,
+                    entries.size()).clear();
+        }
+        setDirty();
+        return true;
     }
 
     public List<TransactionHistoryEntry> getPage(UUID playerUUID, int page, int pageSize) {
@@ -178,4 +248,3 @@ public final class TransactionHistorySavedData extends SavedData {
         return snapshot;
     }
 }
-

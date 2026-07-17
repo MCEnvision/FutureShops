@@ -221,6 +221,10 @@ public final class ClaimRepository {
         return claims.get(claimId);
     }
 
+    public synchronized ClaimAttemptResult getAttempt(String requestKey) {
+        return attempts.get(requireRequestKey(requestKey));
+    }
+
     public synchronized ClaimMaintenanceApplyResult preflightMaintenanceReplace(
             EscrowClaim replacement
     ) {

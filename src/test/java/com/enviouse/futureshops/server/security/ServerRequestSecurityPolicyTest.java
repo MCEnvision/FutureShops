@@ -32,6 +32,8 @@ class ServerRequestSecurityPolicyTest {
                 2, 1, Duration.ofSeconds(2L));
         assertLimit(defaults, ServerRequestAction.ATM_DEPOSIT,
                 2, 1, Duration.ofSeconds(2L));
+        assertLimit(defaults, ServerRequestAction.PAY,
+                4, 1, Duration.ofSeconds(1L));
     }
 
     @Test
@@ -54,6 +56,8 @@ class ServerRequestSecurityPolicyTest {
                 ServerRequestAction.ATM_CASH_COLLECTION.code()).allowed());
         assertTrue(limiter.tryAcquire(PLAYER,
                 ServerRequestAction.ATM_DEPOSIT.code()).allowed());
+        assertTrue(limiter.tryAcquire(PLAYER,
+                ServerRequestAction.PAY.code()).allowed());
 
         clock.now = Duration.ofSeconds(2L).toNanos();
         assertTrue(limiter.tryAcquire(PLAYER,

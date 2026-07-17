@@ -64,6 +64,7 @@ class EconomyWalletCutoverContractTest {
     @Test
     void transferPostsBothPreEventsBeforeOneWalletCommit() throws Exception {
         String provider = read("src/main/java/com/enviouse/futureshops/server/economy/InternalEconomyProvider.java");
+        String guard = read("src/main/java/com/enviouse/futureshops/server/economy/WalletMutationGuard.java");
         int senderPre = provider.indexOf("BalanceChangeEvent.Pre senderPre");
         int recipientPre = provider.indexOf("BalanceChangeEvent.Pre recipientPre");
         int senderDispatch = provider.indexOf("postPre(senderPre)", senderPre);
@@ -79,7 +80,8 @@ class EconomyWalletCutoverContractTest {
         assertTrue(commit > recipientDispatch);
         assertTrue(postGate > commit);
         assertTrue(senderPost > postGate && recipientPost > senderPost);
-        assertTrue(provider.contains("ACTIVE_ACCOUNTS"));
+        assertTrue(provider.contains("WalletMutationGuard.tryAcquire"));
+        assertTrue(guard.contains("ACTIVE_ACCOUNTS"));
     }
 
     @Test

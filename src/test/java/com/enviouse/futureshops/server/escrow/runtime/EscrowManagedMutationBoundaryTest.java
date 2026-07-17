@@ -15,6 +15,7 @@ import com.enviouse.futureshops.server.escrow.ledger.LedgerSavedData;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerTransaction;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintSavedData;
 import com.enviouse.futureshops.server.escrow.store.EscrowTransactionSavedData;
+import com.enviouse.futureshops.server.escrow.stock.StockSavedData;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -66,6 +67,8 @@ class EscrowManagedMutationBoundaryTest {
         assertRejected(() -> stores.custody().replaceFromValidated(null));
         assertRejected(() -> stores.protectedMints().applyCommitted(null));
         assertRejected(() -> stores.protectedMints().replaceFromValidated(null));
+        assertRejected(() -> stores.stock().applyCommitted(null));
+        assertRejected(() -> stores.stock().replaceFromValidated(null));
         assertRejected(() -> stores.runtimeMetadata().establishLineage(null, 1L));
         assertRejected(() -> stores.runtimeMetadata().advance(null, 2L));
         assertRejected(() -> stores.runtimeMetadata().adoptTrustedCheckpoint(null));
@@ -234,6 +237,7 @@ class EscrowManagedMutationBoundaryTest {
                 EscrowAdministrativeAuditSavedData.class,
                 CustodySavedData.class,
                 ProtectedMintSavedData.class,
+                StockSavedData.class,
                 EscrowRuntimeSavedData.class)) {
             assertTrue(EscrowManagedSavedData.class.isAssignableFrom(type), type.getName());
         }
@@ -248,6 +252,7 @@ class EscrowManagedMutationBoundaryTest {
         stores.administrativeAudit.bindManagedMutationPermit(permit);
         stores.custody.bindManagedMutationPermit(permit);
         stores.protectedMints.bindManagedMutationPermit(permit);
+        stores.stock.bindManagedMutationPermit(permit);
         return new ManagedStores(stores, permit);
     }
 
@@ -282,12 +287,13 @@ class EscrowManagedMutationBoundaryTest {
                 new EscrowAdministrativeAuditSavedData();
         private final CustodySavedData custody = new CustodySavedData();
         private final ProtectedMintSavedData protectedMints = new ProtectedMintSavedData();
+        private final StockSavedData stock = new StockSavedData();
         private final EscrowRuntimeSavedData runtimeMetadata = new EscrowRuntimeSavedData();
 
         private EscrowSavedDataCheckpointBundle bundle() {
             return new EscrowSavedDataCheckpointBundle(
                     transactions, ledger, claims, administrativeAudit, custody,
-                    protectedMints, runtimeMetadata, () -> true);
+                    protectedMints, stock, runtimeMetadata, () -> true);
         }
     }
 
@@ -316,6 +322,10 @@ class EscrowManagedMutationBoundaryTest {
             return stores.protectedMints;
         }
 
+        private StockSavedData stock() {
+            return stores.stock;
+        }
+
         private EscrowRuntimeSavedData runtimeMetadata() {
             return stores.runtimeMetadata;
         }
@@ -323,14 +333,16 @@ class EscrowManagedMutationBoundaryTest {
         private EscrowSavedDataMutationApplier applier() {
             return new EscrowSavedDataMutationApplier(
                     transactions(), ledger(), claims(), administrativeAudit(), custody(),
-                    protectedMints(), MaintenanceRuntimeMutationHandler.unavailable(),
+                    protectedMints(), stock(),
+                    MaintenanceRuntimeMutationHandler.unavailable(),
                     AtmWithdrawalApplyFaultInjector.NONE, permit);
         }
 
         private EscrowSavedDataCheckpointBundle bundle() {
             return new EscrowSavedDataCheckpointBundle(
                     transactions(), ledger(), claims(), administrativeAudit(), custody(),
-                    protectedMints(), runtimeMetadata(), () -> true, permit);
+                    protectedMints(), stock(), runtimeMetadata(), () -> true,
+                    permit);
         }
     }
 }

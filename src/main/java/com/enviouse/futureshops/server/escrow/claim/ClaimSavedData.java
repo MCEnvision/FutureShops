@@ -227,6 +227,13 @@ public final class ClaimSavedData extends EscrowManagedSavedData {
         return repository.get(claimId);
     }
 
+    public synchronized java.util.Optional<ClaimAttemptResult> attempt(
+            String requestKey
+    ) {
+        return java.util.Optional.ofNullable(
+                repository.getAttempt(requestKey));
+    }
+
     public synchronized ClaimMaintenanceApplyResult preflightMaintenanceReplace(
             EscrowClaim replacement
     ) {

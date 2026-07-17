@@ -37,6 +37,9 @@ import com.enviouse.futureshops.server.escrow.store.EscrowTransactionByteCodec;
 import com.enviouse.futureshops.server.escrow.store.EscrowTransactionSavedData;
 import com.enviouse.futureshops.server.escrow.model.EscrowState;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransactionId;
+import com.enviouse.futureshops.server.escrow.stock.StockMutationCommand;
+import com.enviouse.futureshops.server.escrow.stock.StockMutationCommandCodec;
+import com.enviouse.futureshops.server.escrow.stock.StockSavedData;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -48,6 +51,7 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
     private final EscrowAdministrativeAuditSavedData administrativeAudit;
     private final CustodySavedData custody;
     private final ProtectedMintSavedData protectedMints;
+    private final StockSavedData stock;
     private final MaintenanceRepairProcessor maintenanceRepairs;
     private final AtmWithdrawalApplyFaultInjector atmWithdrawalFaults;
     private final EscrowMutationPermit mutationPermit;
@@ -111,12 +115,27 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
                                    MaintenanceRuntimeMutationHandler runtimeHandler,
                                    AtmWithdrawalApplyFaultInjector atmWithdrawalFaults,
                                    EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, new StockSavedData(), runtimeHandler,
+                atmWithdrawalFaults, mutationPermit);
+    }
+
+    EscrowSavedDataMutationApplier(EscrowTransactionSavedData transactions,
+                                   LedgerSavedData ledger, ClaimSavedData claims,
+                                   EscrowAdministrativeAuditSavedData administrativeAudit,
+                                   CustodySavedData custody,
+                                   ProtectedMintSavedData protectedMints,
+                                   StockSavedData stock,
+                                   MaintenanceRuntimeMutationHandler runtimeHandler,
+                                   AtmWithdrawalApplyFaultInjector atmWithdrawalFaults,
+                                   EscrowMutationPermit mutationPermit) {
         this.transactions = Objects.requireNonNull(transactions, "transactions");
         this.ledger = Objects.requireNonNull(ledger, "ledger");
         this.claims = Objects.requireNonNull(claims, "claims");
         this.administrativeAudit = Objects.requireNonNull(administrativeAudit, "administrativeAudit");
         this.custody = Objects.requireNonNull(custody, "custody");
         this.protectedMints = Objects.requireNonNull(protectedMints, "protectedMints");
+        this.stock = Objects.requireNonNull(stock, "stock");
         this.maintenanceRepairs = new MaintenanceRepairProcessor(transactions, claims,
                 administrativeAudit, custody, runtimeHandler);
         this.atmWithdrawalFaults = Objects.requireNonNull(
@@ -186,6 +205,10 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
             case FOREIGN_CASH_DEPOSIT_CANCELLATION ->
                     preflightForeignCashCancellation(
                             transactionId, event.body());
+            case PLAYER_PAYMENT_COMMIT -> preflightPlayerPayment(
+                    transactionId, event.body());
+            case STOCK_MUTATION -> preflightStockMutation(
+                    transactionId, event.body());
             case JOURNAL_LINEAGE -> throw new EscrowRuntimeException(
                     "Journal lineage cannot be preflighted as a mutation");
         };
@@ -235,6 +258,10 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
                     applyForeignCashSettlement(record, event.body());
             case FOREIGN_CASH_DEPOSIT_CANCELLATION ->
                     applyForeignCashCancellation(record, event.body());
+            case PLAYER_PAYMENT_COMMIT ->
+                    applyPlayerPayment(record, event.body());
+            case STOCK_MUTATION ->
+                    applyStockMutation(record, event.body());
             case JOURNAL_LINEAGE -> throw new EscrowRuntimeException(
                     "Journal lineage cannot be applied as a mutation");
         }
@@ -244,6 +271,21 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
         EscrowTransaction transaction = EscrowTransactionByteCodec.decode(body);
         requireRecordIdentity(record, transaction.transactionId().value());
         transactions.applyCommitted(transaction);
+    }
+
+    private void applyStockMutation(JournalRecord record, byte[] body) {
+        StockMutationCommand command = StockMutationCommandCodec.decode(body);
+        requireRecordIdentity(record, command.requestId());
+        stock.applyCommitted(command);
+    }
+
+    private EscrowPreflightResult preflightStockMutation(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        StockMutationCommand command = StockMutationCommandCodec.decode(body);
+        requireRecordIdentity(recordTransactionId, command.requestId());
+        return result(stock.preflightCommitted(command).replayed());
     }
 
     private EscrowPreflightResult preflightTransaction(UUID recordTransactionId, byte[] body) {
@@ -706,7 +748,7 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
         if (claim.kind() != ClaimKind.MONEY) {
             throw new EscrowRuntimeException("Money claim settlement references a non money claim");
         }
-        requireRecordIdentity(record, settlement.ledgerTransaction().transactionId());
+        requireRecordIdentity(record, settlement.requestId());
         ledger.applyCommitted(settlement.ledgerTransaction());
         ClaimAttemptResult result = claims.deliverCommitted(
                 delivery.ownerId(), delivery.claimId(), delivery.requestKey(), delivery.units(),
@@ -722,17 +764,43 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
         if (claim.kind() != ClaimKind.MONEY) {
             throw new EscrowRuntimeException("Money claim settlement references a non money claim");
         }
-        requireRecordIdentity(recordTransactionId, settlement.ledgerTransaction().transactionId());
+        requireRecordIdentity(recordTransactionId, settlement.requestId());
         boolean ledgerReplay = ledger.preflightCommitted(
                 settlement.ledgerTransaction()).replayed();
         ClaimAttemptResult claimResult = claims.preflightDeliveryCommitted(
                 delivery.ownerId(), delivery.claimId(), delivery.requestKey(), delivery.units(),
                 delivery.deliveredAt());
         requireDeliveredUnits(claimResult, delivery.units());
-        if (ledgerReplay != claimResult.replayed()) {
-            throw new EscrowRuntimeException("Money claim settlement is only partially materialized");
+        CompositeMaterialization materialization =
+                new CompositeMaterialization();
+        materialization.accept(ledgerReplay);
+        materialization.accept(claimResult.replayed());
+        EscrowPreflightResult result = materialization.result();
+        if (result == EscrowPreflightResult.APPLY
+                && !settlement.legacyFormat()) {
+            requireMoneyClaimSnapshot(settlement, claim);
         }
-        return result(ledgerReplay);
+        return result;
+    }
+
+    private void requireMoneyClaimSnapshot(
+            MoneyClaimSettlement settlement,
+            EscrowClaim claim
+    ) {
+        long wallet = ledger.balance(PlayerPaymentCommit.walletAccount(
+                settlement.delivery().ownerId()));
+        long debt = ledger.balance(PlayerPaymentCommit.debtAccount(
+                settlement.delivery().ownerId()));
+        long reserved = ledger.balance(PlayerPaymentCommit.reservedAccount(
+                settlement.delivery().ownerId()));
+        if (wallet != settlement.walletBeforeMinorUnits()
+                || debt != settlement.debtBeforeMinorUnits()
+                || reserved != settlement.reservedBeforeMinorUnits()
+                || claim.remainingUnits()
+                != settlement.claimRemainingBeforeUnits()) {
+            throw new EscrowRuntimeException(
+                    "Money claim settlement snapshot changed before commit");
+        }
     }
 
     private void applyAdministrativeAudit(JournalRecord record, byte[] body) {
@@ -900,6 +968,85 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
         for (EscrowClaim claim : commit.cashClaims()) {
             claims.createCommitted(claim);
             atmWithdrawalFaults.afterMutation(step++);
+        }
+    }
+
+    private EscrowPreflightResult preflightPlayerPayment(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        PlayerPaymentCommit commit = PlayerPaymentCommitCodec.decode(body);
+        requireRecordIdentity(recordTransactionId, commit.transactionId());
+        PlayerPaymentConservationValidator.validate(commit);
+        java.util.List<EscrowClaim> existingClaims =
+                claims.claimsForTransaction(commit.transactionId());
+        if (commit.overflowClaim().isEmpty()) {
+            if (!existingClaims.isEmpty()) {
+                throw new EscrowRuntimeException(
+                        "Player payment has unexpected claim evidence");
+            }
+        } else if (!existingClaims.isEmpty()
+                && !existingClaims.equals(java.util.List.of(
+                commit.overflowClaim().orElseThrow()))) {
+            throw new EscrowRuntimeException(
+                    "Player payment claim evidence conflicts");
+        }
+        boolean ledgerReplayed = ledger.preflightCommitted(
+                commit.ledgerTransaction()).replayed();
+        if (!ledgerReplayed) {
+            requirePaymentSnapshot(commit);
+        }
+        CompositeMaterialization materialization =
+                new CompositeMaterialization();
+        materialization.accept(transactions
+                .preflightFoldedAtomicCompletionCommitted(
+                        commit.completedTransaction()).replayed());
+        materialization.accept(ledgerReplayed);
+        if (commit.overflowClaim().isPresent()) {
+            EscrowClaim claim = commit.overflowClaim().orElseThrow();
+            boolean claimReplayed = claims.getClaim(claim.claimId()) != null;
+            claims.preflightCreateCommitted(claim);
+            materialization.accept(claimReplayed);
+        }
+        return materialization.result();
+    }
+
+    private void applyPlayerPayment(JournalRecord record, byte[] body) {
+        PlayerPaymentCommit commit = PlayerPaymentCommitCodec.decode(body);
+        requireRecordIdentity(record, commit.transactionId());
+        int step = 0;
+        transactions.applyFoldedAtomicCompletionCommitted(
+                commit.completedTransaction());
+        atmWithdrawalFaults.afterMutation(step++);
+        ledger.applyCommitted(commit.ledgerTransaction());
+        atmWithdrawalFaults.afterMutation(step++);
+        if (commit.overflowClaim().isPresent()) {
+            claims.createCommitted(commit.overflowClaim().orElseThrow());
+            atmWithdrawalFaults.afterMutation(step);
+        }
+    }
+
+    private void requirePaymentSnapshot(PlayerPaymentCommit commit) {
+        long payerWallet = ledger.balance(PlayerPaymentCommit.walletAccount(
+                commit.payerId()));
+        long payerDebt = ledger.balance(PlayerPaymentCommit.debtAccount(
+                commit.payerId()));
+        long recipientWallet = ledger.balance(
+                PlayerPaymentCommit.walletAccount(commit.recipientId()));
+        long recipientDebt = ledger.balance(
+                PlayerPaymentCommit.debtAccount(commit.recipientId()));
+        long recipientReserved = ledger.balance(
+                PlayerPaymentCommit.reservedAccount(commit.recipientId()));
+        if (payerWallet != commit.payerWalletBeforeMinorUnits()
+                || payerDebt != commit.payerDebtBeforeMinorUnits()
+                || recipientWallet
+                != commit.recipientWalletBeforeMinorUnits()
+                || recipientDebt
+                != commit.recipientDebtBeforeMinorUnits()
+                || recipientReserved
+                != commit.recipientReservedBeforeMinorUnits()) {
+            throw new EscrowRuntimeException(
+                    "Player payment wallet snapshot changed before commit");
         }
     }
 

@@ -179,6 +179,24 @@ public final class EscrowTransactionSavedData extends EscrowManagedSavedData {
         return repository.preflightFoldedRefund(held, refunded);
     }
 
+    public synchronized EscrowStoreApplyResult applyFoldedAtomicCompletionCommitted(
+            EscrowTransaction completed
+    ) {
+        requireEscrowMutationPermit();
+        EscrowStoreApplyResult result =
+                repository.applyFoldedAtomicCompletion(completed);
+        if (result.applied()) {
+            setDirty();
+        }
+        return result;
+    }
+
+    public synchronized EscrowStoreApplyResult preflightFoldedAtomicCompletionCommitted(
+            EscrowTransaction completed
+    ) {
+        return repository.preflightFoldedAtomicCompletion(completed);
+    }
+
     public synchronized EscrowTransaction getTransaction(EscrowTransactionId transactionId) {
         return repository.get(transactionId);
     }
@@ -189,6 +207,13 @@ public final class EscrowTransactionSavedData extends EscrowManagedSavedData {
 
     public synchronized Map<EscrowTransactionId, EscrowTransaction> snapshotTransactions() {
         return repository.snapshot();
+    }
+
+    public synchronized List<EscrowTransaction> transactionsAfter(
+            Optional<EscrowTransactionId> after,
+            int limit
+    ) {
+        return repository.transactionsAfter(after, limit);
     }
 
     public synchronized List<EscrowTransaction> recoveryCandidatesAfter(

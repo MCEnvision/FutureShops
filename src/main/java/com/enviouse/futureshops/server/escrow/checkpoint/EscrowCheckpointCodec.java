@@ -1,5 +1,8 @@
 package com.enviouse.futureshops.server.escrow.checkpoint;
 
+import com.enviouse.futureshops.server.escrow.stock.StockSavedData;
+import net.minecraft.nbt.CompoundTag;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -16,12 +19,14 @@ import java.util.Objects;
 import java.util.UUID;
 
 public final class EscrowCheckpointCodec {
-    public static final int FORMAT_VERSION = 1;
-    public static final long MAX_FILE_BYTES = 268_435_592L;
+    public static final int FORMAT_VERSION = 2;
+    public static final long MAX_FILE_BYTES = 268_435_600L;
 
     private static final int MAGIC = 0x46534350;
     private static final int FIXED_BYTES = 80;
     private static final int ENTRY_FIXED_BYTES = Integer.BYTES * 2;
+    private static final int LEGACY_FORMAT_VERSION = 1;
+    private static final int LEGACY_STORE_COUNT = 7;
 
     private EscrowCheckpointCodec() {
     }
@@ -51,7 +56,8 @@ public final class EscrowCheckpointCodec {
 
     public static EscrowCheckpoint read(InputStream source, long fileBytes) throws IOException {
         Objects.requireNonNull(source, "source");
-        if (fileBytes < minimumFileBytes() || fileBytes > MAX_FILE_BYTES) {
+        if (fileBytes < minimumFileBytes(LEGACY_STORE_COUNT)
+                || fileBytes > MAX_FILE_BYTES) {
             throw new EscrowCheckpointException("Escrow checkpoint file size is invalid");
         }
         try {
@@ -60,7 +66,8 @@ public final class EscrowCheckpointCodec {
                 throw new EscrowCheckpointException("Escrow checkpoint magic does not match");
             }
             int version = input.readUnsignedShort();
-            if (version != FORMAT_VERSION) {
+            if (version != LEGACY_FORMAT_VERSION
+                    && version != FORMAT_VERSION) {
                 throw new EscrowCheckpointException(
                         version > FORMAT_VERSION
                                 ? "Escrow checkpoint schema is newer than this build"
@@ -74,8 +81,11 @@ public final class EscrowCheckpointCodec {
             UUID replacementLineage = readUuid(input);
             long baseSequence = input.readLong();
             Instant createdAt = readInstant(input);
+            int expectedStoreCount = version == LEGACY_FORMAT_VERSION
+                    ? LEGACY_STORE_COUNT
+                    : EscrowCheckpointStore.values().length;
             int storeCount = input.readInt();
-            if (storeCount != EscrowCheckpointStore.values().length) {
+            if (storeCount != expectedStoreCount) {
                 throw new EscrowCheckpointException("Escrow checkpoint store count is invalid");
             }
 
@@ -104,6 +114,10 @@ public final class EscrowCheckpointCodec {
                 if (snapshots.put(store, snapshot) != null) {
                     throw new EscrowCheckpointException("Escrow checkpoint contains a duplicate store");
                 }
+            }
+            if (version == LEGACY_FORMAT_VERSION) {
+                snapshots.put(EscrowCheckpointStore.STOCK,
+                        emptyStockSnapshot());
             }
             for (EscrowCheckpointStore store : EscrowCheckpointStore.values()) {
                 if (!snapshots.containsKey(store)) {
@@ -152,8 +166,15 @@ public final class EscrowCheckpointCodec {
                 + checkpoint.aggregateSnapshotBytes();
     }
 
-    private static long minimumFileBytes() {
-        return FIXED_BYTES + (long) ENTRY_FIXED_BYTES * EscrowCheckpointStore.values().length;
+    private static long minimumFileBytes(int storeCount) {
+        return FIXED_BYTES + (long) ENTRY_FIXED_BYTES * storeCount;
+    }
+
+    private static byte[] emptyStockSnapshot() {
+        return EscrowCheckpointComponentCodec.encode(
+                EscrowCheckpointStore.STOCK,
+                new StockSavedData().save(new CompoundTag()),
+                EscrowCheckpoint.MAX_STORE_BYTES);
     }
 
     private static Instant readInstant(DataInputStream input) throws IOException {
