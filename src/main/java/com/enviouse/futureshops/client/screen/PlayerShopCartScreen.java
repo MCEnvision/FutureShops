@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.client.screen;
 
+import com.enviouse.futureshops.client.ClientRouteGuard;
 import com.enviouse.futureshops.client.PlayerShopCartState;
 import com.enviouse.futureshops.client.ShopClientState;
 import com.enviouse.futureshops.client.ShopColors;
@@ -134,8 +135,7 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
                 final PlayerShopCartState.CartEntry rowEntry = entry;
                 int rowBodyRight = priceColLeft - 6;
                 ShopUiUtil.zone(clickZones, iconX, y, rowBodyRight - iconX, rowH - 2, true,
-                        () -> ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopActionPacket(
-                                rowEntry.shopPos(), "VISIT", rowEntry.listingIndex(), 0)));
+                        () -> openSourceShop(rowEntry));
 
                 // LGB#15: Item name with inline base quantity (e.g. "Stick ×6")
                 String itemName = ShopUiUtil.getItemDisplayNameWithNbtAndQty(entry.itemId(), entry.nbtJson(), entry.baseQuantity());
@@ -465,6 +465,12 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
                 () -> confirmationModal = null);
     }
 
+    private void openSourceShop(PlayerShopCartState.CartEntry entry) {
+        ClientRouteGuard.expectStorefront(this, entry.shopPos().asLong());
+        ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopActionPacket(
+                entry.shopPos(), "VISIT", entry.listingIndex(), 0));
+    }
+
     private void checkout(PaymentSource paymentSource) {
         List<PlayerShopCartState.CartEntry> entries = PlayerShopCartState.getEntries();
         for (PlayerShopCartState.CartEntry entry : entries) {
@@ -482,6 +488,7 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
 
     @Override
     public void onClose() {
+        ClientRouteGuard.cancelFor(this);
         if (this.minecraft != null) this.minecraft.setScreen(parent);
     }
 

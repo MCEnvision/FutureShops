@@ -20,7 +20,7 @@ public final class AtmService {
     private AtmService() {
     }
 
-    public static void sendData(ServerPlayer player) {
+    public static void sendData(ServerPlayer player, boolean openScreen) {
         PhysicalCurrencyAdapter currency = CurrencyManager.get();
         EconomyProvider economy = BalanceManager.getProvider();
         List<AtmDenominationData> denominations = new ArrayList<>();
@@ -37,7 +37,7 @@ public final class AtmService {
         ShopPackets.sendToPlayer(player, new S2CAtmDataPacket(
                 economy.getBalance(player.getUUID()), economy.getCurrencyName(), economy.getDecimalPlaces(),
                 currency.id(), currency.isInternal(), CurrencyWithdrawalService.signature(currency),
-                denominations));
+                denominations, openScreen));
     }
 
     public static void withdraw(ServerPlayer player, String signature, List<Integer> counts) {
@@ -46,7 +46,7 @@ public final class AtmService {
         ShopPackets.sendToPlayer(player, new S2CAtmResultPacket(
                 result.success(), result.code().name(), result.resultingBalance(), result.amountMinor()));
         if (result.code() == CurrencyWithdrawalService.Code.CURRENCY_CHANGED) {
-            sendData(player);
+            sendData(player, false);
         }
     }
 }

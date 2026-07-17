@@ -21,7 +21,8 @@ public record S2CAtmDataPacket(
         String providerId,
         boolean protectedMinting,
         String currencySignature,
-        List<AtmDenominationData> denominations) {
+        List<AtmDenominationData> denominations,
+        boolean openScreen) {
 
     public static void encode(S2CAtmDataPacket packet, FriendlyByteBuf buffer) {
         buffer.writeLong(packet.balanceMinor());
@@ -34,6 +35,7 @@ public record S2CAtmDataPacket(
         for (AtmDenominationData denomination : packet.denominations()) {
             AtmDenominationData.encode(buffer, denomination);
         }
+        buffer.writeBoolean(packet.openScreen());
     }
 
     public static S2CAtmDataPacket decode(FriendlyByteBuf buffer) {
@@ -49,8 +51,9 @@ public record S2CAtmDataPacket(
         }
         List<AtmDenominationData> denominations = new ArrayList<>(size);
         for (int i = 0; i < size; i++) denominations.add(AtmDenominationData.decode(buffer));
+        boolean openScreen = buffer.readBoolean();
         return new S2CAtmDataPacket(balance, currencyName, decimals, providerId,
-                protectedMinting, signature, denominations);
+                protectedMinting, signature, denominations, openScreen);
     }
 
     public static void handle(S2CAtmDataPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

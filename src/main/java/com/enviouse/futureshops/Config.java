@@ -4,12 +4,34 @@ import net.minecraftforge.common.ForgeConfigSpec;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.config.ModConfigEvent;
 
 @Mod.EventBusSubscriber(modid = Futureshops.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
 public class Config {
+    public static final String FOREIGN_CURRENCY_WARNING = "WARNING. Changing the currency provider from futureshops disables all FutureShops physical currency duplication protection. Currency items from other mods are spawned and accepted without mint ids, checksums, or spent mint tracking.";
+
+    private static final Set<String> MODULE_IDS = Set.of("shop", "bazaar", "auction_house");
     private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
+
+    private static final ForgeConfigSpec.BooleanValue MODULES_BAZAAR_ENABLED = BUILDER
+        .comment("Enable the Bazaar module. Disabling it preserves existing orders, custody, refunds, and claims.")
+        .define("modules.bazaar_enabled", true);
+
+    private static final ForgeConfigSpec.BooleanValue MODULES_AUCTION_HOUSE_ENABLED = BUILDER
+        .comment("Enable the Auction House module. Disabling it preserves existing listings, bids, custody, refunds, and claims.")
+        .define("modules.auction_house_enabled", true);
+
+    private static final ForgeConfigSpec.BooleanValue MODULES_SHOW_MODULE_NAVIGATION = BUILDER
+        .comment("Show navigation between Shop, Bazaar, and Auction House when those modules are available.")
+        .define("modules.show_module_navigation", true);
+
+    private static final ForgeConfigSpec.ConfigValue<String> MODULES_DEFAULT_MODULE = BUILDER
+        .comment("Module opened by shared market navigation. Allowed values are shop, bazaar, and auction_house.")
+        .define("modules.default_module", "shop",
+            value -> value instanceof String text && MODULE_IDS.contains(text.strip().toLowerCase(Locale.ROOT)));
 
     private static final ForgeConfigSpec.ConfigValue<String> ECONOMY_CURRENCY_NAME = BUILDER
         .comment("Display name of the economy currency")
@@ -46,10 +68,7 @@ public class Config {
             "  \"apocalypsenow\" - Apocalypse Now cash: apocalypsenow:money (100) and apocalypsenow:coins (25);",
             "                    money blocks are accepted on deposit (900 / 8100) but never handed out.",
             "  \"custom\"        - Any mod's items, defined via currency.items / currency.accept_only_items below.",
-            "WARNING: Changing currency.provider away from \"futureshops\" means you lose ALL FutureShops",
-            "physical-currency dupe prevention. Foreign items are spawned and accepted WITHOUT checksums,",
-            "mint IDs, or spent-mint ledger tracking because FutureShops cannot control another mod's",
-            "items, recipes, loot tables, or duplication bugs. The source mod owns that currency's supply.",
+            FOREIGN_CURRENCY_WARNING,
             "If the configured provider/items can't be resolved at server start, FutureShops falls back to",
             "the built-in currency and logs an error."
         )
@@ -157,7 +176,9 @@ public class Config {
         )
         .defineInRange("local_listings.scan_radius_blocks", 64, 0, 1024);
 
-    static final ForgeConfigSpec SPEC = BUILDER.build();
+    public static final ForgeConfigSpec SPEC = BUILDER.build();
+
+    private static volatile ModuleSettings moduleSettings = ModuleSettings.defaults();
 
     public static String economyCurrencyName;
     public static int economyCurrencyDecimals;
@@ -197,6 +218,26 @@ public class Config {
     // Local Listings
     public static int localListingsScanRadiusBlocks;
 
+    public static ModuleSettings moduleSettings() {
+        return moduleSettings;
+    }
+
+    public static boolean bazaarEnabled() {
+        return moduleSettings.bazaarEnabled();
+    }
+
+    public static boolean auctionHouseEnabled() {
+        return moduleSettings.auctionHouseEnabled();
+    }
+
+    public static boolean showModuleNavigation() {
+        return moduleSettings.showModuleNavigation();
+    }
+
+    public static String defaultModule() {
+        return moduleSettings.effectiveDefaultModule();
+    }
+
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event) {
         // This subscriber also sees the separate client presentation config. Only read values from
@@ -204,6 +245,12 @@ public class Config {
         if (event.getConfig().getSpec() != SPEC) {
             return;
         }
+        moduleSettings = new ModuleSettings(
+            MODULES_BAZAAR_ENABLED.get(),
+            MODULES_AUCTION_HOUSE_ENABLED.get(),
+            MODULES_SHOW_MODULE_NAVIGATION.get(),
+            MODULES_DEFAULT_MODULE.get()
+        );
         economyCurrencyName = ECONOMY_CURRENCY_NAME.get();
         economyCurrencyDecimals = ECONOMY_DECIMALS.get();
         economyStartingBalanceMinorUnits = ECONOMY_STARTING_BALANCE_MINOR_UNITS.get();
@@ -244,6 +291,37 @@ public class Config {
         if (event instanceof ModConfigEvent.Reloading
                 && com.enviouse.futureshops.money.CurrencyManager.getOrNull() != null) {
             com.enviouse.futureshops.money.CurrencyManager.initialize();
+        }
+    }
+
+    public record ModuleSettings(
+        boolean bazaarEnabled,
+        boolean auctionHouseEnabled,
+        boolean showModuleNavigation,
+        String defaultModule
+    ) {
+        public ModuleSettings {
+            if (defaultModule == null) {
+                throw new IllegalArgumentException("Default module is required.");
+            }
+            defaultModule = defaultModule.strip().toLowerCase(Locale.ROOT);
+            if (!MODULE_IDS.contains(defaultModule)) {
+                throw new IllegalArgumentException("Unknown default module. " + defaultModule);
+            }
+        }
+
+        public static ModuleSettings defaults() {
+            return new ModuleSettings(true, true, true, "shop");
+        }
+
+        public String effectiveDefaultModule() {
+            if ("bazaar".equals(defaultModule) && !bazaarEnabled) {
+                return "shop";
+            }
+            if ("auction_house".equals(defaultModule) && !auctionHouseEnabled) {
+                return "shop";
+            }
+            return defaultModule;
         }
     }
 }

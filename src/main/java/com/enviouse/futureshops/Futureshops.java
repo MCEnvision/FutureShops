@@ -2,6 +2,9 @@ package com.enviouse.futureshops;
 
 import com.enviouse.futureshops.catalog.ShopCatalog;
 import com.enviouse.futureshops.compat.rs2.RefinedStorage2Compat;
+import com.enviouse.futureshops.config.AuctionHouseConfig;
+import com.enviouse.futureshops.config.BazaarConfig;
+import com.enviouse.futureshops.config.EscrowConfig;
 import com.enviouse.futureshops.init.ModBlockEntities;
 import com.enviouse.futureshops.init.ModBlocks;
 import com.enviouse.futureshops.init.ModCreativeTabs;
@@ -9,6 +12,9 @@ import com.enviouse.futureshops.init.ModItems;
 import com.enviouse.futureshops.money.SpentMintsSavedData;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.server.economy.BalanceManager;
+import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeManager;
+import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
+import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeState;
 import com.enviouse.futureshops.server.pricing.DynamicPricingEngine;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
 import com.enviouse.futureshops.server.shop.ExternalStorageRegistry;
@@ -59,8 +65,12 @@ public class Futureshops {
         MinecraftForge.EVENT_BUS.register(this);
 
         // Register our mod's ForgeConfigSpec so that Forge can create and load the config file for us
-        ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, Config.SPEC);
-        ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, ClientConfig.SPEC);
+        ModLoadingContext context = ModLoadingContext.get();
+        context.registerConfig(ModConfig.Type.COMMON, Config.SPEC, "futureshops-common.toml");
+        context.registerConfig(ModConfig.Type.COMMON, EscrowConfig.SPEC, EscrowConfig.FILE_NAME);
+        context.registerConfig(ModConfig.Type.COMMON, AuctionHouseConfig.SPEC, AuctionHouseConfig.FILE_NAME);
+        context.registerConfig(ModConfig.Type.COMMON, BazaarConfig.SPEC, BazaarConfig.FILE_NAME);
+        context.registerConfig(ModConfig.Type.CLIENT, ClientConfig.SPEC, "futureshops-client.toml");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
@@ -86,6 +96,13 @@ public class Futureshops {
     // You can use SubscribeEvent and let the Event Bus discover methods to call
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
+        EscrowRuntimeService escrow = EscrowRuntimeManager.initialize(event.getServer());
+        if (escrow.state() == EscrowRuntimeState.MAINTENANCE) {
+            LOGGER.error("FutureShops escrow entered maintenance during startup.",
+                    escrow.failure().orElse(null));
+        } else if (escrow.state() == EscrowRuntimeState.RECOVERING) {
+            LOGGER.warn("FutureShops escrow is recovering before value mutations become available.");
+        }
         BalanceManager.initialize(event.getServer());
         // Resolve the configured physical-currency adapter (built-in money item
         // or a foreign mod's items, e.g. Apocalypse Now cash).
@@ -105,6 +122,13 @@ public class Futureshops {
     public void onServerStopping(ServerStoppingEvent event) {
         // Force-close every open shop session so clients can dismiss their GUIs.
         ShopSessionManager.closeAllAndForceClose(event.getServer(), "SERVER_STOPPING");
+        if (EscrowRuntimeManager.getOrNull() != null) {
+            try {
+                EscrowRuntimeManager.shutdown(event.getServer());
+            } catch (RuntimeException exception) {
+                LOGGER.error("FutureShops escrow failed to close cleanly.", exception);
+            }
+        }
         BalanceManager.clear();
         com.enviouse.futureshops.money.CurrencyManager.clear();
         DynamicPricingEngine.reset();
@@ -118,6 +142,9 @@ public class Futureshops {
     @SubscribeEvent
     public void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase == TickEvent.Phase.END && event.getServer() != null) {
+            if (EscrowRuntimeManager.getOrNull() != null) {
+                EscrowRuntimeManager.tick(event.getServer());
+            }
             DynamicPricingEngine.onServerTick(event.getServer());
             StockRefreshScheduler.onServerTick(event.getServer());
         }

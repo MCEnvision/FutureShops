@@ -15,9 +15,8 @@ class CurrencyProtectionContractTest {
     void generatedTomlContainsExplicitForeignCurrencyWarning() throws Exception {
         String config = Files.readString(Path.of(
                 "src/main/java/com/enviouse/futureshops/Config.java"));
-        assertTrue(config.contains("lose ALL FutureShops"));
-        assertTrue(config.contains("WITHOUT checksums"));
-        assertTrue(config.contains("spent-mint ledger"));
+        assertTrue(config.contains(
+                "WARNING. Changing the currency provider from futureshops disables all FutureShops physical currency duplication protection. Currency items from other mods are spawned and accepted without mint ids, checksums, or spent mint tracking."));
     }
 
     @Test

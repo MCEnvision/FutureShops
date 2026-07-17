@@ -48,6 +48,12 @@ public final class ShopClientPacketHandler {
             if (mc.screen instanceof AtmScreen atm) {
                 atm.applyData(packet);
             } else {
+                ClientRouteGuard.ResponseDecision decision =
+                        ClientRouteGuard.acceptAtmResponse(mc.screen);
+                if (!ClientRouteGuard.allowsAtmOpen(
+                        decision, packet.openScreen(), mc.screen == null)) {
+                    return;
+                }
                 mc.setScreen(new AtmScreen(mc.screen, packet));
             }
         });
@@ -203,6 +209,23 @@ public final class ShopClientPacketHandler {
     public static void handlePlayerShopData(S2CPlayerShopDataPacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
+            boolean storefrontOpen = mc.screen instanceof PlayerStorefrontScreen;
+            boolean storefrontChild = mc.screen instanceof com.enviouse.futureshops.client.screen.PlayerShopBarterScreen
+                    || mc.screen instanceof com.enviouse.futureshops.client.screen.PlayerShopSellScreen;
+            if (!packet.owner()) {
+                if (storefrontOpen || storefrontChild) {
+                    if (!packet.shopPos().equals(PlayerShopClientState.shopPos())) {
+                        return;
+                    }
+                } else {
+                    ClientRouteGuard.ResponseDecision decision =
+                            ClientRouteGuard.acceptStorefrontResponse(
+                                    mc.screen, packet.shopPos().asLong());
+                    if (decision == ClientRouteGuard.ResponseDecision.REJECT) {
+                        return;
+                    }
+                }
+            }
             PlayerShopClientState.apply(
                     packet.shopPos(),
                     packet.owner(),

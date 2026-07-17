@@ -410,26 +410,10 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         CatalogItem item = currentItem();
         if (item == null) return 1;
 
-        // For buying: limited by stock and balance
-        int buyLimit;
-        if (item.unlimited()) {
-            buyLimit = 2304; // Full inventory worth
-        } else {
-            buyLimit = Math.max(1, item.stock());
-        }
-
-        long effectivePrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
-        if (effectivePrice > 0) {
-            long balance = ShopClientState.getCurrentBalanceMinorUnits();
-            int affordable = (int) Math.min(balance / effectivePrice, 2304);
-            buyLimit = Math.min(buyLimit, affordable);
-        }
-
         // For selling: limited by how many the player has in inventory (NBT-strict, matching the server)
         int sellLimit = ShopUiUtil.countPlayerInventoryNbt(item.itemId(), item.nbtJson(), true);
-
-        // Return the greater of the two — the actual action will enforce its own limit
-        return Math.max(1, Math.max(buyLimit, sellLimit));
+        return PurchaseQuantityPolicy.serverShopMaximum(
+                item.unlimited(), item.stock(), sellLimit);
     }
 
     private int clampQuantity(int quantity) {

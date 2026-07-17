@@ -2,6 +2,7 @@ package com.enviouse.futureshops.money;
 
 import com.enviouse.futureshops.Config;
 import com.enviouse.futureshops.init.ModItems;
+import com.enviouse.futureshops.server.escrow.mint.ProtectedMintBatch;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -40,5 +41,9 @@ public final class MoneyMintService {
 
         stack.getOrCreateTag().put(MoneyNbtKeys.ROOT, moneyData);
         return stack;
+    }
+
+    public static ItemStack mintPlannedStack(ProtectedMintBatch batch, int count) {
+        return ProtectedMoneyMintBridge.mintMaterializedStack(batch, count);
     }
 }

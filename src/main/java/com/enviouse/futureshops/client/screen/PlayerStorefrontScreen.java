@@ -14,6 +14,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -231,14 +232,8 @@ public class PlayerStorefrontScreen extends Screen implements ShopScreenMarker {
         // that opened this listing; in Option B detail it returns to this storefront's grid.
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY, leftX, rowY, 44, btnH,
                 Component.translatable("gui.futureshops.player_shop_block.visitor.back"),
-                ShopUiUtil.ButtonStyle.SECONDARY, true, () -> {
-                    if (optionA) {
-                        returnToParent();
-                    } else {
-                        detailIndex = -1;
-                        updateWidgets();
-                    }
-                });
+                ShopUiUtil.ButtonStyle.SECONDARY, true,
+                () -> applyNavigation(ClientNavigationPolicy.storefrontBack(optionA)));
 
         // Quantity steppers: − [box] + Max — on the DEDICATED quantity row above the actions, so they
         // never overlap the right-anchored action buttons (which would steal clicks at narrow widths).
@@ -975,23 +970,20 @@ public class PlayerStorefrontScreen extends Screen implements ShopScreenMarker {
 
     private int clampQuantity(int quantity) {
         PlayerShopListingData listing = currentDetailListing();
-        int stockCap = listing == null ? 999 : Math.max(1, listing.stock());
+        int stockCap = listing == null ? 999 : PurchaseQuantityPolicy.playerShopStockMaximum(
+                PlayerShopClientState.adminShopMode(), listing.stock());
         return Math.max(1, Math.min(stockCap, quantity));
     }
 
-    /** Smart max: MONEY = balance/price, BARTER = inventory/cost, BOTH = max, compound = min. */
+    /** Smart max uses stock for money and the exact barter inventory cap when barter is required. */
     private int resolveMaxQuantity() {
         PlayerShopListingData listing = currentDetailListing();
         if (listing == null) return 1;
-        int stock = Math.max(1, listing.stock());
+        int stock = PurchaseQuantityPolicy.playerShopStockMaximum(
+                PlayerShopClientState.adminShopMode(), listing.stock());
         String mode = listing.tradeMode().toUpperCase(Locale.ROOT);
-        int maxMoney = Integer.MAX_VALUE;
         int maxBarter = Integer.MAX_VALUE;
 
-        if (!"BARTER".equals(mode) && listing.effectiveUnitPriceMinor() > 0) {
-            long balance = ShopClientState.getCurrentBalanceMinorUnits();
-            maxMoney = (int) Math.min(balance / listing.effectiveUnitPriceMinor(), Integer.MAX_VALUE);
-        }
         if (!"MONEY".equals(mode)) {
             String barterId = listing.barterItemId();
             int barterCost = listing.barterItemCount();
@@ -999,18 +991,7 @@ public class PlayerStorefrontScreen extends Screen implements ShopScreenMarker {
                 maxBarter = ShopUiUtil.countPlayerInventoryNbt(barterId, listing.barterNbtJson(), listing.barterNbtAware()) / barterCost;
             }
         }
-
-        int affordable;
-        if ("MONEY_AND_BARTER".equals(mode)) {
-            affordable = Math.min(maxMoney, maxBarter);
-        } else if ("BOTH".equals(mode)) {
-            affordable = Math.max(maxMoney, maxBarter);
-        } else if ("BARTER".equals(mode)) {
-            affordable = maxBarter;
-        } else {
-            affordable = maxMoney;
-        }
-        return Math.max(1, Math.min(stock, affordable));
+        return PurchaseQuantityPolicy.playerShopMaximum(mode, stock, maxBarter);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1167,6 +1148,11 @@ public class PlayerStorefrontScreen extends Screen implements ShopScreenMarker {
             confirmationModal.keyPressed(keyCode);
             return true;
         }
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            applyNavigation(ClientNavigationPolicy.storefrontEscape(
+                    optionA, optionA || detailIndex >= 0));
+            return true;
+        }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -1177,6 +1163,20 @@ public class PlayerStorefrontScreen extends Screen implements ShopScreenMarker {
 
     private void returnToParent() {
         if (this.minecraft != null) this.minecraft.setScreen(parent);
+    }
+
+    private void applyNavigation(ClientNavigationPolicy.Action action) {
+        if (this.minecraft == null) {
+            return;
+        }
+        switch (action) {
+            case RETURN_TO_PARENT -> returnToParent();
+            case RETURN_TO_GRID -> {
+                detailIndex = -1;
+                updateWidgets();
+            }
+            case CLOSE -> onClose();
+        }
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.client.screen;
 
+import com.enviouse.futureshops.client.ClientRouteGuard;
 import com.enviouse.futureshops.client.ShopClientState;
 import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.CatalogCategory;
@@ -1334,7 +1335,10 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         for (int i = nearbyScrollIdx; i < nearby.size() && i < nearbyScrollIdx + maxVisible; i++) {
             int y = cY + (i - nearbyScrollIdx) * (cardH + gap);
             if (mouseX >= cX && mouseX < cX + cW && mouseY >= y && mouseY < y + cardH) {
-                ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopActionPacket(nearby.get(i).pos(), "VISIT", 0, 0));
+                NearbyShopEntry target = nearby.get(i);
+                ClientRouteGuard.expectStorefront(this, target.pos().asLong());
+                ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopActionPacket(
+                        target.pos(), "VISIT", 0, 0));
                 return true;
             }
         }
@@ -1342,12 +1346,14 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
     }
 
     private void switchToServerShop() {
+        ClientRouteGuard.cancelFor(this);
         nearbyMode = false;
         gridScrollRows = 0;
         rebuildFilteredItems();
     }
 
     private void switchToPlayerShops() {
+        ClientRouteGuard.cancelFor(this);
         nearbyMode = true;
         gridScrollRows = 0;
         nearbyScrollIdx = 0;
@@ -1363,6 +1369,12 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         tradeFilter = next;
         gridScrollRows = 0;
         rebuildFilteredItems();
+    }
+
+    @Override
+    public void onClose() {
+        ClientRouteGuard.cancelFor(this);
+        super.onClose();
     }
 
     @Override

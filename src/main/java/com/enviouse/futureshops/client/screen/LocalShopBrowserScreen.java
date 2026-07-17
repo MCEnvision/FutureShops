@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.client.screen;
 
+import com.enviouse.futureshops.client.ClientRouteGuard;
 import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.LocalShopOwnerEntry;
 import com.enviouse.futureshops.data.LocalShopOwnerEntry.LocalDepartment;
@@ -407,6 +408,7 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
                     // instead of whatever listing was last viewed in that shop.
                     BlockPos pos = BlockPos.of(listing.shopPosLong());
                     com.enviouse.futureshops.client.PlayerShopClientState.requestVisit(pos, listing.listingIndex());
+                    ClientRouteGuard.expectStorefront(this, pos.asLong());
                     ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopActionPacket(
                             pos, "VISIT", 0, 0));
                     return true;
@@ -419,6 +421,7 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
 
     @Override
     public void onClose() {
+        ClientRouteGuard.cancelFor(this);
         if (this.minecraft != null) this.minecraft.setScreen(parent);
     }
 
@@ -427,4 +430,3 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
         return false;
     }
 }
-

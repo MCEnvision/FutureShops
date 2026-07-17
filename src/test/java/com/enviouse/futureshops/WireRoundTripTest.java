@@ -531,13 +531,27 @@ public class WireRoundTripTest {
                 123_456L, "Credits", 2, "custom", false, "abc123",
                 List.of(
                         new AtmDenominationData("othermod:gold_bill", 10_000L, 64),
-                        new AtmDenominationData("othermod:silver_coin", 25L, 16)));
+                        new AtmDenominationData("othermod:silver_coin", 25L, 16)), true);
         FriendlyByteBuf b = buf();
         S2CAtmDataPacket.encode(in, b);
         S2CAtmDataPacket out = S2CAtmDataPacket.decode(b);
         assertEquals(in, out);
         assertFalse(out.protectedMinting(), "foreign currency must advertise the unprotected mode");
+        assertTrue(out.openScreen(), "command ATM data must preserve its open intent");
         assertEquals(2, out.denominations().size());
+        assertEquals(0, b.readableBytes());
+    }
+
+    @Test
+    void atmRefreshDataPacketKeepsOpenIntentFalse() {
+        S2CAtmDataPacket in = new S2CAtmDataPacket(
+                500L, "Credits", 2, "futureshops", true, "refresh",
+                List.of(new AtmDenominationData("futureshops:money", 100L, 64)), false);
+        FriendlyByteBuf b = buf();
+        S2CAtmDataPacket.encode(in, b);
+        S2CAtmDataPacket out = S2CAtmDataPacket.decode(b);
+        assertEquals(in, out);
+        assertFalse(out.openScreen());
         assertEquals(0, b.readableBytes());
     }
 

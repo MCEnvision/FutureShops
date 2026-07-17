@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.client.screen;
 
+import com.enviouse.futureshops.client.ClientRouteGuard;
 import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.OwnedShopSummary;
 import com.enviouse.futureshops.network.ShopPackets;
@@ -85,23 +86,39 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + 82, y, 62, 18,
                 Component.translatable("gui.futureshops.balance.atm"),
-                ShopUiUtil.ButtonStyle.PRIMARY, true,
-                () -> ShopPackets.CHANNEL.sendToServer(new C2SOpenAtmPacket()));
+                ShopUiUtil.ButtonStyle.PRIMARY, true, this::openAtm);
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + guiW - 214, y, 68, 18,
                 Component.translatable("gui.futureshops.balance.franchise"),
-                ShopUiUtil.ButtonStyle.SECONDARY, true,
-                () -> ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("OPEN", "")));
+                ShopUiUtil.ButtonStyle.SECONDARY, true, this::openFranchise);
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + guiW - 142, y, 60, 18,
                 Component.translatable("gui.futureshops.balance.leaders"),
-                ShopUiUtil.ButtonStyle.SECONDARY, true,
-                () -> ShopPackets.CHANNEL.sendToServer(new C2SOpenBalTopUiPacket(1)));
+                ShopUiUtil.ButtonStyle.SECONDARY, true, this::openLeaders);
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + guiW - 78, y, 60, 18,
                 Component.translatable("gui.futureshops.balance.close"),
-                ShopUiUtil.ButtonStyle.SECONDARY, true,
-                () -> ShopPackets.CHANNEL.sendToServer(new C2SOpenShopPacket("default")));
+                ShopUiUtil.ButtonStyle.SECONDARY, true, this::openDefaultShop);
+    }
+
+    private void openAtm() {
+        ClientRouteGuard.expectAtm(this);
+        ShopPackets.CHANNEL.sendToServer(new C2SOpenAtmPacket());
+    }
+
+    private void openFranchise() {
+        ClientRouteGuard.cancelFor(this);
+        ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("OPEN", ""));
+    }
+
+    private void openLeaders() {
+        ClientRouteGuard.cancelFor(this);
+        ShopPackets.CHANNEL.sendToServer(new C2SOpenBalTopUiPacket(1));
+    }
+
+    private void openDefaultShop() {
+        ClientRouteGuard.cancelFor(this);
+        ShopPackets.CHANNEL.sendToServer(new C2SOpenShopPacket("default"));
     }
 
     @Override
@@ -341,6 +358,7 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
             if (mouseX >= panelX + 8 && mouseX <= panelX + panelW - 8 && mouseY >= y && mouseY <= y + 46) {
                 OwnedShopSummary summary = shopSummaries.get(i + shopScroll);
                 BlockPos pos = BlockPos.of(summary.shopPosLong());
+                ClientRouteGuard.expectStorefront(this, pos.asLong());
                 ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopActionPacket(pos, "VISIT", 0, 0));
                 return true;
             }
@@ -350,6 +368,7 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
 
     @Override
     public void onClose() {
+        ClientRouteGuard.cancelFor(this);
         if (this.minecraft != null) {
             this.minecraft.setScreen(parent);
         }

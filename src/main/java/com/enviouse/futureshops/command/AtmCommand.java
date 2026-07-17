@@ -19,7 +19,7 @@ public final class AtmCommand {
                         Component.translatable("command.futureshops.player_only")));
                 return 0;
             }
-            AtmService.sendData(player);
+            AtmService.sendData(player, true);
             return 1;
         }));
     }

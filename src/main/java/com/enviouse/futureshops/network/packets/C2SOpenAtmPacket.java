@@ -20,7 +20,7 @@ public record C2SOpenAtmPacket() {
         NetworkEvent.Context context = contextSupplier.get();
         context.enqueueWork(() -> {
             ServerPlayer player = context.getSender();
-            if (player != null) AtmService.sendData(player);
+            if (player != null) AtmService.sendData(player, false);
         });
         context.setPacketHandled(true);
     }

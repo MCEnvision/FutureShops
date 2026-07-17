@@ -31,7 +31,7 @@ public final class WithdrawCommand {
                     context.getSource().sendFailure(EconomyCommandUtil.error(Component.translatable("command.futureshops.player_only")));
                     return 0;
                 }
-                AtmService.sendData(player);
+                AtmService.sendData(player, true);
                 return 1;
             })
             .then(Commands.argument("amount", StringArgumentType.word())

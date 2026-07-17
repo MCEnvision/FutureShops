@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
+ * Protocol 32 adds explicit ATM server open intent to the data packet.
  * Pins the network protocol version. Protocol 30 appends the ATM open/data/withdraw/result packets
  * so clients can submit exact denomination plans to the server-authoritative minting path.
  * Protocol 29 changes the protocol-28 barter-batch action from
@@ -37,8 +38,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class ProtocolVersionConstantTest {
 
     @Test
-    void protocolVersionIs31() {
-        assertEquals("31", ShopPackets.PROTOCOL_VERSION,
-                "PROTOCOL_VERSION must be 31 because purchase packets now include payment source");
+    void protocolVersionIs32() {
+        assertEquals("32", ShopPackets.PROTOCOL_VERSION,
+                "PROTOCOL_VERSION must be 32 because ATM data now includes open intent");
     }
 }

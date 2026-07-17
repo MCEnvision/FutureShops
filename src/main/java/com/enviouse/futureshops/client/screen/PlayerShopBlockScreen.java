@@ -24,6 +24,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraftforge.registries.ForgeRegistries;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
 import java.util.Locale;
@@ -461,7 +462,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
     private void renderCloseButton(GuiGraphics g) {
         btn(g, guiLeft + guiW - 24, guiTop + 6, 18, 14, Component.literal("✕"),
-                ShopUiUtil.ButtonStyle.SECONDARY, true, null, null, null, this::onClose);
+                ShopUiUtil.ButtonStyle.SECONDARY, true, null, null, null, this::closeCompletely);
     }
 
     private void renderOwnerTabBar(GuiGraphics g) {
@@ -1756,6 +1757,15 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
             if (confirmationModal.keyPressed(keyCode)) return true;
             return true;
         }
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            if (ClientNavigationPolicy.playerShopBlockEscape(PlayerShopClientState.owner())
+                    == ClientNavigationPolicy.Action.CLOSE) {
+                closeCompletely();
+            } else {
+                onClose();
+            }
+            return true;
+        }
         // Enter key = 257
         if (keyCode == 257) {
             if (PlayerShopClientState.owner()) {
@@ -2008,22 +2018,15 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         if (quantityBox != null) quantityBox.setValue(Integer.toString(clampQuantity(quantity)));
     }
 
-    /**
-     * Smart max: for MONEY = balance / price, for BARTER = inventory / cost,
-     * for BOTH = max of the two, for MONEY_AND_BARTER = min of the two (need both).
-     */
+    /** Smart max uses stock for money and the exact barter inventory cap when barter is required. */
     private int resolveMaxQuantity() {
         PlayerShopListingData listing = PlayerShopClientState.selectedListing();
         if (listing == null) return 1;
-        int stock = Math.max(1, listing.stock());
+        int stock = PurchaseQuantityPolicy.playerShopStockMaximum(
+                PlayerShopClientState.adminShopMode(), listing.stock());
         String mode = listing.tradeMode().toUpperCase(Locale.ROOT);
-        int maxMoney = Integer.MAX_VALUE;
         int maxBarter = Integer.MAX_VALUE;
 
-        if (!"BARTER".equals(mode) && listing.effectiveUnitPriceMinor() > 0) {
-            long balance = ShopClientState.getCurrentBalanceMinorUnits();
-            maxMoney = (int) Math.min(balance / listing.effectiveUnitPriceMinor(), Integer.MAX_VALUE);
-        }
         if (!"MONEY".equals(mode)) {
             String barterId = listing.barterItemId();
             int barterCost = listing.barterItemCount();
@@ -2031,19 +2034,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                 maxBarter = ShopUiUtil.countPlayerInventoryNbt(barterId, listing.barterNbtJson(), listing.barterNbtAware()) / barterCost;
             }
         }
-
-        int affordable;
-        if ("MONEY_AND_BARTER".equals(mode)) {
-            affordable = Math.min(maxMoney, maxBarter);
-        } else if ("BOTH".equals(mode)) {
-            affordable = Math.max(maxMoney, maxBarter);
-        } else if ("BARTER".equals(mode)) {
-            affordable = maxBarter;
-        } else {
-            affordable = maxMoney;
-        }
-
-        return Math.max(1, Math.min(stock, affordable));
+        return PurchaseQuantityPolicy.playerShopMaximum(mode, stock, maxBarter);
     }
 
     private int clampQuantity(int quantity) {
@@ -2053,7 +2044,8 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         // force a balance refresh. The server-side buy path re-validates both stock and
         // funds, so letting the user freely dial up a number here is safe.
         PlayerShopListingData listing = PlayerShopClientState.selectedListing();
-        int stockCap = listing == null ? 999 : Math.max(1, listing.stock());
+        int stockCap = listing == null ? 999 : PurchaseQuantityPolicy.playerShopStockMaximum(
+                PlayerShopClientState.adminShopMode(), listing.stock());
         return Math.max(1, Math.min(stockCap, quantity));
     }
 
@@ -2179,6 +2171,10 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     @Override
     public void onClose() {
         if (this.minecraft != null) this.minecraft.setScreen(parent);
+    }
+
+    private void closeCompletely() {
+        if (this.minecraft != null) this.minecraft.setScreen(null);
     }
 
     @Override
