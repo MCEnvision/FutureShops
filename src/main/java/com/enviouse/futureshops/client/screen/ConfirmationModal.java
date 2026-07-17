@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.client.screen;
 
 import com.enviouse.futureshops.client.ShopColors;
+import com.enviouse.futureshops.money.PaymentSource;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -8,6 +9,7 @@ import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
@@ -22,7 +24,10 @@ public class ConfirmationModal {
     private final List<SummaryLine> summaryLines;
     private final String totalText;
     private final Consumer<ConfirmationModal> onConfirm;
+    private final BiConsumer<ConfirmationModal, PaymentSource> onPaymentConfirm;
     private final Runnable onCancel;
+    private final boolean paymentSourceRequired;
+    private PaymentSource selectedPaymentSource;
 
     private State state = State.WAITING;
     private String resultMessage = "";
@@ -44,7 +49,21 @@ public class ConfirmationModal {
         this.summaryLines = List.copyOf(summaryLines);
         this.totalText = totalText;
         this.onConfirm = onConfirm;
+        this.onPaymentConfirm = null;
         this.onCancel = onCancel;
+        this.paymentSourceRequired = false;
+    }
+
+    public ConfirmationModal(String title, List<SummaryLine> summaryLines, String totalText,
+                             BiConsumer<ConfirmationModal, PaymentSource> onConfirm,
+                             Runnable onCancel) {
+        this.title = title;
+        this.summaryLines = List.copyOf(summaryLines);
+        this.totalText = totalText;
+        this.onConfirm = null;
+        this.onPaymentConfirm = onConfirm;
+        this.onCancel = onCancel;
+        this.paymentSourceRequired = true;
     }
 
     public State getState() {
@@ -106,7 +125,8 @@ public class ConfirmationModal {
 
         // Modal panel — responsive to screen size, never exceeds viewport
         modalW = Math.min(260, Math.max(180, screenW - 20));
-        modalH = Math.min(screenH - 20, 60 + summaryLines.size() * 16 + 40);
+        modalH = Math.min(screenH - 20, 60 + summaryLines.size() * 16 + 40
+                + (paymentSourceRequired ? 30 : 0));
         modalX = (screenW - modalW) / 2;
         modalY = (screenH - modalH) / 2;
 
@@ -170,6 +190,30 @@ public class ConfirmationModal {
         graphics.drawString(font, totalText, modalX + 10, lineY, ShopColors.TEXT_CURRENCY, true);
         lineY += 16;
 
+        if (paymentSourceRequired) {
+            graphics.drawCenteredString(font,
+                    Component.translatable("gui.futureshops.modal.payment_source"),
+                    modalX + modalW / 2, lineY, ShopColors.TEXT_MUTED);
+            lineY += 11;
+            int sourceGap = 8;
+            int sourceW = (modalW - 28 - sourceGap) / 2;
+            int sourceX = modalX + 14;
+            boolean waiting = state == State.WAITING;
+            ShopUiUtil.button(graphics, font, clickZones, mouseX, mouseY,
+                    sourceX, lineY, sourceW, 16,
+                    Component.translatable("gui.futureshops.modal.inventory_cash"),
+                    selectedPaymentSource == PaymentSource.PHYSICAL
+                            ? ShopUiUtil.ButtonStyle.PRIMARY : ShopUiUtil.ButtonStyle.SECONDARY,
+                    waiting, () -> selectedPaymentSource = PaymentSource.PHYSICAL);
+            ShopUiUtil.button(graphics, font, clickZones, mouseX, mouseY,
+                    sourceX + sourceW + sourceGap, lineY, sourceW, 16,
+                    Component.translatable("gui.futureshops.modal.wallet_balance"),
+                    selectedPaymentSource == PaymentSource.WALLET
+                            ? ShopUiUtil.ButtonStyle.PRIMARY : ShopUiUtil.ButtonStyle.SECONDARY,
+                    waiting, () -> selectedPaymentSource = PaymentSource.WALLET);
+            lineY += 22;
+        }
+
         // Buttons — flat Nocturne primitives.
         int btnW = 70;
         int btnH = 16;
@@ -187,9 +231,16 @@ public class ConfirmationModal {
             ShopUiUtil.button(graphics, font, clickZones, mouseX, mouseY, confirmX, lineY, btnW, btnH,
                     Component.translatable("gui.futureshops.modal.processing"), ShopUiUtil.ButtonStyle.PRIMARY, false, null);
         } else {
+            boolean canConfirm = !paymentSourceRequired || selectedPaymentSource != null;
             ShopUiUtil.button(graphics, font, clickZones, mouseX, mouseY, confirmX, lineY, btnW, btnH,
-                    Component.translatable("gui.futureshops.modal.confirm"), ShopUiUtil.ButtonStyle.PRIMARY, true,
-                    () -> onConfirm.accept(this));
+                    Component.translatable("gui.futureshops.modal.confirm"), ShopUiUtil.ButtonStyle.PRIMARY, canConfirm,
+                    () -> {
+                        if (paymentSourceRequired) {
+                            onPaymentConfirm.accept(this, selectedPaymentSource);
+                        } else {
+                            onConfirm.accept(this);
+                        }
+                    });
         }
 
         // Vanilla-style tooltip on hovered item icon so buyers can inspect enchantments,
@@ -245,4 +296,3 @@ public class ConfirmationModal {
         }
     }
 }
-

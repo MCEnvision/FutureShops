@@ -97,10 +97,10 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                         ConfirmationModal.SummaryLine.item(item.itemId(), item.displayName() + " ×" + qty, item.nbtJson())
                 ),
                 I18n.get("gui.futureshops.item_detail.total_cost", totalStr, ShopClientState.getCurrencyName()),
-                modal -> {
+                (modal, paymentSource) -> {
                     modal.setProcessing();
                     ShopPackets.CHANNEL.sendToServer(C2SBuyRequestPacket.single(
-                            ShopClientState.getActiveShopId(), item.listingId(), qty));
+                            ShopClientState.getActiveShopId(), item.listingId(), qty, paymentSource));
                 },
                 () -> confirmationModal = null
         );

@@ -74,14 +74,17 @@ public class BuyPacketCallSiteTest {
 
                 // Split on commas that are NOT inside nested parens.
                 List<String> parts = splitTopLevel(args);
-                if (parts.size() < 4) {
-                    failures.add(file + " :: legacy 3-arg C2SPlayerShopBuyPacket ctor used — "
-                            + "BOTH-mode listings will be rejected by the server guard: " + argsRaw);
+                if (parts.size() < 5) {
+                    failures.add(file + " :: buy packet is missing its trade method or payment source: " + argsRaw);
                     continue;
                 }
                 String paymentArg = parts.get(3).trim();
                 if (paymentArg.equals("\"\"")) {
                     failures.add(file + " :: empty-string paymentMethod passed to C2SPlayerShopBuyPacket: " + argsRaw);
+                }
+                String paymentSourceArg = parts.get(4).trim();
+                if (paymentSourceArg.equals("\"\"")) {
+                    failures.add(file + " :: empty-string paymentSource passed to C2SPlayerShopBuyPacket: " + argsRaw);
                 }
                 // `entry.chosenPayment()`, `"MONEY"`, `"BARTER"`, `"MONEY_AND_BARTER"`, `paymentMethod`
                 // are all fine — chosenPayment() defaults per-mode in PlayerShopCartState.
@@ -453,7 +456,6 @@ public class BuyPacketCallSiteTest {
                         + String.join("\n  ", missing));
     }
 }
-
 
 
 

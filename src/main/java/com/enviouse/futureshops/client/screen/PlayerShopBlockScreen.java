@@ -7,6 +7,7 @@ import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.PlayerShopListingData;
 import com.enviouse.futureshops.data.PlayerShopStorageEntry;
 import com.enviouse.futureshops.network.ShopPackets;
+import com.enviouse.futureshops.money.PaymentSource;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopActionPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuyPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuybackConfigPacket;
@@ -1665,7 +1666,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     private String buyerFriendlyMessage(String code) {
         String upper = code.toUpperCase(Locale.ROOT);
         boolean buyerVisible = switch (upper) {
-            case "BOUGHT", "INSUFFICIENT_FUNDS", "OUT_OF_STOCK", "MISSING_BARTER_ITEMS", "STORAGE_FULL",
+            case "BOUGHT", "INSUFFICIENT_FUNDS", "INSUFFICIENT_PHYSICAL_FUNDS", "OUT_OF_STOCK", "MISSING_BARTER_ITEMS", "STORAGE_FULL",
                  "INVALID_ITEM", "NO_LINK", "ROLLBACK", "UNCONFIGURED", "RS_NOT_CONTROLLER",
                  "INVALID_REQUEST" -> true;
             default -> false;
@@ -1909,13 +1910,10 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
         rebuildWidgets();
     }
 
-    private void buy(int quantity) {
-        buy(quantity, "MONEY");
-    }
-
-    private void buy(int quantity, String paymentMethod) {
+    private void buy(int quantity, String paymentMethod, PaymentSource paymentSource) {
         ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopBuyPacket(
-                PlayerShopClientState.shopPos(), PlayerShopClientState.selectedListingIndex(), quantity, paymentMethod));
+                PlayerShopClientState.shopPos(), PlayerShopClientState.selectedListingIndex(), quantity,
+                paymentMethod, paymentSource.wire()));
     }
 
     private void showBuyConfirmation(int quantity) {
@@ -1962,16 +1960,29 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
             paymentMethod = "MONEY";
         }
 
-        confirmationModal = new ConfirmationModal(
-                I18n.get("gui.futureshops.player_shop_block.confirm.title"),
-                summary,
-                totalLine,
-                modal -> {
-                    modal.setProcessing();
-                    buy(quantity, paymentMethod);
-                },
-                () -> confirmationModal = null
-        );
+        if (total > 0L) {
+            confirmationModal = new ConfirmationModal(
+                    I18n.get("gui.futureshops.player_shop_block.confirm.title"),
+                    summary,
+                    totalLine,
+                    (modal, paymentSource) -> {
+                        modal.setProcessing();
+                        buy(quantity, paymentMethod, paymentSource);
+                    },
+                    () -> confirmationModal = null
+            );
+        } else {
+            confirmationModal = new ConfirmationModal(
+                    I18n.get("gui.futureshops.player_shop_block.confirm.title"),
+                    summary,
+                    totalLine,
+                    modal -> {
+                        modal.setProcessing();
+                        buy(quantity, paymentMethod, PaymentSource.WALLET);
+                    },
+                    () -> confirmationModal = null
+            );
+        }
     }
 
     public void onTransactionResult(boolean success, String message) {

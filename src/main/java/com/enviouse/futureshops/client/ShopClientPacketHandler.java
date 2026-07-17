@@ -490,6 +490,7 @@ public final class ShopClientPacketHandler {
             case COOLDOWN -> "command.futureshops.buy.error.cooldown";
             case INVALID_ITEM, INVALID_RECIPE -> "command.futureshops.buy.error.invalid_item";
             case INSUFFICIENT_FUNDS -> "command.futureshops.error.insufficient_funds";
+            case INSUFFICIENT_PHYSICAL_FUNDS -> "command.futureshops.error.insufficient_physical_funds";
             case INVALID_AMOUNT -> "command.futureshops.error.invalid_amount";
             case MAX_BALANCE_EXCEEDED -> "command.futureshops.error.max_balance_exceeded";
             case MISSING_ITEMS -> "gui.futureshops.status.sell.error.missing_items";

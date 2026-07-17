@@ -5,6 +5,7 @@ import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.CatalogItem;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
+import com.enviouse.futureshops.money.PaymentSource;
 import com.enviouse.futureshops.network.packets.C2SVerifyAdminCartPacket;
 import com.enviouse.futureshops.network.packets.S2CVerifyCartResponsePacket;
 import net.minecraft.client.gui.GuiGraphics;
@@ -83,9 +84,9 @@ public class CartScreen extends Screen implements ShopScreenMarker {
                 Component.translatable("gui.futureshops.cart.confirm.title").getString(),
                 lines,
                 Component.translatable("gui.futureshops.item_detail.total_cost", totalStr, ShopClientState.getCurrencyName()).getString(),
-                modal -> {
+                (modal, paymentSource) -> {
                     modal.setProcessing();
-                    sendCheckout();
+                    sendCheckout(paymentSource);
                 },
                 () -> confirmationModal = null
         );
@@ -286,7 +287,7 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         // If we already have warnings (user saw them), force checkout on second click
         if (!ShopClientState.getCartWarnings().isEmpty()) {
             ShopClientState.clearCartVerification();
-            sendCheckout();
+            showCheckoutModal();
             return;
         }
 
@@ -308,12 +309,13 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         ShopPackets.CHANNEL.sendToServer(new C2SVerifyAdminCartPacket(shopId, lines));
     }
 
-    private void sendCheckout() {
+    private void sendCheckout(PaymentSource paymentSource) {
         List<C2SBuyRequestPacket.LineItem> lines = ShopClientState.getCartEntries().stream()
                 .map(entry -> new C2SBuyRequestPacket.LineItem(entry.listingId(), entry.quantity()))
                 .toList();
         if (!lines.isEmpty()) {
-            ShopPackets.CHANNEL.sendToServer(C2SBuyRequestPacket.cart(ShopClientState.getActiveShopId(), lines));
+            ShopPackets.CHANNEL.sendToServer(C2SBuyRequestPacket.cart(
+                    ShopClientState.getActiveShopId(), lines, paymentSource));
         }
     }
 

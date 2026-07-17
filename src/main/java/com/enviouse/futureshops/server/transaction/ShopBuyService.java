@@ -3,12 +3,13 @@ package com.enviouse.futureshops.server.transaction;
 import com.enviouse.futureshops.catalog.ItemDef;
 import com.enviouse.futureshops.catalog.ShopCatalog;
 import com.enviouse.futureshops.event.ShopTransactionEvent;
+import com.enviouse.futureshops.money.PaymentSource;
+import com.enviouse.futureshops.money.PurchasePaymentService;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
 import com.enviouse.futureshops.network.packets.S2CBuyResponsePacket;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
-import com.enviouse.futureshops.server.economy.TransactionResult;
 import com.enviouse.futureshops.server.pricing.DynamicPricingEngine;
 import com.enviouse.futureshops.server.session.ShopSession;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
@@ -70,6 +71,11 @@ public final class ShopBuyService {
         ShopSession session = ShopSessionManager.get(player.getUUID()).orElse(null);
         if (session == null || !session.shopId().equals(shopId)) {
             return BuyResult.error(shopId, BalanceManager.getProvider().getBalance(player.getUUID()), ShopResultCode.SHOP_CLOSED);
+        }
+
+        PaymentSource paymentSource = PaymentSource.fromWire(packet.paymentSource()).orElse(null);
+        if (paymentSource == null) {
+            return BuyResult.error(shopId, BalanceManager.getProvider().getBalance(player.getUUID()), ShopResultCode.INVALID_REQUEST);
         }
 
         Map<String, Integer> mergedLines = mergeLines(packet.lineItems());
@@ -165,7 +171,8 @@ public final class ShopBuyService {
                 return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVENTORY_FULL);
             }
 
-            if (provider.getBalance(player.getUUID()) < totalCost) {
+            if (paymentSource == PaymentSource.WALLET
+                    && provider.getBalance(player.getUUID()) < totalCost) {
                 return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INSUFFICIENT_FUNDS);
             }
 
@@ -178,9 +185,10 @@ public final class ShopBuyService {
                 }
             }
 
-            TransactionResult withdrawal = provider.withdraw(player.getUUID(), totalCost, "BUY");
-            if (!withdrawal.success()) {
-                return BuyResult.error(shopId, withdrawal.resultingBalance(), withdrawal.errorCode());
+            PurchasePaymentService.Result payment = PurchasePaymentService.charge(
+                    player, totalCost, paymentSource);
+            if (!payment.success()) {
+                return BuyResult.error(shopId, payment.resultingBalance(), payment.code());
             }
 
             List<PreparedLine> reserved = new ArrayList<>();
@@ -189,7 +197,7 @@ public final class ShopBuyService {
                     for (PreparedLine rollback : reserved) {
                         ShopCatalog.restoreStock(shopId, rollback.listingId(), rollback.quantity());
                     }
-                    provider.deposit(player.getUUID(), totalCost, "BUY");
+                    PurchasePaymentService.refund(player, payment.receipt());
                     return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.OUT_OF_STOCK);
                 }
                 reserved.add(line);
@@ -206,7 +214,7 @@ public final class ShopBuyService {
 
             inventory.setChanged();
             player.inventoryMenu.broadcastChanges();
-            return BuyResult.success(shopId, withdrawal.resultingBalance(), totalCost, totalQuantity, List.copyOf(preparedLines));
+            return BuyResult.success(shopId, payment.resultingBalance(), totalCost, totalQuantity, List.copyOf(preparedLines));
         } finally {
             lock.unlock();
         }
@@ -241,5 +249,4 @@ public final class ShopBuyService {
         }
     }
 }
-
 

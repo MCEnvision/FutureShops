@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.network.packets;
 
 import com.enviouse.futureshops.server.transaction.ShopBuyService;
+import com.enviouse.futureshops.money.PaymentSource;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
@@ -12,7 +13,8 @@ import java.util.function.Supplier;
  * Client → server buy request.
  * Supports both single-item buys (detail screen) and cart checkout.
  */
-public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<LineItem> lineItems) {
+public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<LineItem> lineItems,
+                                  String paymentSource) {
 
     /**
      * One buy line. {@code listingId} is the catalog resolution key (== registry itemId for legacy
@@ -30,18 +32,22 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
         }
     }
 
-    public static C2SBuyRequestPacket single(String shopId, String listingId, int quantity) {
-        return new C2SBuyRequestPacket(shopId, false, List.of(new LineItem(listingId, quantity)));
+    public static C2SBuyRequestPacket single(String shopId, String listingId, int quantity,
+                                             PaymentSource paymentSource) {
+        return new C2SBuyRequestPacket(shopId, false, List.of(new LineItem(listingId, quantity)),
+                paymentSource.wire());
     }
 
-    public static C2SBuyRequestPacket cart(String shopId, List<LineItem> lineItems) {
-        return new C2SBuyRequestPacket(shopId, true, List.copyOf(lineItems));
+    public static C2SBuyRequestPacket cart(String shopId, List<LineItem> lineItems,
+                                           PaymentSource paymentSource) {
+        return new C2SBuyRequestPacket(shopId, true, List.copyOf(lineItems), paymentSource.wire());
     }
 
     public static void encode(C2SBuyRequestPacket packet, FriendlyByteBuf buffer) {
         buffer.writeUtf(packet.shopId);
         buffer.writeBoolean(packet.cartCheckout);
         buffer.writeCollection(packet.lineItems, LineItem::encode);
+        buffer.writeUtf(packet.paymentSource);
     }
 
     /** Hard cap on cart line count. A real cart never exceeds a few dozen;
@@ -60,7 +66,7 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
         for (int i = 0; i < count; i++) {
             lines.add(LineItem.decode(buffer));
         }
-        return new C2SBuyRequestPacket(shopId, cartCheckout, lines);
+        return new C2SBuyRequestPacket(shopId, cartCheckout, lines, buffer.readUtf());
     }
 
     public static void handle(C2SBuyRequestPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
@@ -74,4 +80,3 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
         context.setPacketHandled(true);
     }
 }
-

@@ -171,6 +171,97 @@ public final class CurrencyMath {
         return counts;
     }
 
+    public static long[] exactBoundedCounts(long amountMinor, long[] denominationValues,
+                                            int[] availableCounts) {
+        if (amountMinor < 0L || denominationValues.length == 0
+                || denominationValues.length != availableCounts.length) {
+            return null;
+        }
+        if (amountMinor == 0L) {
+            return new long[denominationValues.length];
+        }
+
+        long[] greedy = new long[denominationValues.length];
+        long remaining = amountMinor;
+        for (int i = 0; i < denominationValues.length; i++) {
+            long value = denominationValues[i];
+            if (value <= 0L || availableCounts[i] <= 0) {
+                continue;
+            }
+            long count = Math.min((long) availableCounts[i], remaining / value);
+            greedy[i] = count;
+            remaining -= count * value;
+        }
+        if (remaining == 0L) {
+            return greedy;
+        }
+
+        long common = 0L;
+        for (int i = 0; i < denominationValues.length; i++) {
+            if (denominationValues[i] > 0L && availableCounts[i] > 0) {
+                common = gcd(common, denominationValues[i]);
+            }
+        }
+        if (common <= 0L || amountMinor % common != 0L) {
+            return null;
+        }
+        long targetUnits = amountMinor / common;
+        if (targetUnits > EXACT_CHANGE_MAX_UNITS) {
+            return null;
+        }
+
+        record Group(int denominationIndex, int count, int units) {
+        }
+        List<Group> groups = new ArrayList<>();
+        int target = (int) targetUnits;
+        for (int i = 0; i < denominationValues.length; i++) {
+            if (denominationValues[i] <= 0L || availableCounts[i] <= 0) {
+                continue;
+            }
+            long unitValue = denominationValues[i] / common;
+            int left = availableCounts[i];
+            int batch = 1;
+            while (left > 0) {
+                int count = Math.min(batch, left);
+                long weight = unitValue * count;
+                if (weight <= target) {
+                    groups.add(new Group(i, count, (int) weight));
+                }
+                left -= count;
+                if (batch <= Integer.MAX_VALUE / 2) {
+                    batch *= 2;
+                }
+            }
+        }
+
+        boolean[] reachable = new boolean[target + 1];
+        int[] previous = new int[target + 1];
+        int[] chosenGroup = new int[target + 1];
+        java.util.Arrays.fill(previous, -1);
+        java.util.Arrays.fill(chosenGroup, -1);
+        reachable[0] = true;
+        for (int groupIndex = 0; groupIndex < groups.size(); groupIndex++) {
+            Group group = groups.get(groupIndex);
+            for (int units = target; units >= group.units(); units--) {
+                if (!reachable[units] && reachable[units - group.units()]) {
+                    reachable[units] = true;
+                    previous[units] = units - group.units();
+                    chosenGroup[units] = groupIndex;
+                }
+            }
+        }
+        if (!reachable[target]) {
+            return null;
+        }
+
+        long[] counts = new long[denominationValues.length];
+        for (int units = target; units > 0; units = previous[units]) {
+            Group group = groups.get(chosenGroup[units]);
+            counts[group.denominationIndex()] += group.count();
+        }
+        return counts;
+    }
+
     private static long gcd(long a, long b) {
         while (b != 0L) {
             long t = a % b;

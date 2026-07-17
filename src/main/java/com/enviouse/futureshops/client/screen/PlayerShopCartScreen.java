@@ -4,6 +4,7 @@ import com.enviouse.futureshops.client.PlayerShopCartState;
 import com.enviouse.futureshops.client.ShopClientState;
 import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.network.ShopPackets;
+import com.enviouse.futureshops.money.PaymentSource;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopActionPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuyPacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyCartPacket;
@@ -29,6 +30,7 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
     private int hoverTooltipX = 0;
     private int hoverTooltipY = 0;
     private boolean awaitingVerification = false;
+    private ConfirmationModal confirmationModal;
     private static final int SCROLLBAR_RESERVE = 16;
     private static final int REMOVE_BTN_W = 18;
 
@@ -378,16 +380,30 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
         } else if (hoverTooltipText != null) {
             graphics.renderTooltip(this.font, Component.literal(hoverTooltipText), hoverTooltipX, hoverTooltipY);
         }
+        if (confirmationModal != null) {
+            confirmationModal.render(graphics, this.font, this.width, this.height, mouseX, mouseY);
+        }
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (confirmationModal != null) {
+            return confirmationModal.mouseClicked(mouseX, mouseY, button, this.font);
+        }
         // Flat Nocturne zones (footer + per-row visit/steppers/remove/payment-toggle): run the
         // top-most hit zone. Registration order (visit → badge → steppers) gives steppers priority.
         if (ShopUiUtil.dispatchClicks(clickZones, mouseX, mouseY)) {
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (confirmationModal != null && confirmationModal.keyPressed(keyCode)) {
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
@@ -425,19 +441,37 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
             awaitingVerification = false;
             List<S2CVerifyCartResponsePacket.CartWarning> warnings = ShopClientState.getCartWarnings();
             if (warnings.isEmpty()) {
-                // All OK — proceed with checkout
-                checkout();
+                prepareCheckout();
             }
             // If there are warnings, they'll be shown in render() — user must click Checkout again to confirm
         }
     }
 
-    private void checkout() {
+    private void prepareCheckout() {
+        PlayerShopCartState.CartSummary summary = PlayerShopCartState.buildSummary();
+        if (summary.moneyTotal() <= 0L) {
+            checkout(PaymentSource.WALLET);
+            return;
+        }
+        String total = ShopUiUtil.formatMinorUnits(summary.moneyTotal()) + " "
+                + ShopClientState.getCurrencyName();
+        confirmationModal = new ConfirmationModal(
+                Component.translatable("gui.futureshops.player_shop_cart.confirm.title").getString(),
+                List.of(ConfirmationModal.SummaryLine.text(
+                        Component.translatable("gui.futureshops.player_shop_cart.confirm.items",
+                                summary.itemCount()).getString())),
+                Component.translatable("gui.futureshops.player_shop_block.confirm.total", total).getString(),
+                (modal, paymentSource) -> checkout(paymentSource),
+                () -> confirmationModal = null);
+    }
+
+    private void checkout(PaymentSource paymentSource) {
         List<PlayerShopCartState.CartEntry> entries = PlayerShopCartState.getEntries();
         for (PlayerShopCartState.CartEntry entry : entries) {
             // LGB#4: Pass chosen payment method for BOTH-mode trades
             ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopBuyPacket(
-                    entry.shopPos(), entry.listingIndex(), entry.quantity(), entry.chosenPayment()));
+                    entry.shopPos(), entry.listingIndex(), entry.quantity(), entry.chosenPayment(),
+                    paymentSource.wire()));
         }
         PlayerShopCartState.clear();
         ShopClientState.clearCartVerification();
@@ -456,4 +490,3 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
         return false;
     }
 }
-

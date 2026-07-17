@@ -37,14 +37,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class ProtocolVersionConstantTest {
 
     @Test
-    void protocolVersionIs30() {
-        assertEquals("30", ShopPackets.PROTOCOL_VERSION,
-                "PROTOCOL_VERSION must be \"30\" — protocol 30 appended the ATM catalog and exact "
-                        + "denomination withdrawal packets. Protocol 29 changed the barter-batch semantics "
-                        + "from an off-hand-paid atomic add to safe targets followed by ingredient editors. "
-                        + "Protocol 28 added trailing barter fields "
-                        + "(boolean barter, int outputCount, int ingredientCount) to C2SAdminShopAddItemsPacket "
-                        + "for creating barter listings from the OP editor. If you intentionally changed the "
-                        + "wire format or semantics, bump it and update this test.");
+    void protocolVersionIs31() {
+        assertEquals("31", ShopPackets.PROTOCOL_VERSION,
+                "PROTOCOL_VERSION must be 31 because purchase packets now include payment source");
     }
 }

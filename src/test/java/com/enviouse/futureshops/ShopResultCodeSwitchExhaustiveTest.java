@@ -81,6 +81,7 @@ public class ShopResultCodeSwitchExhaustiveTest {
     private static final Set<String> BUYER_VISIBLE_CODES = Set.of(
             "BOUGHT",
             "INSUFFICIENT_FUNDS",
+            "INSUFFICIENT_PHYSICAL_FUNDS",
             "OUT_OF_STOCK",
             "MISSING_BARTER_ITEMS",
             "STORAGE_FULL",

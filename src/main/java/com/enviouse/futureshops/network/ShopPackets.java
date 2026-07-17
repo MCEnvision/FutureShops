@@ -56,6 +56,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ShopPackets {
+    // 31 adds separate wallet and inventory cash selection to every purchase packet.
     // 30: added the server-authoritative ATM catalog, exact denomination withdrawal request,
     //     and result packets. v29 peers do not know these appended packet registrations.
     // 29: changed the protocol-28 barter batch from an off-hand-paid atomic add into safe empty
@@ -71,7 +72,7 @@ public final class ShopPackets {
     // 24: per-listing id added to CatalogItem + buy/sell/admin-cart wire lines (multi-variant NBT
     //     admin listings). Old v23 clients are refused at handshake so they can't desync on the
     //     new leading listingId field.
-    public static final String PROTOCOL_VERSION = "30";
+    public static final String PROTOCOL_VERSION = "31";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))

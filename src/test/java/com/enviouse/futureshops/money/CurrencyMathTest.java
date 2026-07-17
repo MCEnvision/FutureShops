@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -129,5 +131,23 @@ class CurrencyMathTest {
         long money = 100L;
         long coins = 25L;
         assertTrue(8 * coins >= money, "8 coins must be worth at least 1 money or crafting prints money");
+    }
+
+    @Test
+    void boundedExactSelectionNeverOverpays() {
+        assertArrayEquals(new long[]{0L, 4L},
+                CurrencyMath.exactBoundedCounts(100L,
+                        new long[]{70L, 25L}, new int[]{1, 4}));
+        assertNull(CurrencyMath.exactBoundedCounts(100L,
+                new long[]{70L, 25L}, new int[]{1, 3}));
+    }
+
+    @Test
+    void boundedExactSelectionHonorsInventoryCounts() {
+        assertArrayEquals(new long[]{1L, 1L, 1L},
+                CurrencyMath.exactBoundedCounts(160L,
+                        new long[]{100L, 50L, 10L}, new int[]{1, 1, 6}));
+        assertNull(CurrencyMath.exactBoundedCounts(160L,
+                new long[]{100L, 50L, 10L}, new int[]{1, 0, 5}));
     }
 }

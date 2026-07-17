@@ -91,6 +91,10 @@ public interface PhysicalCurrencyAdapter {
      */
     ConsumeSummary consumeUpTo(ServerPlayer player, long targetMinor);
 
+    ExactPayment consumeExact(ServerPlayer player, long targetMinor);
+
+    void refundExact(ServerPlayer player, ExactPayment payment);
+
     record Denomination(Item item, long valueMinor) {
     }
 
@@ -102,5 +106,14 @@ public interface PhysicalCurrencyAdapter {
      * restorable.
      */
     record ConsumeSummary(long creditedMinor, int itemsConsumed, List<ItemStack> refundableStacks) {
+    }
+
+    record PaymentPortion(long valueMinor, int count, ItemStack refundableStack) {
+    }
+
+    record ExactPayment(boolean success, long amountMinor, int itemsConsumed, List<PaymentPortion> portions) {
+        public static ExactPayment failed() {
+            return new ExactPayment(false, 0L, 0, List.of());
+        }
     }
 }

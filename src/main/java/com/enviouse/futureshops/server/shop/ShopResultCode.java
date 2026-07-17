@@ -56,6 +56,7 @@ public enum ShopResultCode {
     STORAGE_FULL,
     INVENTORY_FULL,
     INSUFFICIENT_FUNDS,
+    INSUFFICIENT_PHYSICAL_FUNDS,
     SHOP_OUT_OF_MONEY,
     BUYBACK_CAP_REACHED,
     MISSING_BARTER_ITEMS,
@@ -88,4 +89,3 @@ public enum ShopResultCode {
         return "gui.futureshops.player_shop.result." + name().toLowerCase(java.util.Locale.ROOT);
     }
 }
-

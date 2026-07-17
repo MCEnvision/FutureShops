@@ -4,6 +4,8 @@ import com.enviouse.futureshops.block.ShopBlockEntity;
 import com.enviouse.futureshops.data.PlayerShopListingData;
 import com.enviouse.futureshops.data.PlayerShopPromoData;
 import com.enviouse.futureshops.data.SettlementHistoryRow;
+import com.enviouse.futureshops.money.PaymentSource;
+import com.enviouse.futureshops.money.PurchasePaymentService;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopDataPacket;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopResultPacket;
@@ -716,8 +718,15 @@ public final class PlayerShopBlockService {
         return listingIndex;
     }
 
-    public static void buy(ServerPlayer buyer, BlockPos pos, int listingIndex, int quantity, String paymentMethod) {
+    public static void buy(ServerPlayer buyer, BlockPos pos, int listingIndex, int quantity,
+                           String paymentMethod, String paymentSourceWire) {
         if (!(buyer.level().getBlockEntity(pos) instanceof ShopBlockEntity shop)) {
+            return;
+        }
+
+        PaymentSource paymentSource = PaymentSource.fromWire(paymentSourceWire).orElse(null);
+        if (paymentSource == null) {
+            sendResult(buyer, false, ShopResultCode.INVALID_REQUEST);
             return;
         }
 
@@ -766,7 +775,8 @@ public final class PlayerShopBlockService {
             // Infinite stock, money sunk on buys, barter inputs voided. No
             // linked-storage or barter-storage required.
             if (shop.isAdminShopMode()) {
-                handleAdminShopBuy(buyer, shop, pos, listing, qty, deliverCount, saleItem, paymentMethod);
+                handleAdminShopBuy(buyer, shop, pos, listing, qty, deliverCount, saleItem,
+                        paymentMethod, paymentSource);
                 return;
             }
 
@@ -800,7 +810,7 @@ public final class PlayerShopBlockService {
 
             EconomyProvider provider = BalanceManager.getProvider();
             long cost = Math.max(0L, listing.calculatePrice(qty));
-            boolean withdrewFromBuyer = false;
+            PurchasePaymentService.Receipt paymentReceipt = null;
             boolean recordedSale = false;
             Item barterItem = null;
             int barterAmount = 0;
@@ -902,12 +912,13 @@ public final class PlayerShopBlockService {
             if (compoundTrade) {
                 // LGB#8: Skip money withdrawal if cost is 0 (100% discount)
                 if (cost > 0L) {
-                    TransactionResult moneyCheck = provider.withdraw(buyer.getUUID(), cost, "BUY");
+                    PurchasePaymentService.Result moneyCheck = PurchasePaymentService.charge(
+                            buyer, cost, paymentSource);
                     if (!moneyCheck.success()) {
-                        sendResultWithChat(buyer, false, ShopResultCode.INSUFFICIENT_FUNDS, Component.translatable("command.futureshops.shop.compound_insufficient"));
+                        sendResultWithChat(buyer, false, moneyCheck.code(), Component.translatable("command.futureshops.shop.compound_insufficient"));
                         return;
                     }
-                    withdrewFromBuyer = true;
+                    paymentReceipt = moneyCheck.receipt();
                 }
 
                 // Fire BarterTradeEvent.Pre (spec §33) for barter portion
@@ -918,7 +929,7 @@ public final class PlayerShopBlockService {
                             List.of(new com.enviouse.futureshops.event.BarterTradeEvent.IngredientEntry(listing.barterItemId(), barterAmount)));
                     net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(barterPre);
                     if (barterPre.isCanceled()) {
-                        if (withdrewFromBuyer) provider.deposit(buyer.getUUID(), cost, "BUY");
+                        PurchasePaymentService.refund(buyer, paymentReceipt);
                         sendResult(buyer, false, ShopResultCode.CANCELLED_BY_EVENT);
                         return;
                     }
@@ -931,7 +942,7 @@ public final class PlayerShopBlockService {
                         buyer.getInventory(), barterItem, barterAmount,
                         listing.barterNbtAware(), listing.barterNbtTag());
                 if (paymentStacks.isEmpty()) {
-                    provider.deposit(buyer.getUUID(), cost, "BUY");
+                    PurchasePaymentService.refund(buyer, paymentReceipt);
                     sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, Component.translatable("command.futureshops.shop.barter_not_taken"));
                     return;
                 }
@@ -941,7 +952,7 @@ public final class PlayerShopBlockService {
                         : insertAll(barterStorage.handler(), paymentStacks);
                 if (!insertedOk) {
                     ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), paymentStacks);
-                    provider.deposit(buyer.getUUID(), cost, "BUY");
+                    PurchasePaymentService.refund(buyer, paymentReceipt);
                     sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, Component.translatable("command.futureshops.shop.trade_storage_full"));
                     return;
                 }
@@ -959,18 +970,15 @@ public final class PlayerShopBlockService {
                         recordedSale = true;
                     }
                 } else {
-                    TransactionResult withdraw = provider.withdraw(buyer.getUUID(), cost, "BUY");
-                    if (!withdraw.success()) {
-                        if (listing.tradeMode() == ShopBlockEntity.TradeMode.BOTH) {
-                            barterTrade = true;
-                        } else {
-                            sendResult(buyer, false, ShopResultCode.INSUFFICIENT_FUNDS);
-                            return;
-                        }
+                    PurchasePaymentService.Result payment = PurchasePaymentService.charge(
+                            buyer, cost, paymentSource);
+                    if (!payment.success()) {
+                        sendResult(buyer, false, payment.code());
+                        return;
                     } else {
-                        withdrewFromBuyer = true;
+                        paymentReceipt = payment.receipt();
                         if (buyer.getServer() == null) {
-                            provider.deposit(buyer.getUUID(), cost, "BUY");
+                            PurchasePaymentService.refund(buyer, paymentReceipt);
                             sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                             return;
                         }
@@ -1042,7 +1050,7 @@ public final class PlayerShopBlockService {
                                 reinsertComposite(linkedStorages, ex);
                             }
                         }
-                        rollbackAll(barterStorage, buyer, provider, withdrewFromBuyer, cost, recordedSale,
+                        rollbackAll(barterStorage, buyer, paymentReceipt, cost, recordedSale,
                                 shop.getOwnerUuid(), pos, insertedPayment, compoundTrade, barterTrade);
                         sendResult(buyer, false, ShopResultCode.ROLLBACK);
                         return;
@@ -1054,7 +1062,7 @@ public final class PlayerShopBlockService {
             }
 
             if (extracted.isEmpty()) {
-                rollbackAll(barterStorage, buyer, provider, withdrewFromBuyer, cost, recordedSale,
+                rollbackAll(barterStorage, buyer, paymentReceipt, cost, recordedSale,
                         shop.getOwnerUuid(), pos, insertedPayment, compoundTrade, barterTrade);
                 sendResult(buyer, false, ShopResultCode.ROLLBACK);
                 return;
@@ -1231,7 +1239,8 @@ public final class PlayerShopBlockService {
      */
     private static void handleAdminShopBuy(ServerPlayer buyer, ShopBlockEntity shop, BlockPos pos,
                                            ShopBlockEntity.Listing listing, int qty, int deliverCount,
-                                           Item saleItem, String paymentMethod) {
+                                           Item saleItem, String paymentMethod,
+                                           PaymentSource paymentSource) {
         EconomyProvider provider = BalanceManager.getProvider();
         long cost = Math.max(0L, listing.calculatePrice(qty));
         boolean isBundle = !listing.bundleOutputs().isEmpty();
@@ -1295,14 +1304,15 @@ public final class PlayerShopBlockService {
         }
 
         // Charge money (sunk — never deposited to owner).
-        boolean withdrewFromBuyer = false;
+        PurchasePaymentService.Receipt paymentReceipt = null;
         if ((compoundTrade || !barterTrade) && cost > 0L) {
-            TransactionResult withdraw = provider.withdraw(buyer.getUUID(), cost, "BUY");
-            if (!withdraw.success()) {
-                sendResult(buyer, false, ShopResultCode.INSUFFICIENT_FUNDS);
+            PurchasePaymentService.Result payment = PurchasePaymentService.charge(
+                    buyer, cost, paymentSource);
+            if (!payment.success()) {
+                sendResult(buyer, false, payment.code());
                 return;
             }
-            withdrewFromBuyer = true;
+            paymentReceipt = payment.receipt();
         }
 
         // Consume barter items — voided (NOT inserted into any storage).
@@ -1311,7 +1321,7 @@ public final class PlayerShopBlockService {
                     buyer.getInventory(), barterItem, barterAmount,
                     listing.barterNbtAware(), listing.barterNbtTag());
             if (paymentStacks.isEmpty()) {
-                if (withdrewFromBuyer) provider.deposit(buyer.getUUID(), cost, "BUY");
+                PurchasePaymentService.refund(buyer, paymentReceipt);
                 sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS,
                         Component.translatable("command.futureshops.shop.barter_not_taken"));
                 return;
@@ -1497,8 +1507,9 @@ public final class PlayerShopBlockService {
      * is pulled back from the barter storage it was inserted into (which may differ
      * from the sale-item storage and may be adapter-backed).
      */
-    private static void rollbackAll(LinkedStorage barterStorage, ServerPlayer buyer, EconomyProvider provider,
-                                    boolean withdrewFromBuyer, long cost, boolean recordedSale,
+    private static void rollbackAll(LinkedStorage barterStorage, ServerPlayer buyer,
+                                    PurchasePaymentService.Receipt paymentReceipt,
+                                    long cost, boolean recordedSale,
                                     UUID ownerUuid, BlockPos pos,
                                     List<ItemStack> insertedPayment,
                                     boolean compoundTrade, boolean barterTrade) {
@@ -1506,9 +1517,7 @@ public final class PlayerShopBlockService {
             if (recordedSale && buyer.getServer() != null) {
                 PlayerShopSettlementSavedData.get(buyer.getServer()).rollbackPending(ownerUuid, pos.asLong(), cost);
             }
-            if (withdrewFromBuyer) {
-                provider.deposit(buyer.getUUID(), cost, "BUY");
-            }
+            PurchasePaymentService.refund(buyer, paymentReceipt);
         }
         if (compoundTrade || barterTrade) {
             rollbackBarterPayment(barterStorage, buyer, insertedPayment);

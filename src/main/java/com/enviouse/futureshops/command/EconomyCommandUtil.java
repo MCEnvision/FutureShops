@@ -57,6 +57,7 @@ public final class EconomyCommandUtil {
         String key = switch (errorCode) {
             case INVALID_AMOUNT -> "command.futureshops.error.invalid_amount";
             case INSUFFICIENT_FUNDS -> "command.futureshops.error.insufficient_funds";
+            case INSUFFICIENT_PHYSICAL_FUNDS -> "command.futureshops.error.insufficient_physical_funds";
             case MAX_BALANCE_EXCEEDED -> "command.futureshops.error.max_balance_exceeded";
             case INVALID_TARGET -> "command.futureshops.pay.self";
             // Codes not meaningful for direct economy commands fall through to a single

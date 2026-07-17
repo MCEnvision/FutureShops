@@ -4,6 +4,7 @@ import com.enviouse.futureshops.client.PlayerShopClientState;
 import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.PlayerShopListingData;
 import com.enviouse.futureshops.network.ShopPackets;
+import com.enviouse.futureshops.money.PaymentSource;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuyPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
@@ -282,7 +283,7 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
                 canPay ? ShopColors.STATUS_SUCCESS : ShopColors.STATUS_DANGER);
     }
 
-    private void confirm() {
+    private void confirm(PaymentSource paymentSource) {
         // Fix: when trade mode is BOTH, the server previously defaulted to MONEY
         // whenever the buyer could afford it, making the Barter button silently
         // deduct coins instead of bartering. Explicitly signal BARTER here.
@@ -299,7 +300,8 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
                 PlayerShopClientState.shopPos(),
                 PlayerShopClientState.selectedListingIndex(),
                 quantity,
-                paymentMethod));
+                paymentMethod,
+                paymentSource.wire()));
     }
 
     private void showBarterConfirmation() {
@@ -329,8 +331,8 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
                 listing.nbtJson()));
 
         String totalText;
+        long money = compound ? Math.max(0L, listing.effectiveUnitPriceMinor()) * quantity : 0L;
         if (compound) {
-            long money = Math.max(0L, listing.effectiveUnitPriceMinor()) * quantity;
             String moneyStr = money <= 0 ? Component.translatable("gui.futureshops.player_shop_block.confirm.free").getString()
                     : ShopUiUtil.formatMinorUnits(money) + " " + com.enviouse.futureshops.client.ShopClientState.getCurrencyName();
             // Unified compound total format — "Total: §a$X §f+ §9N× item" — matches cart row
@@ -340,16 +342,29 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
             totalText = Component.translatable("gui.futureshops.player_shop_barter.confirm.trades", quantity).getString();
         }
 
-        confirmationModal = new ConfirmationModal(
-                Component.translatable("gui.futureshops.player_shop_barter.confirm.title").getString(),
-                summary,
-                totalText,
-                modal -> {
-                    modal.setProcessing();
-                    confirm();
-                },
-                () -> confirmationModal = null
-        );
+        if (money > 0L) {
+            confirmationModal = new ConfirmationModal(
+                    Component.translatable("gui.futureshops.player_shop_barter.confirm.title").getString(),
+                    summary,
+                    totalText,
+                    (modal, paymentSource) -> {
+                        modal.setProcessing();
+                        confirm(paymentSource);
+                    },
+                    () -> confirmationModal = null
+            );
+        } else {
+            confirmationModal = new ConfirmationModal(
+                    Component.translatable("gui.futureshops.player_shop_barter.confirm.title").getString(),
+                    summary,
+                    totalText,
+                    modal -> {
+                        modal.setProcessing();
+                        confirm(PaymentSource.WALLET);
+                    },
+                    () -> confirmationModal = null
+            );
+        }
     }
 
     public void onTransactionResult(boolean success, String message) {

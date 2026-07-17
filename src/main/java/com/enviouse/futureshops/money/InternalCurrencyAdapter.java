@@ -117,6 +117,90 @@ public final class InternalCurrencyAdapter implements PhysicalCurrencyAdapter {
         return new ConsumeSummary(creditedMinor, itemsConsumed, List.of());
     }
 
+    @Override
+    public ExactPayment consumeExact(ServerPlayer player, long targetMinor) {
+        if (targetMinor < 0L) {
+            return ExactPayment.failed();
+        }
+        if (targetMinor == 0L) {
+            return new ExactPayment(true, 0L, 0, List.of());
+        }
+
+        List<PlannedStack> planned = planValidStacks(player);
+        List<Long> values = new ArrayList<>();
+        List<Integer> available = new ArrayList<>();
+        for (PlannedStack stack : planned) {
+            int index = values.indexOf(stack.denomination);
+            if (index < 0) {
+                values.add(stack.denomination);
+                available.add(stack.available);
+            } else {
+                available.set(index, available.get(index) + stack.available);
+            }
+        }
+        long[] valueArray = new long[values.size()];
+        int[] availableArray = new int[available.size()];
+        for (int i = 0; i < values.size(); i++) {
+            valueArray[i] = values.get(i);
+            availableArray[i] = available.get(i);
+        }
+        long[] selected = CurrencyMath.exactBoundedCounts(targetMinor, valueArray, availableArray);
+        if (selected == null) {
+            return ExactPayment.failed();
+        }
+
+        SpentMintsSavedData mintData = SpentMintsSavedData.get(player.getServer());
+        List<PaymentPortion> portions = new ArrayList<>();
+        int itemsConsumed = 0;
+        for (int i = 0; i < selected.length; i++) {
+            int remaining = Math.toIntExact(selected[i]);
+            int consumedAtValue = 0;
+            for (PlannedStack stack : planned) {
+                if (remaining <= 0) {
+                    break;
+                }
+                if (stack.denomination != valueArray[i]) {
+                    continue;
+                }
+                int requested = Math.min(remaining, stack.available);
+                SpentMintsSavedData.ConsumeResult result = mintData.consume(
+                        stack.mintId, requested, stack.denomination, stack.authorizedCount);
+                if (result.accepted() <= 0) {
+                    continue;
+                }
+                stack.stack.shrink(result.accepted());
+                remaining -= result.accepted();
+                consumedAtValue += result.accepted();
+                itemsConsumed += result.accepted();
+            }
+            if (consumedAtValue > 0) {
+                portions.add(new PaymentPortion(valueArray[i], consumedAtValue, ItemStack.EMPTY));
+            }
+            if (remaining > 0) {
+                ExactPayment partial = new ExactPayment(true, 0L, itemsConsumed, List.copyOf(portions));
+                refundExact(player, partial);
+                return ExactPayment.failed();
+            }
+        }
+        player.containerMenu.broadcastChanges();
+        return new ExactPayment(true, targetMinor, itemsConsumed, List.copyOf(portions));
+    }
+
+    @Override
+    public void refundExact(ServerPlayer player, ExactPayment payment) {
+        for (PaymentPortion portion : payment.portions()) {
+            int remaining = portion.count();
+            int maxStack = Math.max(1, ModItems.MONEY_ITEM.get().getMaxStackSize());
+            while (remaining > 0) {
+                int count = Math.min(remaining, maxStack);
+                ItemStack replacement = mint(player, portion.valueMinor(), count);
+                player.getInventory().placeItemBackInInventory(replacement);
+                remaining -= count;
+            }
+        }
+        player.containerMenu.broadcastChanges();
+    }
+
     // -------------------------------------------------------------------------
     // Helpers (moved verbatim from DepositCommand)
     // -------------------------------------------------------------------------

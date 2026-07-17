@@ -129,6 +129,79 @@ public final class ItemValueCurrencyAdapter implements PhysicalCurrencyAdapter {
         return new ConsumeSummary(credited, itemsConsumed, refundable);
     }
 
+    @Override
+    public ExactPayment consumeExact(ServerPlayer player, long targetMinor) {
+        if (targetMinor < 0L) {
+            return ExactPayment.failed();
+        }
+        if (targetMinor == 0L) {
+            return new ExactPayment(true, 0L, 0, List.of());
+        }
+
+        List<ItemStack> stacks = new ArrayList<>(currencyStacks(player));
+        stacks.sort(Comparator.comparingLong(this::unitValueMinor).reversed());
+        List<Long> values = new ArrayList<>();
+        List<Integer> available = new ArrayList<>();
+        for (ItemStack stack : stacks) {
+            long value = unitValueMinor(stack);
+            int index = values.indexOf(value);
+            if (index < 0) {
+                values.add(value);
+                available.add(stack.getCount());
+            } else {
+                available.set(index, available.get(index) + stack.getCount());
+            }
+        }
+        long[] valueArray = new long[values.size()];
+        int[] availableArray = new int[available.size()];
+        for (int i = 0; i < values.size(); i++) {
+            valueArray[i] = values.get(i);
+            availableArray[i] = available.get(i);
+        }
+        long[] selected = CurrencyMath.exactBoundedCounts(targetMinor, valueArray, availableArray);
+        if (selected == null) {
+            return ExactPayment.failed();
+        }
+
+        int itemsConsumed = 0;
+        List<PaymentPortion> portions = new ArrayList<>();
+        for (int i = 0; i < selected.length; i++) {
+            int remaining = Math.toIntExact(selected[i]);
+            if (remaining <= 0) {
+                continue;
+            }
+            for (ItemStack stack : stacks) {
+                if (remaining <= 0) {
+                    break;
+                }
+                if (unitValueMinor(stack) != valueArray[i]) {
+                    continue;
+                }
+                int taken = Math.min(remaining, stack.getCount());
+                if (taken <= 0) {
+                    continue;
+                }
+                ItemStack refundable = stack.copyWithCount(taken);
+                stack.shrink(taken);
+                portions.add(new PaymentPortion(valueArray[i], taken, refundable));
+                itemsConsumed += taken;
+                remaining -= taken;
+            }
+        }
+        return new ExactPayment(true, targetMinor, itemsConsumed, List.copyOf(portions));
+    }
+
+    @Override
+    public void refundExact(ServerPlayer player, ExactPayment payment) {
+        for (PaymentPortion portion : payment.portions()) {
+            ItemStack stack = portion.refundableStack().copy();
+            if (!stack.isEmpty()) {
+                player.getInventory().placeItemBackInInventory(stack);
+            }
+        }
+        player.containerMenu.broadcastChanges();
+    }
+
     private List<ItemStack> currencyStacks(ServerPlayer player) {
         List<ItemStack> out = new ArrayList<>();
         java.util.stream.Stream

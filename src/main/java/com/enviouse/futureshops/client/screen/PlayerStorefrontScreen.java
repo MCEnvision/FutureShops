@@ -6,6 +6,7 @@ import com.enviouse.futureshops.client.ShopClientState;
 import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.PlayerShopListingData;
 import com.enviouse.futureshops.network.ShopPackets;
+import com.enviouse.futureshops.money.PaymentSource;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuyPacket;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -873,12 +874,13 @@ public class PlayerStorefrontScreen extends Screen implements ShopScreenMarker {
      * BuyPacketCallSiteTest invariant — so the server's BOTH-mode guard honours the button
      * instead of auto-detecting and silently bartering.
      */
-    private void buy(int quantity, String paymentMethod) {
+    private void buy(int quantity, String paymentMethod, PaymentSource paymentSource) {
         if (detailIndex >= 0) {
             PlayerShopClientState.setSelectedListingIndex(detailIndex);
         }
         ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopBuyPacket(
-                PlayerShopClientState.shopPos(), PlayerShopClientState.selectedListingIndex(), quantity, paymentMethod));
+                PlayerShopClientState.shopPos(), PlayerShopClientState.selectedListingIndex(), quantity,
+                paymentMethod, paymentSource.wire()));
     }
 
     /** Buy confirmation modal — mirrors PlayerShopBlockScreen.showBuyConfirmation (money / compound). */
@@ -922,15 +924,27 @@ public class PlayerStorefrontScreen extends Screen implements ShopScreenMarker {
         }
 
         String pm = paymentMethod;
-        confirmationModal = new ConfirmationModal(
-                Component.translatable("gui.futureshops.player_shop_block.confirm.title").getString(),
-                summary,
-                totalLine,
-                modal -> {
-                    modal.setProcessing();
-                    buy(quantity, pm);
-                },
-                () -> confirmationModal = null);
+        if (total > 0L) {
+            confirmationModal = new ConfirmationModal(
+                    Component.translatable("gui.futureshops.player_shop_block.confirm.title").getString(),
+                    summary,
+                    totalLine,
+                    (modal, paymentSource) -> {
+                        modal.setProcessing();
+                        buy(quantity, pm, paymentSource);
+                    },
+                    () -> confirmationModal = null);
+        } else {
+            confirmationModal = new ConfirmationModal(
+                    Component.translatable("gui.futureshops.player_shop_block.confirm.title").getString(),
+                    summary,
+                    totalLine,
+                    modal -> {
+                        modal.setProcessing();
+                        buy(quantity, pm, PaymentSource.WALLET);
+                    },
+                    () -> confirmationModal = null);
+        }
     }
 
     /** Routed from ShopClientPacketHandler on the buy result so the modal can resolve. */
