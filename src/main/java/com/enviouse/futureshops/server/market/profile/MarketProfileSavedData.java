@@ -353,8 +353,7 @@ public final class MarketProfileSavedData extends SavedData {
             }
             return;
         }
-        if (profile.mutationTombstones.containsKey(value.requestId())
-                || replayFilterContains(profile, value.requestId())) {
+        if (profile.mutationTombstones.containsKey(value.requestId())) {
             throw new IllegalStateException(
                     "Market profile request identity was retired");
         }

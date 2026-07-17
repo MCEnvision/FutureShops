@@ -52,7 +52,7 @@ class BazaarProductDefinitionLoaderTest {
                       "version": 2,
                       "item": "minecraft:diamond",
                       "identityPolicy": "exact",
-                      "exactNbt": "{display:{Name:'{\"text\":\"Market Gem\"}'}}",
+                      "exactNbt": "{display:{Name:'{\\\"text\\\":\\\"Market Gem\\\"}'}}",
                       "category": "gems",
                       "status": "halted"
                     }

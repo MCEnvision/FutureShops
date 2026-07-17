@@ -69,8 +69,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
     private int nearbyScrollIdx;
 
     /** 0 = All, 1 = Buy, 2 = Barter. All is the default so mixed departments never hide listings. */
-    private int tradeFilter = ServerShopTradeFilterPolicy
-            .defaultFilter().ordinal();
+    private int tradeFilter = ServerShopTradeFilterPolicy.defaultFilter().ordinal();
     private boolean nearbyMode;        // false = Server Shop tab, true = Player Shops tab
     private int sortMode;              // 0 = Name, 1 = Price, 2 = Stock
 

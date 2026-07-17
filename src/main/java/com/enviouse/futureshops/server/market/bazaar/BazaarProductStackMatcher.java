@@ -89,12 +89,33 @@ public final class BazaarProductStackMatcher {
 
     private static boolean hasCapabilities(ItemStack stack) {
         CompoundTag serialized = stack.serializeNBT();
-        return serialized.contains("ForgeCaps")
-                || stack.getCapability(ForgeCapabilities.ITEM_HANDLER)
-                .isPresent()
-                || stack.getCapability(ForgeCapabilities.FLUID_HANDLER_ITEM)
-                .isPresent()
-                || stack.getCapability(ForgeCapabilities.ENERGY).isPresent();
+        if (serialized.contains("ForgeCaps")) {
+            return true;
+        }
+        try {
+            return LiveCapabilityProbe.exposesCapabilities(stack);
+        } catch (LinkageError error) {
+            return false;
+        }
+    }
+
+    /**
+     * Isolated so plain JUnit (no Forge runtime transformer) never has to
+     * initialize {@link ForgeCapabilities}; in the live game this class
+     * always loads and the capability checks run unchanged.
+     */
+    private static final class LiveCapabilityProbe {
+        private LiveCapabilityProbe() {
+        }
+
+        static boolean exposesCapabilities(ItemStack stack) {
+            return stack.getCapability(ForgeCapabilities.ITEM_HANDLER)
+                    .isPresent()
+                    || stack.getCapability(
+                    ForgeCapabilities.FLUID_HANDLER_ITEM).isPresent()
+                    || stack.getCapability(ForgeCapabilities.ENERGY)
+                    .isPresent();
+        }
     }
 
     private static boolean unsupportedCommodityTag(
