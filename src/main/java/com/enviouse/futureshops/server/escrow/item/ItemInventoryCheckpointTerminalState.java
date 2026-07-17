@@ -1,6 +1,6 @@
 package com.enviouse.futureshops.server.escrow.item;
 
-enum ItemInventoryCheckpointTerminalState {
+public enum ItemInventoryCheckpointTerminalState {
     COMMITTED(true),
     COMPENSATED(true),
     PREPARED(false),
@@ -12,7 +12,7 @@ enum ItemInventoryCheckpointTerminalState {
         this.terminal = terminal;
     }
 
-    boolean terminal() {
+    public boolean terminal() {
         return terminal;
     }
 }

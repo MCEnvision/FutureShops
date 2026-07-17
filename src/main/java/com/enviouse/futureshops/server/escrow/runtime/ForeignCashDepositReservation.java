@@ -11,6 +11,7 @@ import com.enviouse.futureshops.server.escrow.model.EscrowAssetLotType;
 import com.enviouse.futureshops.server.escrow.model.EscrowOperation;
 import com.enviouse.futureshops.server.escrow.model.EscrowState;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -27,6 +28,7 @@ public record ForeignCashDepositReservation(
         UUID playerId,
         LedgerAccountId destinationAccount,
         long walletBalanceLimitMinorUnits,
+        CashDepositMode depositMode,
         byte[] inventoryBeforeHash,
         ForeignCashDepositPlan plan,
         EscrowTransaction heldTransaction,
@@ -34,11 +36,29 @@ public record ForeignCashDepositReservation(
 ) {
     public static final String CURRENCY_ID = "futureshops:wallet";
 
+    public ForeignCashDepositReservation(
+            UUID reservationId,
+            UUID requestId,
+            UUID playerId,
+            LedgerAccountId destinationAccount,
+            long walletBalanceLimitMinorUnits,
+            byte[] inventoryBeforeHash,
+            ForeignCashDepositPlan plan,
+            EscrowTransaction heldTransaction,
+            List<CustodyMutation> custodyReservations
+    ) {
+        this(reservationId, requestId, playerId, destinationAccount,
+                walletBalanceLimitMinorUnits,
+                CashDepositMode.PUBLIC_WALLET, inventoryBeforeHash, plan,
+                heldTransaction, custodyReservations);
+    }
+
     public ForeignCashDepositReservation {
         Objects.requireNonNull(reservationId, "reservationId");
         Objects.requireNonNull(requestId, "requestId");
         Objects.requireNonNull(playerId, "playerId");
         Objects.requireNonNull(destinationAccount, "destinationAccount");
+        Objects.requireNonNull(depositMode, "depositMode");
         inventoryBeforeHash = requireHash(inventoryBeforeHash,
                 "inventoryBeforeHash");
         Objects.requireNonNull(plan, "plan");
@@ -57,8 +77,14 @@ public record ForeignCashDepositReservation(
         }
         UUID expected = reservationId(requestId, playerId,
                 destinationAccount, walletBalanceLimitMinorUnits,
-                inventoryBeforeHash, plan, heldTransaction);
-        if (!reservationId.equals(expected)) {
+                depositMode, inventoryBeforeHash, plan, heldTransaction);
+        boolean legacyPublicIdentity = depositMode
+                == CashDepositMode.PUBLIC_WALLET
+                && reservationId.equals(legacyReservationId(requestId,
+                playerId, destinationAccount,
+                walletBalanceLimitMinorUnits, inventoryBeforeHash, plan,
+                heldTransaction));
+        if (!reservationId.equals(expected) && !legacyPublicIdentity) {
             throw new IllegalArgumentException(
                     "Foreign cash deposit reservation id is invalid");
         }
@@ -88,7 +114,12 @@ public record ForeignCashDepositReservation(
                 || heldTransaction.assetLots().size() != ordered.size()
                 || heldTransaction.assetLots().stream().anyMatch(asset ->
                 asset.type() != EscrowAssetLotType
-                        .FOREIGN_PHYSICAL_CURRENCY)) {
+                        .FOREIGN_PHYSICAL_CURRENCY
+                        || !depositMode.name().equals(
+                        asset.attributes().get("deposit_mode"))
+                        && (!legacyPublicIdentity
+                        || asset.attributes().containsKey(
+                        "deposit_mode")))) {
             throw new IllegalArgumentException(
                     "Foreign cash deposit escrow assets are invalid");
         }
@@ -108,6 +139,31 @@ public record ForeignCashDepositReservation(
             UUID playerId,
             LedgerAccountId destination,
             long walletLimit,
+            CashDepositMode depositMode,
+            byte[] inventoryHash,
+            ForeignCashDepositPlan plan,
+            EscrowTransaction held
+    ) {
+        Objects.requireNonNull(depositMode, "depositMode");
+        String material = "futureshops foreign cash deposit reservation v2 "
+                + requestId + " " + playerId + " "
+                + destination.ownerKey() + " " + walletLimit + " "
+                + depositMode + " "
+                + java.util.HexFormat.of().formatHex(
+                requireHash(inventoryHash, "inventoryHash")) + " "
+                + java.util.HexFormat.of().formatHex(
+                sha256(ForeignCashDepositCodec
+                        .encodeLegacyPlanIdentity(plan))) + " "
+                + held.transactionId().value();
+        return UUID.nameUUIDFromBytes(material.getBytes(
+                StandardCharsets.UTF_8));
+    }
+
+    static UUID legacyReservationId(
+            UUID requestId,
+            UUID playerId,
+            LedgerAccountId destination,
+            long walletLimit,
             byte[] inventoryHash,
             ForeignCashDepositPlan plan,
             EscrowTransaction held
@@ -122,6 +178,19 @@ public record ForeignCashDepositReservation(
                 + held.transactionId().value();
         return UUID.nameUUIDFromBytes(material.getBytes(
                 StandardCharsets.UTF_8));
+    }
+
+    public static UUID reservationId(
+            UUID requestId,
+            UUID playerId,
+            LedgerAccountId destination,
+            long walletLimit,
+            byte[] inventoryHash,
+            ForeignCashDepositPlan plan,
+            EscrowTransaction held
+    ) {
+        return reservationId(requestId, playerId, destination, walletLimit,
+                CashDepositMode.PUBLIC_WALLET, inventoryHash, plan, held);
     }
 
     public static UUID custodyLotId(
@@ -215,6 +284,7 @@ public record ForeignCashDepositReservation(
                 && destinationAccount.equals(other.destinationAccount)
                 && walletBalanceLimitMinorUnits
                 == other.walletBalanceLimitMinorUnits
+                && depositMode == other.depositMode
                 && Arrays.equals(inventoryBeforeHash,
                 other.inventoryBeforeHash)
                 && plan.equals(other.plan)
@@ -225,7 +295,8 @@ public record ForeignCashDepositReservation(
     @Override
     public int hashCode() {
         return 31 * Objects.hash(reservationId, requestId, playerId,
-                destinationAccount, walletBalanceLimitMinorUnits, plan,
+                destinationAccount, walletBalanceLimitMinorUnits,
+                depositMode, plan,
                 heldTransaction, custodyReservations)
                 + Arrays.hashCode(inventoryBeforeHash);
     }

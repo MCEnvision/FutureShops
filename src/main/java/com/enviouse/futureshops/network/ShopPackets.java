@@ -7,6 +7,7 @@ import com.enviouse.futureshops.network.packets.C2SAtmWithdrawPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmCollectCashPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
 import com.enviouse.futureshops.network.packets.C2SBarterRequestPacket;
+import com.enviouse.futureshops.network.packets.C2SCloseMarketSessionPacket;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SFetchDepartmentsPacket;
 import com.enviouse.futureshops.network.packets.C2SFetchHistoryPacket;
@@ -18,12 +19,18 @@ import com.enviouse.futureshops.network.packets.C2SOpenBalTopUiPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenAtmPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenBalanceUiPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenShopPacket;
+import com.enviouse.futureshops.network.packets.C2SOpenMarketModulePacket;
+import com.enviouse.futureshops.network.packets.C2SMarketPageQueryPacket;
+import com.enviouse.futureshops.network.packets.C2SMarketCapabilitiesPacket;
+import com.enviouse.futureshops.network.packets.C2SMarketClaimCollectionPacket;
+import com.enviouse.futureshops.network.packets.C2SMarketProfileMutationPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopActionPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuyPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuybackConfigPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopConfigPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopIconPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopSavedConfigPacket;
+import com.enviouse.futureshops.network.packets.C2SPlayerShopSettlementClaimPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopUnlinkStoragePacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopPromoPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopSellPacket;
@@ -46,6 +53,11 @@ import com.enviouse.futureshops.network.packets.S2CFranchiseDataPacket;
 import com.enviouse.futureshops.network.packets.S2CHistoryResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CInventorySyncPacket;
 import com.enviouse.futureshops.network.packets.S2CLocalShopsPacket;
+import com.enviouse.futureshops.network.packets.S2COpenMarketModulePacket;
+import com.enviouse.futureshops.network.packets.S2CMarketPagePacket;
+import com.enviouse.futureshops.network.packets.S2CMarketCapabilitiesPacket;
+import com.enviouse.futureshops.network.packets.S2CMarketClaimCollectionPacket;
+import com.enviouse.futureshops.network.packets.S2CMarketProfileMutationPacket;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopDataPacket;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopResultPacket;
 import com.enviouse.futureshops.network.packets.S2CSellResponsePacket;
@@ -84,7 +96,12 @@ public final class ShopPackets {
     // 24: per-listing id added to CatalogItem + buy/sell/admin-cart wire lines (multi-variant NBT
     //     admin listings). Old v23 clients are refused at handshake so they can't desync on the
     //     new leading listingId field.
-    public static final String PROTOCOL_VERSION = "39";
+    // Protocol 40 adds shared market module opening.
+    // Protocol 41 adds durable sell and barter request identities.
+    // Protocol 42 adds correlated paged market data.
+    // Protocol 43 adds correlated player shop settlements and buybacks.
+    // Protocol 44 adds market capability synchronization.
+    public static final String PROTOCOL_VERSION = "44";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))
@@ -415,6 +432,85 @@ public final class ShopPackets {
             .decoder(S2CAtmDepositResultPacket::decode)
             .encoder(S2CAtmDepositResultPacket::encode)
             .consumerMainThread(S2CAtmDepositResultPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SOpenMarketModulePacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SOpenMarketModulePacket::decode)
+            .encoder(C2SOpenMarketModulePacket::encode)
+            .consumerMainThread(C2SOpenMarketModulePacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2COpenMarketModulePacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2COpenMarketModulePacket::decode)
+            .encoder(S2COpenMarketModulePacket::encode)
+            .consumerMainThread(S2COpenMarketModulePacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SMarketPageQueryPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SMarketPageQueryPacket::decode)
+            .encoder(C2SMarketPageQueryPacket::encode)
+            .consumerMainThread(C2SMarketPageQueryPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CMarketPagePacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CMarketPagePacket::decode)
+            .encoder(S2CMarketPagePacket::encode)
+            .consumerMainThread(S2CMarketPagePacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SCloseMarketSessionPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SCloseMarketSessionPacket::decode)
+            .encoder(C2SCloseMarketSessionPacket::encode)
+            .consumerMainThread(C2SCloseMarketSessionPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SPlayerShopSettlementClaimPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SPlayerShopSettlementClaimPacket::decode)
+            .encoder(C2SPlayerShopSettlementClaimPacket::encode)
+            .consumerMainThread(C2SPlayerShopSettlementClaimPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SMarketCapabilitiesPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SMarketCapabilitiesPacket::decode)
+            .encoder(C2SMarketCapabilitiesPacket::encode)
+            .consumerMainThread(C2SMarketCapabilitiesPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CMarketCapabilitiesPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CMarketCapabilitiesPacket::decode)
+            .encoder(S2CMarketCapabilitiesPacket::encode)
+            .consumerMainThread(S2CMarketCapabilitiesPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SMarketProfileMutationPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SMarketProfileMutationPacket::decode)
+            .encoder(C2SMarketProfileMutationPacket::encode)
+            .consumerMainThread(C2SMarketProfileMutationPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CMarketProfileMutationPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CMarketProfileMutationPacket::decode)
+            .encoder(S2CMarketProfileMutationPacket::encode)
+            .consumerMainThread(S2CMarketProfileMutationPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SMarketClaimCollectionPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SMarketClaimCollectionPacket::decode)
+            .encoder(C2SMarketClaimCollectionPacket::encode)
+            .consumerMainThread(C2SMarketClaimCollectionPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CMarketClaimCollectionPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CMarketClaimCollectionPacket::decode)
+            .encoder(S2CMarketClaimCollectionPacket::encode)
+            .consumerMainThread(S2CMarketClaimCollectionPacket::handle)
             .add();
     }
 

@@ -3,6 +3,7 @@ package com.enviouse.futureshops.server.escrow.runtime;
 import com.enviouse.futureshops.money.InternalBillInventoryPlanner;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountId;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountType;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashInventoryState;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionCancellation;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionEvidence;
@@ -43,6 +44,7 @@ final class ProtectedCashRedemptionWorkflow {
             String requestKey,
             long configRevision,
             long walletBalanceLimitMinorUnits,
+            CashDepositMode depositMode,
             Instant now
     ) {
         requireServerThread();
@@ -50,6 +52,7 @@ final class ProtectedCashRedemptionWorkflow {
         Objects.requireNonNull(plan, "plan");
         Objects.requireNonNull(transactionId, "transactionId");
         Objects.requireNonNull(requestKey, "requestKey");
+        Objects.requireNonNull(depositMode, "depositMode");
         Objects.requireNonNull(now, "now");
         if (server.getPlayerList().getPlayer(player.getUUID()) != player) {
             throw new EscrowRuntimeException(
@@ -71,7 +74,7 @@ final class ProtectedCashRedemptionWorkflow {
             reservation = ProtectedCashRedemptionFactory.walletReservation(
                     player.getUUID(), transactionId, requestKey,
                     configRevision, walletBalanceLimitMinorUnits, plan,
-                    before, now);
+                    before, depositMode, now);
             intent = ProtectedCashRedemptionEvidence.intent(
                     reservation, before);
             intentPersistAttempted = true;

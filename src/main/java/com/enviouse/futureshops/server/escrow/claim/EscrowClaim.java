@@ -25,7 +25,9 @@ public record EscrowClaim(UUID claimId, UUID transactionId, UUID ownerId, String
         if (payload.length > MAX_PAYLOAD_BYTES) {
             throw new IllegalArgumentException("Claim payload is too large");
         }
-        if (kind == ClaimKind.MONEY && payload.length != 0) {
+        if ((kind == ClaimKind.MONEY
+                || kind == ClaimKind.INTERNAL_ESCROW_MONEY)
+                && payload.length != 0) {
             throw new IllegalArgumentException("Money claim cannot contain an item payload");
         }
         if ((kind == ClaimKind.ITEM

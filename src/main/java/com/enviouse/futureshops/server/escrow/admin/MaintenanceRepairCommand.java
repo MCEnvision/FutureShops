@@ -98,6 +98,7 @@ public record MaintenanceRepairCommand(UUID commandId,
             case RECONCILE_CUSTODY -> type == MaintenanceRepairTargetType.CUSTODY_LOT;
             case QUARANTINE_CUSTODY -> type == MaintenanceRepairTargetType.CUSTODY_LOT
                     || type == MaintenanceRepairTargetType.CUSTODY_BATCH;
+            case BALANCE_MUTATION -> false;
         };
         if (!valid) {
             throw new IllegalArgumentException("Maintenance action target is invalid");

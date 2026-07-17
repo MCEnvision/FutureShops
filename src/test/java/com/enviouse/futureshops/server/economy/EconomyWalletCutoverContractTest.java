@@ -25,8 +25,10 @@ class EconomyWalletCutoverContractTest {
             assertFalse(source.contains("InternalBalanceSavedData"));
         }
         assertTrue(provider.contains("EscrowWalletService.live()"));
-        assertTrue(api.contains("BalanceManager.setBalance("));
-        assertTrue(admin.contains("BalanceManager.setBalance("));
+        assertTrue(api.contains("AdministrativeBalanceMutationService.live()"));
+        assertTrue(admin.contains("AdministrativeBalanceMutationService.live()"));
+        assertFalse(api.contains("BalanceManager.setBalance("));
+        assertFalse(admin.contains("BalanceManager.setBalance("));
     }
 
     @Test
@@ -130,16 +132,16 @@ class EconomyWalletCutoverContractTest {
     }
 
     @Test
-    void publicKeyedOperationsReachBalanceManager() throws Exception {
+    void publicKeyedOperationsReachAuditedAdministrativeService() throws Exception {
         String api = read("src/main/java/com/enviouse/futureshops/api/ShopModAPI.java");
-        String manager = read("src/main/java/com/enviouse/futureshops/server/economy/BalanceManager.java");
+        String service = read("src/main/java/com/enviouse/futureshops/server/escrow/admin/balance/AdministrativeBalanceMutationService.java");
 
         assertTrue(api.contains("withdraw(UUID requestId, UUID playerUUID"));
         assertTrue(api.contains("deposit(UUID requestId, UUID playerUUID"));
         assertTrue(api.contains("transfer(UUID requestId, UUID fromPlayer"));
         assertTrue(api.contains("setBalanceResult("));
-        assertTrue(manager.contains("transfer(UUID requestId"));
-        assertTrue(manager.contains("setBalance(UUID requestId"));
+        assertTrue(api.contains("AdministrativeBalanceMutationService.live()"));
+        assertTrue(service.contains("commitIntent(mutation)"));
     }
 
     private static void assertReplayBeforeWork(String source,

@@ -292,6 +292,10 @@ public final class PersistentStockRepository {
                             CatalogStockStatus.RETIRED, 0L, current.configFingerprint(), now));
                     changed = true;
                 }
+            } else if (!current.configFingerprint().equals(
+                    definition.configFingerprint())) {
+                throw new StockConflictException(
+                        "Reloaded stock listing identity conflicts");
             } else if (!matchesActiveDefinition(current, definition)) {
                 requireMonotonic(now, current.updatedAt());
                 rebuilt.put(entry.getKey(), refreshedState(current, definition, now));
@@ -729,6 +733,11 @@ public final class PersistentStockRepository {
         }
         requireRequestCapacity();
         CatalogStockState current = requireListing(definition.key());
+        if (!current.configFingerprint().equals(
+                definition.configFingerprint())) {
+            throw new StockConflictException(
+                    "Stock listing identity conflicts");
+        }
         requireExpectedRevision(current.revision(), expectedListingRevision,
                 "Stock listing changed before reset");
         requireMonotonic(now, current.updatedAt());

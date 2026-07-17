@@ -79,6 +79,23 @@ public final class StockSavedData extends EscrowManagedSavedData {
         return repository.preflightCommitted(command);
     }
 
+    public synchronized List<StockCommandResult> preflightCommittedSequence(
+            List<StockMutationCommand> commands
+    ) {
+        List<StockMutationCommand> safeCommands = List.copyOf(
+                Objects.requireNonNull(commands, "commands"));
+        if (safeCommands.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Stock command sequence cannot be empty");
+        }
+        PersistentStockRepository copy = new PersistentStockRepository();
+        copy.rebuild(repository.snapshot());
+        return safeCommands.stream()
+                .map(command -> copy.applyCommitted(
+                        Objects.requireNonNull(command, "stock command")))
+                .toList();
+    }
+
     public synchronized StockCommandResult applyCommitted(
             StockMutationCommand command
     ) {

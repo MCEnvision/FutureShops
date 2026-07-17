@@ -14,12 +14,14 @@ import com.enviouse.futureshops.server.economy.EconomyProvider;
 import com.enviouse.futureshops.server.escrow.claim.EscrowClaim;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintSavedData;
 import com.enviouse.futureshops.server.escrow.claim.ClaimKind;
+import com.enviouse.futureshops.server.escrow.claim.ClaimStatus;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountId;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountType;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerTransaction;
 import com.enviouse.futureshops.server.escrow.model.EscrowOperation;
 import com.enviouse.futureshops.server.escrow.model.EscrowState;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
 import com.enviouse.futureshops.server.escrow.redemption.CashDepositEvidenceKeys;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashInventoryState;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionEvidence;
@@ -60,9 +62,118 @@ public final class EscrowCashDepositService {
             ServerPlayer player,
             DepositRequest request
     ) {
+        return depositInternal(player, request,
+                CashDepositMode.PUBLIC_WALLET);
+    }
+
+    public static synchronized DepositResult depositForEscrow(
+            ServerPlayer player,
+            DepositRequest request
+    ) {
+        return depositInternal(player, request,
+                CashDepositMode.INTERNAL_ESCROW);
+    }
+
+    public static EscrowClaim requireInternalEscrowFundingClaim(
+            ServerPlayer player,
+            DepositResult result
+    ) {
+        EscrowClaim claim = requireInternalEscrowFundingClaimEvidence(
+                player, result);
+        if (claim.status() != ClaimStatus.PENDING
+                || claim.remainingUnits() != claim.originalUnits()) {
+            throw new EscrowRuntimeException(
+                    "Internal cash funding claim is not pending");
+        }
+        return claim;
+    }
+
+    public static EscrowClaim requireInternalEscrowFundingClaimEvidence(
+            ServerPlayer player,
+            DepositResult result
+    ) {
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(result, "result");
+        UUID transactionId = result.transactionId().orElseThrow();
+        if (!result.successful() || result.walletCreditMinorUnits() != 0L
+                || result.overflowClaimMinorUnits()
+                != result.depositedMinorUnits()) {
+            throw new EscrowRuntimeException(
+                    "Internal cash funding result is invalid");
+        }
+        List<EscrowClaim> matches = EscrowRuntimeManager.requireReady()
+                .claimsForTransaction(transactionId).stream()
+                .filter(claim -> claim.ownerId().equals(player.getUUID()))
+                .filter(claim -> claim.transactionId().equals(transactionId))
+                .filter(claim -> claim.kind()
+                        == ClaimKind.INTERNAL_ESCROW_MONEY)
+                .filter(claim -> claim.originalUnits()
+                        == result.depositedMinorUnits())
+                .filter(claim -> (claim.status() == ClaimStatus.PENDING
+                        && claim.remainingUnits()
+                        == result.depositedMinorUnits())
+                        || (claim.status() == ClaimStatus.COMPLETED
+                        && claim.remainingUnits() == 0L))
+                .toList();
+        if (matches.size() != 1) {
+            throw new EscrowRuntimeException(
+                    "Internal cash funding claim is missing or ambiguous");
+        }
+        return matches.get(0);
+    }
+
+    public static Optional<UUID> serverShopPurchaseBinding(
+            EscrowTransaction transaction
+    ) {
+        Objects.requireNonNull(transaction, "transaction");
+        if (transaction.operation() != EscrowOperation.CURRENCY_DEPOSIT
+                || transaction.state() != EscrowState.COMPLETED) {
+            return Optional.empty();
+        }
+        String key = transaction.requestKey().value();
+        int marker = key.lastIndexOf(".shop.");
+        if (marker < 0 || marker + 6 + 36 != key.length()) {
+            return Optional.empty();
+        }
+        try {
+            UUID purchaseRequestId = UUID.fromString(
+                    key.substring(marker + 6));
+            String prefix = key.substring(0, marker);
+            if (!prefix.startsWith("cash.deposit.")) {
+                return Optional.empty();
+            }
+            int requestEnd = prefix.indexOf('.', "cash.deposit.".length());
+            if (requestEnd < 0) {
+                return Optional.empty();
+            }
+            UUID depositRequestId = UUID.fromString(prefix.substring(
+                    "cash.deposit.".length(), requestEnd));
+            String fingerprint = prefix.substring(requestEnd + 1);
+            if (!CURRENCY_SIGNATURE.matcher(fingerprint).matches()
+                    || !depositRequestId.equals(
+                    ServerShopFundingRelease.fundingRequestId(
+                            purchaseRequestId))) {
+                return Optional.empty();
+            }
+            return Optional.of(purchaseRequestId);
+        } catch (IllegalArgumentException exception) {
+            return Optional.empty();
+        }
+    }
+
+    private static DepositResult depositInternal(
+            ServerPlayer player,
+            DepositRequest request,
+            CashDepositMode requiredMode
+    ) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(request, "request");
-        UUID transactionId = transactionId(player.getUUID(),
+        Objects.requireNonNull(requiredMode, "requiredMode");
+        if (request.mode() != requiredMode) {
+            throw new IllegalArgumentException(
+                    "Cash deposit mode does not match its entrypoint");
+        }
+        UUID transactionId = transactionIdForRequest(player.getUUID(),
                 request.requestId());
         ServerRequestSecurityManager.GateDecision gate =
                 ServerRequestSecurityManager.tryAcquire(
@@ -84,7 +195,8 @@ public final class EscrowCashDepositService {
             }
             result = withConfigurationReadLease(
                     () -> depositWithConfigurationLease(
-                            runtime, player, request, transactionId));
+                            runtime, player, request, transactionId,
+                            requiredMode));
         } catch (ForeignCashDepositWorkflow
                 .ConfigurationChangedException exception) {
             result = resolveAfterFailure(runtime, player, request,
@@ -125,7 +237,8 @@ public final class EscrowCashDepositService {
             EscrowRuntimeService runtime,
             ServerPlayer player,
             DepositRequest request,
-            UUID transactionId
+            UUID transactionId,
+            CashDepositMode mode
     ) {
         PhysicalCurrencyAdapter adapter = CurrencyManager.getOrNull();
         if (adapter == null) {
@@ -139,8 +252,10 @@ public final class EscrowCashDepositService {
             return failure(Status.CONFIG_CHANGED, request,
                     Optional.empty(), Optional.empty());
         }
-        long walletBalanceLimitMinorUnits =
-                Config.economyMaxBalanceMinorUnits;
+        long walletBalanceLimitMinorUnits = walletBalanceLimit(
+                mode == CashDepositMode.INTERNAL_ESCROW,
+                economy.getBalance(player.getUUID()),
+                Config.economyMaxBalanceMinorUnits);
         long protectedConfigurationRevision =
                 configurationRevision(adapter);
         try {
@@ -171,10 +286,24 @@ public final class EscrowCashDepositService {
         return adapter.isInternal()
                 ? depositProtected(runtime, player, request,
                 transactionId, protectedConfigurationRevision,
-                walletBalanceLimitMinorUnits)
+                walletBalanceLimitMinorUnits, mode)
                 : depositForeign(runtime, player, request,
                 transactionId, adapter,
-                walletBalanceLimitMinorUnits);
+                walletBalanceLimitMinorUnits, mode);
+    }
+
+    static long walletBalanceLimit(
+            boolean claimOnly,
+            long currentBalanceMinorUnits,
+            long configuredLimitMinorUnits
+    ) {
+        if (currentBalanceMinorUnits < 0L
+                || configuredLimitMinorUnits < currentBalanceMinorUnits) {
+            throw new IllegalArgumentException(
+                    "Cash deposit wallet limit is invalid");
+        }
+        return claimOnly ? currentBalanceMinorUnits
+                : configuredLimitMinorUnits;
     }
 
     public static DepositRequest requestForCurrentState(
@@ -224,7 +353,8 @@ public final class EscrowCashDepositService {
             DepositRequest request,
             UUID transactionId,
             long protectedConfigurationRevision,
-            long walletBalanceLimitMinorUnits
+            long walletBalanceLimitMinorUnits,
+            CashDepositMode mode
     ) {
         InternalBillInventoryPlanner planner =
                 new InternalBillInventoryPlanner(
@@ -289,7 +419,7 @@ public final class EscrowCashDepositService {
         ProtectedCashRedemptionResult terminal = runtime.redeemProtectedCash(
                 player, plan, transactionId, requestKey(player, request),
                 protectedConfigurationRevision,
-                walletBalanceLimitMinorUnits, Instant.now());
+                walletBalanceLimitMinorUnits, mode, Instant.now());
         return success(runtime, player, request, terminal.transactionId(),
                 terminal.depositedMinorUnits(), itemCount.getAsInt(),
                 terminal.walletCreditMinorUnits(),
@@ -303,7 +433,8 @@ public final class EscrowCashDepositService {
             DepositRequest request,
             UUID transactionId,
             PhysicalCurrencyAdapter adapter,
-            long walletBalanceLimitMinorUnits
+            long walletBalanceLimitMinorUnits,
+            CashDepositMode mode
     ) {
         InternalBillInventoryPlanner.SlotIdentity onlySlot =
                 sourceSlot(player, request.source());
@@ -353,7 +484,7 @@ public final class EscrowCashDepositService {
         ForeignCashDepositResult terminal = runtime.redeemForeignCash(
                 player, plan, request.requestId(), transactionId,
                 requestKey(player, request),
-                walletBalanceLimitMinorUnits, Instant.now());
+                walletBalanceLimitMinorUnits, mode, Instant.now());
         return success(runtime, player, request, terminal.transactionId(),
                 terminal.depositedMinorUnits(), itemCount.getAsInt(),
                 terminal.walletCreditMinorUnits(),
@@ -434,7 +565,8 @@ public final class EscrowCashDepositService {
         Optional<EscrowTransaction> stored = runtime.transaction(
                 transactionId);
         String expectedKey = requestKey(player, request);
-        ReplayDisposition disposition = classifyReplay(stored, expectedKey);
+        ReplayDisposition disposition = classifyReplay(stored, expectedKey,
+                legacyRequestKey(player.getUUID(), request));
         switch (disposition) {
             case ABSENT -> {
                 return Optional.empty();
@@ -489,7 +621,8 @@ public final class EscrowCashDepositService {
             Optional<EscrowTransaction> stored = runtime.transaction(
                     transactionId);
             ReplayDisposition disposition = classifyReplay(stored,
-                    requestKey(player, request));
+                    requestKey(player, request),
+                    legacyRequestKey(player.getUUID(), request));
             return resolveFailureDisposition(request, transactionId,
                     disposition, fallbackStatus, fallbackTransactionId,
                     () -> completedReplayFromRuntime(runtime, player,
@@ -578,15 +711,35 @@ public final class EscrowCashDepositService {
                         playerId.toString()))
                 .map(leg -> leg.deltaMinor())
                 .reduce(0L, Math::addExact);
+        ClaimKind expectedClaimKind = request.mode()
+                == CashDepositMode.INTERNAL_ESCROW
+                ? ClaimKind.INTERNAL_ESCROW_MONEY : ClaimKind.MONEY;
+        boolean conflictingMoneyClaim = claims.stream().anyMatch(claim ->
+                claim.ownerId().equals(playerId)
+                        && claim.transactionId().equals(transactionId)
+                        && (claim.kind() == ClaimKind.MONEY
+                        || claim.kind()
+                        == ClaimKind.INTERNAL_ESCROW_MONEY)
+                        && claim.kind() != expectedClaimKind);
         long overflow = claims.stream()
-                .filter(claim -> claim.kind() == ClaimKind.MONEY
+                .filter(claim -> claim.kind() == expectedClaimKind
                         && claim.ownerId().equals(playerId)
                         && claim.transactionId().equals(transactionId))
                 .map(EscrowClaim::originalUnits)
                 .reduce(0L, Math::addExact);
+        boolean legacyPublicEvidence = request.mode()
+                == CashDepositMode.PUBLIC_WALLET
+                && legacyRequestKey(playerId, request).filter(value ->
+                transaction.requestKey().value().equals(value)).isPresent();
+        boolean modeEvidence = transaction.assetLots().stream()
+                .allMatch(asset -> request.mode().name().equals(
+                        asset.attributes().get("deposit_mode"))
+                        || legacyPublicEvidence
+                        && !asset.attributes().containsKey("deposit_mode"));
         if (amount <= 0L || items <= 0
                 || items > MAX_ITEMS_CONSUMED || walletCredit < 0L
                 || overflow < 0L
+                || conflictingMoneyClaim || !modeEvidence
                 || Math.addExact(walletCredit, overflow) != amount) {
             throw new EscrowRuntimeException(
                     "Cash deposit replay evidence does not conserve");
@@ -601,16 +754,27 @@ public final class EscrowCashDepositService {
             Optional<EscrowTransaction> stored,
             String expectedRequestKey
     ) {
+        return classifyReplay(stored, expectedRequestKey, Optional.empty());
+    }
+
+    static ReplayDisposition classifyReplay(
+            Optional<EscrowTransaction> stored,
+            String expectedRequestKey,
+            Optional<String> legacyRequestKey
+    ) {
         Objects.requireNonNull(stored, "stored");
         Objects.requireNonNull(expectedRequestKey,
                 "expectedRequestKey");
+        Objects.requireNonNull(legacyRequestKey, "legacyRequestKey");
         if (stored.isEmpty()) {
             return ReplayDisposition.ABSENT;
         }
         EscrowTransaction transaction = stored.orElseThrow();
         if (transaction.operation() != EscrowOperation.CURRENCY_DEPOSIT
                 || !transaction.requestKey().value().equals(
-                expectedRequestKey)) {
+                expectedRequestKey)
+                && legacyRequestKey.stream().noneMatch(value ->
+                transaction.requestKey().value().equals(value))) {
             return ReplayDisposition.REQUEST_CONFLICT;
         }
         return switch (transaction.state()) {
@@ -756,7 +920,12 @@ public final class EscrowCashDepositService {
                 facts.legacyBillCount(), bills);
     }
 
-    private static UUID transactionId(UUID playerId, UUID requestId) {
+    public static UUID transactionIdForRequest(
+            UUID playerId,
+            UUID requestId
+    ) {
+        Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(requestId, "requestId");
         return UUID.nameUUIDFromBytes((
                 "futureshops cash deposit transaction v1 " + playerId + " "
                         + requestId).getBytes(StandardCharsets.UTF_8));
@@ -773,13 +942,48 @@ public final class EscrowCashDepositService {
         String amount = request.requestedMinorUnits().isPresent()
                 ? Long.toString(request.requestedMinorUnits().getAsLong())
                 : "all";
+        if (request.serverShopPurchaseRequestId().isEmpty()) {
+            byte[] digest = ForeignCashDepositReservation.sha256(
+                    ("futureshops cash deposit payload v3 "
+                            + playerId + " " + request.source() + " "
+                            + amount + " " + request.currencySignature()
+                            + " " + request.mode())
+                            .getBytes(StandardCharsets.UTF_8));
+            return "cash.deposit." + request.requestId() + "."
+                    + HexFormat.of().formatHex(digest);
+        }
+        UUID purchaseRequestId = request.serverShopPurchaseRequestId()
+                .orElseThrow();
+        byte[] digest = ForeignCashDepositReservation.sha256(
+                ("futureshops cash deposit payload v4 "
+                        + playerId + " " + request.source() + " "
+                        + amount + " " + request.currencySignature() + " "
+                        + request.mode() + " " + purchaseRequestId)
+                        .getBytes(StandardCharsets.UTF_8));
+        return "cash.deposit." + request.requestId() + "."
+                + HexFormat.of().formatHex(digest) + ".shop."
+                + purchaseRequestId;
+    }
+
+    static Optional<String> legacyRequestKey(
+            UUID playerId,
+            DepositRequest request
+    ) {
+        Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(request, "request");
+        if (request.mode() != CashDepositMode.PUBLIC_WALLET) {
+            return Optional.empty();
+        }
+        String amount = request.requestedMinorUnits().isPresent()
+                ? Long.toString(request.requestedMinorUnits().getAsLong())
+                : "all";
         byte[] digest = ForeignCashDepositReservation.sha256(
                 ("futureshops cash deposit payload v2 "
                         + playerId + " " + request.source() + " "
                         + amount + " " + request.currencySignature())
                         .getBytes(StandardCharsets.UTF_8));
-        return "cash.deposit." + request.requestId() + "."
-                + HexFormat.of().formatHex(digest);
+        return Optional.of("cash.deposit." + request.requestId() + "."
+                + HexFormat.of().formatHex(digest));
     }
 
     private static long configurationRevision(
@@ -860,8 +1064,32 @@ public final class EscrowCashDepositService {
             UUID requestId,
             String currencySignature,
             Source source,
-            OptionalLong requestedMinorUnits
+            OptionalLong requestedMinorUnits,
+            CashDepositMode mode,
+            Optional<UUID> serverShopPurchaseRequestId
     ) {
+        public DepositRequest(
+                UUID requestId,
+                String currencySignature,
+                Source source,
+                OptionalLong requestedMinorUnits
+        ) {
+            this(requestId, currencySignature, source,
+                    requestedMinorUnits, CashDepositMode.PUBLIC_WALLET,
+                    Optional.empty());
+        }
+
+        public DepositRequest(
+                UUID requestId,
+                String currencySignature,
+                Source source,
+                OptionalLong requestedMinorUnits,
+                CashDepositMode mode
+        ) {
+            this(requestId, currencySignature, source,
+                    requestedMinorUnits, mode, Optional.empty());
+        }
+
         public DepositRequest {
             Objects.requireNonNull(requestId, "requestId");
             currencySignature = Objects.requireNonNull(
@@ -869,9 +1097,21 @@ public final class EscrowCashDepositService {
             Objects.requireNonNull(source, "source");
             requestedMinorUnits = Objects.requireNonNull(
                     requestedMinorUnits, "requestedMinorUnits");
+            Objects.requireNonNull(mode, "mode");
+            serverShopPurchaseRequestId = Objects.requireNonNull(
+                    serverShopPurchaseRequestId,
+                    "serverShopPurchaseRequestId");
             if (requestId.equals(ZERO_UUID)
                     || !CURRENCY_SIGNATURE.matcher(
-                    currencySignature).matches()) {
+                    currencySignature).matches()
+                    || serverShopPurchaseRequestId.filter(
+                    ZERO_UUID::equals).isPresent()
+                    || serverShopPurchaseRequestId.isPresent()
+                    && mode != CashDepositMode.INTERNAL_ESCROW
+                    || serverShopPurchaseRequestId.isPresent()
+                    && !requestId.equals(
+                    ServerShopFundingRelease.fundingRequestId(
+                            serverShopPurchaseRequestId.orElseThrow()))) {
                 throw new IllegalArgumentException(
                         "Cash deposit request identity is invalid");
             }

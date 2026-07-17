@@ -34,12 +34,17 @@ public final class MarketLayoutEngine {
         int desiredBreadcrumbHeight = height < 220 ? 0 : 16;
         int desiredFooterHeight = height < 205 ? 22 : 28;
         int desiredToolbarHeight = mode == MarketLayoutMode.NARROW ? 38 : 24;
+        int desiredSecondaryTabsHeight = mode == MarketLayoutMode.NARROW
+            ? 22 : 0;
         int headerHeight = Math.min(desiredHeaderHeight, height);
         int remainingHeight = height - headerHeight;
         int footerHeight = Math.min(desiredFooterHeight, remainingHeight);
         remainingHeight -= footerHeight;
         int breadcrumbHeight = Math.min(desiredBreadcrumbHeight, remainingHeight);
         remainingHeight -= breadcrumbHeight;
+        int secondaryTabsHeight = Math.min(
+            desiredSecondaryTabsHeight, remainingHeight);
+        remainingHeight -= secondaryTabsHeight;
         int toolbarHeight = Math.min(desiredToolbarHeight, remainingHeight);
         int railWidth = switch (mode) {
             case WIDE -> Math.min(196, Math.max(148, width / 5));
@@ -50,9 +55,10 @@ public final class MarketLayoutEngine {
         int innerWidth = Math.max(1, width - padding * 2);
         int bodyTop = top + headerHeight + breadcrumbHeight;
         int bodyBottom = top + height - footerHeight;
+        int mainTop = bodyTop + secondaryTabsHeight;
         int contentX = innerX + (railWidth == 0 ? 0 : railWidth + padding);
         int contentWidth = Math.max(1, innerX + innerWidth - contentX);
-        int toolbarY = bodyTop;
+        int toolbarY = mainTop;
         int contentY = toolbarY + toolbarHeight;
         int contentHeight = Math.max(0, bodyBottom - contentY);
         int targetCardWidth = switch (normalizedCardSize) {
@@ -72,7 +78,10 @@ public final class MarketLayoutEngine {
         MarketRectangle window = new MarketRectangle(left, top, width, height);
         MarketRectangle header = new MarketRectangle(left, top, width, headerHeight);
         MarketRectangle breadcrumb = new MarketRectangle(left, top + headerHeight, width, breadcrumbHeight);
-        MarketRectangle rail = new MarketRectangle(innerX, bodyTop, railWidth, Math.max(0, bodyBottom - bodyTop));
+        MarketRectangle secondaryTabs = new MarketRectangle(left,
+            bodyTop, width, secondaryTabsHeight);
+        MarketRectangle rail = new MarketRectangle(innerX, mainTop,
+            railWidth, Math.max(0, bodyBottom - mainTop));
         MarketRectangle toolbar = new MarketRectangle(contentX, toolbarY, contentWidth, toolbarHeight);
         MarketRectangle content = new MarketRectangle(contentX, contentY, contentWidth, contentHeight);
         MarketRectangle footer = new MarketRectangle(left, bodyBottom, width, footerHeight);
@@ -81,6 +90,7 @@ public final class MarketLayoutEngine {
             window,
             header,
             breadcrumb,
+            secondaryTabs,
             rail,
             toolbar,
             content,
@@ -89,7 +99,7 @@ public final class MarketLayoutEngine {
             padding,
             mode == MarketLayoutMode.WIDE,
             mode == MarketLayoutMode.NARROW,
-            mode == MarketLayoutMode.NARROW
+            secondaryTabsHeight > 0
         );
     }
 

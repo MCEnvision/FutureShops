@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.block;
 
 import com.enviouse.futureshops.init.ModBlockEntities;
+import com.enviouse.futureshops.server.shop.PlayerShopRegistrySavedData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -9,6 +10,7 @@ import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import software.bernie.geckolib.animatable.GeoBlockEntity;
@@ -24,10 +26,15 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     private static final RawAnimation IDLE_ANIM = RawAnimation.begin().thenLoop("idle");
+    private static final String REGISTRY_SHOP_ID_KEY = "RegistryShopUUID";
+    private static final String REGISTRY_REVISION_KEY = "RegistryIdentityRevision";
+    private static final UUID ZERO_UUID = new UUID(0L, 0L);
 
     private final AnimatableInstanceCache geoCache = GeckoLibUtil.createInstanceCache(this);
     /** Default listing cap when maxListings is not overridden (-1 = unlimited). */
@@ -70,6 +77,8 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     }
 
     private UUID ownerUuid;
+    private UUID registryShopId;
+    private long registryIdentityRevision;
     /**
      * Owner's last-known username. Captured whenever {@link #setOwnerUuid(UUID, String)}
      * is called with a non-blank name. Synced to clients so the block-top
@@ -153,6 +162,38 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         return ownerUuid;
     }
 
+    @Nullable
+    public UUID getRegistryShopId() {
+        return registryShopId;
+    }
+
+    public long getRegistryIdentityRevision() {
+        return registryIdentityRevision;
+    }
+
+    public void setRegistryIdentity(UUID shopId, long revision) {
+        validateRegistryIdentity(shopId, revision);
+        if (shopId.equals(registryShopId)
+                && revision == registryIdentityRevision) {
+            return;
+        }
+        registryShopId = shopId;
+        registryIdentityRevision = revision;
+        setChanged();
+    }
+
+    public void reconcileRegistryIdentity() {
+        if (!(level instanceof ServerLevel serverLevel) || ownerUuid == null) {
+            return;
+        }
+        PlayerShopRegistrySavedData.ShopRef identity =
+                PlayerShopRegistrySavedData.get(serverLevel.getServer()).reconcile(
+                        ownerUuid, Optional.ofNullable(registryShopId),
+                        registryIdentityRevision, serverLevel.dimension().location(),
+                        worldPosition.asLong());
+        setRegistryIdentity(identity.shopId(), identity.revision());
+    }
+
     public void setOwnerUuid(UUID ownerUuid) {
         setOwnerUuid(ownerUuid, null);
     }
@@ -164,6 +205,12 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         }
         setChanged();
         syncTopItemsToClients();
+    }
+
+    @Override
+    public void onLoad() {
+        super.onLoad();
+        reconcileRegistryIdentity();
     }
 
     public String getOwnerName() {
@@ -592,6 +639,9 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         if (ownerUuid != null) {
             tag.putUUID("OwnerUUID", ownerUuid);
         }
+        if (registryShopId != null) {
+            writeRegistryIdentity(tag, registryShopId, registryIdentityRevision);
+        }
         if (!ownerName.isEmpty()) {
             tag.putString("OwnerName", ownerName);
         }
@@ -630,6 +680,10 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     public void load(CompoundTag tag) {
         super.load(tag);
         ownerUuid = tag.hasUUID("OwnerUUID") ? tag.getUUID("OwnerUUID") : null;
+        Optional<PersistedRegistryIdentity> registryIdentity = readRegistryIdentity(tag);
+        registryShopId = registryIdentity.map(PersistedRegistryIdentity::shopId).orElse(null);
+        registryIdentityRevision = registryIdentity
+                .map(PersistedRegistryIdentity::revision).orElse(0L);
         ownerName = tag.getString("OwnerName");
         shopId = tag.getString("ShopId");
         if (shopId.isBlank()) {
@@ -686,6 +740,41 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
             linkedStoragePositions.add(BlockPos.of(tag.getLong("LinkedStoragePos")));
         }
         barterStoragePos = tag.contains("BarterStoragePos") ? BlockPos.of(tag.getLong("BarterStoragePos")) : null;
+    }
+
+    static void writeRegistryIdentity(CompoundTag tag, UUID shopId, long revision) {
+        Objects.requireNonNull(tag, "tag");
+        validateRegistryIdentity(shopId, revision);
+        tag.putUUID(REGISTRY_SHOP_ID_KEY, shopId);
+        tag.putLong(REGISTRY_REVISION_KEY, revision);
+    }
+
+    static Optional<PersistedRegistryIdentity> readRegistryIdentity(CompoundTag tag) {
+        Objects.requireNonNull(tag, "tag");
+        boolean hasId = tag.contains(REGISTRY_SHOP_ID_KEY);
+        boolean hasRevision = tag.contains(REGISTRY_REVISION_KEY);
+        if (!hasId && !hasRevision) {
+            return Optional.empty();
+        }
+        if (!tag.hasUUID(REGISTRY_SHOP_ID_KEY)
+                || !tag.contains(REGISTRY_REVISION_KEY, Tag.TAG_LONG)) {
+            throw new IllegalArgumentException("Player shop block identity is malformed");
+        }
+        return Optional.of(new PersistedRegistryIdentity(
+                tag.getUUID(REGISTRY_SHOP_ID_KEY),
+                tag.getLong(REGISTRY_REVISION_KEY)));
+    }
+
+    private static void validateRegistryIdentity(UUID shopId, long revision) {
+        if (shopId == null || ZERO_UUID.equals(shopId) || revision < 0L) {
+            throw new IllegalArgumentException("Player shop block identity is invalid");
+        }
+    }
+
+    static record PersistedRegistryIdentity(UUID shopId, long revision) {
+        PersistedRegistryIdentity {
+            validateRegistryIdentity(shopId, revision);
+        }
     }
 
     /** Per-listing trade direction: does the shop sell, buy, or both? */
@@ -1188,4 +1277,3 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
 
     private final List<net.minecraft.world.item.ItemStack> clientTopStacks = new ArrayList<>();
 }
-

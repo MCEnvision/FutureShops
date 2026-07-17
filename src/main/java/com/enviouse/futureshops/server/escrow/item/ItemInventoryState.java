@@ -74,6 +74,19 @@ public final class ItemInventoryState {
                         .logicalIndex()));
     }
 
+    public static boolean stackMatchesHash(
+            ItemStack stack,
+            byte[] expectedHash
+    ) {
+        Objects.requireNonNull(stack, "stack");
+        return ItemInventoryHashes.equal(
+                ItemInventoryHashes.hashSlot(stack), expectedHash);
+    }
+
+    public boolean matchesInventoryHash(byte[] expectedHash) {
+        return ItemInventoryHashes.equal(inventoryHash, expectedHash);
+    }
+
     List<ItemStack> mutableCopy() {
         return new ArrayList<>(ItemInventoryHashes.copySlots(accessibleSlots));
     }

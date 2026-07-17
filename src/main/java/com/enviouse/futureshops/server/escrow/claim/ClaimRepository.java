@@ -281,11 +281,80 @@ public final class ClaimRepository {
         int safeLimit = Math.max(1, Math.min(limit, 256));
         return claims.values().stream()
                 .filter(claim -> claim.ownerId().equals(ownerId))
+                .filter(claim -> claim.kind().publiclyVisible())
                 .filter(claim -> claim.status() == ClaimStatus.PENDING
                         || claim.status() == ClaimStatus.PARTIALLY_DELIVERED)
                 .sorted(Comparator.comparing(EscrowClaim::createdAt))
                 .limit(safeLimit)
                 .toList();
+    }
+
+    public synchronized OpenClaimPage openPageFor(
+            UUID ownerId,
+            String sourcePrefix,
+            int pageIndex,
+            int pageSize
+    ) {
+        UUID owner = Objects.requireNonNull(ownerId, "ownerId");
+        String prefix = OpenClaimPage.requireSourcePrefix(sourcePrefix);
+        if (pageIndex < 0 || pageSize <= 0
+                || pageSize > OpenClaimPage.MAXIMUM_PAGE_SIZE) {
+            throw new IllegalArgumentException(
+                    "Open claim page request is invalid");
+        }
+        List<EscrowClaim> matching = claims.values().stream()
+                .filter(claim -> claim.ownerId().equals(owner))
+                .filter(claim -> claim.sourceKey().startsWith(prefix))
+                .filter(claim -> claim.kind().publiclyVisible())
+                .filter(claim -> OpenClaimPage.open(claim.status()))
+                .sorted(OpenClaimPage.ORDER)
+                .toList();
+        int totalResults = matching.size();
+        int pageCount = OpenClaimPage.pageCount(
+                totalResults, pageSize);
+        long start = (long) pageIndex * pageSize;
+        List<EscrowClaim> page = start >= totalResults
+                ? List.of()
+                : matching.subList((int) start,
+                (int) Math.min((long) totalResults, start + pageSize));
+        return new OpenClaimPage(owner, prefix, pageIndex, pageSize,
+                totalResults, pageCount, page);
+    }
+
+    public synchronized OpenClaimSourceCounts openSourceCountsFor(
+            UUID ownerId,
+            List<String> sourcePrefixes
+    ) {
+        UUID owner = Objects.requireNonNull(ownerId, "ownerId");
+        List<String> requested = List.copyOf(Objects.requireNonNull(
+                sourcePrefixes, "sourcePrefixes"));
+        if (requested.size() > OpenClaimSourceCounts.MAXIMUM_PREFIXES) {
+            throw new IllegalArgumentException(
+                    "Open claim prefix count exceeds its limit");
+        }
+        LinkedHashMap<String, Long> counts = new LinkedHashMap<>();
+        for (String value : requested) {
+            String prefix = OpenClaimSourceCounts.requirePrefix(value);
+            if (counts.put(prefix, 0L) != null) {
+                throw new IllegalArgumentException(
+                        "Open claim source prefix is duplicated");
+            }
+        }
+        long total = 0L;
+        for (EscrowClaim claim : claims.values()) {
+            if (!claim.ownerId().equals(owner)
+                    || !claim.kind().publiclyVisible()
+                    || !OpenClaimPage.open(claim.status())) {
+                continue;
+            }
+            total = Math.addExact(total, 1L);
+            for (Map.Entry<String, Long> entry : counts.entrySet()) {
+                if (claim.sourceKey().startsWith(entry.getKey())) {
+                    entry.setValue(Math.addExact(entry.getValue(), 1L));
+                }
+            }
+        }
+        return new OpenClaimSourceCounts(total, counts);
     }
 
     public synchronized List<EscrowClaim> pendingCashFor(UUID ownerId) {

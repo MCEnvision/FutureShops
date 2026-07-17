@@ -1,5 +1,7 @@
 package com.enviouse.futureshops.catalog;
 
+import com.enviouse.futureshops.server.escrow.stock.migration.CatalogStockRuntime;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -50,7 +52,7 @@ public final class AdminShopConfigWriter {
         }
 
         if (!writeJson(path, root)) return false;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return true;
     }
 
@@ -70,7 +72,7 @@ public final class AdminShopConfigWriter {
         items.remove(idx);
 
         if (!writeJson(path, root)) return false;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return true;
     }
 
@@ -106,7 +108,7 @@ public final class AdminShopConfigWriter {
         items.add(buildItemEntry(stamped));
 
         if (!writeJson(path, root)) return "";
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return listingId;
     }
 
@@ -127,7 +129,7 @@ public final class AdminShopConfigWriter {
         int added = addItemsWithBarterToRoot(root, specs, outputCount, ingredientItemId, ingredientCount);
         if (added == 0) return 0;
         if (!writeJson(path, root)) return 0;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return added;
     }
 
@@ -205,7 +207,7 @@ public final class AdminShopConfigWriter {
         if (idx < 0) return false;
         items.set(idx, buildItemEntry(withListingId(spec, listingId.trim())));
         if (!writeJson(path, root)) return false;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return true;
     }
 
@@ -229,7 +231,7 @@ public final class AdminShopConfigWriter {
         items.remove(idx);
         removeBarterRecipesFromRoot(root, resolutionKey, registryItemId);
         if (!writeJson(path, root)) return false;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return true;
     }
 
@@ -251,7 +253,7 @@ public final class AdminShopConfigWriter {
             o.remove("stockRefreshSeconds");
         }
         if (!writeJson(path, root)) return false;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return true;
     }
 
@@ -271,7 +273,7 @@ public final class AdminShopConfigWriter {
         int removed = removeBarterRecipesFromRoot(root, resolutionKey, registryItemId);
         if (removed == 0) return 0;
         if (!writeJson(path, root)) return 0;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return removed;
     }
 
@@ -318,7 +320,7 @@ public final class AdminShopConfigWriter {
         if (root == null) return null;
         String listingId = addBarterTargetToRoot(root, spec, outputCount);
         if (listingId == null || !writeJson(path, root)) return null;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return listingId;
     }
 
@@ -336,7 +338,7 @@ public final class AdminShopConfigWriter {
         if (root == null) return List.of();
         List<String> listingIds = addBarterTargetsToRoot(root, specs, outputCount);
         if (listingIds.isEmpty() || !writeJson(path, root)) return List.of();
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return listingIds;
     }
 
@@ -378,7 +380,7 @@ public final class AdminShopConfigWriter {
         if (root == null) return false;
         if (!addBarterIngredientToRoot(root, targetKey, ingredientItemId, ingredientNbt, count)) return false;
         if (!writeJson(path, root)) return false;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return true;
     }
 
@@ -430,7 +432,7 @@ public final class AdminShopConfigWriter {
         if (root == null) return false;
         if (!removeBarterIngredientFromRoot(root, targetKey, index)) return false;
         if (!writeJson(path, root)) return false;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return true;
     }
 
@@ -461,7 +463,7 @@ public final class AdminShopConfigWriter {
         if (root == null) return false;
         if (!setBarterOutputCountInRoot(root, targetKey, count)) return false;
         if (!writeJson(path, root)) return false;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return true;
     }
 
@@ -482,7 +484,7 @@ public final class AdminShopConfigWriter {
         JsonObject root = readOrInit(path);
         if (root == null || !setBarterIngredientCountInRoot(root, targetKey, index, count)) return false;
         if (!writeJson(path, root)) return false;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return true;
     }
 
@@ -537,7 +539,7 @@ public final class AdminShopConfigWriter {
             return false;
         }
         if (!writeJson(path, root)) return false;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return true;
     }
 
@@ -580,7 +582,7 @@ public final class AdminShopConfigWriter {
         if (root == null) return false;
         if (!renameCategoryInRoot(root, categoryId, newDisplayName.trim())) return false;
         if (!writeJson(path, root)) return false;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return true;
     }
 
@@ -606,7 +608,7 @@ public final class AdminShopConfigWriter {
         if (root == null) return false;
         if (setCategorySortOrdersInRoot(root, categoryIdsInOrder) == 0) return false;
         if (!writeJson(path, root)) return false;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return true;
     }
 
@@ -674,7 +676,7 @@ public final class AdminShopConfigWriter {
         int added = addItemsToRoot(root, specs);
         if (added == 0) return 0;
         if (!writeJson(path, root)) return 0;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return added;
     }
 
@@ -773,7 +775,7 @@ public final class AdminShopConfigWriter {
         cats.add(entry);
 
         if (!writeJson(path, root)) return false;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return true;
     }
 
@@ -810,7 +812,7 @@ public final class AdminShopConfigWriter {
         cats.remove(found);
 
         if (!writeJson(path, root)) return false;
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         return true;
     }
 

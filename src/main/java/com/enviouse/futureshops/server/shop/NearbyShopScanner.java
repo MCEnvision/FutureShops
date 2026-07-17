@@ -47,18 +47,20 @@ public final class NearbyShopScanner {
         }
 
         PlayerShopRegistrySavedData registry = PlayerShopRegistrySavedData.get(player.getServer());
-        Map<Long, PlayerShopRegistrySavedData.ShopRecord> allShops = registry.getAllShops();
+        Map<PlayerShopRegistrySavedData.ShopLocation,
+                PlayerShopRegistrySavedData.ShopRecord> allShops = registry.getAllShops();
 
         String currentDimension = level.dimension().location().toString();
 
-        for (Map.Entry<Long, PlayerShopRegistrySavedData.ShopRecord> entry : allShops.entrySet()) {
+        for (Map.Entry<PlayerShopRegistrySavedData.ShopLocation,
+                PlayerShopRegistrySavedData.ShopRecord> entry : allShops.entrySet()) {
             PlayerShopRegistrySavedData.ShopRecord record = entry.getValue();
             // Only include shops in the same dimension
             if (!currentDimension.equals(record.dimension())) {
                 continue;
             }
 
-            BlockPos shopPos = BlockPos.of(entry.getKey());
+            BlockPos shopPos = BlockPos.of(entry.getKey().posLong());
             double distance = center.distSqr(shopPos);
             if (!unlimited && distance > (double) radiusSq) {
                 continue;
@@ -123,4 +125,3 @@ public final class NearbyShopScanner {
                 .orElse(ownerUuid.toString().substring(0, 8));
     }
 }
-

@@ -22,6 +22,12 @@ class MarketLayoutEngineTest {
         assertTrue(scaleTwo.fullBrand());
         assertFalse(scaleThree.fullBrand());
         assertTrue(scaleFour.categoryDrawer());
+        assertTrue(scaleFour.secondaryTabRow());
+        assertTrue(scaleFour.secondaryTabs().height() > 0);
+        assertEquals(0, scaleTwo.secondaryTabs().height());
+        assertEquals(0, scaleThree.secondaryTabs().height());
+        assertFalse(scaleFour.secondaryTabs().overlaps(
+                scaleFour.toolbar()));
         assertEquals(1, scaleFour.cardColumns());
     }
 
@@ -35,6 +41,8 @@ class MarketLayoutEngineTest {
             assertTrue(layout.content().width() > 0);
             assertTrue(layout.cardColumns() > 0);
             assertFalse(layout.header().overlaps(layout.footer()));
+            assertFalse(layout.secondaryTabs().overlaps(
+                    layout.toolbar()));
         }
     }
 

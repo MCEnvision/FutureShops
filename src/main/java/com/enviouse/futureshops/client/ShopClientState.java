@@ -26,6 +26,7 @@ public final class ShopClientState {
 
     private static volatile String activeShopId = "";
     private static volatile long currentBalanceMinorUnits = 0L;
+    private static volatile boolean currentBalanceKnown;
     private static volatile String currencyName = "Coins";
     private static volatile int currencyDecimals = 2;
 
@@ -68,6 +69,7 @@ public final class ShopClientState {
                                      boolean adminEnabled, List<NearbyShopEntry> nearby, boolean canEdit) {
         activeShopId = shopId;
         currentBalanceMinorUnits = balanceMinorUnits;
+        currentBalanceKnown = true;
         currencyName = currency;
         currencyDecimals = decimals;
         catalogCategories = List.copyOf(categories);
@@ -91,6 +93,7 @@ public final class ShopClientState {
     public static void reset() {
         activeShopId = "";
         currentBalanceMinorUnits = 0L;
+        currentBalanceKnown = false;
         catalogCategories = List.of();
         catalogItems = List.of();
         catalogPromos = List.of();
@@ -113,6 +116,55 @@ public final class ShopClientState {
 
     public static void setCurrentBalanceMinorUnits(long balanceMinorUnits) {
         currentBalanceMinorUnits = balanceMinorUnits;
+        currentBalanceKnown = true;
+    }
+
+    public static void applyMarketWalletSnapshot(
+            long balanceMinorUnits,
+            boolean balanceKnown,
+            String currency,
+            int decimals
+    ) {
+        String name = java.util.Objects.requireNonNull(
+                currency, "currency");
+        if (name.isEmpty() || name.length() > 64
+                || !name.equals(name.strip())
+                || decimals < 0 || decimals > 6
+                || !balanceKnown && balanceMinorUnits != 0L
+                || !validCurrencyName(name)) {
+            throw new IllegalArgumentException(
+                    "Market wallet snapshot is invalid");
+        }
+        currentBalanceMinorUnits = balanceKnown
+                ? balanceMinorUnits : 0L;
+        currentBalanceKnown = balanceKnown;
+        currencyName = name;
+        currencyDecimals = decimals;
+    }
+
+    public static void clearMarketWalletSnapshot() {
+        currentBalanceMinorUnits = 0L;
+        currentBalanceKnown = false;
+        currencyName = "Coins";
+        currencyDecimals = 2;
+    }
+
+    private static boolean validCurrencyName(String name) {
+        for (int index = 0; index < name.length(); index++) {
+            char character = name.charAt(index);
+            if (Character.isHighSurrogate(character)) {
+                if (index + 1 >= name.length()
+                        || !Character.isLowSurrogate(
+                        name.charAt(index + 1))) {
+                    return false;
+                }
+                index++;
+            } else if (Character.isLowSurrogate(character)
+                    || Character.isISOControl(character)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Listing tag snapshots taken at ADD-to-cart time, keyed by listingId — verify-cart
@@ -272,6 +324,10 @@ public final class ShopClientState {
 
     public static long getCurrentBalanceMinorUnits() {
         return currentBalanceMinorUnits;
+    }
+
+    public static boolean isCurrentBalanceKnown() {
+        return currentBalanceKnown;
     }
 
     public static String getCurrencyName() {

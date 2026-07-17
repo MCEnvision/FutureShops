@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PaymentSourceRegressionTest {
@@ -47,26 +48,61 @@ class PaymentSourceRegressionTest {
     }
 
     @Test
-    void physicalPurchasesAreExactProtectedAndRefundable() throws Exception {
-        String service = read("src/main/java/com/enviouse/futureshops/money/PurchasePaymentService.java");
+    void physicalPurchasesEnterDeterministicEscrowCustody() throws Exception {
+        String service = read("src/main/java/com/enviouse/futureshops/server/escrow/runtime/PlayerShopLiveEscrowService.java");
+        String deposit = read("src/main/java/com/enviouse/futureshops/server/escrow/runtime/EscrowCashDepositService.java");
         String internal = read("src/main/java/com/enviouse/futureshops/money/InternalCurrencyAdapter.java");
         String foreign = read("src/main/java/com/enviouse/futureshops/money/ItemValueCurrencyAdapter.java");
-        assertTrue(service.contains("destroyCounterfeit(player)"));
-        assertTrue(service.contains("consumeExact(player, amountMinor)"));
-        assertTrue(service.contains("refundExact(player, receipt.physicalPayment())"));
+        assertTrue(service.contains("depositForEscrow(actor"));
+        assertTrue(service.contains("walletCreditMinorUnits() != 0L"));
+        assertTrue(service.contains("overflowClaimMinorUnits() != total"));
+        assertTrue(service.contains("physicalMoneyLedger"));
+        assertTrue(service.contains("completePhysicalFundingClaims"));
+        assertTrue(deposit.contains("claimOnly"));
+        assertTrue(deposit.contains("economy.getBalance(player.getUUID())"));
         assertTrue(internal.contains("SpentMintsSavedData.ConsumeResult"));
-        assertTrue(internal.contains("refundExact"));
         assertTrue(foreign.contains("consumeExact"));
-        assertTrue(foreign.contains("refundableStack"));
     }
 
     @Test
-    void bothServerPurchaseEnginesChargeAndRollbackTheChosenSource() throws Exception {
+    void fullWalletInventoryCashPurchaseUsesClaimCustody() throws Exception {
+        String trade = read("src/main/java/com/enviouse/futureshops/server/shop/PlayerShopEscrowTransactionService.java");
+        String live = read("src/main/java/com/enviouse/futureshops/server/escrow/runtime/PlayerShopLiveEscrowService.java");
+        String deposit = read("src/main/java/com/enviouse/futureshops/server/escrow/runtime/EscrowCashDepositService.java");
+
+        assertTrue(trade.contains(
+                "PlayerShopPaymentSource.INVENTORY_CASH"));
+        assertTrue(trade.contains(
+                "PlayerShopMoneyTransfer.BALANCE_NOT_APPLICABLE"));
+        assertFalse(trade.contains("Math.addExact(balance, cost)"));
+        assertTrue(live.contains("depositForEscrow(actor"));
+        assertTrue(live.contains("LedgerAccountType.PLAYER_CLAIM"));
+        assertTrue(live.contains("overflowClaimMinorUnits() != total"));
+        assertTrue(deposit.contains(
+                "return claimOnly ? currentBalanceMinorUnits"));
+    }
+
+    @Test
+    void bothServerPurchaseEnginesHonorTheChosenSource() throws Exception {
         String admin = read("src/main/java/com/enviouse/futureshops/server/transaction/ShopBuyService.java");
+        String bridge = read("src/main/java/com/enviouse/futureshops/server/transaction/ServerShopPhysicalFundingBridge.java");
+        String commit = read("src/main/java/com/enviouse/futureshops/server/escrow/runtime/ServerShopPurchaseCommit.java");
         String player = read("src/main/java/com/enviouse/futureshops/server/shop/PlayerShopBlockService.java");
-        assertTrue(admin.contains("PurchasePaymentService.charge"));
-        assertTrue(admin.contains("PurchasePaymentService.refund"));
-        assertTrue(player.contains("PurchasePaymentService.charge"));
-        assertTrue(player.contains("PurchasePaymentService.refund"));
+        String live = read("src/main/java/com/enviouse/futureshops/server/shop/PlayerShopEscrowTransactionService.java");
+        assertTrue(admin.contains("ServerShopPurchaseService.purchase"));
+        assertTrue(admin.contains("ServerShopPhysicalFundingBridge.fund"));
+        assertTrue(admin.indexOf("ServerShopPurchaseService.resolveReplay")
+                < admin.indexOf("ServerShopPhysicalFundingBridge.fund"));
+        assertTrue(bridge.contains("CashDepositMode.INTERNAL_ESCROW"));
+        assertTrue(bridge.contains("depositForEscrow(player, request)"));
+        assertFalse(bridge.contains(
+                "EscrowCashDepositService.deposit(player, request)"));
+        assertTrue(commit.contains("claimAccount(value.claimId())"));
+        assertTrue(commit.contains("physicalFundingDeliveryKey"));
+        assertTrue(player.contains("PlayerShopEscrowTransactionService.buy"));
+        assertTrue(live.contains("PlayerShopLiveEscrowService.execute"));
+        assertTrue(live.contains("PlayerShopPaymentSource.INVENTORY_CASH"));
+        assertFalse(player.contains("PurchasePaymentService.charge"));
+        assertFalse(player.contains("PurchasePaymentService.refund"));
     }
 }

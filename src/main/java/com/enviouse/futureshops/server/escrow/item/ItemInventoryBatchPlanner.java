@@ -30,6 +30,54 @@ public final class ItemInventoryBatchPlanner {
             List<ItemInventoryBatchEntry> requestedEntries
     ) {
         Objects.requireNonNull(current, "current");
+        CanonicalBatch batch = canonicalBatch(requestedEntries);
+        ItemInventoryMutationDirection direction = batch.direction();
+        List<ItemInventoryBatchEntry> entries = batch.entries();
+        byte[] fingerprint = fingerprint(direction, entries);
+        List<ItemStack> trial = current.mutableCopy();
+        boolean exactMatching = entries.stream().anyMatch(entry ->
+                entry.matcher().mode() == ItemMatchMode.EXACT);
+        List<SlotEvidence> evidence = captureEvidence(
+                trial, exactMatching);
+        List<ItemInventoryAllocation> allocations = new ArrayList<>();
+        AllocationBudget allocationBudget = new AllocationBudget();
+        Map<UUID, Integer> fulfilled = new LinkedHashMap<>();
+        boolean complete = true;
+        for (ItemInventoryBatchEntry entry : entries) {
+            int count = direction == ItemInventoryMutationDirection.INSERT
+                    ? insert(trial, evidence, entry, allocations,
+                    allocationBudget, exactMatching)
+                    : extract(trial, evidence, entry, allocations,
+                    allocationBudget);
+            fulfilled.put(entry.entryId(), count);
+            complete &= count == entry.count();
+        }
+        if (!complete) {
+            return new ItemInventoryMutationPlan(
+                    direction == ItemInventoryMutationDirection.INSERT
+                            ? ItemInventoryPlanStatus.INSUFFICIENT_CAPACITY
+                            : ItemInventoryPlanStatus.INSUFFICIENT_ITEMS,
+                    direction, current, current, entries, List.of(),
+                    List.of(), fulfilled, fingerprint);
+        }
+        ItemInventoryState after = ItemInventoryState.fromAccessibleSlots(
+                trial);
+        List<ItemInventorySlotChange> changes = changes(current, after);
+        return new ItemInventoryMutationPlan(
+                ItemInventoryPlanStatus.APPLICABLE, direction, current, after,
+                entries, allocations, changes, fulfilled, fingerprint);
+    }
+
+    public static byte[] fingerprint(
+            List<ItemInventoryBatchEntry> requestedEntries
+    ) {
+        CanonicalBatch batch = canonicalBatch(requestedEntries);
+        return fingerprint(batch.direction(), batch.entries());
+    }
+
+    private static CanonicalBatch canonicalBatch(
+            List<ItemInventoryBatchEntry> requestedEntries
+    ) {
         Objects.requireNonNull(requestedEntries, "requestedEntries");
         if (requestedEntries.isEmpty()
                 || requestedEntries.size() > MAX_ENTRIES) {
@@ -67,39 +115,7 @@ public final class ItemInventoryBatchPlanner {
             entries.add(entry);
         }
         entries.sort(entryComparator(direction));
-        byte[] fingerprint = fingerprint(direction, entries);
-        List<ItemStack> trial = current.mutableCopy();
-        boolean exactMatching = entries.stream().anyMatch(entry ->
-                entry.matcher().mode() == ItemMatchMode.EXACT);
-        List<SlotEvidence> evidence = captureEvidence(
-                trial, exactMatching);
-        List<ItemInventoryAllocation> allocations = new ArrayList<>();
-        AllocationBudget allocationBudget = new AllocationBudget();
-        Map<UUID, Integer> fulfilled = new LinkedHashMap<>();
-        boolean complete = true;
-        for (ItemInventoryBatchEntry entry : entries) {
-            int count = direction == ItemInventoryMutationDirection.INSERT
-                    ? insert(trial, evidence, entry, allocations,
-                    allocationBudget, exactMatching)
-                    : extract(trial, evidence, entry, allocations,
-                    allocationBudget);
-            fulfilled.put(entry.entryId(), count);
-            complete &= count == entry.count();
-        }
-        if (!complete) {
-            return new ItemInventoryMutationPlan(
-                    direction == ItemInventoryMutationDirection.INSERT
-                            ? ItemInventoryPlanStatus.INSUFFICIENT_CAPACITY
-                            : ItemInventoryPlanStatus.INSUFFICIENT_ITEMS,
-                    direction, current, current, entries, List.of(),
-                    List.of(), fulfilled, fingerprint);
-        }
-        ItemInventoryState after = ItemInventoryState.fromAccessibleSlots(
-                trial);
-        List<ItemInventorySlotChange> changes = changes(current, after);
-        return new ItemInventoryMutationPlan(
-                ItemInventoryPlanStatus.APPLICABLE, direction, current, after,
-                entries, allocations, changes, fulfilled, fingerprint);
+        return new CanonicalBatch(direction, List.copyOf(entries));
     }
 
     private static int insert(
@@ -475,5 +491,11 @@ public final class ItemInventoryBatchPlanner {
         byte[] encoded = value.getBytes(StandardCharsets.UTF_8);
         output.writeInt(encoded.length);
         output.write(encoded);
+    }
+
+    private record CanonicalBatch(
+            ItemInventoryMutationDirection direction,
+            List<ItemInventoryBatchEntry> entries
+    ) {
     }
 }

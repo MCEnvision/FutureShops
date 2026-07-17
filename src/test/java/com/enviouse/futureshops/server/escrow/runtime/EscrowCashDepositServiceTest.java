@@ -19,6 +19,7 @@ import com.enviouse.futureshops.server.escrow.model.EscrowState;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransactionId;
 import com.enviouse.futureshops.server.escrow.model.MoneyAmount;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
 import com.enviouse.futureshops.server.security.ServerRequestSecurityManager;
 import com.enviouse.futureshops.money.CurrencyManager;
 import org.junit.jupiter.api.Test;
@@ -102,6 +103,78 @@ class EscrowCashDepositServiceTest {
                         REQUEST_ID, "stale",
                         EscrowCashDepositService.Source.INVENTORY,
                         OptionalLong.of(100L)));
+    }
+
+    @Test
+    void legacyPublicReplayResolvesWithoutWeakeningInternalModeEvidence() {
+        var publicRequest = new EscrowCashDepositService.DepositRequest(
+                REQUEST_ID, CURRENCY_SIGNATURE,
+                EscrowCashDepositService.Source.INVENTORY,
+                OptionalLong.of(100L));
+        String currentKey = EscrowCashDepositService.requestKey(
+                PLAYER_ID, publicRequest);
+        String legacyKey = EscrowCashDepositService.legacyRequestKey(
+                PLAYER_ID, publicRequest).orElseThrow();
+        EscrowTransaction legacyTransaction = completed(heldTransaction(
+                legacyKey, Map.of()));
+        LedgerTransaction ledger = replayLedger();
+        EscrowClaim publicClaim = replayClaim(ClaimKind.MONEY);
+
+        assertFalse(currentKey.equals(legacyKey));
+        assertEquals(EscrowCashDepositService.ReplayDisposition.COMPLETED,
+                EscrowCashDepositService.classifyReplay(
+                        Optional.of(legacyTransaction), currentKey,
+                        Optional.of(legacyKey)));
+        var replay = EscrowCashDepositService.completedReplay(
+                publicRequest, TRANSACTION_ID, legacyTransaction, ledger,
+                List.of(publicClaim), PLAYER_ID, 570L, false);
+        assertTrue(replay.successful());
+        assertTrue(replay.replayed());
+        assertEquals(30L, replay.overflowClaimMinorUnits());
+
+        var internalRequest = new EscrowCashDepositService.DepositRequest(
+                REQUEST_ID, CURRENCY_SIGNATURE,
+                EscrowCashDepositService.Source.INVENTORY,
+                OptionalLong.of(100L), CashDepositMode.INTERNAL_ESCROW);
+        assertTrue(EscrowCashDepositService.legacyRequestKey(
+                PLAYER_ID, internalRequest).isEmpty());
+        assertEquals(
+                EscrowCashDepositService.ReplayDisposition.REQUEST_CONFLICT,
+                EscrowCashDepositService.classifyReplay(
+                        Optional.of(legacyTransaction),
+                        EscrowCashDepositService.requestKey(
+                                PLAYER_ID, internalRequest),
+                        Optional.empty()));
+        EscrowTransaction internalWithoutMode = completed(heldTransaction(
+                EscrowCashDepositService.requestKey(
+                        PLAYER_ID, internalRequest), Map.of()));
+        assertThrows(EscrowRuntimeException.class,
+                () -> EscrowCashDepositService.completedReplay(
+                        internalRequest, TRANSACTION_ID,
+                        internalWithoutMode, ledger,
+                        List.of(replayClaim(
+                                ClaimKind.INTERNAL_ESCROW_MONEY)),
+                        PLAYER_ID, 500L, false));
+    }
+
+    @Test
+    void fullWalletInventoryCashUsesClaimOnlyEscrowHeadroom() {
+        long fullWallet = 99_999_999_999L;
+        long purchaseCash = 12_500L;
+
+        long custodyLimit = EscrowCashDepositService.walletBalanceLimit(
+                true, fullWallet, fullWallet);
+
+        assertEquals(fullWallet, custodyLimit);
+        assertEquals(0L, Math.subtractExact(custodyLimit, fullWallet));
+        assertEquals(purchaseCash, Math.subtractExact(purchaseCash,
+                Math.subtractExact(custodyLimit, fullWallet)));
+        assertEquals(fullWallet,
+                EscrowCashDepositService.walletBalanceLimit(
+                        false, 100L, fullWallet));
+        assertThrows(IllegalArgumentException.class,
+                () -> EscrowCashDepositService.walletBalanceLimit(
+                        true, Math.addExact(fullWallet, 1L), fullWallet));
     }
 
     @Test
@@ -335,6 +408,14 @@ class EscrowCashDepositServiceTest {
     }
 
     private static EscrowTransaction heldTransaction() {
+        return heldTransaction(REQUEST_KEY, Map.of(
+                "deposit_mode", CashDepositMode.PUBLIC_WALLET.name()));
+    }
+
+    private static EscrowTransaction heldTransaction(
+            String requestKey,
+            Map<String, String> attributes
+    ) {
         EscrowParty player = EscrowParty.player(PLAYER_ID);
         EscrowParty system = EscrowParty.system("cash_deposit_test");
         Set<EscrowParticipant> participants = Set.of(
@@ -350,15 +431,40 @@ class EscrowCashDepositServiceTest {
                 EscrowProtectionLevel.PROTECTED, player, system, 2L,
                 Optional.of(new MoneyAmount("futureshops:credits", 100L)),
                 "protected cash".getBytes(StandardCharsets.UTF_8),
-                Map.of());
+                attributes);
         return EscrowTransaction.create(
                         new EscrowTransactionId(TRANSACTION_ID),
-                        Optional.empty(), new EscrowRequestKey(REQUEST_KEY),
+                        Optional.empty(), new EscrowRequestKey(requestKey),
                         EscrowOperation.CURRENCY_DEPOSIT, participants,
                         List.of(asset), NOW, 1L, Optional.empty())
                 .transitionTo(EscrowState.VALIDATED, NOW.plusSeconds(1))
                 .transitionTo(EscrowState.HOLDING, NOW.plusSeconds(2))
                 .transitionTo(EscrowState.HELD, NOW.plusSeconds(3));
+    }
+
+    private static LedgerTransaction replayLedger() {
+        return new LedgerTransaction(
+                TRANSACTION_ID, "cash.deposit.test.replay.ledger", "deposit",
+                List.of(
+                        new LedgerLeg(new LedgerAccountId(
+                                LedgerAccountType.FOREIGN_CURRENCY_SOURCE,
+                                "source"), -100L),
+                        new LedgerLeg(new LedgerAccountId(
+                                LedgerAccountType.PLAYER_WALLET,
+                                PLAYER_ID.toString()), 70L),
+                        new LedgerLeg(new LedgerAccountId(
+                                LedgerAccountType.PLAYER_CLAIM,
+                                PLAYER_ID.toString()), 30L)));
+    }
+
+    private static EscrowClaim replayClaim(ClaimKind kind) {
+        return new EscrowClaim(
+                UUID.nameUUIDFromBytes(("cash.deposit.test.claim." + kind)
+                        .getBytes(StandardCharsets.UTF_8)),
+                TRANSACTION_ID, PLAYER_ID,
+                "cash.deposit.test.claim." + kind,
+                kind, 30L, 30L, new byte[0], ClaimStatus.PENDING,
+                "Deposit overflow", NOW, NOW);
     }
 
     private static void assertConfigurationReloadWaitsForDepositWindow(

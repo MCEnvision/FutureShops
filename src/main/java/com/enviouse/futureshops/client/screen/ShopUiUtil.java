@@ -239,10 +239,16 @@ public final class ShopUiUtil {
             return Long.toString(minorUnits);
         }
 
-        long divisor = (long) Math.pow(10, decimals);
-        long whole = minorUnits / divisor;
-        long fractional = Math.abs(minorUnits % divisor);
-        return whole + "." + String.format("%0" + decimals + "d", fractional);
+        java.math.BigInteger value = java.math.BigInteger.valueOf(
+                minorUnits);
+        java.math.BigInteger divisor = java.math.BigInteger.TEN.pow(
+                decimals);
+        java.math.BigInteger[] parts = value.abs()
+                .divideAndRemainder(divisor);
+        String sign = value.signum() < 0 ? "-" : "";
+        return sign + parts[0] + "." + String.format(
+                java.util.Locale.ROOT, "%0" + decimals + "d",
+                parts[1].longValueExact());
     }
 
     public static int countPlayerInventory(String itemId) {

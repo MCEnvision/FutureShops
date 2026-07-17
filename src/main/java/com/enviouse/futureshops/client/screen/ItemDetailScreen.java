@@ -47,6 +47,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
 
     // Spec §8: Confirmation modal overlay
     private ConfirmationModal confirmationModal = null;
+    private java.util.UUID pendingSellRequestId;
 
     public ItemDetailScreen(Screen parent, String listingId) {
         super(Component.translatable("gui.futureshops.detail.title"));
@@ -121,8 +122,10 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                 I18n.get("gui.futureshops.item_detail.earn", totalStr, ShopClientState.getCurrencyName()),
                 modal -> {
                     modal.setProcessing();
+                    pendingSellRequestId = java.util.UUID.randomUUID();
                     ShopPackets.CHANNEL.sendToServer(new C2SSellRequestPacket(
-                            ShopClientState.getActiveShopId(), item.listingId(), qty));
+                            ShopClientState.getActiveShopId(), item.listingId(),
+                            qty, pendingSellRequestId));
                 },
                 () -> confirmationModal = null
         );
@@ -450,6 +453,18 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                 confirmationModal.setFailed(message);
             }
         }
+    }
+
+    public void onSellTransactionResult(
+            java.util.UUID requestId,
+            boolean success,
+            String message
+    ) {
+        if (requestId == null || !requestId.equals(pendingSellRequestId)) {
+            return;
+        }
+        pendingSellRequestId = null;
+        onTransactionResult(success, message);
     }
 
     @Override

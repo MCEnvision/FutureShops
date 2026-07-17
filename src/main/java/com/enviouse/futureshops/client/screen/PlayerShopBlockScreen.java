@@ -2,6 +2,8 @@ package com.enviouse.futureshops.client.screen;
 
 import com.enviouse.futureshops.client.PlayerShopCartState;
 import com.enviouse.futureshops.client.PlayerShopClientState;
+import com.enviouse.futureshops.client.PlayerShopResponseTracker;
+import com.enviouse.futureshops.client.ShopClientPacketHandler;
 import com.enviouse.futureshops.client.ShopClientState;
 import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.PlayerShopListingData;
@@ -14,6 +16,7 @@ import com.enviouse.futureshops.network.packets.C2SPlayerShopBuybackConfigPacket
 import com.enviouse.futureshops.network.packets.C2SPlayerShopConfigPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopIconPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopSavedConfigPacket;
+import com.enviouse.futureshops.network.packets.C2SPlayerShopSettlementClaimPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopUnlinkStoragePacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
@@ -936,7 +939,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                 Component.translatable("gui.futureshops.player_shop_block.payouts.collect"),
                 ShopUiUtil.ButtonStyle.PRIMARY, true, null, null,
                 Component.translatable("gui.futureshops.player_shop_block.footer.collect_tooltip"),
-                () -> sendAction("CLAIM_SETTLEMENT", 0));
+                this::claimSettlement);
         y += cardH + 6;
 
         // Lifetime revenue card + History.
@@ -1921,9 +1924,13 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     }
 
     private void buy(int quantity, String paymentMethod, PaymentSource paymentSource) {
+        PlayerShopResponseTracker.PendingRequest request =
+                ShopClientPacketHandler.beginPlayerShopRequest(
+                        PlayerShopResponseTracker.Operation.PURCHASE, 0);
         ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopBuyPacket(
                 PlayerShopClientState.shopPos(), PlayerShopClientState.selectedListingIndex(), quantity,
-                paymentMethod, paymentSource.wire()));
+                paymentMethod, paymentSource.wire(), request.requestId(),
+                request.responseToken()));
     }
 
     private void showBuyConfirmation(int quantity) {
@@ -2103,6 +2110,16 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     private void sendAction(String action, int amount) {
         ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopActionPacket(
                 PlayerShopClientState.shopPos(), action, PlayerShopClientState.selectedListingIndex(), amount));
+    }
+
+    private void claimSettlement() {
+        PlayerShopResponseTracker.PendingRequest request =
+                ShopClientPacketHandler.beginPlayerShopRequest(
+                        PlayerShopResponseTracker.Operation.SETTLEMENT, 0);
+        ShopPackets.CHANNEL.sendToServer(
+                new C2SPlayerShopSettlementClaimPacket(
+                        PlayerShopClientState.shopPos(),
+                        request.requestId(), request.responseToken()));
     }
 
     private int currentBarterCount() {

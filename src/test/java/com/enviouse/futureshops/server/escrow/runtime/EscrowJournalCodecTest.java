@@ -56,6 +56,24 @@ class EscrowJournalCodecTest {
                 EscrowJournalEventType.PLAYER_PAYMENT_COMMIT.wireId());
         assertEquals(24,
                 EscrowJournalEventType.STOCK_MUTATION.wireId());
+        assertEquals(25, EscrowJournalEventType
+                .SERVER_SHOP_PURCHASE_COMMIT.wireId());
+        assertEquals(26, EscrowJournalEventType
+                .ITEM_INVENTORY_MUTATION.wireId());
+        assertEquals(27, EscrowJournalEventType
+                .EXACT_ITEM_CLAIM_DELIVERY_COMMIT.wireId());
+        assertEquals(28, EscrowJournalEventType
+                .ITEM_INVENTORY_QUARANTINE_ADMINISTRATION.wireId());
+        assertEquals(29, EscrowJournalEventType
+                .ITEM_INVENTORY_JOURNAL_COMPACTION.wireId());
+        assertEquals(32, EscrowJournalEventType
+                .AUCTION_HOUSE_MUTATION.wireId());
+        assertEquals(34, EscrowJournalEventType
+                .AUCTION_HOUSE_ESCROW_LIFECYCLE.wireId());
+        assertEquals(37, EscrowJournalEventType
+                .MARKET_CONTROL_MUTATION.wireId());
+        assertEquals(38, EscrowJournalEventType
+                .SERVER_SHOP_FUNDING_RELEASE.wireId());
         assertEquals(EscrowJournalEventType.ATM_WITHDRAWAL_COMMIT,
                 EscrowJournalEventType.fromWireId(14));
         assertEquals(
@@ -77,6 +95,28 @@ class EscrowJournalCodecTest {
                 EscrowJournalEventType.fromWireId(23));
         assertEquals(EscrowJournalEventType.STOCK_MUTATION,
                 EscrowJournalEventType.fromWireId(24));
+        assertEquals(EscrowJournalEventType.SERVER_SHOP_PURCHASE_COMMIT,
+                EscrowJournalEventType.fromWireId(25));
+        assertEquals(EscrowJournalEventType.ITEM_INVENTORY_MUTATION,
+                EscrowJournalEventType.fromWireId(26));
+        assertEquals(EscrowJournalEventType
+                        .EXACT_ITEM_CLAIM_DELIVERY_COMMIT,
+                EscrowJournalEventType.fromWireId(27));
+        assertEquals(EscrowJournalEventType
+                        .ITEM_INVENTORY_QUARANTINE_ADMINISTRATION,
+                EscrowJournalEventType.fromWireId(28));
+        assertEquals(EscrowJournalEventType
+                        .ITEM_INVENTORY_JOURNAL_COMPACTION,
+                EscrowJournalEventType.fromWireId(29));
+        assertEquals(EscrowJournalEventType.AUCTION_HOUSE_MUTATION,
+                EscrowJournalEventType.fromWireId(32));
+        assertEquals(EscrowJournalEventType
+                        .AUCTION_HOUSE_ESCROW_LIFECYCLE,
+                EscrowJournalEventType.fromWireId(34));
+        assertEquals(EscrowJournalEventType.MARKET_CONTROL_MUTATION,
+                EscrowJournalEventType.fromWireId(37));
+        assertEquals(EscrowJournalEventType.SERVER_SHOP_FUNDING_RELEASE,
+                EscrowJournalEventType.fromWireId(38));
     }
 
     @Test

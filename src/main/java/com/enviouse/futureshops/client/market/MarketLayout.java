@@ -7,6 +7,7 @@ public record MarketLayout(
     MarketRectangle window,
     MarketRectangle header,
     MarketRectangle breadcrumb,
+    MarketRectangle secondaryTabs,
     MarketRectangle categoryRail,
     MarketRectangle toolbar,
     MarketRectangle content,
@@ -22,6 +23,7 @@ public record MarketLayout(
         Objects.requireNonNull(window, "window");
         Objects.requireNonNull(header, "header");
         Objects.requireNonNull(breadcrumb, "breadcrumb");
+        Objects.requireNonNull(secondaryTabs, "secondaryTabs");
         Objects.requireNonNull(categoryRail, "categoryRail");
         Objects.requireNonNull(toolbar, "toolbar");
         Objects.requireNonNull(content, "content");
@@ -30,7 +32,8 @@ public record MarketLayout(
             throw new IllegalArgumentException("Market layout columns and padding must be positive.");
         }
         for (MarketRectangle rectangle : new MarketRectangle[]{
-            header, breadcrumb, categoryRail, toolbar, content, footer
+            header, breadcrumb, secondaryTabs, categoryRail, toolbar,
+            content, footer
         }) {
             if (rectangle.right() > window.right() || rectangle.bottom() > window.bottom()) {
                 throw new IllegalArgumentException("Market layout region is outside the window.");
@@ -41,6 +44,10 @@ public record MarketLayout(
         }
         if (mode != MarketLayoutMode.NARROW && categoryDrawer) {
             throw new IllegalArgumentException("Only narrow market layout uses a category drawer.");
+        }
+        if (secondaryTabRow != (secondaryTabs.height() > 0)) {
+            throw new IllegalArgumentException(
+                "Market secondary tab geometry is inconsistent.");
         }
     }
 }

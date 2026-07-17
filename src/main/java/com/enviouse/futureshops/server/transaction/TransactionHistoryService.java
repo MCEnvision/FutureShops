@@ -74,6 +74,89 @@ public final class TransactionHistoryService {
         }
     }
 
+    public static void recordServerPurchase(
+            MinecraftServer server,
+            UUID playerId,
+            String shopId,
+            UUID transactionId,
+            int lineIndex,
+            String itemId,
+            int quantity,
+            long totalMinorUnits,
+            String note,
+            String nbtJson,
+            Instant occurredAt
+    ) {
+        java.util.Objects.requireNonNull(server, "server");
+        java.util.Objects.requireNonNull(playerId, "playerId");
+        java.util.Objects.requireNonNull(transactionId, "transactionId");
+        String marker = "server.shop.purchase." + transactionId + "."
+                + lineIndex;
+        if (TransactionHistorySavedData.get(server).appendIfAbsent(
+                playerId, marker, new TransactionHistoryEntry(
+                        java.util.Objects.requireNonNull(
+                                occurredAt, "occurredAt").getEpochSecond(),
+                        "BUY", itemId,
+                        quantity, totalMinorUnits, note,
+                        nbtJson == null ? "" : nbtJson))) {
+            pushLatestToSubscriber(server, playerId,
+                    ShopDataService.resolveShopId(shopId));
+        }
+    }
+
+    public static void recordServerSell(
+            MinecraftServer server,
+            UUID playerId,
+            String shopId,
+            UUID transactionId,
+            String itemId,
+            int quantity,
+            long totalMinorUnits,
+            String nbtJson,
+            Instant occurredAt
+    ) {
+        java.util.Objects.requireNonNull(server, "server");
+        java.util.Objects.requireNonNull(playerId, "playerId");
+        java.util.Objects.requireNonNull(transactionId, "transactionId");
+        String marker = "server.shop.sell." + transactionId;
+        if (TransactionHistorySavedData.get(server).appendIfAbsent(
+                playerId, marker, new TransactionHistoryEntry(
+                        java.util.Objects.requireNonNull(
+                                occurredAt, "occurredAt").getEpochSecond(),
+                        "SELL", itemId, quantity, totalMinorUnits,
+                        "DETAIL", nbtJson == null ? "" : nbtJson))) {
+            pushLatestToSubscriber(server, playerId,
+                    ShopDataService.resolveShopId(shopId));
+        }
+    }
+
+    public static void recordServerBarter(
+            MinecraftServer server,
+            UUID playerId,
+            String shopId,
+            UUID transactionId,
+            String itemId,
+            int quantity,
+            String note,
+            String nbtJson,
+            Instant occurredAt
+    ) {
+        java.util.Objects.requireNonNull(server, "server");
+        java.util.Objects.requireNonNull(playerId, "playerId");
+        java.util.Objects.requireNonNull(transactionId, "transactionId");
+        String marker = "server.shop.barter." + transactionId;
+        if (TransactionHistorySavedData.get(server).appendIfAbsent(
+                playerId, marker, new TransactionHistoryEntry(
+                        java.util.Objects.requireNonNull(
+                                occurredAt, "occurredAt").getEpochSecond(),
+                        "BARTER", itemId, quantity, 0L,
+                        note == null ? "" : note,
+                        nbtJson == null ? "" : nbtJson))) {
+            pushLatestToSubscriber(server, playerId,
+                    ShopDataService.resolveShopId(shopId));
+        }
+    }
+
     public static void sendHistoryPage(ServerPlayer player, String requestedShopId, int page, int pageSize,
                                        TransactionHistoryEntry.HistoryFilter filter,
                                        String searchText,

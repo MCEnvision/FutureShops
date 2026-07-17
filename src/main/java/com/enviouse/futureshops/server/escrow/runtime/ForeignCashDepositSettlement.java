@@ -12,6 +12,7 @@ import com.enviouse.futureshops.server.escrow.ledger.LedgerLeg;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerTransaction;
 import com.enviouse.futureshops.server.escrow.model.EscrowState;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionSettlement.InventoryMutationReceipt;
 
 import java.nio.charset.StandardCharsets;
@@ -198,7 +199,7 @@ public record ForeignCashDepositSettlement(
                     || !claim.transactionId().equals(
                     reservation.transactionId())
                     || !claim.ownerId().equals(reservation.playerId())
-                    || claim.kind() != ClaimKind.MONEY
+                    || claim.kind() != expectedOverflowClaimKind(reservation)
                     || claim.status() != ClaimStatus.PENDING
                     || claim.originalUnits() != overflowCredit
                     || claim.remainingUnits() != overflowCredit
@@ -230,5 +231,12 @@ public record ForeignCashDepositSettlement(
         return capacity.compareTo(amount) >= 0
                 ? reservation.amountMinorUnits()
                 : capacity.longValueExact();
+    }
+
+    private static ClaimKind expectedOverflowClaimKind(
+            ForeignCashDepositReservation reservation
+    ) {
+        return reservation.depositMode() == CashDepositMode.INTERNAL_ESCROW
+                ? ClaimKind.INTERNAL_ESCROW_MONEY : ClaimKind.MONEY;
     }
 }

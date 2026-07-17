@@ -39,7 +39,8 @@ public final class LocalShopAggregator {
         PlayerShopRegistrySavedData registry = PlayerShopRegistrySavedData.get(player.getServer());
         FranchiseSavedData franchiseData = FranchiseSavedData.get(player.getServer());
 
-        Map<Long, PlayerShopRegistrySavedData.ShopRecord> allShops = registry.getAllShops();
+        Map<PlayerShopRegistrySavedData.ShopLocation,
+                PlayerShopRegistrySavedData.ShopRecord> allShops = registry.getAllShops();
         int scanRadius = Config.localListingsScanRadiusBlocks;
         boolean unlimited = scanRadius <= 0;
         long scanRadiusSq = (long) scanRadius * scanRadius;
@@ -51,11 +52,12 @@ public final class LocalShopAggregator {
         Map<UUID, String> groupDisplayName = new HashMap<>();
         Map<UUID, String> groupFranchiseName = new HashMap<>();
 
-        for (Map.Entry<Long, PlayerShopRegistrySavedData.ShopRecord> entry : allShops.entrySet()) {
+        for (Map.Entry<PlayerShopRegistrySavedData.ShopLocation,
+                PlayerShopRegistrySavedData.ShopRecord> entry : allShops.entrySet()) {
             PlayerShopRegistrySavedData.ShopRecord record = entry.getValue();
             if (!currentDimension.equals(record.dimension())) continue;
 
-            BlockPos shopPos = BlockPos.of(entry.getKey());
+            BlockPos shopPos = BlockPos.of(entry.getKey().posLong());
             double distSq = center.distSqr(shopPos);
             if (!unlimited && distSq > (double) scanRadiusSq) continue;
             if (!level.hasChunkAt(shopPos)) continue;
@@ -190,6 +192,5 @@ public final class LocalShopAggregator {
 
     private record ShopInfo(BlockPos pos, ShopBlockEntity shop, double distance) {}
 }
-
 
 

@@ -6,7 +6,6 @@ import com.enviouse.futureshops.server.escrow.admin.MaintenanceRepairCommand;
 import com.enviouse.futureshops.server.escrow.admin.MaintenanceRepairTarget;
 import com.enviouse.futureshops.server.escrow.admin.MaintenanceStateFingerprint;
 import com.enviouse.futureshops.server.escrow.claim.ClaimAttemptResult;
-import com.enviouse.futureshops.server.escrow.claim.ClaimKind;
 import com.enviouse.futureshops.server.escrow.claim.ClaimSavedData;
 import com.enviouse.futureshops.server.escrow.claim.EscrowClaim;
 import com.enviouse.futureshops.server.escrow.custody.CustodyBatchCommit;
@@ -17,6 +16,15 @@ import com.enviouse.futureshops.server.escrow.custody.CustodyPreparedOperation;
 import com.enviouse.futureshops.server.escrow.custody.CustodyPreparedOperationCodec;
 import com.enviouse.futureshops.server.escrow.custody.CustodySavedData;
 import com.enviouse.futureshops.server.escrow.journal.JournalRecord;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalSavedData;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalStatus;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalTransition;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalTransitionCodec;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryQuarantineAdministration;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryQuarantineAdministrationCodec;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryQuarantineAdministrationResult;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalCompaction;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalCompactionCodec;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerSavedData;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountId;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountType;
@@ -26,6 +34,8 @@ import com.enviouse.futureshops.server.escrow.mint.ProtectedMintEventCodec;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintJournalEvent;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintOperation;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintSavedData;
+import com.enviouse.futureshops.server.escrow.playershop.PlayerShopEscrowLifecycleEvent;
+import com.enviouse.futureshops.server.escrow.playershop.PlayerShopEscrowLifecycleEventCodec;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionConservationValidator;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionReservation;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionReservationCodec;
@@ -39,7 +49,32 @@ import com.enviouse.futureshops.server.escrow.model.EscrowState;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransactionId;
 import com.enviouse.futureshops.server.escrow.stock.StockMutationCommand;
 import com.enviouse.futureshops.server.escrow.stock.StockMutationCommandCodec;
+import com.enviouse.futureshops.server.escrow.stock.StockCommandResult;
+import com.enviouse.futureshops.server.escrow.stock.StockMutationOutcome;
 import com.enviouse.futureshops.server.escrow.stock.StockSavedData;
+import com.enviouse.futureshops.server.market.auction.AuctionHouseMutation;
+import com.enviouse.futureshops.server.market.auction.AuctionHouseMutationCodec;
+import com.enviouse.futureshops.server.market.auction.AuctionHouseSavedData;
+import com.enviouse.futureshops.server.market.auction.escrow.AuctionEscrowCommit;
+import com.enviouse.futureshops.server.market.auction.escrow.AuctionEscrowLedgerAccounts;
+import com.enviouse.futureshops.server.market.auction.escrow.AuctionEscrowLifecycleEvent;
+import com.enviouse.futureshops.server.market.auction.escrow.AuctionEscrowLifecycleEventCodec;
+import com.enviouse.futureshops.server.market.auction.escrow.AuctionEscrowWalletSnapshot;
+import com.enviouse.futureshops.server.market.bazaar.BazaarMutation;
+import com.enviouse.futureshops.server.market.bazaar.BazaarMutationCodec;
+import com.enviouse.futureshops.server.market.bazaar.BazaarSavedData;
+import com.enviouse.futureshops.server.market.bazaar.BazaarOrderSide;
+import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarBuyFundingEvidence;
+import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarCreateEscrowIntent;
+import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarEscrowCommit;
+import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarEscrowLedgerAccounts;
+import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarEscrowLifecycleEvent;
+import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarEscrowLifecycleEventCodec;
+import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarEscrowWalletSnapshot;
+import com.enviouse.futureshops.server.market.control.MarketControlApplyResult;
+import com.enviouse.futureshops.server.market.control.MarketControlMutation;
+import com.enviouse.futureshops.server.market.control.MarketControlMutationCodec;
+import com.enviouse.futureshops.server.market.control.MarketControlSavedData;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -52,6 +87,12 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
     private final CustodySavedData custody;
     private final ProtectedMintSavedData protectedMints;
     private final StockSavedData stock;
+    private final ItemInventoryJournalSavedData itemInventoryJournal;
+    private final AuctionHouseSavedData auctionHouse;
+    private final BazaarSavedData bazaar;
+    private final ServerShopIntentSavedData serverShopIntents;
+    private final PlayerShopEscrowSavedData playerShopEscrow;
+    private final MarketControlSavedData marketControl;
     private final MaintenanceRepairProcessor maintenanceRepairs;
     private final AtmWithdrawalApplyFaultInjector atmWithdrawalFaults;
     private final EscrowMutationPermit mutationPermit;
@@ -116,7 +157,8 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
                                    AtmWithdrawalApplyFaultInjector atmWithdrawalFaults,
                                    EscrowMutationPermit mutationPermit) {
         this(transactions, ledger, claims, administrativeAudit, custody,
-                protectedMints, new StockSavedData(), runtimeHandler,
+                protectedMints, new StockSavedData(),
+                new ItemInventoryJournalSavedData(), runtimeHandler,
                 atmWithdrawalFaults, mutationPermit);
     }
 
@@ -129,6 +171,118 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
                                    MaintenanceRuntimeMutationHandler runtimeHandler,
                                    AtmWithdrawalApplyFaultInjector atmWithdrawalFaults,
                                    EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock,
+                new ItemInventoryJournalSavedData(), runtimeHandler,
+                atmWithdrawalFaults, mutationPermit);
+    }
+
+    EscrowSavedDataMutationApplier(EscrowTransactionSavedData transactions,
+                                   LedgerSavedData ledger, ClaimSavedData claims,
+                                   EscrowAdministrativeAuditSavedData administrativeAudit,
+                                   CustodySavedData custody,
+                                   ProtectedMintSavedData protectedMints,
+                                   StockSavedData stock,
+                                   ItemInventoryJournalSavedData itemInventoryJournal,
+                                   MaintenanceRuntimeMutationHandler runtimeHandler,
+                                   AtmWithdrawalApplyFaultInjector atmWithdrawalFaults,
+                                   EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal,
+                new AuctionHouseSavedData(), runtimeHandler,
+                atmWithdrawalFaults, mutationPermit);
+    }
+
+    EscrowSavedDataMutationApplier(EscrowTransactionSavedData transactions,
+                                   LedgerSavedData ledger, ClaimSavedData claims,
+                                   EscrowAdministrativeAuditSavedData administrativeAudit,
+                                   CustodySavedData custody,
+                                   ProtectedMintSavedData protectedMints,
+                                   StockSavedData stock,
+                                   ItemInventoryJournalSavedData itemInventoryJournal,
+                                   AuctionHouseSavedData auctionHouse,
+                                   MaintenanceRuntimeMutationHandler runtimeHandler,
+                                   AtmWithdrawalApplyFaultInjector atmWithdrawalFaults,
+                                   EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                new ServerShopIntentSavedData(), runtimeHandler,
+                atmWithdrawalFaults, mutationPermit);
+    }
+
+    EscrowSavedDataMutationApplier(EscrowTransactionSavedData transactions,
+                                   LedgerSavedData ledger, ClaimSavedData claims,
+                                   EscrowAdministrativeAuditSavedData administrativeAudit,
+                                   CustodySavedData custody,
+                                   ProtectedMintSavedData protectedMints,
+                                   StockSavedData stock,
+                                   ItemInventoryJournalSavedData itemInventoryJournal,
+                                   AuctionHouseSavedData auctionHouse,
+                                   ServerShopIntentSavedData serverShopIntents,
+                                   MaintenanceRuntimeMutationHandler runtimeHandler,
+                                   AtmWithdrawalApplyFaultInjector atmWithdrawalFaults,
+                                   EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                new BazaarSavedData(), serverShopIntents, runtimeHandler,
+                atmWithdrawalFaults, mutationPermit);
+    }
+
+    EscrowSavedDataMutationApplier(EscrowTransactionSavedData transactions,
+                                   LedgerSavedData ledger, ClaimSavedData claims,
+                                   EscrowAdministrativeAuditSavedData administrativeAudit,
+                                   CustodySavedData custody,
+                                   ProtectedMintSavedData protectedMints,
+                                   StockSavedData stock,
+                                   ItemInventoryJournalSavedData itemInventoryJournal,
+                                   AuctionHouseSavedData auctionHouse,
+                                   BazaarSavedData bazaar,
+                                   ServerShopIntentSavedData serverShopIntents,
+                                   MaintenanceRuntimeMutationHandler runtimeHandler,
+                                   AtmWithdrawalApplyFaultInjector atmWithdrawalFaults,
+                                   EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                bazaar, serverShopIntents, new PlayerShopEscrowSavedData(),
+                runtimeHandler, atmWithdrawalFaults, mutationPermit);
+    }
+
+    EscrowSavedDataMutationApplier(EscrowTransactionSavedData transactions,
+                                   LedgerSavedData ledger, ClaimSavedData claims,
+                                   EscrowAdministrativeAuditSavedData administrativeAudit,
+                                   CustodySavedData custody,
+                                   ProtectedMintSavedData protectedMints,
+                                   StockSavedData stock,
+                                   ItemInventoryJournalSavedData itemInventoryJournal,
+                                   AuctionHouseSavedData auctionHouse,
+                                   BazaarSavedData bazaar,
+                                   ServerShopIntentSavedData serverShopIntents,
+                                   PlayerShopEscrowSavedData playerShopEscrow,
+                                   MaintenanceRuntimeMutationHandler runtimeHandler,
+                                   AtmWithdrawalApplyFaultInjector atmWithdrawalFaults,
+                                   EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                bazaar, serverShopIntents, playerShopEscrow,
+                new MarketControlSavedData(), runtimeHandler,
+                atmWithdrawalFaults, mutationPermit);
+    }
+
+    EscrowSavedDataMutationApplier(EscrowTransactionSavedData transactions,
+                                   LedgerSavedData ledger, ClaimSavedData claims,
+                                   EscrowAdministrativeAuditSavedData administrativeAudit,
+                                   CustodySavedData custody,
+                                   ProtectedMintSavedData protectedMints,
+                                   StockSavedData stock,
+                                   ItemInventoryJournalSavedData itemInventoryJournal,
+                                   AuctionHouseSavedData auctionHouse,
+                                   BazaarSavedData bazaar,
+                                   ServerShopIntentSavedData serverShopIntents,
+                                   PlayerShopEscrowSavedData playerShopEscrow,
+                                   MarketControlSavedData marketControl,
+                                   MaintenanceRuntimeMutationHandler runtimeHandler,
+                                   AtmWithdrawalApplyFaultInjector atmWithdrawalFaults,
+                                   EscrowMutationPermit mutationPermit) {
         this.transactions = Objects.requireNonNull(transactions, "transactions");
         this.ledger = Objects.requireNonNull(ledger, "ledger");
         this.claims = Objects.requireNonNull(claims, "claims");
@@ -136,6 +290,17 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
         this.custody = Objects.requireNonNull(custody, "custody");
         this.protectedMints = Objects.requireNonNull(protectedMints, "protectedMints");
         this.stock = Objects.requireNonNull(stock, "stock");
+        this.itemInventoryJournal = Objects.requireNonNull(
+                itemInventoryJournal, "itemInventoryJournal");
+        this.auctionHouse = Objects.requireNonNull(
+                auctionHouse, "auctionHouse");
+        this.bazaar = Objects.requireNonNull(bazaar, "bazaar");
+        this.serverShopIntents = Objects.requireNonNull(
+                serverShopIntents, "serverShopIntents");
+        this.playerShopEscrow = Objects.requireNonNull(
+                playerShopEscrow, "playerShopEscrow");
+        this.marketControl = Objects.requireNonNull(
+                marketControl, "marketControl");
         this.maintenanceRepairs = new MaintenanceRepairProcessor(transactions, claims,
                 administrativeAudit, custody, runtimeHandler);
         this.atmWithdrawalFaults = Objects.requireNonNull(
@@ -209,6 +374,47 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
                     transactionId, event.body());
             case STOCK_MUTATION -> preflightStockMutation(
                     transactionId, event.body());
+            case SERVER_SHOP_PURCHASE_COMMIT ->
+                    preflightServerShopPurchase(
+                            transactionId, event.body());
+            case SERVER_SHOP_FUNDING_RELEASE ->
+                    preflightServerShopFundingRelease(
+                            transactionId, event.body());
+            case SERVER_SHOP_SELL_COMMIT ->
+                    preflightServerShopSellLifecycle(
+                            transactionId, event.body());
+            case SERVER_SHOP_BARTER_COMMIT ->
+                    preflightServerShopBarterLifecycle(
+                            transactionId, event.body());
+            case ITEM_INVENTORY_MUTATION ->
+                    preflightItemInventoryMutation(
+                            transactionId, event.body());
+            case EXACT_ITEM_CLAIM_DELIVERY_COMMIT ->
+                    preflightExactItemClaimDelivery(
+                            transactionId, event.body());
+            case ITEM_INVENTORY_QUARANTINE_ADMINISTRATION ->
+                    preflightItemInventoryQuarantineAdministration(
+                            transactionId, event.body());
+            case ITEM_INVENTORY_JOURNAL_COMPACTION ->
+                    preflightItemInventoryJournalCompaction(
+                            transactionId, event.body());
+            case AUCTION_HOUSE_MUTATION ->
+                    preflightAuctionHouseMutation(
+                            transactionId, event.body());
+            case AUCTION_HOUSE_ESCROW_LIFECYCLE ->
+                    preflightAuctionEscrowLifecycle(
+                            transactionId, event.body());
+            case BAZAAR_MUTATION -> preflightBazaarMutation(
+                    transactionId, event.body());
+            case BAZAAR_ESCROW_LIFECYCLE ->
+                    preflightBazaarEscrowLifecycle(
+                            transactionId, event.body());
+            case PLAYER_SHOP_ESCROW_LIFECYCLE ->
+                    preflightPlayerShopEscrowLifecycle(
+                            transactionId, event.body());
+            case MARKET_CONTROL_MUTATION ->
+                    preflightMarketControlMutation(
+                            transactionId, event.body());
             case JOURNAL_LINEAGE -> throw new EscrowRuntimeException(
                     "Journal lineage cannot be preflighted as a mutation");
         };
@@ -262,6 +468,36 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
                     applyPlayerPayment(record, event.body());
             case STOCK_MUTATION ->
                     applyStockMutation(record, event.body());
+            case SERVER_SHOP_PURCHASE_COMMIT ->
+                    applyServerShopPurchase(record, event.body());
+            case SERVER_SHOP_FUNDING_RELEASE ->
+                    applyServerShopFundingRelease(record, event.body());
+            case SERVER_SHOP_SELL_COMMIT ->
+                    applyServerShopSellLifecycle(record, event.body());
+            case SERVER_SHOP_BARTER_COMMIT ->
+                    applyServerShopBarterLifecycle(record, event.body());
+            case ITEM_INVENTORY_MUTATION ->
+                    applyItemInventoryMutation(record, event.body());
+            case EXACT_ITEM_CLAIM_DELIVERY_COMMIT ->
+                    applyExactItemClaimDelivery(record, event.body());
+            case ITEM_INVENTORY_QUARANTINE_ADMINISTRATION ->
+                    applyItemInventoryQuarantineAdministration(
+                            record, event.body());
+            case ITEM_INVENTORY_JOURNAL_COMPACTION ->
+                    applyItemInventoryJournalCompaction(
+                            record, event.body());
+            case AUCTION_HOUSE_MUTATION ->
+                    applyAuctionHouseMutation(record, event.body());
+            case AUCTION_HOUSE_ESCROW_LIFECYCLE ->
+                    applyAuctionEscrowLifecycle(record, event.body());
+            case BAZAAR_MUTATION ->
+                    applyBazaarMutation(record, event.body());
+            case BAZAAR_ESCROW_LIFECYCLE ->
+                    applyBazaarEscrowLifecycle(record, event.body());
+            case PLAYER_SHOP_ESCROW_LIFECYCLE ->
+                    applyPlayerShopEscrowLifecycle(record, event.body());
+            case MARKET_CONTROL_MUTATION ->
+                    applyMarketControlMutation(record, event.body());
             case JOURNAL_LINEAGE -> throw new EscrowRuntimeException(
                     "Journal lineage cannot be applied as a mutation");
         }
@@ -271,6 +507,30 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
         EscrowTransaction transaction = EscrowTransactionByteCodec.decode(body);
         requireRecordIdentity(record, transaction.transactionId().value());
         transactions.applyCommitted(transaction);
+    }
+
+    private EscrowPreflightResult preflightMarketControlMutation(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        MarketControlMutation mutation =
+                MarketControlMutationCodec.decode(body);
+        requireRecordIdentity(recordTransactionId,
+                mutation.auditEntry().requestId());
+        MarketControlApplyResult applyResult =
+                marketControl.preflightCommitted(mutation);
+        return result(applyResult.replayed());
+    }
+
+    private void applyMarketControlMutation(
+            JournalRecord record,
+            byte[] body
+    ) {
+        MarketControlMutation mutation =
+                MarketControlMutationCodec.decode(body);
+        requireRecordIdentity(record,
+                mutation.auditEntry().requestId());
+        marketControl.applyCommitted(mutation);
     }
 
     private void applyStockMutation(JournalRecord record, byte[] body) {
@@ -286,6 +546,1075 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
         StockMutationCommand command = StockMutationCommandCodec.decode(body);
         requireRecordIdentity(recordTransactionId, command.requestId());
         return result(stock.preflightCommitted(command).replayed());
+    }
+
+    private EscrowPreflightResult preflightItemInventoryMutation(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        ItemInventoryJournalTransition transition =
+                ItemInventoryJournalTransitionCodec.decode(body);
+        requireRecordIdentity(recordTransactionId,
+                transition.requestId());
+        return result(itemInventoryJournal.preflightCommitted(
+                transition).replayed());
+    }
+
+    private void applyItemInventoryMutation(
+            JournalRecord record,
+            byte[] body
+    ) {
+        ItemInventoryJournalTransition transition =
+                ItemInventoryJournalTransitionCodec.decode(body);
+        requireRecordIdentity(record, transition.requestId());
+        itemInventoryJournal.applyCommitted(transition);
+    }
+
+    private EscrowPreflightResult preflightAuctionHouseMutation(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        AuctionHouseMutation mutation =
+                AuctionHouseMutationCodec.decode(body);
+        requireRecordIdentity(recordTransactionId,
+                mutation.requestId());
+        return result(auctionHouse.preflightCommitted(
+                mutation).replayed());
+    }
+
+    private void applyAuctionHouseMutation(
+            JournalRecord record,
+            byte[] body
+    ) {
+        AuctionHouseMutation mutation =
+                AuctionHouseMutationCodec.decode(body);
+        requireRecordIdentity(record, mutation.requestId());
+        auctionHouse.applyCommitted(mutation);
+    }
+
+    private EscrowPreflightResult preflightAuctionEscrowLifecycle(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        AuctionEscrowLifecycleEvent event =
+                AuctionEscrowLifecycleEventCodec.decode(body);
+        requireRecordIdentity(recordTransactionId, event.requestId());
+        requireAuctionCreateCustodyCommitted(event);
+        RecoveryMaterialization materialization =
+                new RecoveryMaterialization();
+        materialization.accept(auctionHouse
+                .preflightEscrowLifecycleCommitted(event).replayed());
+        if (!(event instanceof AuctionEscrowLifecycleEvent.Commit value)) {
+            return materialization.result();
+        }
+        AuctionEscrowCommit commit = value.commit();
+        commit.completedTransaction().ifPresent(transaction ->
+                materialization.accept(transactions
+                        .preflightFoldedAtomicCompletionCommitted(
+                                transaction).replayed()));
+        commit.ledgerTransaction().ifPresent(transaction -> {
+            boolean replayed = ledger.preflightCommitted(
+                    transaction).replayed();
+            if (!replayed) {
+                requireAuctionWalletSnapshots(commit.walletSnapshots());
+            }
+            materialization.accept(replayed);
+        });
+        java.util.Set<UUID> expectedClaimIds = commit.claims().stream()
+                .map(EscrowClaim::claimId)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        java.util.List<EscrowClaim> existing =
+                claims.claimsForTransaction(commit.requestId());
+        if (!existing.stream().map(EscrowClaim::claimId)
+                .allMatch(expectedClaimIds::contains)) {
+            throw new EscrowRuntimeException(
+                    "Auction escrow has unexpected claim evidence");
+        }
+        claims.preflightCreateBatch(commit.claims());
+        for (EscrowClaim claim : commit.claims()) {
+            materialization.accept(
+                    claims.getClaim(claim.claimId()) != null);
+        }
+        return materialization.result();
+    }
+
+    private void applyAuctionEscrowLifecycle(
+            JournalRecord record,
+            byte[] body
+    ) {
+        AuctionEscrowLifecycleEvent event =
+                AuctionEscrowLifecycleEventCodec.decode(body);
+        requireRecordIdentity(record, event.requestId());
+        requireAuctionCreateCustodyCommitted(event);
+        if (!(event instanceof AuctionEscrowLifecycleEvent.Commit value)) {
+            auctionHouse.applyEscrowLifecycleCommitted(event);
+            return;
+        }
+        AuctionEscrowCommit commit = value.commit();
+        int step = 0;
+        for (var transaction : commit.completedTransaction().stream()
+                .toList()) {
+            transactions.applyFoldedAtomicCompletionCommitted(transaction);
+            atmWithdrawalFaults.afterMutation(step++);
+        }
+        for (var transaction : commit.ledgerTransaction().stream()
+                .toList()) {
+            boolean replayed = ledger.preflightCommitted(
+                    transaction).replayed();
+            if (!replayed) {
+                requireAuctionWalletSnapshots(commit.walletSnapshots());
+            }
+            ledger.applyCommitted(transaction);
+            atmWithdrawalFaults.afterMutation(step++);
+        }
+        for (EscrowClaim claim : commit.claims()) {
+            claims.createCommitted(claim);
+            atmWithdrawalFaults.afterMutation(step++);
+        }
+        auctionHouse.applyEscrowLifecycleCommitted(event);
+    }
+
+    private void requireAuctionCreateCustodyCommitted(
+            AuctionEscrowLifecycleEvent event
+    ) {
+        if (!(event instanceof AuctionEscrowLifecycleEvent.Commit value)
+                || value.completedIntent().isEmpty()) {
+            return;
+        }
+        var intent = value.completedIntent().orElseThrow();
+        var expectedIntent = intent.itemMutationIntent();
+        var expectedReceipt = intent.plannedCustody().receipt();
+        var entry = itemInventoryJournal.find(
+                expectedIntent.token().requestId());
+        if (entry.isPresent()) {
+            var committed = entry.orElseThrow();
+            if (committed.status() != ItemInventoryJournalStatus.COMMITTED
+                    || !committed.intent().equals(expectedIntent)
+                    || !committed.committedReceipt().filter(
+                    expectedReceipt::equals).isPresent()) {
+                throw new EscrowRuntimeException(
+                        "Auction creation item custody is not committed");
+            }
+            return;
+        }
+        var tombstone = itemInventoryJournal.findTombstone(
+                expectedIntent.token().requestId()).orElse(null);
+        if (tombstone == null
+                || tombstone.status()
+                != ItemInventoryJournalStatus.COMMITTED
+                || !tombstone.token().equals(expectedIntent.token())
+                || !tombstone.terminalAt().equals(
+                expectedReceipt.appliedAt())
+                || !java.security.MessageDigest.isEqual(
+                tombstone.terminalDigest(), expectedReceipt.digest())) {
+            throw new EscrowRuntimeException(
+                    "Auction creation item custody is not committed");
+        }
+    }
+
+    private void requireAuctionWalletSnapshots(
+            java.util.List<AuctionEscrowWalletSnapshot> snapshots
+    ) {
+        for (AuctionEscrowWalletSnapshot snapshot : snapshots) {
+            long wallet = ledger.balance(
+                    AuctionEscrowLedgerAccounts.wallet(
+                            snapshot.playerId()));
+            long debt = ledger.balance(
+                    AuctionEscrowLedgerAccounts.debt(
+                            snapshot.playerId()));
+            long reserved = ledger.balance(new LedgerAccountId(
+                    LedgerAccountType.PLAYER_RESERVED,
+                    snapshot.playerId().toString()));
+            if (wallet != snapshot.walletMinor()
+                    || debt != snapshot.debtMinor()
+                    || reserved != snapshot.reservedMinor()) {
+                throw new EscrowRuntimeException(
+                        "Auction wallet snapshot changed before commit");
+            }
+        }
+    }
+
+    private EscrowPreflightResult preflightBazaarMutation(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        BazaarMutation mutation = BazaarMutationCodec.decode(body);
+        requireRecordIdentity(recordTransactionId,
+                mutation.mutationId());
+        return result(bazaar.preflightCommitted(mutation).replayed());
+    }
+
+    private void applyBazaarMutation(
+            JournalRecord record,
+            byte[] body
+    ) {
+        BazaarMutation mutation = BazaarMutationCodec.decode(body);
+        requireRecordIdentity(record, mutation.mutationId());
+        bazaar.applyCommitted(mutation);
+    }
+
+    private EscrowPreflightResult preflightBazaarEscrowLifecycle(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        BazaarEscrowLifecycleEvent event =
+                BazaarEscrowLifecycleEventCodec.decode(body);
+        requireRecordIdentity(recordTransactionId, event.requestId());
+        requireBazaarCreateCustodyCommitted(event);
+        RecoveryMaterialization materialization =
+                new RecoveryMaterialization();
+        materialization.accept(bazaar
+                .preflightEscrowLifecycleCommitted(event).replayed());
+        if (!(event instanceof BazaarEscrowLifecycleEvent.Commit value)) {
+            return materialization.result();
+        }
+        BazaarEscrowCommit commit = value.commit();
+        for (EscrowTransaction transaction
+                : commit.completedTransactions()) {
+            materialization.accept(transactions
+                    .preflightFoldedAtomicCompletionCommitted(
+                            transaction).replayed());
+        }
+        for (LedgerTransaction transaction
+                : commit.ledgerTransactions()) {
+            boolean replayed = ledger.preflightCommitted(
+                    transaction).replayed();
+            if (!replayed) {
+                requireBazaarWalletSnapshot(value, transaction);
+            }
+            materialization.accept(replayed);
+        }
+        java.util.Set<UUID> expectedClaimIds = commit.claims().stream()
+                .map(EscrowClaim::claimId)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        for (EscrowTransaction transaction
+                : commit.completedTransactions()) {
+            java.util.List<EscrowClaim> existing =
+                    claims.claimsForTransaction(
+                            transaction.transactionId().value());
+            if (!existing.stream().map(EscrowClaim::claimId)
+                    .allMatch(expectedClaimIds::contains)) {
+                throw new EscrowRuntimeException(
+                        "Bazaar escrow has unexpected claim evidence");
+            }
+        }
+        claims.preflightCreateBatch(commit.claims());
+        for (EscrowClaim claim : commit.claims()) {
+            materialization.accept(
+                    claims.getClaim(claim.claimId()) != null);
+        }
+        return materialization.result();
+    }
+
+    private void applyBazaarEscrowLifecycle(
+            JournalRecord record,
+            byte[] body
+    ) {
+        BazaarEscrowLifecycleEvent event =
+                BazaarEscrowLifecycleEventCodec.decode(body);
+        requireRecordIdentity(record, event.requestId());
+        requireBazaarCreateCustodyCommitted(event);
+        if (!(event instanceof BazaarEscrowLifecycleEvent.Commit value)) {
+            bazaar.applyEscrowLifecycleCommitted(event);
+            return;
+        }
+        BazaarEscrowCommit commit = value.commit();
+        int step = 0;
+        for (EscrowTransaction transaction
+                : commit.completedTransactions()) {
+            transactions.applyFoldedAtomicCompletionCommitted(transaction);
+            atmWithdrawalFaults.afterMutation(step++);
+        }
+        for (LedgerTransaction transaction
+                : commit.ledgerTransactions()) {
+            boolean replayed = ledger.preflightCommitted(
+                    transaction).replayed();
+            if (!replayed) {
+                requireBazaarWalletSnapshot(value, transaction);
+            }
+            ledger.applyCommitted(transaction);
+            atmWithdrawalFaults.afterMutation(step++);
+        }
+        for (EscrowClaim claim : commit.claims()) {
+            claims.createCommitted(claim);
+            atmWithdrawalFaults.afterMutation(step++);
+        }
+        bazaar.applyEscrowLifecycleCommitted(event);
+    }
+
+    private void requireBazaarCreateCustodyCommitted(
+            BazaarEscrowLifecycleEvent event
+    ) {
+        if (!(event instanceof BazaarEscrowLifecycleEvent.Commit value)
+                || value.completedIntent().isEmpty()) {
+            return;
+        }
+        BazaarCreateEscrowIntent intent = value.completedIntent()
+                .orElseThrow();
+        if (intent.command().side() != BazaarOrderSide.SELL) {
+            return;
+        }
+        var expectedIntent = intent.itemMutationIntent().orElseThrow();
+        var expectedReceipt = intent.sellCustody().orElseThrow().receipt();
+        var entry = itemInventoryJournal.find(
+                expectedIntent.token().requestId());
+        if (entry.isPresent()) {
+            var committed = entry.orElseThrow();
+            if (committed.status() != ItemInventoryJournalStatus.COMMITTED
+                    || !committed.intent().equals(expectedIntent)
+                    || !committed.committedReceipt().filter(
+                    expectedReceipt::equals).isPresent()) {
+                throw new EscrowRuntimeException(
+                        "Bazaar creation item custody is not committed");
+            }
+            return;
+        }
+        var tombstone = itemInventoryJournal.findTombstone(
+                expectedIntent.token().requestId()).orElse(null);
+        if (tombstone == null
+                || tombstone.status()
+                != ItemInventoryJournalStatus.COMMITTED
+                || !tombstone.token().equals(expectedIntent.token())
+                || !tombstone.terminalAt().equals(
+                expectedReceipt.appliedAt())
+                || !java.security.MessageDigest.isEqual(
+                tombstone.terminalDigest(), expectedReceipt.digest())) {
+            throw new EscrowRuntimeException(
+                    "Bazaar creation item custody is not committed");
+        }
+    }
+
+    private void requireBazaarWalletSnapshot(
+            BazaarEscrowLifecycleEvent.Commit event,
+            LedgerTransaction transaction
+    ) {
+        if (event.completedIntent().isEmpty()) {
+            return;
+        }
+        BazaarCreateEscrowIntent intent = event.completedIntent()
+                .orElseThrow();
+        if (intent.command().side() != BazaarOrderSide.BUY
+                || !transaction.transactionId().equals(
+                intent.command().activationTransactionId())) {
+            return;
+        }
+        BazaarBuyFundingEvidence funding = intent.buyFunding()
+                .orElseThrow();
+        BazaarEscrowWalletSnapshot snapshot = funding.wallet();
+        long current = ledger.balance(BazaarEscrowLedgerAccounts.wallet(
+                snapshot.ownerId()));
+        if (current != snapshot.walletMinor()) {
+            throw new EscrowRuntimeException(
+                    "Bazaar wallet snapshot changed before commit");
+        }
+    }
+
+    private EscrowPreflightResult preflightPlayerShopEscrowLifecycle(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        PlayerShopEscrowLifecycleEvent event =
+                PlayerShopEscrowLifecycleEventCodec.decode(body);
+        requireRecordIdentity(recordTransactionId, event.eventId());
+        return result(playerShopEscrow.preflight(event)
+                == PlayerShopEscrowSavedData.MutationDisposition.REPLAYED);
+    }
+
+    private void applyPlayerShopEscrowLifecycle(
+            JournalRecord record,
+            byte[] body
+    ) {
+        PlayerShopEscrowLifecycleEvent event =
+                PlayerShopEscrowLifecycleEventCodec.decode(body);
+        requireRecordIdentity(record, event.eventId());
+        playerShopEscrow.apply(event);
+    }
+
+    private EscrowPreflightResult preflightExactItemClaimDelivery(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        ExactItemClaimDeliveryCommit commit =
+                ExactItemClaimDeliveryCommitCodec.decode(body);
+        requireRecordIdentity(recordTransactionId, commit.requestId());
+        EscrowClaim claim = requireClaim(commit.delivery());
+        ExactItemClaimDeliveryPlanner.validate(claim, commit);
+        boolean itemReplayed = itemInventoryJournal.preflightCommitted(
+                commit.itemCommit()).replayed();
+        ClaimAttemptResult delivery = claims.preflightDeliveryCommitted(
+                commit.delivery().ownerId(), commit.delivery().claimId(),
+                commit.delivery().requestKey(), commit.delivery().units(),
+                commit.delivery().deliveredAt());
+        requireDeliveredUnits(delivery, commit.delivery().units());
+        if (delivery.replayed() && !itemReplayed) {
+            throw new EscrowRuntimeException(
+                    "Exact item claim inventory evidence is missing");
+        }
+        return result(itemReplayed && delivery.replayed());
+    }
+
+    private void applyExactItemClaimDelivery(
+            JournalRecord record,
+            byte[] body
+    ) {
+        ExactItemClaimDeliveryCommit commit =
+                ExactItemClaimDeliveryCommitCodec.decode(body);
+        requireRecordIdentity(record, commit.requestId());
+        EscrowClaim claim = requireClaim(commit.delivery());
+        ExactItemClaimDeliveryPlanner.validate(claim, commit);
+        itemInventoryJournal.applyCommitted(commit.itemCommit());
+        ClaimAttemptResult delivery = claims.deliverCommitted(
+                commit.delivery().ownerId(), commit.delivery().claimId(),
+                commit.delivery().requestKey(), commit.delivery().units(),
+                commit.delivery().deliveredAt());
+        requireDeliveredUnits(delivery, commit.delivery().units());
+    }
+
+    private EscrowPreflightResult
+    preflightItemInventoryQuarantineAdministration(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        ItemInventoryQuarantineAdministration administration =
+                ItemInventoryQuarantineAdministrationCodec.decode(body);
+        requireRecordIdentity(recordTransactionId,
+                administration.commandId());
+        requireQuarantineRefundEvidence(administration);
+        ItemInventoryQuarantineAdministrationResult itemResult =
+                itemInventoryJournal.preflightAdministration(
+                        administration);
+        boolean refundReplayed = true;
+        if (administration.refundClaim().isPresent()) {
+            EscrowClaim refund = administration.refundClaim().orElseThrow();
+            refundReplayed = claims.getClaim(refund.claimId()) != null;
+            claims.preflightCreateCommitted(refund);
+        }
+        if (refundReplayed && !itemResult.replayed()) {
+            throw new EscrowRuntimeException(
+                    "Item inventory refund exists without its review");
+        }
+        return result(itemResult.replayed() && refundReplayed);
+    }
+
+    private void applyItemInventoryQuarantineAdministration(
+            JournalRecord record,
+            byte[] body
+    ) {
+        ItemInventoryQuarantineAdministration administration =
+                ItemInventoryQuarantineAdministrationCodec.decode(body);
+        requireRecordIdentity(record, administration.commandId());
+        requireQuarantineRefundEvidence(administration);
+        itemInventoryJournal.applyAdministration(administration);
+        administration.refundClaim().ifPresent(claims::createCommitted);
+    }
+
+    private void requireQuarantineRefundEvidence(
+            ItemInventoryQuarantineAdministration administration
+    ) {
+        if (administration.refundClaim().isEmpty()) {
+            return;
+        }
+        var inspection = itemInventoryJournal.inspectQuarantine(
+                administration.requestId()).orElseThrow(() ->
+                new EscrowRuntimeException(
+                        "Item inventory quarantine is missing"));
+        EscrowClaim refund = administration.refundClaim().orElseThrow();
+        String expectedSource = "item.quarantine.refund."
+                + administration.requestId() + "."
+                + administration.commandId();
+        if (!refund.transactionId().equals(
+                inspection.entry().intent().token().transactionId())
+                || !refund.sourceKey().equals(expectedSource)) {
+            throw new EscrowRuntimeException(
+                    "Item inventory quarantine refund evidence conflicts");
+        }
+    }
+
+    private EscrowPreflightResult preflightItemInventoryJournalCompaction(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        ItemInventoryJournalCompaction compaction =
+                ItemInventoryJournalCompactionCodec.decode(body);
+        requireRecordIdentity(recordTransactionId, compaction.commandId());
+        return result(itemInventoryJournal.preflightCompaction(
+                compaction).replayed());
+    }
+
+    private void applyItemInventoryJournalCompaction(
+            JournalRecord record,
+            byte[] body
+    ) {
+        ItemInventoryJournalCompaction compaction =
+                ItemInventoryJournalCompactionCodec.decode(body);
+        requireRecordIdentity(record, compaction.commandId());
+        itemInventoryJournal.applyCompaction(compaction);
+    }
+
+    private EscrowPreflightResult preflightServerShopPurchase(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        ServerShopPurchaseCommit commit =
+                ServerShopPurchaseCommitCodec.decode(body);
+        requireRecordIdentity(recordTransactionId, commit.requestId());
+        RecoveryMaterialization materialization =
+                new RecoveryMaterialization();
+        materialization.accept(transactions
+                .preflightFoldedAtomicCompletionCommitted(
+                        commit.completedTransaction()).replayed());
+        for (EscrowTransaction child
+                : commit.completedLineTransactions()) {
+            materialization.accept(transactions
+                    .preflightFoldedAtomicCompletionCommitted(child)
+                    .replayed());
+        }
+        boolean ledgerReplayed = ledger.preflightCommitted(
+                commit.ledgerTransaction()).replayed();
+        if (!ledgerReplayed) {
+            requireServerShopWalletSnapshot(commit);
+        }
+        materialization.accept(ledgerReplayed);
+        commit.physicalFunding().ifPresent(funding -> {
+            ClaimAttemptResult result = claims.preflightDeliveryCommitted(
+                    commit.playerId(), funding.claimId(),
+                    ServerShopPurchaseCommit.physicalFundingDeliveryKey(
+                            commit.requestId(), funding.claimId()),
+                    funding.amountMinorUnits(), commit.completedTransaction()
+                            .timestamps().createdAt());
+            requireServerShopPhysicalFundingResult(commit, funding, result);
+            materialization.accept(result.replayed());
+        });
+        java.util.List<StockCommandResult> stockResults =
+                stock.preflightCommittedSequence(java.util.List.of(
+                        commit.stockReservation(), commit.stockCommit()));
+        requireServerShopStockResult(stockResults.get(0), false);
+        requireServerShopStockResult(stockResults.get(1), true);
+        for (StockCommandResult result : stockResults) {
+            materialization.accept(result.replayed());
+        }
+        java.util.Set<UUID> expectedClaimIds = commit.itemClaims().stream()
+                .map(EscrowClaim::claimId)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        java.util.List<EscrowClaim> existing = claims.claimsForTransaction(
+                commit.requestId());
+        if (!existing.stream().map(EscrowClaim::claimId)
+                .allMatch(expectedClaimIds::contains)) {
+            throw new EscrowRuntimeException(
+                    "Server shop purchase has unexpected claim evidence");
+        }
+        claims.preflightCreateBatch(commit.itemClaims());
+        for (EscrowClaim claim : commit.itemClaims()) {
+            materialization.accept(claims.getClaim(claim.claimId()) != null);
+        }
+        return materialization.result();
+    }
+
+    private void applyServerShopPurchase(
+            JournalRecord record,
+            byte[] body
+    ) {
+        ServerShopPurchaseCommit commit =
+                ServerShopPurchaseCommitCodec.decode(body);
+        requireRecordIdentity(record, commit.requestId());
+        int step = 0;
+        transactions.applyFoldedAtomicCompletionCommitted(
+                commit.completedTransaction());
+        atmWithdrawalFaults.afterMutation(step++);
+        for (EscrowTransaction child
+                : commit.completedLineTransactions()) {
+            transactions.applyFoldedAtomicCompletionCommitted(child);
+            atmWithdrawalFaults.afterMutation(step++);
+        }
+        ledger.applyCommitted(commit.ledgerTransaction());
+        atmWithdrawalFaults.afterMutation(step++);
+        commit.physicalFunding().ifPresent(funding -> {
+            ClaimAttemptResult result = claims.deliverCommitted(
+                    commit.playerId(), funding.claimId(),
+                    ServerShopPurchaseCommit.physicalFundingDeliveryKey(
+                            commit.requestId(), funding.claimId()),
+                    funding.amountMinorUnits(), commit.completedTransaction()
+                            .timestamps().createdAt());
+            requireServerShopPhysicalFundingResult(commit, funding, result);
+        });
+        if (commit.physicalFunding().isPresent()) {
+            atmWithdrawalFaults.afterMutation(step++);
+        }
+        requireServerShopStockResult(stock.applyCommitted(
+                commit.stockReservation()), false);
+        atmWithdrawalFaults.afterMutation(step++);
+        requireServerShopStockResult(stock.applyCommitted(
+                commit.stockCommit()), true);
+        atmWithdrawalFaults.afterMutation(step++);
+        for (EscrowClaim claim : commit.itemClaims()) {
+            claims.createCommitted(claim);
+            atmWithdrawalFaults.afterMutation(step++);
+        }
+    }
+
+    private EscrowPreflightResult preflightServerShopFundingRelease(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        ServerShopFundingRelease release =
+                ServerShopFundingReleaseCodec.decode(body);
+        requireRecordIdentity(recordTransactionId, release.releaseId());
+        requireServerShopPurchaseAbsent(release.purchaseRequestId());
+        requireServerShopFundingTransaction(release);
+        EscrowClaim fundingClaim = claims.getClaim(
+                release.fundingClaimId());
+        requireServerShopFundingClaim(release, fundingClaim);
+
+        boolean transactionReplayed = transactions
+                .preflightFoldedAtomicCompletionCommitted(
+                        release.completedTransaction()).replayed();
+        boolean ledgerReplayed = ledger.preflightCommitted(
+                release.ledgerTransaction()).replayed();
+        if (!ledgerReplayed) {
+            long fundingBalance = ledger.balance(
+                    ServerShopPurchaseCommit.claimAccount(
+                            release.fundingClaimId()));
+            long refundBalance = ledger.balance(
+                    ServerShopPurchaseCommit.claimAccount(
+                            release.refundClaim().claimId()));
+            if (fundingBalance != release.amountMinorUnits()
+                    || refundBalance != 0L) {
+                throw new EscrowRuntimeException(
+                        "Server shop funding release balance changed");
+            }
+        }
+        ClaimAttemptResult delivery = claims.preflightDeliveryCommitted(
+                release.playerId(), release.fundingClaimId(),
+                release.fundingClaimDelivery().requestKey(),
+                release.amountMinorUnits(), release.releasedAt());
+        requireServerShopFundingReleaseDelivery(release, delivery);
+        java.util.List<EscrowClaim> releaseClaims =
+                claims.claimsForTransaction(release.releaseId());
+        if (releaseClaims.stream().anyMatch(claim ->
+                !claim.claimId().equals(
+                        release.refundClaim().claimId()))) {
+            throw new EscrowRuntimeException(
+                    "Server shop funding release has unexpected claims");
+        }
+        boolean refundReplayed = claims.getClaim(
+                release.refundClaim().claimId()) != null;
+        claims.preflightCreateCommitted(release.refundClaim());
+        if (ledgerReplayed && !transactionReplayed
+                || delivery.replayed() && !ledgerReplayed
+                || refundReplayed && !delivery.replayed()) {
+            throw new EscrowRuntimeException(
+                    "Server shop funding release is out of order");
+        }
+        RecoveryMaterialization materialization =
+                new RecoveryMaterialization();
+        materialization.accept(transactionReplayed);
+        materialization.accept(ledgerReplayed);
+        materialization.accept(delivery.replayed());
+        materialization.accept(refundReplayed);
+        return materialization.result();
+    }
+
+    private void applyServerShopFundingRelease(
+            JournalRecord record,
+            byte[] body
+    ) {
+        ServerShopFundingRelease release =
+                ServerShopFundingReleaseCodec.decode(body);
+        requireRecordIdentity(record, release.releaseId());
+        requireServerShopPurchaseAbsent(release.purchaseRequestId());
+        requireServerShopFundingTransaction(release);
+        requireServerShopFundingClaim(release,
+                claims.getClaim(release.fundingClaimId()));
+        int step = 0;
+        transactions.applyFoldedAtomicCompletionCommitted(
+                release.completedTransaction());
+        atmWithdrawalFaults.afterMutation(step++);
+        ledger.applyCommitted(release.ledgerTransaction());
+        atmWithdrawalFaults.afterMutation(step++);
+        ClaimAttemptResult delivery = claims.deliverCommitted(
+                release.playerId(), release.fundingClaimId(),
+                release.fundingClaimDelivery().requestKey(),
+                release.amountMinorUnits(), release.releasedAt());
+        requireServerShopFundingReleaseDelivery(release, delivery);
+        atmWithdrawalFaults.afterMutation(step++);
+        claims.createCommitted(release.refundClaim());
+        atmWithdrawalFaults.afterMutation(step);
+    }
+
+    private void requireServerShopPurchaseAbsent(UUID purchaseRequestId) {
+        if (transactions.getTransaction(new EscrowTransactionId(
+                purchaseRequestId)) != null
+                || ledger.wasApplied(purchaseRequestId)
+                || !claims.claimsForTransaction(
+                purchaseRequestId).isEmpty()
+                || !stock.reservationsForTransaction(
+                purchaseRequestId).isEmpty()) {
+            throw new EscrowRuntimeException(
+                    "Server shop purchase evidence blocks funding release");
+        }
+    }
+
+    private static void requireServerShopFundingClaim(
+            ServerShopFundingRelease release,
+            EscrowClaim claim
+    ) {
+        if (claim == null
+                || !claim.claimId().equals(release.fundingClaimId())
+                || !claim.transactionId().equals(
+                release.fundingTransactionId())
+                || !claim.ownerId().equals(release.playerId())
+                || claim.kind()
+                != com.enviouse.futureshops.server.escrow.claim.ClaimKind
+                .INTERNAL_ESCROW_MONEY
+                || claim.originalUnits() != release.amountMinorUnits()
+                || claim.payload().length != 0
+                || claim.status()
+                != com.enviouse.futureshops.server.escrow.claim.ClaimStatus
+                .PENDING
+                && claim.status()
+                != com.enviouse.futureshops.server.escrow.claim.ClaimStatus
+                .COMPLETED) {
+            throw new EscrowRuntimeException(
+                    "Server shop funding release claim conflicts");
+        }
+    }
+
+    private void requireServerShopFundingTransaction(
+            ServerShopFundingRelease release
+    ) {
+        EscrowTransaction transaction = transactions.getTransaction(
+                new EscrowTransactionId(
+                        release.fundingTransactionId()));
+        if (transaction == null
+                || EscrowCashDepositService.serverShopPurchaseBinding(
+                transaction).filter(
+                release.purchaseRequestId()::equals).isEmpty()
+                || !ServerShopFundingReleaseService.depositHasOwner(
+                transaction, release.playerId())) {
+            throw new EscrowRuntimeException(
+                    "Server shop funding release deposit binding conflicts");
+        }
+    }
+
+    private static void requireServerShopFundingReleaseDelivery(
+            ServerShopFundingRelease release,
+            ClaimAttemptResult result
+    ) {
+        if (!result.claimId().equals(release.fundingClaimId())
+                || !result.requestKey().equals(
+                release.fundingClaimDelivery().requestKey())
+                || result.deliveredUnits() != release.amountMinorUnits()
+                || result.remainingUnits() != 0L
+                || result.status()
+                != com.enviouse.futureshops.server.escrow.claim.ClaimStatus
+                .COMPLETED
+                || !result.deliveredAt().equals(release.releasedAt())) {
+            throw new EscrowRuntimeException(
+                    "Server shop funding release delivery conflicts");
+        }
+    }
+
+    private EscrowPreflightResult preflightServerShopSellLifecycle(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        ServerShopSellLifecycleEvent event =
+                ServerShopSellLifecycleEventCodec.decode(body);
+        requireRecordIdentity(recordTransactionId, event.requestId());
+        if (event instanceof ServerShopSellLifecycleEvent.Prepare value) {
+            return result(serverShopIntents.preflightPrepareSell(
+                    value.intent())
+                    == ServerShopIntentSavedData.MutationDisposition
+                    .REPLAYED);
+        }
+        if (event instanceof ServerShopSellLifecycleEvent.Abort value) {
+            return result(serverShopIntents.preflightSellAbort(
+                    value.expectedIntent(), value.terminalIntent())
+                    == ServerShopIntentSavedData.MutationDisposition
+                    .REPLAYED);
+        }
+        ServerShopSellLifecycleEvent.Commit value =
+                (ServerShopSellLifecycleEvent.Commit) event;
+        ServerShopSellCommit commit = value.commit();
+        RecoveryMaterialization materialization =
+                new RecoveryMaterialization();
+        materialization.accept(serverShopIntents.preflightCompleteSell(
+                value.completedIntent())
+                == ServerShopIntentSavedData.MutationDisposition
+                .REPLAYED);
+        materialization.accept(transactions
+                .preflightFoldedAtomicCompletionCommitted(
+                        commit.completedTransaction()).replayed());
+        boolean ledgerReplayed = ledger.preflightCommitted(
+                commit.ledgerTransaction()).replayed();
+        if (!ledgerReplayed) {
+            requireServerShopSellWalletSnapshot(commit);
+        }
+        materialization.accept(ledgerReplayed);
+        java.util.List<StockCommandResult> stockResults =
+                stock.preflightCommittedSequence(java.util.List.of(
+                        commit.stockReservation(), commit.stockCommit()));
+        requireServerShopStockResult(stockResults.get(0), false);
+        requireServerShopStockResult(stockResults.get(1), true);
+        stockResults.forEach(result -> materialization.accept(
+                result.replayed()));
+        java.util.Set<UUID> expectedClaimIds = commit.overflowClaim()
+                .stream().map(EscrowClaim::claimId)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        java.util.List<EscrowClaim> existing =
+                claims.claimsForTransaction(commit.requestId());
+        if (!existing.stream().map(EscrowClaim::claimId)
+                .allMatch(expectedClaimIds::contains)) {
+            throw new EscrowRuntimeException(
+                    "Server shop sell has unexpected claim evidence");
+        }
+        java.util.List<EscrowClaim> expectedClaims =
+                commit.overflowClaim().stream().toList();
+        claims.preflightCreateBatch(expectedClaims);
+        for (EscrowClaim claim : expectedClaims) {
+            materialization.accept(
+                    claims.getClaim(claim.claimId()) != null);
+        }
+        return materialization.result();
+    }
+
+    private void applyServerShopSellLifecycle(
+            JournalRecord record,
+            byte[] body
+    ) {
+        ServerShopSellLifecycleEvent event =
+                ServerShopSellLifecycleEventCodec.decode(body);
+        requireRecordIdentity(record, event.requestId());
+        if (event instanceof ServerShopSellLifecycleEvent.Prepare value) {
+            serverShopIntents.applyPrepareSell(value.intent());
+            return;
+        }
+        if (event instanceof ServerShopSellLifecycleEvent.Abort value) {
+            serverShopIntents.applySellAbort(value.expectedIntent(),
+                    value.terminalIntent());
+            return;
+        }
+        ServerShopSellLifecycleEvent.Commit value =
+                (ServerShopSellLifecycleEvent.Commit) event;
+        ServerShopSellCommit commit = value.commit();
+        int step = 0;
+        transactions.applyFoldedAtomicCompletionCommitted(
+                commit.completedTransaction());
+        atmWithdrawalFaults.afterMutation(step++);
+        ledger.applyCommitted(commit.ledgerTransaction());
+        atmWithdrawalFaults.afterMutation(step++);
+        requireServerShopStockResult(stock.applyCommitted(
+                commit.stockReservation()), false);
+        atmWithdrawalFaults.afterMutation(step++);
+        requireServerShopStockResult(stock.applyCommitted(
+                commit.stockCommit()), true);
+        atmWithdrawalFaults.afterMutation(step++);
+        for (EscrowClaim claim : commit.overflowClaim().stream().toList()) {
+            claims.createCommitted(claim);
+            atmWithdrawalFaults.afterMutation(step++);
+        }
+        serverShopIntents.applyCompleteSell(value.completedIntent());
+    }
+
+    private EscrowPreflightResult preflightServerShopBarterLifecycle(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        ServerShopBarterLifecycleEvent event =
+                ServerShopBarterLifecycleEventCodec.decode(body);
+        requireRecordIdentity(recordTransactionId, event.requestId());
+        if (event instanceof ServerShopBarterLifecycleEvent.Prepare value) {
+            RecoveryMaterialization materialization =
+                    new RecoveryMaterialization();
+            materialization.accept(serverShopIntents
+                    .preflightPrepareBarter(value.intent())
+                    == ServerShopIntentSavedData.MutationDisposition
+                    .REPLAYED);
+            StockCommandResult stockResult = stock.preflightCommitted(
+                    value.stockReservation());
+            requireServerShopStockResult(stockResult, false);
+            materialization.accept(stockResult.replayed());
+            return materialization.result();
+        }
+        if (event instanceof ServerShopBarterLifecycleEvent.Abort value) {
+            RecoveryMaterialization materialization =
+                    new RecoveryMaterialization();
+            materialization.accept(serverShopIntents
+                    .preflightCompleteBarter(value.terminalIntent())
+                    == ServerShopIntentSavedData.MutationDisposition
+                    .REPLAYED);
+            StockCommandResult stockResult = stock.preflightCommitted(
+                    value.stockRelease());
+            requireServerShopStockResult(stockResult, true);
+            materialization.accept(stockResult.replayed());
+            return materialization.result();
+        }
+        ServerShopBarterLifecycleEvent.Commit value =
+                (ServerShopBarterLifecycleEvent.Commit) event;
+        ServerShopBarterCommit commit = value.commit();
+        RecoveryMaterialization materialization =
+                new RecoveryMaterialization();
+        materialization.accept(serverShopIntents
+                .preflightCompleteBarter(value.completedIntent())
+                == ServerShopIntentSavedData.MutationDisposition
+                .REPLAYED);
+        materialization.accept(transactions
+                .preflightFoldedAtomicCompletionCommitted(
+                        commit.completedTransaction()).replayed());
+        java.util.List<StockCommandResult> stockResults =
+                stock.preflightCommittedSequence(java.util.List.of(
+                        commit.stockReservation(), commit.stockCommit()));
+        requireServerShopStockResult(stockResults.get(0), false);
+        requireServerShopStockResult(stockResults.get(1), true);
+        stockResults.forEach(result -> materialization.accept(
+                result.replayed()));
+        java.util.Set<UUID> expectedClaimIds = commit.outputClaims()
+                .stream().map(EscrowClaim::claimId)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        java.util.List<EscrowClaim> existing =
+                claims.claimsForTransaction(commit.requestId());
+        if (!existing.stream().map(EscrowClaim::claimId)
+                .allMatch(expectedClaimIds::contains)) {
+            throw new EscrowRuntimeException(
+                    "Server shop barter has unexpected claim evidence");
+        }
+        claims.preflightCreateBatch(commit.outputClaims());
+        for (EscrowClaim claim : commit.outputClaims()) {
+            materialization.accept(
+                    claims.getClaim(claim.claimId()) != null);
+        }
+        return materialization.result();
+    }
+
+    private void applyServerShopBarterLifecycle(
+            JournalRecord record,
+            byte[] body
+    ) {
+        ServerShopBarterLifecycleEvent event =
+                ServerShopBarterLifecycleEventCodec.decode(body);
+        requireRecordIdentity(record, event.requestId());
+        if (event instanceof ServerShopBarterLifecycleEvent.Prepare value) {
+            int step = 0;
+            requireServerShopStockResult(stock.applyCommitted(
+                    value.stockReservation()), false);
+            atmWithdrawalFaults.afterMutation(step);
+            serverShopIntents.applyPrepareBarter(value.intent());
+            return;
+        }
+        if (event instanceof ServerShopBarterLifecycleEvent.Abort value) {
+            int step = 0;
+            requireServerShopStockResult(stock.applyCommitted(
+                    value.stockRelease()), true);
+            atmWithdrawalFaults.afterMutation(step);
+            serverShopIntents.applyCompleteBarter(
+                    value.terminalIntent());
+            return;
+        }
+        ServerShopBarterLifecycleEvent.Commit value =
+                (ServerShopBarterLifecycleEvent.Commit) event;
+        ServerShopBarterCommit commit = value.commit();
+        int step = 0;
+        transactions.applyFoldedAtomicCompletionCommitted(
+                commit.completedTransaction());
+        atmWithdrawalFaults.afterMutation(step++);
+        requireServerShopStockResult(stock.applyCommitted(
+                commit.stockReservation()), false);
+        atmWithdrawalFaults.afterMutation(step++);
+        requireServerShopStockResult(stock.applyCommitted(
+                commit.stockCommit()), true);
+        atmWithdrawalFaults.afterMutation(step++);
+        for (EscrowClaim claim : commit.outputClaims()) {
+            claims.createCommitted(claim);
+            atmWithdrawalFaults.afterMutation(step++);
+        }
+        serverShopIntents.applyCompleteBarter(
+                value.completedIntent());
+    }
+
+    private void requireServerShopSellWalletSnapshot(
+            ServerShopSellCommit commit
+    ) {
+        long wallet = ledger.balance(ServerShopSellCommit.walletAccount(
+                commit.playerId()));
+        long debt = ledger.balance(ServerShopSellCommit.debtAccount(
+                commit.playerId()));
+        long reserved = ledger.balance(
+                ServerShopSellCommit.reservedAccount(commit.playerId()));
+        if (wallet != commit.walletBeforeMinorUnits()
+                || debt != commit.debtBeforeMinorUnits()
+                || reserved != commit.reservedBeforeMinorUnits()) {
+            throw new EscrowRuntimeException(
+                    "Server shop sell wallet snapshot changed before commit");
+        }
+    }
+
+    private void requireServerShopWalletSnapshot(
+            ServerShopPurchaseCommit commit
+    ) {
+        if (commit.physicalFunding().isPresent()) {
+            ServerShopPurchaseCommit.PhysicalFunding funding =
+                    commit.physicalFunding().orElseThrow();
+            EscrowClaim claim = claims.getClaim(funding.claimId());
+            long claimBalance = ledger.balance(
+                    ServerShopPurchaseCommit.claimAccount(funding.claimId()));
+            if (claim == null
+                    || !claim.transactionId().equals(funding.transactionId())
+                    || !claim.ownerId().equals(commit.playerId())
+                    || claim.kind()
+                    != com.enviouse.futureshops.server.escrow.claim.ClaimKind
+                    .INTERNAL_ESCROW_MONEY
+                    || claim.status()
+                    != com.enviouse.futureshops.server.escrow.claim.ClaimStatus
+                    .PENDING
+                    || claim.originalUnits() != funding.amountMinorUnits()
+                    || claim.remainingUnits() != funding.amountMinorUnits()
+                    || claimBalance != funding.amountMinorUnits()) {
+                throw new EscrowRuntimeException(
+                        "Server shop physical funding snapshot changed before commit");
+            }
+            return;
+        }
+        long wallet = ledger.balance(ServerShopPurchaseCommit.walletAccount(
+                commit.playerId()));
+        long debt = ledger.balance(ServerShopPurchaseCommit.debtAccount(
+                commit.playerId()));
+        if (wallet != commit.walletBeforeMinorUnits()
+                || debt != commit.debtBeforeMinorUnits()) {
+            throw new EscrowRuntimeException(
+                    "Server shop wallet snapshot changed before commit");
+        }
+    }
+
+    private static void requireServerShopPhysicalFundingResult(
+            ServerShopPurchaseCommit commit,
+            ServerShopPurchaseCommit.PhysicalFunding funding,
+            ClaimAttemptResult result
+    ) {
+        if (!result.claimId().equals(funding.claimId())
+                || result.deliveredUnits() != funding.amountMinorUnits()
+                || result.remainingUnits() != 0L
+                || result.status()
+                != com.enviouse.futureshops.server.escrow.claim.ClaimStatus
+                .COMPLETED
+                || !result.deliveredAt().equals(commit.completedTransaction()
+                .timestamps().createdAt())) {
+            throw new EscrowRuntimeException(
+                    "Server shop physical funding claim was not consumed");
+        }
+    }
+
+    private static void requireServerShopStockResult(
+            StockCommandResult result,
+            boolean resolution
+    ) {
+        StockMutationOutcome outcome = result.receipt().outcome();
+        if (outcome != StockMutationOutcome.APPLIED
+                && !(resolution
+                && outcome == StockMutationOutcome.UNCHANGED)) {
+            throw new EscrowRuntimeException(resolution
+                    ? "Server shop stock commit was not applied"
+                    : "Server shop stock reservation was not applied");
+        }
     }
 
     private EscrowPreflightResult preflightTransaction(UUID recordTransactionId, byte[] body) {
@@ -745,7 +2074,7 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
         MoneyClaimSettlement settlement = MoneyClaimSettlementCodec.decode(body);
         ClaimDeliveryCommit delivery = settlement.delivery();
         EscrowClaim claim = requireClaim(delivery);
-        if (claim.kind() != ClaimKind.MONEY) {
+        if (!EscrowMoneyClaimService.isMonetaryClaim(claim)) {
             throw new EscrowRuntimeException("Money claim settlement references a non money claim");
         }
         requireRecordIdentity(record, settlement.requestId());
@@ -761,7 +2090,7 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
         MoneyClaimSettlement settlement = MoneyClaimSettlementCodec.decode(body);
         ClaimDeliveryCommit delivery = settlement.delivery();
         EscrowClaim claim = requireClaim(delivery);
-        if (claim.kind() != ClaimKind.MONEY) {
+        if (!EscrowMoneyClaimService.isMonetaryClaim(claim)) {
             throw new EscrowRuntimeException("Money claim settlement references a non money claim");
         }
         requireRecordIdentity(recordTransactionId, settlement.requestId());
@@ -1129,6 +2458,25 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
                         "Escrow composite event has no materialized components");
             }
             return replayed ? EscrowPreflightResult.REPLAY : EscrowPreflightResult.APPLY;
+        }
+    }
+
+    private static final class RecoveryMaterialization {
+        private boolean component;
+        private boolean fresh;
+
+        private void accept(boolean replayed) {
+            component = true;
+            fresh |= !replayed;
+        }
+
+        private EscrowPreflightResult result() {
+            if (!component) {
+                throw new EscrowRuntimeException(
+                        "Escrow recovery composite event has no components");
+            }
+            return fresh ? EscrowPreflightResult.APPLY
+                    : EscrowPreflightResult.REPLAY;
         }
     }
 }

@@ -4,6 +4,7 @@ import com.enviouse.futureshops.server.escrow.claim.ClaimKind;
 import com.enviouse.futureshops.server.escrow.claim.ClaimSavedData;
 import com.enviouse.futureshops.server.escrow.claim.ClaimStatus;
 import com.enviouse.futureshops.server.escrow.claim.EscrowClaim;
+import com.enviouse.futureshops.server.escrow.journal.JournalRecord;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountId;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountType;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerLeg;
@@ -122,6 +123,49 @@ class MoneyClaimSettlementInvariantTest {
                         event(attemptOnly.settlement())));
     }
 
+    @Test
+    void monetaryRefundUsesTheSameConservedSettlement() {
+        Stores stores = Stores.seeded(
+                ClaimKind.REFUND, new byte[0]);
+        EscrowJournalEvent event = event(stores.settlement());
+        EscrowSavedDataMutationApplier applier = stores.applier();
+
+        assertEquals(0L, stores.settlement().ledgerTransaction().legs()
+                .stream().mapToLong(LedgerLeg::deltaMinor).sum());
+        assertEquals(EscrowPreflightResult.APPLY,
+                applier.preflight(
+                        stores.settlement().requestId(), event));
+
+        applier.apply(new JournalRecord(
+                1L, stores.settlement().requestId(),
+                EscrowStepIds.forEvent(
+                        stores.settlement().requestId(), event),
+                EscrowJournalEventCodec.encode(event)), event);
+
+        assertEquals(50L, stores.ledger().balance(
+                stores.claimAccount()));
+        assertEquals(0L, stores.ledger().balance(
+                PlayerPaymentCommit.debtAccount(stores.ownerId())));
+        assertEquals(100L, stores.ledger().balance(
+                PlayerPaymentCommit.walletAccount(stores.ownerId())));
+        assertEquals(50L, stores.claims().getClaim(
+                stores.claimId()).remainingUnits());
+        assertEquals(EscrowPreflightResult.REPLAY,
+                applier.preflight(
+                        stores.settlement().requestId(), event));
+    }
+
+    @Test
+    void itemRefundCannotUseTheMoneySettlementPath() {
+        Stores stores = Stores.seeded(
+                ClaimKind.REFUND, new byte[]{1});
+
+        assertThrows(EscrowRuntimeException.class,
+                () -> stores.applier().preflight(
+                        stores.settlement().requestId(),
+                        event(stores.settlement())));
+    }
+
     private static EscrowJournalEvent event(
             MoneyClaimSettlement settlement
     ) {
@@ -139,6 +183,13 @@ class MoneyClaimSettlementInvariantTest {
             MoneyClaimSettlement settlement
     ) {
         private static Stores seeded() {
+            return seeded(ClaimKind.MONEY, new byte[0]);
+        }
+
+        private static Stores seeded(
+                ClaimKind kind,
+                byte[] payload
+        ) {
             UUID ownerId = UUID.randomUUID();
             UUID claimId = UUID.randomUUID();
             UUID sourceTransaction = UUID.randomUUID();
@@ -150,7 +201,7 @@ class MoneyClaimSettlementInvariantTest {
             claims.createCommitted(new EscrowClaim(
                     claimId, sourceTransaction, ownerId,
                     "money.claim.invariant." + claimId,
-                    ClaimKind.MONEY, 200L, 200L, new byte[0],
+                    kind, 200L, 200L, payload,
                     ClaimStatus.PENDING, "Money claim invariant",
                     PlayerPaymentTestFixtures.NOW,
                     PlayerPaymentTestFixtures.NOW));

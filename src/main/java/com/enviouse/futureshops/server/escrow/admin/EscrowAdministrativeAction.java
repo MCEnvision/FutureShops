@@ -9,5 +9,6 @@ public enum EscrowAdministrativeAction {
     QUARANTINE_CLAIM,
     REPAIR_CLAIM,
     RECONCILE_CUSTODY,
-    QUARANTINE_CUSTODY
+    QUARANTINE_CUSTODY,
+    BALANCE_MUTATION
 }

@@ -78,7 +78,9 @@ class EscrowCrossDomainConservationAuditTest {
         custody.reserveCommitted(itemLot("item.reserve", 3));
         custody.reserveCommitted(foreignLot("foreign.reserve", 700L, 7));
         ClaimSavedData claims = new ClaimSavedData();
-        createClaim(claims, ClaimKind.MONEY, 30L, new byte[0], false, 10L);
+        createClaim(claims, ClaimKind.MONEY, 20L, new byte[0], false, 10L);
+        createClaim(claims, ClaimKind.INTERNAL_ESCROW_MONEY, 10L,
+                new byte[0], false, 13L);
         createClaim(claims, ClaimKind.REFUND, 20L, new byte[0], true, 11L);
         createClaim(claims, ClaimKind.ITEM, 4L, new byte[]{1}, false, 12L);
         LedgerSavedData ledger = balancedLedger(500L, 50L, 1_000L);

@@ -1,6 +1,12 @@
 package com.enviouse.futureshops.server.escrow.checkpoint;
 
 import com.enviouse.futureshops.server.escrow.stock.StockSavedData;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalSavedData;
+import com.enviouse.futureshops.server.market.auction.AuctionHouseSavedData;
+import com.enviouse.futureshops.server.market.bazaar.BazaarSavedData;
+import com.enviouse.futureshops.server.escrow.runtime.PlayerShopEscrowSavedData;
+import com.enviouse.futureshops.server.escrow.runtime.ServerShopIntentSavedData;
+import com.enviouse.futureshops.server.market.control.MarketControlSavedData;
 import net.minecraft.nbt.CompoundTag;
 
 import java.io.ByteArrayInputStream;
@@ -19,14 +25,26 @@ import java.util.Objects;
 import java.util.UUID;
 
 public final class EscrowCheckpointCodec {
-    public static final int FORMAT_VERSION = 2;
-    public static final long MAX_FILE_BYTES = 268_435_600L;
+    public static final int FORMAT_VERSION = 8;
+    public static final long MAX_FILE_BYTES = 268_435_680L;
 
     private static final int MAGIC = 0x46534350;
     private static final int FIXED_BYTES = 80;
     private static final int ENTRY_FIXED_BYTES = Integer.BYTES * 2;
     private static final int LEGACY_FORMAT_VERSION = 1;
     private static final int LEGACY_STORE_COUNT = 7;
+    private static final int STOCK_FORMAT_VERSION = 2;
+    private static final int STOCK_STORE_COUNT = 8;
+    private static final int ITEM_INVENTORY_FORMAT_VERSION = 3;
+    private static final int ITEM_INVENTORY_STORE_COUNT = 9;
+    private static final int AUCTION_HOUSE_FORMAT_VERSION = 4;
+    private static final int AUCTION_HOUSE_STORE_COUNT = 10;
+    private static final int SERVER_SHOP_FORMAT_VERSION = 5;
+    private static final int SERVER_SHOP_STORE_COUNT = 11;
+    private static final int BAZAAR_FORMAT_VERSION = 6;
+    private static final int BAZAAR_STORE_COUNT = 12;
+    private static final int PLAYER_SHOP_FORMAT_VERSION = 7;
+    private static final int PLAYER_SHOP_STORE_COUNT = 13;
 
     private EscrowCheckpointCodec() {
     }
@@ -67,6 +85,12 @@ public final class EscrowCheckpointCodec {
             }
             int version = input.readUnsignedShort();
             if (version != LEGACY_FORMAT_VERSION
+                    && version != STOCK_FORMAT_VERSION
+                    && version != ITEM_INVENTORY_FORMAT_VERSION
+                    && version != AUCTION_HOUSE_FORMAT_VERSION
+                    && version != SERVER_SHOP_FORMAT_VERSION
+                    && version != BAZAAR_FORMAT_VERSION
+                    && version != PLAYER_SHOP_FORMAT_VERSION
                     && version != FORMAT_VERSION) {
                 throw new EscrowCheckpointException(
                         version > FORMAT_VERSION
@@ -81,9 +105,20 @@ public final class EscrowCheckpointCodec {
             UUID replacementLineage = readUuid(input);
             long baseSequence = input.readLong();
             Instant createdAt = readInstant(input);
-            int expectedStoreCount = version == LEGACY_FORMAT_VERSION
-                    ? LEGACY_STORE_COUNT
-                    : EscrowCheckpointStore.values().length;
+            int expectedStoreCount = switch (version) {
+                case LEGACY_FORMAT_VERSION -> LEGACY_STORE_COUNT;
+                case STOCK_FORMAT_VERSION -> STOCK_STORE_COUNT;
+                case ITEM_INVENTORY_FORMAT_VERSION ->
+                        ITEM_INVENTORY_STORE_COUNT;
+                case AUCTION_HOUSE_FORMAT_VERSION ->
+                        AUCTION_HOUSE_STORE_COUNT;
+                case SERVER_SHOP_FORMAT_VERSION ->
+                        SERVER_SHOP_STORE_COUNT;
+                case BAZAAR_FORMAT_VERSION -> BAZAAR_STORE_COUNT;
+                case PLAYER_SHOP_FORMAT_VERSION ->
+                        PLAYER_SHOP_STORE_COUNT;
+                default -> EscrowCheckpointStore.values().length;
+            };
             int storeCount = input.readInt();
             if (storeCount != expectedStoreCount) {
                 throw new EscrowCheckpointException("Escrow checkpoint store count is invalid");
@@ -118,6 +153,30 @@ public final class EscrowCheckpointCodec {
             if (version == LEGACY_FORMAT_VERSION) {
                 snapshots.put(EscrowCheckpointStore.STOCK,
                         emptyStockSnapshot());
+            }
+            if (version <= STOCK_FORMAT_VERSION) {
+                snapshots.put(EscrowCheckpointStore.ITEM_INVENTORY_JOURNAL,
+                        emptyItemInventoryJournalSnapshot());
+            }
+            if (version <= ITEM_INVENTORY_FORMAT_VERSION) {
+                snapshots.put(EscrowCheckpointStore.AUCTION_HOUSE,
+                        emptyAuctionHouseSnapshot());
+            }
+            if (version <= AUCTION_HOUSE_FORMAT_VERSION) {
+                snapshots.put(EscrowCheckpointStore.SERVER_SHOP_INTENTS,
+                        emptyServerShopIntentSnapshot());
+            }
+            if (version <= SERVER_SHOP_FORMAT_VERSION) {
+                snapshots.put(EscrowCheckpointStore.BAZAAR,
+                        emptyBazaarSnapshot());
+            }
+            if (version <= BAZAAR_FORMAT_VERSION) {
+                snapshots.put(EscrowCheckpointStore.PLAYER_SHOP_ESCROW,
+                        emptyPlayerShopEscrowSnapshot());
+            }
+            if (version <= PLAYER_SHOP_FORMAT_VERSION) {
+                snapshots.put(EscrowCheckpointStore.MARKET_CONTROL,
+                        emptyMarketControlSnapshot());
             }
             for (EscrowCheckpointStore store : EscrowCheckpointStore.values()) {
                 if (!snapshots.containsKey(store)) {
@@ -174,6 +233,48 @@ public final class EscrowCheckpointCodec {
         return EscrowCheckpointComponentCodec.encode(
                 EscrowCheckpointStore.STOCK,
                 new StockSavedData().save(new CompoundTag()),
+                EscrowCheckpoint.MAX_STORE_BYTES);
+    }
+
+    private static byte[] emptyItemInventoryJournalSnapshot() {
+        return EscrowCheckpointComponentCodec.encode(
+                EscrowCheckpointStore.ITEM_INVENTORY_JOURNAL,
+                new ItemInventoryJournalSavedData().save(new CompoundTag()),
+                EscrowCheckpoint.MAX_STORE_BYTES);
+    }
+
+    private static byte[] emptyAuctionHouseSnapshot() {
+        return EscrowCheckpointComponentCodec.encode(
+                EscrowCheckpointStore.AUCTION_HOUSE,
+                new AuctionHouseSavedData().save(new CompoundTag()),
+                EscrowCheckpoint.MAX_STORE_BYTES);
+    }
+
+    private static byte[] emptyServerShopIntentSnapshot() {
+        return EscrowCheckpointComponentCodec.encode(
+                EscrowCheckpointStore.SERVER_SHOP_INTENTS,
+                new ServerShopIntentSavedData().save(new CompoundTag()),
+                EscrowCheckpoint.MAX_STORE_BYTES);
+    }
+
+    private static byte[] emptyBazaarSnapshot() {
+        return EscrowCheckpointComponentCodec.encode(
+                EscrowCheckpointStore.BAZAAR,
+                new BazaarSavedData().save(new CompoundTag()),
+                EscrowCheckpoint.MAX_STORE_BYTES);
+    }
+
+    private static byte[] emptyPlayerShopEscrowSnapshot() {
+        return EscrowCheckpointComponentCodec.encode(
+                EscrowCheckpointStore.PLAYER_SHOP_ESCROW,
+                new PlayerShopEscrowSavedData().save(new CompoundTag()),
+                EscrowCheckpoint.MAX_STORE_BYTES);
+    }
+
+    private static byte[] emptyMarketControlSnapshot() {
+        return EscrowCheckpointComponentCodec.encode(
+                EscrowCheckpointStore.MARKET_CONTROL,
+                new MarketControlSavedData().save(new CompoundTag()),
                 EscrowCheckpoint.MAX_STORE_BYTES);
     }
 

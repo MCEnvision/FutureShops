@@ -102,6 +102,42 @@ class EscrowMoneyClaimReplayTest {
                         .orElseThrow().status());
     }
 
+    @Test
+    void monetaryRefundUsesTheSameIdempotentReplayPath() {
+        Evidence evidence = Evidence.exact(
+                ClaimKind.REFUND, new byte[0]);
+
+        EscrowMoneyClaimService.CollectionResult replay =
+                EscrowMoneyClaimService.resolveReplay(
+                        evidence, evidence.ownerId,
+                        evidence.claimId, evidence.requestId)
+                        .orElseThrow();
+
+        assertEquals(EscrowMoneyClaimService.Status.SUCCESS,
+                replay.status());
+        assertEquals(150L, replay.collectedMinorUnits());
+        assertTrue(replay.replayed());
+    }
+
+    @Test
+    void itemRefundAndInternalMoneyCannotReplayAsWalletMoney() {
+        Evidence itemRefund = Evidence.exact(
+                ClaimKind.REFUND, new byte[]{1});
+        Evidence internal = Evidence.exact(
+                ClaimKind.INTERNAL_ESCROW_MONEY, new byte[0]);
+
+        assertEquals(EscrowMoneyClaimService.Status.REQUEST_CONFLICT,
+                EscrowMoneyClaimService.resolveReplay(
+                        itemRefund, itemRefund.ownerId,
+                        itemRefund.claimId, itemRefund.requestId)
+                        .orElseThrow().status());
+        assertEquals(EscrowMoneyClaimService.Status.REQUEST_CONFLICT,
+                EscrowMoneyClaimService.resolveReplay(
+                        internal, internal.ownerId,
+                        internal.claimId, internal.requestId)
+                        .orElseThrow().status());
+    }
+
     private static final class Evidence
             implements EscrowMoneyClaimService.EvidenceBackend {
         private final UUID ownerId = UUID.randomUUID();
@@ -114,11 +150,18 @@ class EscrowMoneyClaimReplayTest {
         private EscrowClaim claim;
 
         private static Evidence exact() {
+            return exact(ClaimKind.MONEY, new byte[0]);
+        }
+
+        private static Evidence exact(
+                ClaimKind kind,
+                byte[] payload
+        ) {
             Evidence evidence = new Evidence();
             EscrowClaim pending = new EscrowClaim(
                     evidence.claimId, UUID.randomUUID(), evidence.ownerId,
                     "money.claim.replay." + evidence.claimId,
-                    ClaimKind.MONEY, 200L, 200L, new byte[0],
+                    kind, 200L, 200L, payload,
                     ClaimStatus.PENDING, "Money claim replay",
                     PlayerPaymentTestFixtures.NOW,
                     PlayerPaymentTestFixtures.NOW);

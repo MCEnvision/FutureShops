@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.server.escrow.checkpoint;
 
+import com.enviouse.futureshops.MinecraftTestBootstrap;
 import com.enviouse.futureshops.server.escrow.admin.EscrowAdministrativeAction;
 import com.enviouse.futureshops.server.escrow.admin.EscrowAdministrativeAuditSavedData;
 import com.enviouse.futureshops.server.escrow.admin.EscrowAdministrativeRecord;
@@ -19,6 +20,10 @@ import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountType;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerLeg;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerSavedData;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerTransaction;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalSavedData;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalTestFixtures;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalTransition;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryMutationIntent;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintBatch;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintSavedData;
 import com.enviouse.futureshops.server.escrow.model.EscrowAssetLot;
@@ -40,7 +45,16 @@ import com.enviouse.futureshops.server.escrow.stock.StockKey;
 import com.enviouse.futureshops.server.escrow.stock.StockMutationCommand;
 import com.enviouse.futureshops.server.escrow.stock.StockPolicy;
 import com.enviouse.futureshops.server.escrow.stock.StockSavedData;
+import com.enviouse.futureshops.server.market.auction.AuctionHouseBook;
+import com.enviouse.futureshops.server.market.auction.AuctionHouseMutation;
+import com.enviouse.futureshops.server.market.auction.AuctionHouseSavedData;
+import com.enviouse.futureshops.server.market.auction.AuctionItemLot;
+import com.enviouse.futureshops.server.market.auction.AuctionListingType;
+import com.enviouse.futureshops.server.market.auction.AuctionRuleSnapshot;
+import com.enviouse.futureshops.server.market.auction.AuctionTimeBasis;
+import com.enviouse.futureshops.server.market.auction.CreateAuctionCommand;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
@@ -65,6 +79,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EscrowSavedDataCheckpointBundleTest {
     private static final Instant NOW = Instant.parse("2026-07-17T12:00:00.123456789Z");
 
+    @BeforeAll
+    static void bootstrapMinecraft() {
+        MinecraftTestBootstrap.initialize();
+    }
+
     @Test
     void roundTripRestoresNonemptyStateInEveryStore() {
         StoreSet source = seededStores("roundtrip.source", lineage("roundtrip.source"), 3L);
@@ -88,6 +107,10 @@ class EscrowSavedDataCheckpointBundleTest {
         assertEquals(source.protectedMints().getBatch(source.mintBatchId()),
                 live.protectedMints().getBatch(source.mintBatchId()));
         assertEquals(source.stock().snapshot(), live.stock().snapshot());
+        assertEquals(source.itemInventoryJournal().snapshot(),
+                live.itemInventoryJournal().snapshot());
+        assertEquals(source.auctionHouse().snapshot(),
+                live.auctionHouse().snapshot());
         assertEquals(Optional.of(source.lineage()), live.runtimeMetadata().journalLineage());
         assertEquals(source.sequence(), live.runtimeMetadata().lastAppliedSequence());
         assertAllStoresMaterialized(live);
@@ -239,6 +262,10 @@ class EscrowSavedDataCheckpointBundleTest {
         CustodySavedData custody = new CustodySavedData();
         ProtectedMintSavedData protectedMints = new ProtectedMintSavedData();
         StockSavedData stock = new StockSavedData();
+        ItemInventoryJournalSavedData itemInventoryJournal =
+                new ItemInventoryJournalSavedData();
+        AuctionHouseSavedData auctionHouse =
+                new AuctionHouseSavedData();
         EscrowRuntimeSavedData runtimeMetadata = new EscrowRuntimeSavedData();
         AtomicBoolean serverThread = new AtomicBoolean(true);
         UUID transactionId = id(key + ".transaction");
@@ -311,6 +338,33 @@ class EscrowSavedDataCheckpointBundleTest {
                 id(key + ".stock.seed"), new StockDefinition(stockKey,
                 StockPolicy.limited(12L), "a".repeat(64)), NOW));
 
+        ItemInventoryMutationIntent itemIntent =
+                ItemInventoryJournalTestFixtures.intent(playerId,
+                        id(key + ".item.transaction"),
+                        id(key + ".item.request"));
+        itemInventoryJournal.applyCommitted(
+                ItemInventoryJournalTransition.prepare(itemIntent));
+
+        UUID auctionRequestId = id(key + ".auction.request");
+        UUID auctionListingId = id(key + ".auction.listing");
+        AuctionHouseBook auctionBook = new AuctionHouseBook(
+                auctionHouse.snapshot());
+        auctionBook.create(new CreateAuctionCommand(auctionRequestId,
+                auctionListingId, playerId,
+                id(key + ".auction.activation"),
+                new AuctionItemLot(id(key + ".auction.custody"),
+                        "minecraft:diamond", "a".repeat(64), 1, 32,
+                        "materials", "diamond minecraft"),
+                AuctionListingType.AUCTION_WITH_BUYOUT,
+                100L, 1000L,
+                new AuctionRuleSnapshot(10L, 250, 10L, 0, true,
+                        60L, 60L, 120L, 2, true,
+                        AuctionTimeBasis.REAL_TIME, true, 7L),
+                1000L, 2000L));
+        auctionHouse.applyCommitted(AuctionHouseMutation.between(
+                auctionHouse.snapshot(), auctionBook.snapshot(),
+                auctionRequestId));
+
         runtimeMetadata.establishLineage(lineage, 1L);
         for (long next = 2L; next <= sequence; next++) {
             runtimeMetadata.advance(lineage, next);
@@ -318,9 +372,11 @@ class EscrowSavedDataCheckpointBundleTest {
 
         EscrowSavedDataCheckpointBundle bundle = new EscrowSavedDataCheckpointBundle(
                 transactions, ledger, claims, administrativeAudit, custody,
-                protectedMints, stock, runtimeMetadata, serverThread::get);
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                runtimeMetadata, serverThread::get);
         return new StoreSet(lineage, sequence, transactions, ledger, claims,
                 administrativeAudit, custody, protectedMints, stock,
+                itemInventoryJournal, auctionHouse,
                 runtimeMetadata,
                 serverThread, bundle, transactionId, claimId, auditId,
                 custodyLotId, mintBatchId);
@@ -331,6 +387,8 @@ class EscrowSavedDataCheckpointBundleTest {
         return new EscrowSavedDataCheckpointBundle(stores.transactions(), stores.ledger(),
                 stores.claims(), stores.administrativeAudit(), stores.custody(),
                 stores.protectedMints(), stores.stock(),
+                stores.itemInventoryJournal(),
+                stores.auctionHouse(),
                 stores.runtimeMetadata(), stores.serverThread()::get,
                 maximumStoreBytes, maximumAggregateBytes, null);
     }
@@ -343,6 +401,8 @@ class EscrowSavedDataCheckpointBundleTest {
         assertTrue(stores.custody().hasMaterializedState());
         assertTrue(stores.protectedMints().hasMaterializedState());
         assertTrue(stores.stock().hasMaterializedState());
+        assertTrue(stores.itemInventoryJournal().hasMaterializedState());
+        assertTrue(stores.auctionHouse().hasMaterializedState());
         assertNotNull(stores.runtimeMetadata().journalLineage().orElse(null));
     }
 
@@ -380,6 +440,8 @@ class EscrowSavedDataCheckpointBundleTest {
             CustodySavedData custody,
             ProtectedMintSavedData protectedMints,
             StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            AuctionHouseSavedData auctionHouse,
             EscrowRuntimeSavedData runtimeMetadata,
             AtomicBoolean serverThread,
             EscrowSavedDataCheckpointBundle bundle,

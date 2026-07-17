@@ -77,4 +77,19 @@ class CommunityBugRegressionTest {
         assertEquals(ClientNavigationPolicy.ProfileAction.OPEN_DEFAULT_SHOP,
                 ClientNavigationPolicy.profileClose());
     }
+
+    @Test
+    void serverShopDefaultsToAllAndShowsCartFeedback() throws Exception {
+        String shop = read("src/main/java/com/enviouse/futureshops/client/screen/ShopMainScreen.java");
+        String state = read("src/main/java/com/enviouse/futureshops/client/ShopClientState.java");
+        String language = read("src/main/resources/assets/futureshops/lang/en_us.json");
+
+        assertTrue(shop.contains(
+                "ServerShopTradeFilterPolicy.defaultFilter().ordinal()"));
+        assertTrue(shop.contains("ShopClientState.getCartTotalQuantity()"));
+        assertTrue(state.contains(
+                "gui.futureshops.status.cart.added"));
+        assertTrue(language.contains(
+                "Added %s× %s to your cart."));
+    }
 }

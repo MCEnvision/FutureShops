@@ -61,7 +61,7 @@ class PersistentStockRepositoryTest {
                 0L, NOW.plusSeconds(10)).replayed());
 
         UUID refreshRequest = UUID.randomUUID();
-        StockDefinition refreshed = limited(KEY, 18L, 'b');
+        StockDefinition refreshed = limited(KEY, 18L, 'a');
         long beforeRefresh = repository.listing(KEY).revision();
         assertFalse(repository.refresh(refreshRequest, refreshed, beforeRefresh,
                 NOW.plusSeconds(5)).replayed());
@@ -69,7 +69,7 @@ class PersistentStockRepositoryTest {
                 NOW.plusSeconds(11)).replayed());
 
         UUID resetRequest = UUID.randomUUID();
-        StockDefinition reset = limited(KEY, 12L, 'c');
+        StockDefinition reset = limited(KEY, 12L, 'a');
         long beforeReset = repository.listing(KEY).revision();
         assertFalse(repository.adminReset(resetRequest, reset, beforeReset,
                 NOW.plusSeconds(6)).replayed());
@@ -77,7 +77,7 @@ class PersistentStockRepositoryTest {
                 NOW.plusSeconds(12)).replayed());
 
         UUID reloadRequest = UUID.randomUUID();
-        StockDefinition reloaded = limited(KEY, 8L, 'd');
+        StockDefinition reloaded = limited(KEY, 8L, 'a');
         assertFalse(repository.reconcileReload(reloadRequest, List.of(reloaded),
                 fingerprint('d'), NOW.plusSeconds(7)).replayed());
         assertTrue(repository.reconcileReload(reloadRequest, List.of(reloaded),
@@ -118,7 +118,7 @@ class PersistentStockRepositoryTest {
                 NOW.plusSeconds(1));
         StockReservationId reservationId = StockReservationId.forTransaction(transactionId, KEY);
 
-        repository.refresh(UUID.randomUUID(), limited(KEY, 3L, 'b'), 1L,
+        repository.refresh(UUID.randomUUID(), limited(KEY, 3L, 'a'), 1L,
                 NOW.plusSeconds(2));
 
         assertEquals(0L, repository.listing(KEY).availableQuantity());
@@ -142,7 +142,7 @@ class PersistentStockRepositoryTest {
                 NOW.plusSeconds(1));
         repository.reserve(UUID.randomUUID(), second, KEY, 4L, 1L,
                 NOW.plusSeconds(2));
-        repository.adminReset(UUID.randomUUID(), limited(KEY, 5L, 'b'), 2L,
+        repository.adminReset(UUID.randomUUID(), limited(KEY, 5L, 'a'), 2L,
                 NOW.plusSeconds(3));
 
         repository.release(UUID.randomUUID(), first,
@@ -163,7 +163,7 @@ class PersistentStockRepositoryTest {
         UUID transactionId = UUID.randomUUID();
         repository.reserve(UUID.randomUUID(), transactionId, KEY, 10L, 0L,
                 NOW.plusSeconds(1));
-        repository.adminReset(UUID.randomUUID(), limited(KEY, 5L, 'b'), 1L,
+        repository.adminReset(UUID.randomUUID(), limited(KEY, 5L, 'a'), 1L,
                 NOW.plusSeconds(2));
 
         repository.release(UUID.randomUUID(), transactionId,
@@ -199,7 +199,7 @@ class PersistentStockRepositoryTest {
     }
 
     @Test
-    void configFingerprintChangeRefreshesButUnchangedReloadPreservesLiveStock() {
+    void policyChangePreservesHeldReservationsAndUnchangedReloadPreservesLiveStock() {
         PersistentStockRepository repository = seeded(10L);
         UUID transactionId = UUID.randomUUID();
         repository.reserve(UUID.randomUUID(), transactionId, KEY, 4L, 0L,
@@ -210,13 +210,46 @@ class PersistentStockRepositoryTest {
                 fingerprint('a'), NOW.plusSeconds(2));
         assertEquals(before, repository.listing(KEY));
 
-        repository.reconcileReload(UUID.randomUUID(), List.of(limited(KEY, 7L, 'b')),
+        repository.reconcileReload(UUID.randomUUID(), List.of(limited(KEY, 7L, 'a')),
                 fingerprint('b'), NOW.plusSeconds(3));
         CatalogStockState changed = repository.listing(KEY);
         assertEquals(3L, changed.availableQuantity());
         assertEquals(before.revision() + 1L, changed.revision());
-        assertEquals(fingerprint('b'), changed.configFingerprint());
+        assertEquals(fingerprint('a'), changed.configFingerprint());
         assertEquals(4L, repository.backedHeldQuantity(KEY));
+    }
+
+    @Test
+    void listingIdentityReuseFailsWithoutChangingAnyDurableState() {
+        PersistentStockRepository repository = seeded(10L);
+        UUID transactionId = UUID.randomUUID();
+        repository.reserve(UUID.randomUUID(), transactionId, KEY, 4L, 0L,
+                NOW.plusSeconds(1));
+        StockStoreSnapshot before = repository.snapshot();
+
+        assertThrows(StockConflictException.class,
+                () -> repository.reconcileReload(UUID.randomUUID(),
+                        List.of(limited(KEY, 7L, 'b')),
+                        fingerprint('b'), NOW.plusSeconds(2)));
+
+        assertEquals(before, repository.snapshot());
+    }
+
+    @Test
+    void retiredListingCanReturnWithItsOriginalIdentity() {
+        PersistentStockRepository repository = seeded(6L);
+        repository.reconcileReload(UUID.randomUUID(), List.of(),
+                fingerprint('b'), NOW.plusSeconds(1));
+
+        repository.reconcileReload(UUID.randomUUID(),
+                List.of(limited(KEY, 9L, 'a')),
+                fingerprint('c'), NOW.plusSeconds(2));
+
+        CatalogStockState restored = repository.listing(KEY);
+        assertEquals(CatalogStockStatus.ACTIVE, restored.status());
+        assertEquals(9L, restored.availableQuantity());
+        assertEquals(fingerprint('a'), restored.configFingerprint());
+        assertTrue(repository.conservation().conserved());
     }
 
     @Test
@@ -233,7 +266,7 @@ class PersistentStockRepositoryTest {
         assertEquals(-1L, repository.listing(KEY).displayQuantity());
         assertFalse(repository.reservationForTransaction(first, KEY).inventoryBacked());
         assertEquals(0L, repository.backedHeldQuantity(KEY));
-        repository.reconcileReload(UUID.randomUUID(), List.of(limited(KEY, 5L, 'b')),
+        repository.reconcileReload(UUID.randomUUID(), List.of(limited(KEY, 5L, 'a')),
                 fingerprint('b'), NOW.plusSeconds(3));
         assertEquals(5L, repository.listing(KEY).availableQuantity());
         repository.commit(UUID.randomUUID(), first,

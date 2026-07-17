@@ -56,6 +56,11 @@ public final class MarketNavigationState {
         return history.size();
     }
 
+    public synchronized Optional<MarketRoute> previous() {
+        requireOpen();
+        return Optional.ofNullable(history.peekLast());
+    }
+
     public synchronized boolean isOpen() {
         return open;
     }
@@ -84,6 +89,22 @@ public final class MarketNavigationState {
             return close();
         }
         UUID nonce = freshNonce();
+        return activateBack(nonce);
+    }
+
+    public synchronized Transition back(UUID nonce) {
+        requireOpen();
+        if (history.isEmpty()) {
+            return close();
+        }
+        if (activatedRouteNonces.size() >= MAX_ROUTE_ACTIVATIONS) {
+            return close();
+        }
+        requireFreshNonce(nonce);
+        return activateBack(nonce);
+    }
+
+    private Transition activateBack(UUID nonce) {
         current = history.removeLast().withNonce(nonce);
         return new Transition(Action.RETURN, Optional.of(current), false);
     }
@@ -98,12 +119,29 @@ public final class MarketNavigationState {
         if (!moduleRoot.isRoot()) {
             throw new IllegalArgumentException("Module switching requires a root route.");
         }
-        requireFreshNonce(moduleRoot.routeNonce());
+        return switchModuleEntry(moduleRoot);
+    }
+
+    public synchronized Transition switchModuleEntry(MarketRoute moduleEntry) {
+        requireOpen();
+        Objects.requireNonNull(moduleEntry, "moduleEntry");
+        requireFreshNonce(moduleEntry.routeNonce());
         boolean closeSession = boundShopSession;
         boundShopSession = false;
         history.clear();
-        current = moduleRoot;
+        current = moduleEntry;
         return new Transition(Action.SWITCH_MODULE, Optional.of(current), closeSession);
+    }
+
+    public synchronized void replaceCurrent(MarketRoute replacement) {
+        requireOpen();
+        Objects.requireNonNull(replacement, "replacement");
+        if (replacement.module() != current.module()
+            || !replacement.viewId().equals(current.viewId())
+            || !replacement.routeNonce().equals(current.routeNonce())) {
+            throw new IllegalArgumentException("Market route identity cannot be replaced.");
+        }
+        current = replacement;
     }
 
     public synchronized Transition close() {

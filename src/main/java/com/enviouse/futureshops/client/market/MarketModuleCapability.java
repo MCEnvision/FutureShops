@@ -31,8 +31,7 @@ public record MarketModuleCapability(
     }
 
     public boolean canOpenView(String viewId) {
-        Objects.requireNonNull(viewId, "viewId");
-        return availability.allowsBrowse()
-            || availability.allowsClaims() && "claims".equals(viewId);
+        return availability.canOpenView(module,
+                Objects.requireNonNull(viewId, "viewId"));
     }
 }

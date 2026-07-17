@@ -8,7 +8,13 @@ public enum EscrowCheckpointStore {
     CUSTODY(5),
     PROTECTED_MINT(6),
     RUNTIME_METADATA(7),
-    STOCK(8);
+    STOCK(8),
+    ITEM_INVENTORY_JOURNAL(9),
+    AUCTION_HOUSE(10),
+    SERVER_SHOP_INTENTS(11),
+    BAZAAR(12),
+    PLAYER_SHOP_ESCROW(13),
+    MARKET_CONTROL(14);
 
     private final int wireId;
 

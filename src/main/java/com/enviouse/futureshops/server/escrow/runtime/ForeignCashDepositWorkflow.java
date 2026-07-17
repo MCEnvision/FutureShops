@@ -4,6 +4,7 @@ import com.enviouse.futureshops.money.CurrencyManager;
 import com.enviouse.futureshops.money.PhysicalCurrencyAdapter;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountId;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountType;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashInventoryState;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -38,6 +39,7 @@ final class ForeignCashDepositWorkflow {
             UUID transactionId,
             String requestKey,
             long walletBalanceLimitMinorUnits,
+            CashDepositMode depositMode,
             Instant now
     ) {
         requireServerThread();
@@ -46,6 +48,7 @@ final class ForeignCashDepositWorkflow {
         Objects.requireNonNull(requestId, "requestId");
         Objects.requireNonNull(transactionId, "transactionId");
         Objects.requireNonNull(requestKey, "requestKey");
+        Objects.requireNonNull(depositMode, "depositMode");
         Objects.requireNonNull(now, "now");
         if (server.getPlayerList().getPlayer(player.getUUID()) != player) {
             throw new EscrowRuntimeException(
@@ -66,7 +69,8 @@ final class ForeignCashDepositWorkflow {
                     player.getInventory());
             reservation = ForeignCashDepositFactory.reservation(requestId,
                     player.getUUID(), transactionId, requestKey,
-                    walletBalanceLimitMinorUnits, plan, before, now);
+                    walletBalanceLimitMinorUnits, depositMode, plan,
+                    before, now);
             intent = ForeignCashDepositEvidence.intent(reservation, before);
             intentPersistAttempted = true;
             intentStore.persistIntent(server, player, intent);

@@ -8,6 +8,11 @@ import com.enviouse.futureshops.data.TransactionHistoryEntry;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
 import com.enviouse.futureshops.server.economy.TransactionResult;
+import com.enviouse.futureshops.server.escrow.admin.balance.AdministrativeBalanceConfirmation;
+import com.enviouse.futureshops.server.escrow.admin.balance.AdministrativeBalanceMutation;
+import com.enviouse.futureshops.server.escrow.admin.balance.AdministrativeBalanceMutationService;
+import com.enviouse.futureshops.server.escrow.admin.balance.AdministrativeBalanceOperation;
+import com.enviouse.futureshops.server.escrow.stock.migration.CatalogStockRuntime;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
 import com.enviouse.futureshops.server.shop.ShopDataService;
 import com.enviouse.futureshops.server.shop.StockRefreshScheduler;
@@ -16,7 +21,6 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 
-import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -55,8 +59,9 @@ public final class ShopModAPI {
     /**
      * Returns the active economy provider. Never null while a server is running.
      */
+    @Deprecated
     public static EconomyProvider getEconomy() {
-        return BalanceManager.getProvider();
+        return LegacyEconomyProvider.INSTANCE;
     }
 
     /**
@@ -69,40 +74,87 @@ public final class ShopModAPI {
     /**
      * Withdraws currency from a player's balance.
      */
+    @Deprecated
     public static TransactionResult withdraw(UUID playerUUID, long amountMinor) {
-        return BalanceManager.getProvider().withdraw(playerUUID, amountMinor);
+        return withdraw(UUID.randomUUID(), playerUUID, amountMinor);
     }
 
+    @Deprecated
     public static TransactionResult withdraw(UUID requestId, UUID playerUUID,
                                              long amountMinor) {
-        return BalanceManager.withdraw(
-                requestId, playerUUID, amountMinor, "WITHDRAW");
+        return balanceMutation(requestId, playerUUID, Optional.empty(),
+                amountMinor, false, "shopmodapi legacy",
+                "Legacy ShopModAPI withdraw",
+                AdministrativeBalanceOperation.DEBIT,
+                AdministrativeBalanceConfirmation.LEGACY_API_INVOCATION);
+    }
+
+    public static TransactionResult withdraw(
+            UUID requestId, UUID playerUUID, long amountMinor,
+            String actor, String reason, boolean confirmed
+    ) {
+        return balanceMutation(requestId, playerUUID, Optional.empty(),
+                amountMinor, false, actor, reason,
+                AdministrativeBalanceOperation.DEBIT,
+                apiConfirmation(confirmed));
     }
 
     /**
      * Deposits currency into a player's balance.
      */
+    @Deprecated
     public static TransactionResult deposit(UUID playerUUID, long amountMinor) {
-        return BalanceManager.getProvider().deposit(playerUUID, amountMinor);
+        return deposit(UUID.randomUUID(), playerUUID, amountMinor);
     }
 
+    @Deprecated
     public static TransactionResult deposit(UUID requestId, UUID playerUUID,
                                             long amountMinor) {
-        return BalanceManager.deposit(
-                requestId, playerUUID, amountMinor, "DEPOSIT");
+        return balanceMutation(requestId, playerUUID, Optional.empty(),
+                amountMinor, false, "shopmodapi legacy",
+                "Legacy ShopModAPI deposit",
+                AdministrativeBalanceOperation.CREDIT,
+                AdministrativeBalanceConfirmation.LEGACY_API_INVOCATION);
+    }
+
+    public static TransactionResult deposit(
+            UUID requestId, UUID playerUUID, long amountMinor,
+            String actor, String reason, boolean confirmed
+    ) {
+        return balanceMutation(requestId, playerUUID, Optional.empty(),
+                amountMinor, false, actor, reason,
+                AdministrativeBalanceOperation.CREDIT,
+                apiConfirmation(confirmed));
     }
 
     /**
      * Transfers currency between two players.
      */
+    @Deprecated
     public static TransactionResult transfer(UUID fromPlayer, UUID toPlayer, long amountMinor) {
-        return BalanceManager.transfer(fromPlayer, toPlayer, amountMinor);
+        return transfer(UUID.randomUUID(), fromPlayer, toPlayer,
+                amountMinor);
     }
 
+    @Deprecated
     public static TransactionResult transfer(UUID requestId, UUID fromPlayer,
                                              UUID toPlayer, long amountMinor) {
-        return BalanceManager.transfer(
-                requestId, fromPlayer, toPlayer, amountMinor, "TRANSFER");
+        return balanceMutation(requestId, fromPlayer,
+                Optional.of(toPlayer), amountMinor, false,
+                "shopmodapi legacy", "Legacy ShopModAPI transfer",
+                AdministrativeBalanceOperation.TRANSFER,
+                AdministrativeBalanceConfirmation.LEGACY_API_INVOCATION);
+    }
+
+    public static TransactionResult transfer(
+            UUID requestId, UUID fromPlayer, UUID toPlayer,
+            long amountMinor, String actor, String reason,
+            boolean confirmed
+    ) {
+        return balanceMutation(requestId, fromPlayer,
+                Optional.of(toPlayer), amountMinor, false, actor, reason,
+                AdministrativeBalanceOperation.TRANSFER,
+                apiConfirmation(confirmed));
     }
 
     // ═══════════════════════════════════════════════
@@ -216,6 +268,7 @@ public final class ShopModAPI {
      * Sets a player's balance directly (admin override). Bypasses max_balance checks.
      * Fires {@link com.enviouse.futureshops.event.BalanceChangeEvent.Post} with reason "ADMIN".
      */
+    @Deprecated
     public static void setBalance(MinecraftServer server, UUID playerUUID, long amountMinor) {
         TransactionResult result = setBalanceResult(
                 UUID.randomUUID(), server, playerUUID, amountMinor);
@@ -225,17 +278,160 @@ public final class ShopModAPI {
         }
     }
 
+    @Deprecated
     public static TransactionResult setBalanceResult(
             UUID requestId, MinecraftServer server, UUID playerUUID,
             long amountMinor
     ) {
         java.util.Objects.requireNonNull(server, "server");
-        return BalanceManager.setBalance(
-                requestId,
-                playerUUID,
+        return balanceMutation(requestId, playerUUID, Optional.empty(),
                 amountMinor,
                 com.enviouse.futureshops.Config.economyAllowNegative,
-                "ADMIN");
+                "shopmodapi legacy", "Legacy ShopModAPI set balance",
+                AdministrativeBalanceOperation.SET,
+                AdministrativeBalanceConfirmation.LEGACY_API_INVOCATION);
+    }
+
+    public static TransactionResult setBalanceResult(
+            UUID requestId, MinecraftServer server, UUID playerUUID,
+            long amountMinor, String actor, String reason,
+            boolean confirmed
+    ) {
+        java.util.Objects.requireNonNull(server, "server");
+        return balanceMutation(requestId, playerUUID, Optional.empty(),
+                amountMinor,
+                com.enviouse.futureshops.Config.economyAllowNegative,
+                actor, reason, AdministrativeBalanceOperation.SET,
+                apiConfirmation(confirmed));
+    }
+
+    private static TransactionResult balanceMutation(
+            UUID requestId,
+            UUID targetPlayer,
+            Optional<UUID> counterpartyPlayer,
+            long amountMinor,
+            boolean allowNegative,
+            String actor,
+            String reason,
+            AdministrativeBalanceOperation operation,
+            AdministrativeBalanceConfirmation confirmation
+    ) {
+        return AdministrativeBalanceMutationService.live().execute(
+                new AdministrativeBalanceMutation(requestId, actor,
+                        operation, targetPlayer, counterpartyPlayer,
+                        amountMinor, allowNegative, reason,
+                        confirmation)).transactionResult();
+    }
+
+    private static AdministrativeBalanceConfirmation apiConfirmation(
+            boolean confirmed
+    ) {
+        return confirmed
+                ? AdministrativeBalanceConfirmation.EXPLICIT_API
+                : AdministrativeBalanceConfirmation.UNCONFIRMED;
+    }
+
+    private static final class LegacyEconomyProvider
+            implements EconomyProvider {
+        private static final LegacyEconomyProvider INSTANCE =
+                new LegacyEconomyProvider();
+
+        @Override
+        public long getBalance(UUID playerUUID) {
+            return BalanceManager.getBalance(playerUUID);
+        }
+
+        @Override
+        public TransactionResult withdraw(
+                UUID playerUUID,
+                long amountMinorUnits
+        ) {
+            return withdraw(playerUUID, amountMinorUnits, "WITHDRAW");
+        }
+
+        @Override
+        public TransactionResult withdraw(
+                UUID playerUUID,
+                long amountMinorUnits,
+                String reason
+        ) {
+            return balanceMutation(UUID.randomUUID(), playerUUID,
+                    Optional.empty(), amountMinorUnits,
+                    "ADMIN".equals(reason)
+                            && com.enviouse.futureshops.Config
+                            .economyAllowNegative,
+                    "shopmodapi economy provider",
+                    legacyProviderReason("withdraw", reason),
+                    AdministrativeBalanceOperation.DEBIT,
+                    AdministrativeBalanceConfirmation
+                            .LEGACY_API_INVOCATION);
+        }
+
+        @Override
+        public TransactionResult deposit(
+                UUID playerUUID,
+                long amountMinorUnits
+        ) {
+            return deposit(playerUUID, amountMinorUnits, "DEPOSIT");
+        }
+
+        @Override
+        public TransactionResult deposit(
+                UUID playerUUID,
+                long amountMinorUnits,
+                String reason
+        ) {
+            return balanceMutation(UUID.randomUUID(), playerUUID,
+                    Optional.empty(), amountMinorUnits, false,
+                    "shopmodapi economy provider",
+                    legacyProviderReason("deposit", reason),
+                    AdministrativeBalanceOperation.CREDIT,
+                    AdministrativeBalanceConfirmation
+                            .LEGACY_API_INVOCATION);
+        }
+
+        @Override
+        public TransactionResult transfer(
+                UUID fromPlayerUUID,
+                UUID toPlayerUUID,
+                long amountMinorUnits
+        ) {
+            return balanceMutation(UUID.randomUUID(), fromPlayerUUID,
+                    Optional.of(toPlayerUUID), amountMinorUnits, false,
+                    "shopmodapi economy provider",
+                    "Legacy economy provider transfer",
+                    AdministrativeBalanceOperation.TRANSFER,
+                    AdministrativeBalanceConfirmation
+                            .LEGACY_API_INVOCATION);
+        }
+
+        @Override
+        public List<com.enviouse.futureshops.server.economy.BalanceEntry>
+        getTopBalances(int page, int pageSize) {
+            return BalanceManager.getTopBalances(page, pageSize);
+        }
+
+        @Override
+        public String getCurrencyName() {
+            return BalanceManager.getProvider().getCurrencyName();
+        }
+
+        @Override
+        public int getDecimalPlaces() {
+            return BalanceManager.getProvider().getDecimalPlaces();
+        }
+    }
+
+    private static String legacyProviderReason(
+            String operation,
+            String reason
+    ) {
+        String detail = reason == null || reason.isBlank()
+                ? "unspecified" : reason.trim();
+        String value = "Legacy economy provider " + operation
+                + " " + detail;
+        return value.length() <= 1024
+                ? value : value.substring(0, 1024);
     }
 
     // ═══════════════════════════════════════════════
@@ -247,9 +443,7 @@ public final class ShopModAPI {
      * Useful for forcing immediate stock restocking from another mod.
      */
     public static void triggerStockRefresh(MinecraftServer server) {
-        StockRefreshScheduler.reset();
-        // Force an immediate check by calling onServerTick repeatedly would be fragile;
-        // instead, the next tick will run the check since counter is 0 and interval is met.
+        StockRefreshScheduler.trigger(server);
     }
 
     /**
@@ -275,7 +469,7 @@ public final class ShopModAPI {
      * carry a distinct listingId — use {@link #setAdminShopStockByListingId(String, String, int)}.
      */
     public static void setAdminShopStock(String shopId, String itemId, int newStock) {
-        ShopCatalog.setStock(shopId, itemId, newStock);
+        CatalogStockRuntime.setStock(shopId, itemId, newStock);
     }
 
     /**
@@ -297,7 +491,7 @@ public final class ShopModAPI {
      * listingId. No-op for unlimited-stock or unknown listings.
      */
     public static void setAdminShopStockByListingId(String shopId, String listingId, int newStock) {
-        ShopCatalog.setStock(shopId, listingId, newStock);
+        CatalogStockRuntime.setStock(shopId, listingId, newStock);
     }
 
     // ═══════════════════════════════════════════════
@@ -319,4 +513,3 @@ public final class ShopModAPI {
         return ShopSessionManager.snapshotSessions().size();
     }
 }
-

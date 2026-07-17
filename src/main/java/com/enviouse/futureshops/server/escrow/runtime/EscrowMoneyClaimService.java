@@ -53,8 +53,7 @@ public final class EscrowMoneyClaimService {
             return replay.orElseThrow();
         }
         EscrowClaim claim = ClaimSavedData.get(server).getClaim(claimId);
-        if (claim == null || !claim.ownerId().equals(player.getUUID())
-                || claim.kind() != ClaimKind.MONEY) {
+        if (!publiclyCollectible(claim, player.getUUID())) {
             return result(Status.NOT_FOUND, requestId, claimId,
                     0L, balance(runtime, player.getUUID()), false);
         }
@@ -143,8 +142,26 @@ public final class EscrowMoneyClaimService {
         }
         return ClaimSavedData.get(player.getServer())
                 .pendingFor(player.getUUID(), limit).stream()
-                .filter(claim -> claim.kind() == ClaimKind.MONEY)
+                .filter(EscrowMoneyClaimService::isMonetaryClaim)
                 .toList();
+    }
+
+    static boolean publiclyCollectible(
+            EscrowClaim claim,
+            UUID ownerId
+    ) {
+        return claim != null
+                && claim.ownerId().equals(
+                Objects.requireNonNull(ownerId, "ownerId"))
+                && isMonetaryClaim(claim);
+    }
+
+    static boolean isMonetaryClaim(EscrowClaim claim) {
+        return claim != null
+                && claim.kind().publiclyVisible()
+                && (claim.kind() == ClaimKind.MONEY
+                || claim.kind() == ClaimKind.REFUND
+                && claim.payload().length == 0);
     }
 
     private static Optional<CollectionResult> replay(
@@ -201,7 +218,7 @@ public final class EscrowMoneyClaimService {
                 || !ledger.transactionId().equals(requestId)
                 || !ledger.idempotencyKey().equals(requestKey)
                 || !currentClaim.ownerId().equals(playerId)
-                || currentClaim.kind() != ClaimKind.MONEY;
+                || !isMonetaryClaim(currentClaim);
         java.util.Set<LedgerAccountId> accounts =
                 new java.util.HashSet<>();
         for (LedgerLeg leg : ledger.legs()) {

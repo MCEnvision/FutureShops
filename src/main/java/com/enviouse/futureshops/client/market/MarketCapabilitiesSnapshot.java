@@ -11,8 +11,14 @@ public record MarketCapabilitiesSnapshot(
     long revision,
     boolean showNavigation,
     MarketModule defaultModule,
+    long walletBalanceMinorUnits,
+    boolean walletBalanceKnown,
+    String currencyName,
+    int currencyDecimals,
     List<MarketModuleCapability> modules
 ) {
+    public static final int MAXIMUM_CURRENCY_NAME_LENGTH = 64;
+
     public MarketCapabilitiesSnapshot {
         if (requestId == null || requestId.equals(new UUID(0L, 0L))) {
             throw new IllegalArgumentException("Market capability request identifier is required.");
@@ -21,6 +27,12 @@ public record MarketCapabilitiesSnapshot(
             throw new IllegalArgumentException("Market capability revision must not be negative.");
         }
         Objects.requireNonNull(defaultModule, "defaultModule");
+        currencyName = boundedCurrencyName(currencyName);
+        if (!walletBalanceKnown && walletBalanceMinorUnits != 0L
+                || currencyDecimals < 0 || currencyDecimals > 6) {
+            throw new IllegalArgumentException(
+                    "Market wallet presentation is invalid.");
+        }
         modules = List.copyOf(Objects.requireNonNull(modules, "modules"));
         if (modules.isEmpty() || modules.size() > MarketModule.values().length) {
             throw new IllegalArgumentException("Market capabilities must contain a bounded module set.");
@@ -45,11 +57,50 @@ public record MarketCapabilitiesSnapshot(
         }
     }
 
+    public MarketCapabilitiesSnapshot(
+        UUID requestId,
+        long revision,
+        boolean showNavigation,
+        MarketModule defaultModule,
+        List<MarketModuleCapability> modules
+    ) {
+        this(requestId, revision, showNavigation, defaultModule,
+            0L, false, "Coins", 2, modules);
+    }
+
     public Map<MarketModule, MarketModuleCapability> byModule() {
         EnumMap<MarketModule, MarketModuleCapability> result = new EnumMap<>(MarketModule.class);
         for (MarketModuleCapability capability : modules) {
             result.put(capability.module(), capability);
         }
         return Map.copyOf(result);
+    }
+
+    private static String boundedCurrencyName(String value) {
+        String name = Objects.requireNonNull(value,
+                "currencyName");
+        if (name.isEmpty()
+                || name.length() > MAXIMUM_CURRENCY_NAME_LENGTH
+                || !name.equals(name.strip())) {
+            throw new IllegalArgumentException(
+                    "Market currency name is invalid.");
+        }
+        for (int index = 0; index < name.length(); index++) {
+            char character = name.charAt(index);
+            if (Character.isHighSurrogate(character)) {
+                if (index + 1 >= name.length()
+                        || !Character.isLowSurrogate(
+                        name.charAt(index + 1))) {
+                    throw new IllegalArgumentException(
+                            "Market currency name is invalid.");
+                }
+                index++;
+            } else if (Character.isLowSurrogate(character)
+                    || Character.isISOControl(character)) {
+                throw new IllegalArgumentException(
+                        "Market currency name is invalid.");
+            }
+        }
+        return name;
     }
 }

@@ -38,6 +38,8 @@ public final class ShopDataService {
         net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(event);
         if (event.isCanceled()) return;
 
+        com.enviouse.futureshops.server.market.MarketModuleService.close(
+                player.getUUID());
         ShopSessionManager.open(player.getUUID(), shopId);
         // forceOpen=true: this is the deliberate open path (command / shop block use)
         sendShopData(player, shopId, true, true);
@@ -133,6 +135,5 @@ public final class ShopDataService {
         }
     }
 }
-
 
 

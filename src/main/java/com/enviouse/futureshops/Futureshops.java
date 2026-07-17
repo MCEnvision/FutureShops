@@ -15,6 +15,7 @@ import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeManager;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeState;
+import com.enviouse.futureshops.server.escrow.stock.migration.CatalogStockRuntime;
 import com.enviouse.futureshops.server.economy.migration.LegacyBalanceMigrationManager;
 import com.enviouse.futureshops.server.pricing.DynamicPricingEngine;
 import com.enviouse.futureshops.server.security.ServerRequestSecurityManager;
@@ -22,6 +23,8 @@ import com.enviouse.futureshops.server.session.ShopSessionManager;
 import com.enviouse.futureshops.server.shop.ExternalStorageRegistry;
 import com.enviouse.futureshops.server.shop.ForgeCapabilityStorageAdapter;
 import com.enviouse.futureshops.server.shop.StockRefreshScheduler;
+import com.enviouse.futureshops.server.market.MarketModuleService;
+import com.enviouse.futureshops.server.market.MarketCapabilityProjectionService;
 import com.mojang.logging.LogUtils;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
@@ -99,6 +102,7 @@ public class Futureshops {
     // You can use SubscribeEvent and let the Event Bus discover methods to call
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
+        MarketModuleService.clearSessions();
         ServerRequestSecurityManager.initialize(event.getServer());
         EscrowRuntimeService escrow = EscrowRuntimeManager.initialize(event.getServer());
         if (escrow.state() == EscrowRuntimeState.MAINTENANCE) {
@@ -116,6 +120,7 @@ public class Futureshops {
         SpentMintsSavedData.get(event.getServer());
         // Load shop catalog from config/futureshops/shops/*.json (spec §24).
         ShopCatalog.reload(event.getServer());
+        CatalogStockRuntime.initialize(event.getServer(), escrow);
         // Initialize dynamic pricing engine (spec §30).
         DynamicPricingEngine.reset();
         // Initialize stock refresh scheduler (spec §31).
@@ -125,6 +130,8 @@ public class Futureshops {
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
+        MarketModuleService.clearSessions();
+        MarketCapabilityProjectionService.clearRevisionState();
         ServerRequestSecurityManager.shutdown(event.getServer());
         // Force-close every open shop session so clients can dismiss their GUIs.
         ShopSessionManager.closeAllAndForceClose(event.getServer(), "SERVER_STOPPING");
@@ -151,6 +158,7 @@ public class Futureshops {
         if (event.phase == TickEvent.Phase.END && event.getServer() != null) {
             if (EscrowRuntimeManager.getOrNull() != null) {
                 EscrowRuntimeManager.tick(event.getServer());
+                CatalogStockRuntime.tick(event.getServer());
             }
             LegacyBalanceMigrationManager.tick(event.getServer());
             DynamicPricingEngine.onServerTick(event.getServer());
@@ -163,6 +171,7 @@ public class Futureshops {
         if (event.getEntity()
                 instanceof net.minecraft.server.level.ServerPlayer player) {
             ServerRequestSecurityManager.removePlayer(player);
+            MarketModuleService.close(player.getUUID());
         }
     }
 

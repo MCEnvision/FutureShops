@@ -13,6 +13,7 @@ public final class ModCommandEvents {
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         ShopCommand.register(event.getDispatcher());
+        MarketCommand.register(event.getDispatcher());
         BalanceCommand.register(event.getDispatcher());
         PayCommand.register(event.getDispatcher());
         BalTopCommand.register(event.getDispatcher());

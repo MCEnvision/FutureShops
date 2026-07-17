@@ -9,6 +9,7 @@ import com.enviouse.futureshops.money.MoneyNbtKeys;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountId;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintBatch;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
@@ -266,9 +267,36 @@ final class ProtectedCashRedemptionSupport {
     static UUID reservationId(UUID playerId,
                               LedgerAccountId destinationAccount,
                               long walletBalanceLimitMinorUnits,
+                              CashDepositMode depositMode,
                               byte[] inventoryBeforeHash,
                               EscrowTransaction transaction,
                               InternalBillInventoryPlanner.ExactPlan plan) {
+        Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(destinationAccount, "destinationAccount");
+        Objects.requireNonNull(depositMode, "depositMode");
+        requireHash(inventoryBeforeHash,
+                "Protected cash reservation inventory hash");
+        Objects.requireNonNull(transaction, "transaction");
+        String material = "futureshops protected cash reservation v4 "
+                + playerId + " " + transaction.transactionId().value() + " "
+                + transaction.requestKey().value() + " "
+                + destinationAccount.type().name() + " "
+                + destinationAccount.ownerKey() + " "
+                + walletBalanceLimitMinorUnits + " "
+                + depositMode + " "
+                + hex(inventoryBeforeHash) + " "
+                + hex(sha256(encodePlan(plan)));
+        return UUID.nameUUIDFromBytes(material.getBytes(StandardCharsets.UTF_8));
+    }
+
+    static UUID legacyReservationId(
+            UUID playerId,
+            LedgerAccountId destinationAccount,
+            long walletBalanceLimitMinorUnits,
+            byte[] inventoryBeforeHash,
+            EscrowTransaction transaction,
+            InternalBillInventoryPlanner.ExactPlan plan
+    ) {
         Objects.requireNonNull(playerId, "playerId");
         Objects.requireNonNull(destinationAccount, "destinationAccount");
         requireHash(inventoryBeforeHash,
@@ -282,7 +310,8 @@ final class ProtectedCashRedemptionSupport {
                 + walletBalanceLimitMinorUnits + " "
                 + hex(inventoryBeforeHash) + " "
                 + hex(sha256(encodePlan(plan)));
-        return UUID.nameUUIDFromBytes(material.getBytes(StandardCharsets.UTF_8));
+        return UUID.nameUUIDFromBytes(material.getBytes(
+                StandardCharsets.UTF_8));
     }
 
     static UUID lotId(UUID transactionId,
