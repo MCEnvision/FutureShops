@@ -8,6 +8,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 /**
  * A foreign physical currency made of another mod's items, each worth a fixed
@@ -23,6 +26,7 @@ public final class ItemValueCurrencyAdapter implements PhysicalCurrencyAdapter {
     private final String id;
     private final List<Denomination> mintable;
     private final Map<Item, Long> acceptValues;
+    private final String depositConfigurationSignature;
 
     /**
      * @param mintable     denominations handed out by /withdraw, sorted by value descending
@@ -32,11 +36,18 @@ public final class ItemValueCurrencyAdapter implements PhysicalCurrencyAdapter {
         this.id = id;
         this.mintable = List.copyOf(mintable);
         this.acceptValues = Map.copyOf(acceptValues);
+        this.depositConfigurationSignature = signature(id,
+                this.acceptValues);
     }
 
     @Override
     public String id() {
         return id;
+    }
+
+    @Override
+    public String depositConfigurationSignature() {
+        return depositConfigurationSignature;
     }
 
     @Override
@@ -209,5 +220,27 @@ public final class ItemValueCurrencyAdapter implements PhysicalCurrencyAdapter {
                 .filter(stack -> unitValueMinor(stack) > 0L)
                 .forEach(out::add);
         return out;
+    }
+
+    private static String signature(String provider, Map<Item, Long> values) {
+        String material = values.entrySet().stream()
+                .map(entry -> Map.entry(
+                        String.valueOf(net.minecraftforge.registries
+                                .ForgeRegistries.ITEMS.getKey(
+                                        entry.getKey())),
+                        entry.getValue()))
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> entry.getKey() + "=" + entry.getValue())
+                .collect(java.util.stream.Collectors.joining(",",
+                        provider + "|", "|"));
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(material.getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(
+                    "Foreign currency signature algorithm is unavailable",
+                    exception);
+        }
     }
 }

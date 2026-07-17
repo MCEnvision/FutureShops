@@ -4,6 +4,8 @@ import com.enviouse.futureshops.Futureshops;
 import com.enviouse.futureshops.network.packets.C2SAdminShopAddItemsPacket;
 import com.enviouse.futureshops.network.packets.C2SAdminShopEditPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmWithdrawPacket;
+import com.enviouse.futureshops.network.packets.C2SAtmCollectCashPacket;
+import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
 import com.enviouse.futureshops.network.packets.C2SBarterRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SFetchDepartmentsPacket;
@@ -32,6 +34,8 @@ import com.enviouse.futureshops.network.packets.C2SVerifyCartPacket;
 import com.enviouse.futureshops.network.packets.S2CAdminEditAckPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmDataPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmResultPacket;
+import com.enviouse.futureshops.network.packets.S2CAtmCollectCashResultPacket;
+import com.enviouse.futureshops.network.packets.S2CAtmDepositResultPacket;
 import com.enviouse.futureshops.network.packets.S2CBalTopUiPacket;
 import com.enviouse.futureshops.network.packets.S2CBarterResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CBalanceUiPacket;
@@ -56,6 +60,13 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ShopPackets {
+    // Protocol 39 binds ATM deposits to currency catalog signatures.
+    // Protocol 38 adds bounded ATM withdrawal retry timing.
+    // Protocol 37 adds correlated ATM cash deposits.
+    // Protocol 36 adds bounded ATM cash retry timing.
+    // Protocol 35 adds correlated cart checkout responses.
+    // Protocol 34 adds bounded correlated ATM cash claim collection.
+    // Protocol 33 adds correlated ATM retries, availability, and claim results.
     // 32 adds explicit ATM server open intent.
     // 31 adds separate wallet and inventory cash selection to every purchase packet.
     // 30: added the server-authoritative ATM catalog, exact denomination withdrawal request,
@@ -73,7 +84,7 @@ public final class ShopPackets {
     // 24: per-listing id added to CatalogItem + buy/sell/admin-cart wire lines (multi-variant NBT
     //     admin listings). Old v23 clients are refused at handshake so they can't desync on the
     //     new leading listingId field.
-    public static final String PROTOCOL_VERSION = "32";
+    public static final String PROTOCOL_VERSION = "39";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))
@@ -380,6 +391,30 @@ public final class ShopPackets {
             .decoder(S2CAtmResultPacket::decode)
             .encoder(S2CAtmResultPacket::encode)
             .consumerMainThread(S2CAtmResultPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SAtmCollectCashPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SAtmCollectCashPacket::decode)
+            .encoder(C2SAtmCollectCashPacket::encode)
+            .consumerMainThread(C2SAtmCollectCashPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CAtmCollectCashResultPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CAtmCollectCashResultPacket::decode)
+            .encoder(S2CAtmCollectCashResultPacket::encode)
+            .consumerMainThread(S2CAtmCollectCashResultPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SAtmDepositPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SAtmDepositPacket::decode)
+            .encoder(C2SAtmDepositPacket::encode)
+            .consumerMainThread(C2SAtmDepositPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CAtmDepositResultPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CAtmDepositResultPacket::decode)
+            .encoder(S2CAtmDepositResultPacket::encode)
+            .consumerMainThread(S2CAtmDepositResultPacket::handle)
             .add();
     }
 

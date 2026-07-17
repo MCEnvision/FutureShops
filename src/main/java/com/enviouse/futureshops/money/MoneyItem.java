@@ -1,10 +1,9 @@
 package com.enviouse.futureshops.money;
 
 import com.enviouse.futureshops.command.EconomyCommandUtil;
-import com.enviouse.futureshops.event.MoneyDepositEvent;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
-import com.enviouse.futureshops.server.economy.TransactionResult;
+import com.enviouse.futureshops.server.escrow.runtime.EscrowCashDepositService;
 import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
@@ -20,6 +19,7 @@ import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.OptionalLong;
 
 public class MoneyItem extends Item {
     private final long denominationMinorUnits;
@@ -33,11 +33,6 @@ public class MoneyItem extends Item {
         return denominationMinorUnits;
     }
 
-    /**
-     * Right-click (use) a coin stack to instantly deposit it into your balance.
-     * Validates checksum + authorized count + mint remaining-count atomically,
-     * accepts up to the remaining balance and destroys any excess as counterfeit.
-     */
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
@@ -50,58 +45,75 @@ public class MoneyItem extends Item {
             return InteractionResultHolder.pass(stack);
         }
 
-        // When a foreign currency provider is active (currency.provider config),
-        // FutureShops bills are no longer legal tender — refuse WITHOUT
-        // destroying the stack so nothing is lost if the config is switched back.
-        if (!CurrencyManager.isInternal()) {
-            serverPlayer.sendSystemMessage(EconomyCommandUtil.warning(
-                    Component.translatable("command.futureshops.deposit.wrong_currency",
-                            CurrencyManager.get().id())));
-            return InteractionResultHolder.fail(stack);
+        int decimalPlaces;
+        String currencyName;
+        String providerId;
+        EscrowCashDepositService.DepositRequest request;
+        try (CurrencyManager.ConfigurationReadLease ignored =
+                     CurrencyManager.acquireConfigurationReadLease()) {
+            EconomyProvider provider = BalanceManager.getProvider();
+            decimalPlaces = provider.getDecimalPlaces();
+            currencyName = provider.getCurrencyName();
+            PhysicalCurrencyAdapter currency = CurrencyManager.getOrNull();
+            providerId = currency == null ? "unknown" : currency.id();
+            EscrowCashDepositService.Source source = hand
+                    == InteractionHand.MAIN_HAND
+                    ? EscrowCashDepositService.Source.MAIN_HAND
+                    : EscrowCashDepositService.Source.OFF_HAND;
+            OptionalLong all = OptionalLong.empty();
+            request = EscrowCashDepositService.requestForCurrentState(
+                    serverPlayer, source, all);
         }
-
-        MoneyValidationService.ConsumeOutcome outcome =
-                MoneyValidationService.validateAndConsume(serverPlayer.getServer(), stack);
-
-        if (!outcome.success()) {
-            // Full rejection: invalid checksum / unknown mint / already consumed.
-            serverPlayer.sendSystemMessage(
-                    EconomyCommandUtil.error(Component.translatable("command.futureshops.deposit.money_invalid")));
-            stack.setCount(0);
-            return InteractionResultHolder.fail(stack);
-        }
-
-        long acceptedValue = outcome.acceptedValueMinor();
-        EconomyProvider provider = BalanceManager.getProvider();
-        TransactionResult result = provider.deposit(serverPlayer.getUUID(), acceptedValue);
-        if (!result.success()) {
-            // Balance credit failed after we already decremented the mint ledger —
-            // we can't cleanly undo a partial consume, so reject the stack entirely.
-            EconomyCommandUtil.sendProviderError(serverPlayer, result.errorCode());
-            return InteractionResultHolder.fail(stack);
-        }
-
-        // Remove accepted + rejected coins from the held stack. Rejected coins
-        // are destroyed as counterfeit (they never corresponded to a real ledger
-        // entry).
-        stack.shrink(outcome.accepted() + outcome.rejected());
-
-        // Fire MoneyDepositEvent (spec §33) for the accepted portion only.
-        net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
-                new MoneyDepositEvent(serverPlayer.getUUID(), acceptedValue, outcome.accepted()));
-
-        String depositedText = EconomyCommandUtil.formatMinorUnits(acceptedValue, provider.getDecimalPlaces());
-        String balanceText = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
-        serverPlayer.sendSystemMessage(EconomyCommandUtil.success(
-                Component.translatable("command.futureshops.deposit.right_click_success",
-                        outcome.accepted(), depositedText, provider.getCurrencyName(), balanceText)));
-
-        if (outcome.rejected() > 0) {
-            serverPlayer.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable(
-                    "command.futureshops.deposit.invalid_destroyed", outcome.rejected())));
-        }
-
-        return InteractionResultHolder.consume(stack);
+        var result = EscrowCashDepositService.deposit(
+                serverPlayer, request);
+        if (result.successful()) {
+                String depositedText = EconomyCommandUtil.formatMinorUnits(
+                        result.depositedMinorUnits(), decimalPlaces);
+                String balanceText = EconomyCommandUtil.formatMinorUnits(
+                        result.resultingBalanceMinorUnits(),
+                        decimalPlaces);
+                serverPlayer.sendSystemMessage(EconomyCommandUtil.success(
+                        Component.translatable(
+                                "command.futureshops.deposit.right_click_success",
+                                result.itemsConsumed(), depositedText,
+                                currencyName, balanceText)));
+                return InteractionResultHolder.consume(
+                        serverPlayer.getItemInHand(hand));
+            }
+        Component message = switch (result.status()) {
+                case WRONG_PROVIDER -> Component.translatable(
+                        "command.futureshops.deposit.wrong_currency",
+                        providerId);
+                case CREATIVE_BLOCKED -> Component.translatable(
+                        "command.futureshops.deposit.creative_blocked");
+                case LEGACY_MIGRATION_REQUIRED -> Component.translatable(
+                        "command.futureshops.deposit.legacy_migration_required");
+                case CONFIG_CHANGED -> Component.translatable(
+                        "command.futureshops.deposit.config_changed");
+                case REQUEST_CONFLICT -> Component.translatable(
+                        "command.futureshops.deposit.request_conflict");
+                case CANCELLED -> Component.translatable(
+                        "command.futureshops.deposit.cancelled");
+                case RATE_LIMITED -> Component.translatable(
+                        "command.futureshops.deposit.rate_limited",
+                        result.retryAfterSeconds());
+                case ESCROW_UNAVAILABLE, RECOVERY_REQUIRED ->
+                        Component.translatable(
+                                "command.futureshops.deposit.recovery_required");
+                case NO_CURRENCY, INVALID_AMOUNT, NOT_ENOUGH_CURRENCY,
+                        INVALID_DENOMINATION, INVALID_CURRENCY ->
+                        Component.translatable(
+                                "command.futureshops.deposit.money_invalid");
+                case TOO_MANY_ITEMS -> Component.translatable(
+                        "command.futureshops.deposit.too_many_items",
+                        EscrowCashDepositService.MAX_ITEMS_CONSUMED);
+                case SUCCESS -> throw new IllegalStateException(
+                        "Successful cash deposit was handled earlier");
+            };
+        serverPlayer.sendSystemMessage(
+                EconomyCommandUtil.warning(message));
+        return InteractionResultHolder.fail(
+                serverPlayer.getItemInHand(hand));
     }
 
     @Override
@@ -122,4 +134,3 @@ public class MoneyItem extends Item {
         tooltip.add(Component.translatable("tooltip.futureshops.money_right_click").withStyle(ChatFormatting.GRAY));
     }
 }
-

@@ -102,6 +102,8 @@ final class AtmWithdrawalTestFixtures {
                 ProtectedCashClaimPayload payload = ProtectedCashClaimPayload.fromBatch(
                         batch, index, portionCount, count);
                 byte[] encoded = ProtectedCashClaimPayloadCodec.encode(payload);
+                long claimUnits = Math.multiplyExact(
+                        batch.denominationMinorUnits(), (long) count);
                 claims.add(new EscrowClaim(
                         AtmWithdrawalCommit.claimId(
                                 TRANSACTION_ID, batch.batchId(), index),
@@ -110,8 +112,8 @@ final class AtmWithdrawalTestFixtures {
                         AtmWithdrawalCommit.claimSourceKey(
                                 TRANSACTION_ID, batch.batchId(), index),
                         ClaimKind.PROTECTED_CASH,
-                        count,
-                        count,
+                        claimUnits,
+                        claimUnits,
                         encoded,
                         ClaimStatus.PENDING,
                         "Protected cash " + batch.denominationMinorUnits(),

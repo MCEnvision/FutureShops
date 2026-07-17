@@ -22,7 +22,8 @@ public enum ProtectedMintState {
         return switch (this) {
             case AUTHORIZED -> target == AVAILABLE || target == QUARANTINED;
             case AVAILABLE -> target == RESERVED || target == QUARANTINED;
-            case RESERVED -> target == SPENT || target == REFUNDED || target == QUARANTINED;
+            case RESERVED -> target == AVAILABLE || target == SPENT
+                    || target == REFUNDED || target == QUARANTINED;
             case SPENT -> target == REFUNDED;
             case REFUNDED, QUARANTINED -> false;
         };

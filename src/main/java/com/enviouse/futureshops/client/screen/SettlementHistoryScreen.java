@@ -11,19 +11,12 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class SettlementHistoryScreen extends Screen implements ShopScreenMarker {
     private static final int PAGE_SIZE = 8;
-    private static final DateTimeFormatter TS_FORMAT_24 =
-            DateTimeFormatter.ofPattern("MM-dd HH:mm").withZone(ZoneId.systemDefault());
-    private static final DateTimeFormatter TS_FORMAT_12 =
-            DateTimeFormatter.ofPattern("MM-dd h:mm a").withZone(ZoneId.systemDefault());
-
     private final Screen parent;
     private int guiLeft;
     private int guiTop;
@@ -160,8 +153,9 @@ public class SettlementHistoryScreen extends Screen implements ShopScreenMarker 
                 };
                 String left = Component.translatable(typeKey).getString();
                 String amount = ShopUiUtil.formatMinorUnits(row.amountMinor());
-                DateTimeFormatter timestampFormat = ClientConfig.use12HourTime() ? TS_FORMAT_12 : TS_FORMAT_24;
-                String ts = timestampFormat.format(Instant.ofEpochSecond(row.timestampEpochSeconds()));
+                String ts = HistoryTimestampFormatter.format(
+                        row.timestampEpochSeconds(), ClientConfig.use12HourTime(),
+                        ZoneId.systemDefault());
                 // Item 12: Include item quantity in the row text
                 String qtyStr = row.quantity() > 0 ? Component.translatable("gui.futureshops.settlement.qty_suffix", row.quantity()).getString() : "";
                 String itemName = (row.itemId() != null && !row.itemId().isBlank())

@@ -17,6 +17,12 @@ import com.enviouse.futureshops.server.escrow.journal.JournalRecord;
 import com.enviouse.futureshops.server.escrow.journal.JournalReplayBatch;
 import com.enviouse.futureshops.server.escrow.journal.JournalScanResult;
 import com.enviouse.futureshops.server.escrow.journal.WriteAheadJournal;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionReservation;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionReservationCodec;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionSettlement;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionSettlementCodec;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionCancellation;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionCancellationCodec;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -238,9 +244,13 @@ public final class EscrowRuntimeCoordinator implements AutoCloseable {
             throw new IllegalArgumentException(
                     "Maintenance repair requires the scoped maintenance lane");
         }
-        if (event.type() == EscrowJournalEventType.ATM_WITHDRAWAL_COMMIT) {
+        if (isAtmWithdrawalEvent(event.type())) {
             throw new IllegalArgumentException(
                     "ATM withdrawal requires the scoped composite lane");
+        }
+        if (isProtectedCashRedemptionEvent(event.type())) {
+            throw new IllegalArgumentException(
+                    "Cash deposit requires its scoped composite lane");
         }
         return commitReady(transactionId, event);
     }
@@ -252,11 +262,106 @@ public final class EscrowRuntimeCoordinator implements AutoCloseable {
         Objects.requireNonNull(transactionId, "transactionId");
         Objects.requireNonNull(event, "event");
         requireReady();
-        if (event.type() != EscrowJournalEventType.ATM_WITHDRAWAL_COMMIT) {
+        if (!isAtmWithdrawalEvent(event.type())) {
             throw new IllegalArgumentException(
                     "Scoped ATM withdrawal lane only accepts ATM withdrawal commits");
         }
         return commitReady(transactionId, event);
+    }
+
+    private static boolean isAtmWithdrawalEvent(
+            EscrowJournalEventType type
+    ) {
+        return type == EscrowJournalEventType.ATM_WITHDRAWAL_COMMIT
+                || type == EscrowJournalEventType
+                .FOREIGN_ATM_WITHDRAWAL_COMMIT;
+    }
+
+    public synchronized EscrowCommitResult commitProtectedCashReservation(
+            ProtectedCashRedemptionReservation reservation
+    ) {
+        Objects.requireNonNull(reservation, "reservation");
+        requireReady();
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType
+                        .PROTECTED_CASH_REDEMPTION_RESERVATION,
+                ProtectedCashRedemptionReservationCodec.encode(reservation));
+        return commitReady(reservation.transactionId(), event);
+    }
+
+    public synchronized EscrowCommitResult commitProtectedCashSettlement(
+            ProtectedCashRedemptionSettlement settlement
+    ) {
+        Objects.requireNonNull(settlement, "settlement");
+        requireReady();
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType
+                        .PROTECTED_CASH_REDEMPTION_SETTLEMENT,
+                ProtectedCashRedemptionSettlementCodec.encode(settlement));
+        return commitReady(settlement.transactionId(), event);
+    }
+
+    public synchronized EscrowCommitResult commitProtectedCashCancellation(
+            ProtectedCashRedemptionCancellation cancellation
+    ) {
+        Objects.requireNonNull(cancellation, "cancellation");
+        requireReady();
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType
+                        .PROTECTED_CASH_REDEMPTION_CANCELLATION,
+                ProtectedCashRedemptionCancellationCodec.encode(
+                        cancellation));
+        return commitReady(cancellation.transactionId(), event);
+    }
+
+    public synchronized EscrowCommitResult commitForeignCashReservation(
+            ForeignCashDepositReservation reservation
+    ) {
+        Objects.requireNonNull(reservation, "reservation");
+        requireReady();
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.FOREIGN_CASH_DEPOSIT_RESERVATION,
+                ForeignCashDepositCodec.encodeReservation(reservation));
+        return commitReady(reservation.transactionId(), event);
+    }
+
+    public synchronized EscrowCommitResult commitForeignCashSettlement(
+            ForeignCashDepositSettlement settlement
+    ) {
+        Objects.requireNonNull(settlement, "settlement");
+        requireReady();
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.FOREIGN_CASH_DEPOSIT_SETTLEMENT,
+                ForeignCashDepositCodec.encodeSettlement(settlement));
+        return commitReady(settlement.transactionId(), event);
+    }
+
+    public synchronized EscrowCommitResult commitForeignCashCancellation(
+            ForeignCashDepositCancellation cancellation
+    ) {
+        Objects.requireNonNull(cancellation, "cancellation");
+        requireReady();
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.FOREIGN_CASH_DEPOSIT_CANCELLATION,
+                ForeignCashDepositCodec.encodeCancellation(cancellation));
+        return commitReady(cancellation.transactionId(), event);
+    }
+
+    private static boolean isProtectedCashRedemptionEvent(
+            EscrowJournalEventType type
+    ) {
+        return type == EscrowJournalEventType
+                .PROTECTED_CASH_REDEMPTION_RESERVATION
+                || type == EscrowJournalEventType
+                .PROTECTED_CASH_REDEMPTION_SETTLEMENT
+                || type == EscrowJournalEventType
+                .PROTECTED_CASH_REDEMPTION_CANCELLATION
+                || type == EscrowJournalEventType
+                .FOREIGN_CASH_DEPOSIT_RESERVATION
+                || type == EscrowJournalEventType
+                .FOREIGN_CASH_DEPOSIT_SETTLEMENT
+                || type == EscrowJournalEventType
+                .FOREIGN_CASH_DEPOSIT_CANCELLATION;
     }
 
     synchronized EscrowCommitResult commitMaintenanceRepair(

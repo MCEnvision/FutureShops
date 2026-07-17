@@ -17,6 +17,7 @@ import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeState;
 import com.enviouse.futureshops.server.economy.migration.LegacyBalanceMigrationManager;
 import com.enviouse.futureshops.server.pricing.DynamicPricingEngine;
+import com.enviouse.futureshops.server.security.ServerRequestSecurityManager;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
 import com.enviouse.futureshops.server.shop.ExternalStorageRegistry;
 import com.enviouse.futureshops.server.shop.ForgeCapabilityStorageAdapter;
@@ -24,6 +25,7 @@ import com.enviouse.futureshops.server.shop.StockRefreshScheduler;
 import com.mojang.logging.LogUtils;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -97,6 +99,7 @@ public class Futureshops {
     // You can use SubscribeEvent and let the Event Bus discover methods to call
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
+        ServerRequestSecurityManager.initialize(event.getServer());
         EscrowRuntimeService escrow = EscrowRuntimeManager.initialize(event.getServer());
         if (escrow.state() == EscrowRuntimeState.MAINTENANCE) {
             LOGGER.error("FutureShops escrow entered maintenance during startup.",
@@ -122,6 +125,7 @@ public class Futureshops {
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
+        ServerRequestSecurityManager.shutdown(event.getServer());
         // Force-close every open shop session so clients can dismiss their GUIs.
         ShopSessionManager.closeAllAndForceClose(event.getServer(), "SERVER_STOPPING");
         BalanceManager.clear();
@@ -151,6 +155,14 @@ public class Futureshops {
             LegacyBalanceMigrationManager.tick(event.getServer());
             DynamicPricingEngine.onServerTick(event.getServer());
             StockRefreshScheduler.onServerTick(event.getServer());
+        }
+    }
+
+    @SubscribeEvent
+    public void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity()
+                instanceof net.minecraft.server.level.ServerPlayer player) {
+            ServerRequestSecurityManager.removePlayer(player);
         }
     }
 

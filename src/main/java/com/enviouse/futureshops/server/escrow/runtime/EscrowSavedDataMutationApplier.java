@@ -18,11 +18,21 @@ import com.enviouse.futureshops.server.escrow.custody.CustodyPreparedOperationCo
 import com.enviouse.futureshops.server.escrow.custody.CustodySavedData;
 import com.enviouse.futureshops.server.escrow.journal.JournalRecord;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerSavedData;
+import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountId;
+import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountType;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerTransaction;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintEventCodec;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintJournalEvent;
+import com.enviouse.futureshops.server.escrow.mint.ProtectedMintOperation;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintSavedData;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionConservationValidator;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionReservation;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionReservationCodec;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionSettlement;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionSettlementCodec;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionCancellation;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionCancellationCodec;
 import com.enviouse.futureshops.server.escrow.store.EscrowTransactionByteCodec;
 import com.enviouse.futureshops.server.escrow.store.EscrowTransactionSavedData;
 import com.enviouse.futureshops.server.escrow.model.EscrowState;
@@ -152,6 +162,30 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
                     transactionId, event.body());
             case ATM_WITHDRAWAL_COMMIT -> preflightAtmWithdrawal(
                     transactionId, event.body());
+            case FOREIGN_ATM_WITHDRAWAL_COMMIT ->
+                    preflightForeignAtmWithdrawal(
+                            transactionId, event.body());
+            case CASH_CLAIM_DELIVERY_COMMIT ->
+                    preflightCashClaimDelivery(
+                            transactionId, event.body());
+            case PROTECTED_CASH_REDEMPTION_RESERVATION ->
+                    preflightProtectedCashReservation(
+                            transactionId, event.body());
+            case PROTECTED_CASH_REDEMPTION_SETTLEMENT ->
+                    preflightProtectedCashSettlement(
+                            transactionId, event.body());
+            case PROTECTED_CASH_REDEMPTION_CANCELLATION ->
+                    preflightProtectedCashCancellation(
+                            transactionId, event.body());
+            case FOREIGN_CASH_DEPOSIT_RESERVATION ->
+                    preflightForeignCashReservation(
+                            transactionId, event.body());
+            case FOREIGN_CASH_DEPOSIT_SETTLEMENT ->
+                    preflightForeignCashSettlement(
+                            transactionId, event.body());
+            case FOREIGN_CASH_DEPOSIT_CANCELLATION ->
+                    preflightForeignCashCancellation(
+                            transactionId, event.body());
             case JOURNAL_LINEAGE -> throw new EscrowRuntimeException(
                     "Journal lineage cannot be preflighted as a mutation");
         };
@@ -185,6 +219,22 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
             case CLAIM_QUARANTINE -> applyClaimQuarantine(record, event.body());
             case MAINTENANCE_REPAIR -> applyMaintenanceRepair(record, event.body());
             case ATM_WITHDRAWAL_COMMIT -> applyAtmWithdrawal(record, event.body());
+            case FOREIGN_ATM_WITHDRAWAL_COMMIT ->
+                    applyForeignAtmWithdrawal(record, event.body());
+            case CASH_CLAIM_DELIVERY_COMMIT ->
+                    applyCashClaimDelivery(record, event.body());
+            case PROTECTED_CASH_REDEMPTION_RESERVATION ->
+                    applyProtectedCashReservation(record, event.body());
+            case PROTECTED_CASH_REDEMPTION_SETTLEMENT ->
+                    applyProtectedCashSettlement(record, event.body());
+            case PROTECTED_CASH_REDEMPTION_CANCELLATION ->
+                    applyProtectedCashCancellation(record, event.body());
+            case FOREIGN_CASH_DEPOSIT_RESERVATION ->
+                    applyForeignCashReservation(record, event.body());
+            case FOREIGN_CASH_DEPOSIT_SETTLEMENT ->
+                    applyForeignCashSettlement(record, event.body());
+            case FOREIGN_CASH_DEPOSIT_CANCELLATION ->
+                    applyForeignCashCancellation(record, event.body());
             case JOURNAL_LINEAGE -> throw new EscrowRuntimeException(
                     "Journal lineage cannot be applied as a mutation");
         }
@@ -247,6 +297,386 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
                 delivery.deliveredAt());
         requireDeliveredUnits(result, delivery.units());
         return result(result.replayed());
+    }
+
+    private void applyCashClaimDelivery(
+            JournalRecord record,
+            byte[] body
+    ) {
+        CashClaimDeliveryCommit commit =
+                CashClaimDeliveryCommitCodec.decode(body);
+        EscrowClaim claim = requireClaim(commit.delivery());
+        requireRecordIdentity(record, claim.transactionId());
+        CashClaimDeliveryValidator.validate(claim, commit, protectedMints);
+        custody.applyTransientRelease(commit.custody());
+        ClaimAttemptResult result = claims.deliverCommitted(
+                commit.delivery().ownerId(), commit.delivery().claimId(),
+                commit.delivery().requestKey(), commit.delivery().units(),
+                commit.delivery().deliveredAt());
+        requireDeliveredUnits(result, commit.delivery().units());
+    }
+
+    private EscrowPreflightResult preflightCashClaimDelivery(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        CashClaimDeliveryCommit commit =
+                CashClaimDeliveryCommitCodec.decode(body);
+        EscrowClaim claim = requireClaim(commit.delivery());
+        requireRecordIdentity(recordTransactionId, claim.transactionId());
+        CashClaimDeliveryValidator.validate(claim, commit, protectedMints);
+        boolean custodyReplayed = custody.preflightTransientRelease(
+                commit.custody()).replayed();
+        ClaimAttemptResult result = claims.preflightDeliveryCommitted(
+                commit.delivery().ownerId(), commit.delivery().claimId(),
+                commit.delivery().requestKey(), commit.delivery().units(),
+                commit.delivery().deliveredAt());
+        requireDeliveredUnits(result, commit.delivery().units());
+        if (result.replayed() && !custodyReplayed) {
+            throw new EscrowRuntimeException(
+                    "Cash claim delivery custody is missing");
+        }
+        return result(result.replayed() && custodyReplayed);
+    }
+
+    private EscrowPreflightResult preflightProtectedCashReservation(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        ProtectedCashRedemptionReservation reservation =
+                ProtectedCashRedemptionReservationCodec.decode(body);
+        requireRecordIdentity(recordTransactionId,
+                reservation.transactionId());
+        ProtectedCashRedemptionConservationValidator.validateReservation(
+                reservation, protectedMints);
+        CompositeMaterialization materialization =
+                new CompositeMaterialization();
+        materialization.accept(transactions.preflightFoldedHeldCommitted(
+                reservation.heldTransaction()).replayed());
+        materialization.accept(custody.preflightCommittedBatch(
+                reservation.custodyReservations()));
+        for (var mintResult : protectedMints.preflightTransitionBatch(
+                reservation.mintReservations(),
+                ProtectedMintOperation.RESERVE)) {
+            materialization.accept(mintResult.replayed());
+        }
+        return materialization.result();
+    }
+
+    private void applyProtectedCashReservation(
+            JournalRecord record,
+            byte[] body
+    ) {
+        ProtectedCashRedemptionReservation reservation =
+                ProtectedCashRedemptionReservationCodec.decode(body);
+        requireRecordIdentity(record, reservation.transactionId());
+        ProtectedCashRedemptionConservationValidator.validateReservation(
+                reservation, protectedMints);
+        transactions.applyFoldedHeldCommitted(
+                reservation.heldTransaction());
+        custody.applyCommittedBatch(reservation.custodyReservations());
+        protectedMints.applyTransitionBatch(reservation.mintReservations(),
+                ProtectedMintOperation.RESERVE);
+    }
+
+    private EscrowPreflightResult preflightProtectedCashSettlement(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        ProtectedCashRedemptionSettlement settlement =
+                ProtectedCashRedemptionSettlementCodec.decode(body);
+        requireRecordIdentity(recordTransactionId,
+                settlement.transactionId());
+        ProtectedCashRedemptionConservationValidator.validateSettlement(
+                settlement, protectedMints);
+        requireProtectedCashReservationMaterialized(settlement.reservation());
+        boolean ledgerReplayed = ledger.preflightCommitted(
+                settlement.ledgerTransaction()).replayed();
+        requireProtectedCashWalletSnapshot(settlement, ledgerReplayed);
+        CompositeMaterialization materialization =
+                new CompositeMaterialization();
+        materialization.accept(custody.preflightCommittedBatch(
+                settlement.custodyConsumptions()));
+        for (var mintResult : protectedMints.preflightTransitionBatch(
+                settlement.mintCommits(), ProtectedMintOperation.COMMIT)) {
+            materialization.accept(mintResult.replayed());
+        }
+        settlement.overflowClaim().ifPresent(claim -> {
+            boolean claimReplayed = claims.getClaim(claim.claimId()) != null;
+            claims.preflightCreateCommitted(claim);
+            materialization.accept(claimReplayed);
+        });
+        materialization.accept(ledgerReplayed);
+        materialization.accept(
+                transactions.preflightFoldedCompletionCommitted(
+                        settlement.reservation().heldTransaction(),
+                        settlement.completedTransaction()).replayed());
+        return materialization.result();
+    }
+
+    private void applyProtectedCashSettlement(
+            JournalRecord record,
+            byte[] body
+    ) {
+        ProtectedCashRedemptionSettlement settlement =
+                ProtectedCashRedemptionSettlementCodec.decode(body);
+        requireRecordIdentity(record, settlement.transactionId());
+        ProtectedCashRedemptionConservationValidator.validateSettlement(
+                settlement, protectedMints);
+        boolean ledgerReplayed = ledger.preflightCommitted(
+                settlement.ledgerTransaction()).replayed();
+        requireProtectedCashWalletSnapshot(settlement, ledgerReplayed);
+        custody.applyCommittedBatch(settlement.custodyConsumptions());
+        protectedMints.applyTransitionBatch(settlement.mintCommits(),
+                ProtectedMintOperation.COMMIT);
+        settlement.overflowClaim().ifPresent(claims::createCommitted);
+        ledger.applyCommitted(settlement.ledgerTransaction());
+        transactions.applyFoldedCompletionCommitted(
+                settlement.reservation().heldTransaction(),
+                settlement.completedTransaction());
+    }
+
+    private void requireProtectedCashWalletSnapshot(
+            ProtectedCashRedemptionSettlement settlement,
+            boolean ledgerReplayed
+    ) {
+        if (ledgerReplayed || settlement.destinationAccount().type()
+                != LedgerAccountType.PLAYER_WALLET) {
+            return;
+        }
+        String owner = settlement.reservation().playerId().toString();
+        LedgerAccountId wallet = new LedgerAccountId(
+                LedgerAccountType.PLAYER_WALLET, owner);
+        LedgerAccountId reserved = new LedgerAccountId(
+                LedgerAccountType.PLAYER_RESERVED, owner);
+        if (ledger.balance(wallet)
+                != settlement.walletBalanceBeforeMinorUnits()
+                || ledger.balance(reserved)
+                != settlement.walletReservedBeforeMinorUnits()) {
+            throw new EscrowRuntimeException(
+                    "Protected cash wallet balance snapshot changed");
+        }
+    }
+
+    private void requireProtectedCashReservationMaterialized(
+            ProtectedCashRedemptionReservation reservation
+    ) {
+        if (!transactions.preflightFoldedHeldCommitted(
+                reservation.heldTransaction()).replayed()
+                || !custody.preflightCommittedBatch(
+                reservation.custodyReservations())) {
+            throw new EscrowRuntimeException(
+                    "Protected cash reservation is not materialized");
+        }
+        for (var mintResult : protectedMints.preflightTransitionBatch(
+                reservation.mintReservations(),
+                ProtectedMintOperation.RESERVE)) {
+            if (!mintResult.replayed()) {
+                throw new EscrowRuntimeException(
+                        "Protected cash mint reservation is not materialized");
+            }
+        }
+    }
+
+    private EscrowPreflightResult preflightProtectedCashCancellation(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        ProtectedCashRedemptionCancellation cancellation =
+                ProtectedCashRedemptionCancellationCodec.decode(body);
+        requireRecordIdentity(recordTransactionId,
+                cancellation.transactionId());
+        ProtectedCashRedemptionConservationValidator.validateCancellation(
+                cancellation, protectedMints);
+        requireProtectedCashReservationMaterialized(
+                cancellation.reservation());
+        CompositeMaterialization materialization =
+                new CompositeMaterialization();
+        materialization.accept(custody.preflightCommittedBatch(
+                cancellation.custodyReleases()));
+        for (var mintResult : protectedMints.preflightTransitionBatch(
+                cancellation.mintReleases(),
+                ProtectedMintOperation.RELEASE)) {
+            materialization.accept(mintResult.replayed());
+        }
+        materialization.accept(
+                transactions.preflightFoldedRefundCommitted(
+                        cancellation.reservation().heldTransaction(),
+                        cancellation.refundedTransaction()).replayed());
+        return materialization.result();
+    }
+
+    private void applyProtectedCashCancellation(
+            JournalRecord record,
+            byte[] body
+    ) {
+        ProtectedCashRedemptionCancellation cancellation =
+                ProtectedCashRedemptionCancellationCodec.decode(body);
+        requireRecordIdentity(record, cancellation.transactionId());
+        ProtectedCashRedemptionConservationValidator.validateCancellation(
+                cancellation, protectedMints);
+        custody.applyCommittedBatch(cancellation.custodyReleases());
+        protectedMints.applyTransitionBatch(cancellation.mintReleases(),
+                ProtectedMintOperation.RELEASE);
+        transactions.applyFoldedRefundCommitted(
+                cancellation.reservation().heldTransaction(),
+                cancellation.refundedTransaction());
+    }
+
+    private EscrowPreflightResult preflightForeignCashReservation(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        ForeignCashDepositReservation reservation =
+                ForeignCashDepositCodec.decodeReservation(body);
+        requireRecordIdentity(recordTransactionId,
+                reservation.transactionId());
+        ForeignCashDepositConservationValidator.validateReservation(
+                reservation);
+        CompositeMaterialization materialization =
+                new CompositeMaterialization();
+        materialization.accept(transactions.preflightFoldedHeldCommitted(
+                reservation.heldTransaction()).replayed());
+        materialization.accept(custody.preflightCommittedBatch(
+                reservation.custodyReservations()));
+        return materialization.result();
+    }
+
+    private void applyForeignCashReservation(
+            JournalRecord record,
+            byte[] body
+    ) {
+        ForeignCashDepositReservation reservation =
+                ForeignCashDepositCodec.decodeReservation(body);
+        requireRecordIdentity(record, reservation.transactionId());
+        ForeignCashDepositConservationValidator.validateReservation(
+                reservation);
+        transactions.applyFoldedHeldCommitted(
+                reservation.heldTransaction());
+        custody.applyCommittedBatch(reservation.custodyReservations());
+    }
+
+    private EscrowPreflightResult preflightForeignCashSettlement(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        ForeignCashDepositSettlement settlement =
+                ForeignCashDepositCodec.decodeSettlement(body);
+        requireRecordIdentity(recordTransactionId,
+                settlement.transactionId());
+        ForeignCashDepositConservationValidator.validateSettlement(
+                settlement);
+        requireForeignCashReservationMaterialized(
+                settlement.reservation());
+        boolean ledgerReplayed = ledger.preflightCommitted(
+                settlement.ledgerTransaction()).replayed();
+        requireForeignCashWalletSnapshot(settlement, ledgerReplayed);
+        CompositeMaterialization materialization =
+                new CompositeMaterialization();
+        materialization.accept(custody.preflightCommittedBatch(
+                settlement.custodyConsumptions()));
+        settlement.overflowClaim().ifPresent(claim -> {
+            boolean claimReplayed = claims.getClaim(claim.claimId()) != null;
+            claims.preflightCreateCommitted(claim);
+            materialization.accept(claimReplayed);
+        });
+        materialization.accept(ledgerReplayed);
+        materialization.accept(
+                transactions.preflightFoldedCompletionCommitted(
+                        settlement.reservation().heldTransaction(),
+                        settlement.completedTransaction()).replayed());
+        return materialization.result();
+    }
+
+    private void applyForeignCashSettlement(
+            JournalRecord record,
+            byte[] body
+    ) {
+        ForeignCashDepositSettlement settlement =
+                ForeignCashDepositCodec.decodeSettlement(body);
+        requireRecordIdentity(record, settlement.transactionId());
+        ForeignCashDepositConservationValidator.validateSettlement(
+                settlement);
+        boolean ledgerReplayed = ledger.preflightCommitted(
+                settlement.ledgerTransaction()).replayed();
+        requireForeignCashWalletSnapshot(settlement, ledgerReplayed);
+        custody.applyCommittedBatch(settlement.custodyConsumptions());
+        settlement.overflowClaim().ifPresent(claims::createCommitted);
+        ledger.applyCommitted(settlement.ledgerTransaction());
+        transactions.applyFoldedCompletionCommitted(
+                settlement.reservation().heldTransaction(),
+                settlement.completedTransaction());
+    }
+
+    private void requireForeignCashWalletSnapshot(
+            ForeignCashDepositSettlement settlement,
+            boolean ledgerReplayed
+    ) {
+        if (ledgerReplayed) {
+            return;
+        }
+        String owner = settlement.reservation().playerId().toString();
+        LedgerAccountId wallet = new LedgerAccountId(
+                LedgerAccountType.PLAYER_WALLET, owner);
+        LedgerAccountId reserved = new LedgerAccountId(
+                LedgerAccountType.PLAYER_RESERVED, owner);
+        if (ledger.balance(wallet)
+                != settlement.walletBalanceBeforeMinorUnits()
+                || ledger.balance(reserved)
+                != settlement.walletReservedBeforeMinorUnits()) {
+            throw new EscrowRuntimeException(
+                    "Foreign cash wallet balance snapshot changed");
+        }
+    }
+
+    private void requireForeignCashReservationMaterialized(
+            ForeignCashDepositReservation reservation
+    ) {
+        if (!transactions.preflightFoldedHeldCommitted(
+                reservation.heldTransaction()).replayed()
+                || !custody.preflightCommittedBatch(
+                reservation.custodyReservations())) {
+            throw new EscrowRuntimeException(
+                    "Foreign cash reservation is not materialized");
+        }
+    }
+
+    private EscrowPreflightResult preflightForeignCashCancellation(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        ForeignCashDepositCancellation cancellation =
+                ForeignCashDepositCodec.decodeCancellation(body);
+        requireRecordIdentity(recordTransactionId,
+                cancellation.transactionId());
+        ForeignCashDepositConservationValidator.validateCancellation(
+                cancellation);
+        requireForeignCashReservationMaterialized(
+                cancellation.reservation());
+        CompositeMaterialization materialization =
+                new CompositeMaterialization();
+        materialization.accept(custody.preflightCommittedBatch(
+                cancellation.custodyReleases()));
+        materialization.accept(
+                transactions.preflightFoldedRefundCommitted(
+                        cancellation.reservation().heldTransaction(),
+                        cancellation.refundedTransaction()).replayed());
+        return materialization.result();
+    }
+
+    private void applyForeignCashCancellation(
+            JournalRecord record,
+            byte[] body
+    ) {
+        ForeignCashDepositCancellation cancellation =
+                ForeignCashDepositCodec.decodeCancellation(body);
+        requireRecordIdentity(record, cancellation.transactionId());
+        ForeignCashDepositConservationValidator.validateCancellation(
+                cancellation);
+        custody.applyCommittedBatch(cancellation.custodyReleases());
+        transactions.applyFoldedRefundCommitted(
+                cancellation.reservation().heldTransaction(),
+                cancellation.refundedTransaction());
     }
 
     private void applyClaimQuarantine(JournalRecord record, byte[] body) {
@@ -421,6 +851,58 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
         }
     }
 
+    private EscrowPreflightResult preflightForeignAtmWithdrawal(
+            UUID recordTransactionId,
+            byte[] body
+    ) {
+        ForeignAtmWithdrawalCommit commit =
+                ForeignAtmWithdrawalCommitCodec.decode(body);
+        requireRecordIdentity(recordTransactionId, commit.requestId());
+        EscrowTransaction current = transactions.getTransaction(
+                new EscrowTransactionId(commit.requestId()));
+        if (current == null) {
+            throw new EscrowRuntimeException(
+                    "Foreign ATM withdrawal requires an existing escrow transaction");
+        }
+        if (current.revision()
+                < commit.committedTransaction().revision()
+                && current.state() != EscrowState.HELD) {
+            throw new EscrowRuntimeException(
+                    "Foreign ATM withdrawal transaction is not held");
+        }
+        claims.preflightCreateBatch(commit.cashClaims());
+        CompositeMaterialization materialization =
+                new CompositeMaterialization();
+        materialization.accept(transactions.preflightCommitted(
+                commit.committedTransaction()).replayed());
+        materialization.accept(ledger.preflightCommitted(
+                commit.ledgerTransaction()).replayed());
+        for (EscrowClaim claim : commit.cashClaims()) {
+            boolean replayed = claims.getClaim(claim.claimId()) != null;
+            claims.preflightCreateCommitted(claim);
+            materialization.accept(replayed);
+        }
+        return materialization.result();
+    }
+
+    private void applyForeignAtmWithdrawal(
+            JournalRecord record,
+            byte[] body
+    ) {
+        ForeignAtmWithdrawalCommit commit =
+                ForeignAtmWithdrawalCommitCodec.decode(body);
+        requireRecordIdentity(record, commit.requestId());
+        int step = 0;
+        transactions.applyCommitted(commit.committedTransaction());
+        atmWithdrawalFaults.afterMutation(step++);
+        ledger.applyCommitted(commit.ledgerTransaction());
+        atmWithdrawalFaults.afterMutation(step++);
+        for (EscrowClaim claim : commit.cashClaims()) {
+            claims.createCommitted(claim);
+            atmWithdrawalFaults.afterMutation(step++);
+        }
+    }
+
     private EscrowPreflightResult preflightMaintenanceRepair(UUID recordTransactionId,
                                                               byte[] body) {
         MaintenanceRepairJournalEntry entry = MaintenanceRepairJournalCodec.decode(body);
@@ -489,7 +971,7 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
         private void accept(boolean componentReplayed) {
             if (replayed != null && replayed != componentReplayed) {
                 throw new EscrowRuntimeException(
-                        "ATM withdrawal commit is only partially materialized");
+                        "Escrow composite event is only partially materialized");
             }
             replayed = componentReplayed;
         }
@@ -497,7 +979,7 @@ public final class EscrowSavedDataMutationApplier implements EscrowMutationAppli
         private EscrowPreflightResult result() {
             if (replayed == null) {
                 throw new EscrowRuntimeException(
-                        "ATM withdrawal commit has no materialized components");
+                        "Escrow composite event has no materialized components");
             }
             return replayed ? EscrowPreflightResult.REPLAY : EscrowPreflightResult.APPLY;
         }

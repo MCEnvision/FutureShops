@@ -15,14 +15,22 @@ import com.enviouse.futureshops.data.TransactionHistoryEntry;
 import com.enviouse.futureshops.network.packets.C2SAdminShopAddItemsPacket;
 import com.enviouse.futureshops.network.packets.C2SAdminShopEditPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmWithdrawPacket;
+import com.enviouse.futureshops.network.packets.C2SAtmCollectCashPacket;
+import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
+import com.enviouse.futureshops.network.packets.C2SPlayerShopBuyPacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyAdminCartPacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyCartPacket;
 import com.enviouse.futureshops.network.packets.S2CAdminEditAckPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmDataPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmResultPacket;
+import com.enviouse.futureshops.network.packets.S2CAtmCollectCashResultPacket;
+import com.enviouse.futureshops.network.packets.S2CAtmDepositResultPacket;
 import com.enviouse.futureshops.network.packets.S2CBalTopUiPacket;
+import com.enviouse.futureshops.network.packets.S2CBuyResponsePacket;
+import com.enviouse.futureshops.network.packets.S2CPlayerShopResultPacket;
 import com.enviouse.futureshops.network.packets.S2CShopDataPacket;
+import com.enviouse.futureshops.server.shop.ShopResultCode;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
@@ -30,6 +38,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -92,6 +102,72 @@ public class WireRoundTripTest {
         assertEquals(in, out);
         assertEquals("enchanted_book_2", out.listingId());
         assertEquals(7, out.quantity());
+    }
+
+    @Test
+    void adminCartCheckoutRoundTripsRequestId() {
+        UUID requestId = UUID.randomUUID();
+        C2SBuyRequestPacket in = new C2SBuyRequestPacket(
+                "server", true,
+                List.of(new C2SBuyRequestPacket.LineItem("diamond", 4)),
+                "WALLET", requestId);
+        FriendlyByteBuf b = buf();
+
+        C2SBuyRequestPacket.encode(in, b);
+        C2SBuyRequestPacket out = C2SBuyRequestPacket.decode(b);
+
+        assertEquals(in, out);
+        assertEquals(requestId, out.requestId());
+        assertEquals(0, b.readableBytes());
+    }
+
+    @Test
+    void adminCartResponseRoundTripsRequestId() {
+        UUID requestId = UUID.randomUUID();
+        S2CBuyResponsePacket in = new S2CBuyResponsePacket(
+                true, true, "server", ShopResultCode.OK,
+                9_000L, 4, 1_000L, requestId);
+        FriendlyByteBuf b = buf();
+
+        S2CBuyResponsePacket.encode(in, b);
+        S2CBuyResponsePacket out = S2CBuyResponsePacket.decode(b);
+
+        assertEquals(in, out);
+        assertEquals(requestId, out.requestId());
+        assertEquals(0, b.readableBytes());
+    }
+
+    @Test
+    void playerShopBuyRoundTripsCheckoutCorrelation() {
+        UUID requestId = UUID.randomUUID();
+        C2SPlayerShopBuyPacket in = new C2SPlayerShopBuyPacket(
+                new BlockPos(3, 70, 9), 5, 2,
+                "MONEY", "INVENTORY", requestId, 7);
+        FriendlyByteBuf b = buf();
+
+        C2SPlayerShopBuyPacket.encode(in, b);
+        C2SPlayerShopBuyPacket out = C2SPlayerShopBuyPacket.decode(b);
+
+        assertEquals(in, out);
+        assertEquals(requestId, out.requestId());
+        assertEquals(7, out.responseToken());
+        assertEquals(0, b.readableBytes());
+    }
+
+    @Test
+    void playerShopResultRoundTripsCheckoutCorrelation() {
+        UUID requestId = UUID.randomUUID();
+        S2CPlayerShopResultPacket in = new S2CPlayerShopResultPacket(
+                false, "SERVER_ERROR", "", requestId, 7);
+        FriendlyByteBuf b = buf();
+
+        S2CPlayerShopResultPacket.encode(in, b);
+        S2CPlayerShopResultPacket out = S2CPlayerShopResultPacket.decode(b);
+
+        assertEquals(in, out);
+        assertEquals(requestId, out.requestId());
+        assertEquals(7, out.responseToken());
+        assertEquals(0, b.readableBytes());
     }
 
     @Test
@@ -523,30 +599,49 @@ public class WireRoundTripTest {
         assertEquals("minecraft:diamond", out.iconItem());
     }
 
-    // ---- protocol 30: physical-currency ATM ----
+    // Protocol 34 ATM cash claim packets.
 
     @Test
     void atmDataPacketRoundTripsSecurityAndDenominations() {
         S2CAtmDataPacket in = new S2CAtmDataPacket(
-                123_456L, "Credits", 2, "custom", false, "abc123",
+                123_456L, true, "Credits", 2, "custom",
+                S2CAtmDataPacket.ROUTE_FOREIGN, false, "a".repeat(64),
                 List.of(
                         new AtmDenominationData("othermod:gold_bill", 10_000L, 64),
-                        new AtmDenominationData("othermod:silver_coin", 25L, 16)), true);
+                        new AtmDenominationData("othermod:silver_coin", 25L, 16)),
+                true, S2CAtmDataPacket.AVAILABLE, true, 6,
+                List.of(
+                        new S2CAtmDataPacket.CashClaimSummary(
+                                UUID.fromString(
+                                        "30000000-0000-0000-0000-000000000001"),
+                                "PROTECTED_CASH", 12),
+                        new S2CAtmDataPacket.CashClaimSummary(
+                                UUID.fromString(
+                                        "30000000-0000-0000-0000-000000000002"),
+                                "FOREIGN_CASH", 3)));
         FriendlyByteBuf b = buf();
         S2CAtmDataPacket.encode(in, b);
         S2CAtmDataPacket out = S2CAtmDataPacket.decode(b);
         assertEquals(in, out);
         assertFalse(out.protectedMinting(), "foreign currency must advertise the unprotected mode");
+        assertEquals(S2CAtmDataPacket.ROUTE_FOREIGN, out.route());
+        assertTrue(out.balanceKnown());
+        assertTrue(out.serviceAvailable());
         assertTrue(out.openScreen(), "command ATM data must preserve its open intent");
         assertEquals(2, out.denominations().size());
+        assertEquals(6, out.pendingCashClaimCount());
+        assertEquals(2, out.collectibleCashClaims().size());
         assertEquals(0, b.readableBytes());
     }
 
     @Test
     void atmRefreshDataPacketKeepsOpenIntentFalse() {
         S2CAtmDataPacket in = new S2CAtmDataPacket(
-                500L, "Credits", 2, "futureshops", true, "refresh",
-                List.of(new AtmDenominationData("futureshops:money", 100L, 64)), false);
+                500L, true, "Credits", 2, "futureshops",
+                S2CAtmDataPacket.ROUTE_PROTECTED, true, "b".repeat(64),
+                List.of(new AtmDenominationData(
+                        "futureshops:money", 100L, 64)),
+                true, S2CAtmDataPacket.AVAILABLE, false);
         FriendlyByteBuf b = buf();
         S2CAtmDataPacket.encode(in, b);
         S2CAtmDataPacket out = S2CAtmDataPacket.decode(b);
@@ -556,9 +651,71 @@ public class WireRoundTripTest {
     }
 
     @Test
+    void atmDataPacketPreservesMalformedCashRecoverySelection() {
+        UUID claimId = UUID.fromString(
+                "30000000-0000-0000-0000-000000000003");
+        S2CAtmDataPacket in = new S2CAtmDataPacket(
+                500L, true, "Credits", 2, "futureshops",
+                S2CAtmDataPacket.ROUTE_PROTECTED, true,
+                "9".repeat(64),
+                List.of(new AtmDenominationData(
+                        "futureshops:money", 100L, 64)),
+                true, S2CAtmDataPacket.AVAILABLE, false, 1,
+                List.of(new S2CAtmDataPacket.CashClaimSummary(
+                        claimId, "PROTECTED_CASH", 0)));
+        FriendlyByteBuf buffer = buf();
+
+        S2CAtmDataPacket.encode(in, buffer);
+
+        S2CAtmDataPacket out = S2CAtmDataPacket.decode(buffer);
+        assertEquals(in, out);
+        assertEquals(0, out.collectibleCashClaims().get(0).billCount());
+        assertEquals(0, buffer.readableBytes());
+    }
+
+    @Test
+    void unavailableAtmDataRoundTripsWithoutInventingABalance() {
+        S2CAtmDataPacket in = new S2CAtmDataPacket(
+                0L, false, "Credits", 2, "futureshops",
+                S2CAtmDataPacket.ROUTE_PROTECTED, true, "c".repeat(64),
+                List.of(new AtmDenominationData(
+                        "futureshops:money", 100L, 64)),
+                false, "MIGRATION_PENDING", true);
+        FriendlyByteBuf b = buf();
+        S2CAtmDataPacket.encode(in, b);
+
+        S2CAtmDataPacket out = S2CAtmDataPacket.decode(b);
+
+        assertEquals(in, out);
+        assertFalse(out.balanceKnown());
+        assertFalse(out.serviceAvailable());
+        assertEquals("MIGRATION_PENDING", out.availabilityCode());
+        assertEquals(0, b.readableBytes());
+    }
+
+    @Test
+    void atmDataPacketBoundsNestedDenominationText() {
+        FriendlyByteBuf b = buf();
+        b.writeLong(0L);
+        b.writeBoolean(false);
+        b.writeUtf("Credits", 256);
+        b.writeVarInt(2);
+        b.writeUtf("custom", 128);
+        b.writeUtf(S2CAtmDataPacket.ROUTE_FOREIGN, 32);
+        b.writeBoolean(false);
+        b.writeUtf("4".repeat(64), 64);
+        b.writeVarInt(1);
+        b.writeUtf("x".repeat(257));
+
+        assertThrows(io.netty.handler.codec.DecoderException.class,
+                () -> S2CAtmDataPacket.decode(b));
+    }
+
+    @Test
     void atmWithdrawPacketRoundTripsExactCounts() {
         C2SAtmWithdrawPacket in = new C2SAtmWithdrawPacket(
-                "currency-signature", List.of(1, 0, 3, 12));
+                UUID.fromString("31000000-0000-0000-0000-000000000001"),
+                "d".repeat(64), List.of(1, 0, 3, 12));
         FriendlyByteBuf b = buf();
         C2SAtmWithdrawPacket.encode(in, b);
         C2SAtmWithdrawPacket out = C2SAtmWithdrawPacket.decode(b);
@@ -569,19 +726,485 @@ public class WireRoundTripTest {
     @Test
     void atmWithdrawPacketRejectsOversizedDenominationList() {
         FriendlyByteBuf b = buf();
-        b.writeUtf("signature", 128);
+        b.writeUUID(UUID.fromString(
+                "31000000-0000-0000-0000-000000000002"));
+        b.writeUtf("e".repeat(64), 64);
         b.writeVarInt(33);
         assertThrows(io.netty.handler.codec.DecoderException.class,
                 () -> C2SAtmWithdrawPacket.decode(b));
     }
 
     @Test
+    void atmWithdrawPacketRejectsNegativeAndAggregateCounts() {
+        FriendlyByteBuf negative = buf();
+        negative.writeUUID(UUID.fromString(
+                "31000000-0000-0000-0000-000000000003"));
+        negative.writeUtf("f".repeat(64), 64);
+        negative.writeVarInt(1);
+        negative.writeVarInt(-1);
+        assertThrows(io.netty.handler.codec.DecoderException.class,
+                () -> C2SAtmWithdrawPacket.decode(negative));
+
+        FriendlyByteBuf aggregate = buf();
+        aggregate.writeUUID(UUID.fromString(
+                "31000000-0000-0000-0000-000000000004"));
+        aggregate.writeUtf("1".repeat(64), 64);
+        aggregate.writeVarInt(2);
+        aggregate.writeVarInt(4096);
+        aggregate.writeVarInt(1);
+        assertThrows(io.netty.handler.codec.DecoderException.class,
+                () -> C2SAtmWithdrawPacket.decode(aggregate));
+    }
+
+    @Test
+    void atmWithdrawPacketRejectsInvalidIdentity() {
+        FriendlyByteBuf zeroId = buf();
+        zeroId.writeUUID(new UUID(0L, 0L));
+        zeroId.writeUtf("5".repeat(64), 64);
+        zeroId.writeVarInt(1);
+        zeroId.writeVarInt(1);
+        assertThrows(io.netty.handler.codec.DecoderException.class,
+                () -> C2SAtmWithdrawPacket.decode(zeroId));
+
+        FriendlyByteBuf badSignature = buf();
+        badSignature.writeUUID(UUID.fromString(
+                "31000000-0000-0000-0000-000000000005"));
+        badSignature.writeUtf("not-a-digest", 64);
+        badSignature.writeVarInt(1);
+        badSignature.writeVarInt(1);
+        assertThrows(io.netty.handler.codec.DecoderException.class,
+                () -> C2SAtmWithdrawPacket.decode(badSignature));
+    }
+
+    @Test
     void atmResultPacketRoundTrips() {
-        S2CAtmResultPacket in = new S2CAtmResultPacket(true, "SUCCESS", 88_800L, 11_200L);
+        UUID requestId = UUID.fromString(
+                "32000000-0000-0000-0000-000000000001");
+        S2CAtmResultPacket in = new S2CAtmResultPacket(
+                requestId, "CLAIMED", false, true, true,
+                88_800L, 11_200L, 0, 12, "2".repeat(64));
         FriendlyByteBuf b = buf();
         S2CAtmResultPacket.encode(in, b);
         S2CAtmResultPacket out = S2CAtmResultPacket.decode(b);
         assertEquals(in, out);
+        assertEquals(requestId, out.requestId());
+        assertTrue(out.success());
+        assertTrue(out.replayed());
+        assertEquals("CLAIMED", out.code());
         assertEquals(0, b.readableBytes());
+    }
+
+    @Test
+    void atmRateLimitedResultRoundTripsItsExactRetryableShape() {
+        UUID requestId = UUID.fromString(
+                "32000000-0000-0000-0000-000000000006");
+        S2CAtmResultPacket in = new S2CAtmResultPacket(
+                requestId, "RATE_LIMITED", true, false, false,
+                0L, 0L, 0, 0, "6".repeat(64), 1_501L);
+        FriendlyByteBuf buffer = buf();
+
+        S2CAtmResultPacket.encode(in, buffer);
+
+        assertEquals(in, S2CAtmResultPacket.decode(buffer));
+        assertFalse(in.success());
+        assertTrue(in.retryable());
+        assertEquals(1_501L, in.retryAfterMillis());
+        assertEquals(0, buffer.readableBytes());
+    }
+
+    @Test
+    void atmRateLimitedResultRejectsAnyNonemptyOrTerminalShape() {
+        UUID requestId = UUID.fromString(
+                "32000000-0000-0000-0000-000000000007");
+        String signature = "7".repeat(64);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new S2CAtmResultPacket(
+                        requestId, "RATE_LIMITED", false, false, false,
+                        0L, 0L, 0, 0, signature, 1_000L));
+        assertThrows(IllegalArgumentException.class,
+                () -> new S2CAtmResultPacket(
+                        requestId, "RATE_LIMITED", true, true, false,
+                        0L, 0L, 0, 0, signature, 1_000L));
+        assertThrows(IllegalArgumentException.class,
+                () -> new S2CAtmResultPacket(
+                        requestId, "RATE_LIMITED", true, false, true,
+                        0L, 0L, 0, 0, signature, 1_000L));
+        assertThrows(IllegalArgumentException.class,
+                () -> new S2CAtmResultPacket(
+                        requestId, "RATE_LIMITED", true, false, false,
+                        0L, 1L, 0, 0, signature, 1_000L));
+        assertThrows(IllegalArgumentException.class,
+                () -> new S2CAtmResultPacket(
+                        requestId, "RATE_LIMITED", true, false, false,
+                        0L, 0L, 1, 0, signature, 1_000L));
+        assertThrows(IllegalArgumentException.class,
+                () -> new S2CAtmResultPacket(
+                        requestId, "RATE_LIMITED", true, false, false,
+                        0L, 0L, 0, 0, signature, 0L));
+        assertThrows(IllegalArgumentException.class,
+                () -> new S2CAtmResultPacket(
+                        requestId, "RATE_LIMITED", true, false, false,
+                        0L, 0L, 0, 0, signature,
+                        S2CAtmResultPacket.MAX_RETRY_AFTER_MILLIS + 1L));
+    }
+
+    @Test
+    void atmResultPacketRejectsInvalidClaimCounts() {
+        FriendlyByteBuf b = buf();
+        b.writeUUID(UUID.fromString(
+                "32000000-0000-0000-0000-000000000002"));
+        b.writeUtf("CLAIMED", 64);
+        b.writeBoolean(false);
+        b.writeBoolean(false);
+        b.writeBoolean(true);
+        b.writeLong(10_000L);
+        b.writeLong(100L);
+        b.writeVarInt(0);
+        b.writeVarInt(4097);
+        b.writeUtf("3".repeat(64), 64);
+
+        assertThrows(io.netty.handler.codec.DecoderException.class,
+                () -> S2CAtmResultPacket.decode(b));
+    }
+
+    @Test
+    void atmCashCollectionRequestRoundTripsExactClaimIds() {
+        UUID playerId = UUID.fromString(
+                "33000000-0000-0000-0000-000000000002");
+        List<UUID> claimIds = List.of(
+                UUID.fromString(
+                        "33000000-0000-0000-0000-000000000011"),
+                UUID.fromString(
+                        "33000000-0000-0000-0000-000000000012"));
+        C2SAtmCollectCashPacket in = new C2SAtmCollectCashPacket(
+                C2SAtmCollectCashPacket.deriveRequestId(
+                        playerId, claimIds), claimIds);
+        FriendlyByteBuf b = buf();
+        C2SAtmCollectCashPacket.encode(in, b);
+
+        assertEquals(in, C2SAtmCollectCashPacket.decode(b));
+        assertEquals(0, b.readableBytes());
+    }
+
+    @Test
+    void atmCashCollectionRequestRejectsDuplicatesAndOversizedLists() {
+        UUID claim = UUID.fromString(
+                "33000000-0000-0000-0000-000000000021");
+        assertThrows(IllegalArgumentException.class, () ->
+                new C2SAtmCollectCashPacket(UUID.randomUUID(),
+                        List.of(claim, claim)));
+        assertThrows(IllegalArgumentException.class, () ->
+                new C2SAtmCollectCashPacket(UUID.randomUUID(),
+                        List.of(UUID.randomUUID(), UUID.randomUUID(),
+                                UUID.randomUUID(), UUID.randomUUID(),
+                                UUID.randomUUID())));
+    }
+
+    @Test
+    void atmCashCollectionResultRoundTripsCorrelationAndCounts() {
+        UUID quarantined = UUID.fromString(
+                "33000000-0000-0000-0000-000000000032");
+        S2CAtmCollectCashResultPacket in =
+                new S2CAtmCollectCashResultPacket(
+                        UUID.fromString(
+                                "33000000-0000-0000-0000-000000000031"),
+                        "PARTIALLY_DELIVERED", false, true,
+                        14, 5, List.of(quarantined));
+        FriendlyByteBuf b = buf();
+        S2CAtmCollectCashResultPacket.encode(in, b);
+
+        assertEquals(in, S2CAtmCollectCashResultPacket.decode(b));
+        assertEquals(List.of(quarantined), in.quarantinedClaimIds());
+        assertEquals(1, in.quarantinedClaimCount());
+        assertEquals(0, b.readableBytes());
+    }
+
+    @Test
+    void atmPartialCashCollectionWithoutQuarantineRemainsRetryable() {
+        S2CAtmCollectCashResultPacket in =
+                new S2CAtmCollectCashResultPacket(
+                        UUID.fromString(
+                                "33000000-0000-0000-0000-000000000035"),
+                        "PARTIALLY_DELIVERED", true, true,
+                        8, 2, List.of());
+        FriendlyByteBuf b = buf();
+        S2CAtmCollectCashResultPacket.encode(in, b);
+
+        assertEquals(in, S2CAtmCollectCashResultPacket.decode(b));
+        assertTrue(in.retryable());
+        assertEquals(0, b.readableBytes());
+    }
+
+    @Test
+    void atmCashCollectionRateLimitRoundTripsBoundedRetryDelay() {
+        S2CAtmCollectCashResultPacket in =
+                new S2CAtmCollectCashResultPacket(
+                        UUID.fromString(
+                                "33000000-0000-0000-0000-000000000036"),
+                        "RATE_LIMITED", true, false,
+                        0, 7, List.of(), 1_501L);
+        FriendlyByteBuf buffer = buf();
+
+        S2CAtmCollectCashResultPacket.encode(in, buffer);
+
+        assertEquals(in,
+                S2CAtmCollectCashResultPacket.decode(buffer));
+        assertEquals(1_501L, in.retryAfterMillis());
+        assertEquals(0, buffer.readableBytes());
+    }
+
+    @Test
+    void atmCashCollectionRateLimitRejectsInexactRetryShapes() {
+        UUID request = UUID.fromString(
+                "33000000-0000-0000-0000-000000000037");
+
+        assertThrows(IllegalArgumentException.class, () ->
+                new S2CAtmCollectCashResultPacket(
+                        request, "RATE_LIMITED", true, false,
+                        0, 1, List.of(), 0L));
+        assertThrows(IllegalArgumentException.class, () ->
+                new S2CAtmCollectCashResultPacket(
+                        request, "RATE_LIMITED", true, false,
+                        0, 1, List.of(),
+                        S2CAtmCollectCashResultPacket
+                                .MAX_RETRY_AFTER_MILLIS + 1L));
+        assertThrows(IllegalArgumentException.class, () ->
+                new S2CAtmCollectCashResultPacket(
+                        request, "RETRYABLE", true, false,
+                        0, 1, List.of(), 1L));
+    }
+
+    @Test
+    void atmCashCollectionDecoderRejectsUnboundedRetryDelay() {
+        FriendlyByteBuf buffer = buf();
+        buffer.writeUUID(UUID.fromString(
+                "33000000-0000-0000-0000-000000000038"));
+        buffer.writeUtf("RATE_LIMITED", 32);
+        buffer.writeBoolean(true);
+        buffer.writeBoolean(false);
+        buffer.writeVarInt(0);
+        buffer.writeVarInt(1);
+        buffer.writeVarInt(0);
+        buffer.writeVarLong(S2CAtmCollectCashResultPacket
+                .MAX_RETRY_AFTER_MILLIS + 1L);
+
+        assertThrows(io.netty.handler.codec.DecoderException.class,
+                () -> S2CAtmCollectCashResultPacket.decode(buffer));
+    }
+
+    @Test
+    void atmCashCollectionResultRejectsUnboundedOrDuplicateRecoveryHandles() {
+        UUID request = UUID.fromString(
+                "33000000-0000-0000-0000-000000000041");
+        UUID claim = UUID.fromString(
+                "33000000-0000-0000-0000-000000000042");
+        assertThrows(IllegalArgumentException.class, () ->
+                new S2CAtmCollectCashResultPacket(request,
+                        "MANUAL_REVIEW", false, false, 0, 0,
+                        List.of(claim, claim)));
+        assertThrows(IllegalArgumentException.class, () ->
+                new S2CAtmCollectCashResultPacket(request,
+                        "MANUAL_REVIEW", false, false, 0, 0,
+                        List.of(UUID.randomUUID(), UUID.randomUUID(),
+                                UUID.randomUUID(), UUID.randomUUID(),
+                                UUID.randomUUID())));
+    }
+
+    @Test
+    void atmDepositRequestRoundTripsExactSourceAndOptionalAmount() {
+        UUID requestId = UUID.fromString(
+                "34000000-0000-0000-0000-000000000001");
+        C2SAtmDepositPacket exact = new C2SAtmDepositPacket(
+                requestId, "a".repeat(64),
+                C2SAtmDepositPacket.Source.MAIN_HAND,
+                OptionalLong.of(12_500L));
+        FriendlyByteBuf exactBuffer = buf();
+        C2SAtmDepositPacket.encode(exact, exactBuffer);
+        assertEquals(exact, C2SAtmDepositPacket.decode(exactBuffer));
+        assertEquals(0, exactBuffer.readableBytes());
+
+        C2SAtmDepositPacket all = new C2SAtmDepositPacket(
+                UUID.fromString(
+                        "34000000-0000-0000-0000-000000000002"),
+                "b".repeat(64),
+                C2SAtmDepositPacket.Source.OFF_HAND,
+                OptionalLong.empty());
+        FriendlyByteBuf allBuffer = buf();
+        C2SAtmDepositPacket.encode(all, allBuffer);
+        assertEquals(all, C2SAtmDepositPacket.decode(allBuffer));
+        assertEquals(0, allBuffer.readableBytes());
+    }
+
+    @Test
+    void atmDepositRequestRejectsZeroAmountAndUnknownSource() {
+        assertThrows(IllegalArgumentException.class, () ->
+                new C2SAtmDepositPacket(UUID.randomUUID(),
+                        "a".repeat(64),
+                        C2SAtmDepositPacket.Source.INVENTORY,
+                        OptionalLong.of(0L)));
+        FriendlyByteBuf buffer = buf();
+        buffer.writeUUID(UUID.randomUUID());
+        buffer.writeUtf("a".repeat(64), 64);
+        buffer.writeUtf("HOTBAR", 16);
+        buffer.writeBoolean(false);
+        assertThrows(io.netty.handler.codec.DecoderException.class,
+                () -> C2SAtmDepositPacket.decode(buffer));
+
+        FriendlyByteBuf badSignature = buf();
+        badSignature.writeUUID(UUID.randomUUID());
+        badSignature.writeUtf("not-a-signature", 64);
+        badSignature.writeUtf("INVENTORY", 16);
+        badSignature.writeBoolean(false);
+        assertThrows(io.netty.handler.codec.DecoderException.class,
+                () -> C2SAtmDepositPacket.decode(badSignature));
+
+        FriendlyByteBuf oldWireShape = buf();
+        oldWireShape.writeUUID(UUID.randomUUID());
+        oldWireShape.writeUtf("INVENTORY", 16);
+        oldWireShape.writeBoolean(false);
+        assertThrows(io.netty.handler.codec.DecoderException.class,
+                () -> C2SAtmDepositPacket.decode(oldWireShape));
+    }
+
+    @Test
+    void atmDepositSuccessRoundTripsSafeSettlementFacts() {
+        UUID requestId = UUID.fromString(
+                "34000000-0000-0000-0000-000000000011");
+        UUID transactionId = UUID.fromString(
+                "34000000-0000-0000-0000-000000000012");
+        S2CAtmDepositResultPacket in =
+                new S2CAtmDepositResultPacket(
+                        requestId, "SUCCESS", false, false,
+                        Optional.of(transactionId), 1_000L, 4,
+                        750L, 250L, true, 9_750L, true,
+                        Optional.empty(), 0L);
+        FriendlyByteBuf buffer = buf();
+
+        S2CAtmDepositResultPacket.encode(in, buffer);
+
+        assertEquals(in, S2CAtmDepositResultPacket.decode(buffer));
+        assertTrue(in.success());
+        assertEquals(0, buffer.readableBytes());
+    }
+
+    @Test
+    void atmDepositConfigurationChangeAllowsPreflightOrDurableIdentity() {
+        UUID requestId = UUID.fromString(
+                "34000000-0000-0000-0000-000000000009");
+        UUID transactionId = UUID.fromString(
+                "34000000-0000-0000-0000-000000000010");
+        for (Optional<UUID> transaction : List.of(
+                Optional.<UUID>empty(), Optional.of(transactionId))) {
+            S2CAtmDepositResultPacket input =
+                    new S2CAtmDepositResultPacket(
+                            requestId, "CONFIG_CHANGED", false, false,
+                            transaction, 0L, 0, 0L, 0L,
+                            false, 0L, false, Optional.empty(), 0L);
+            FriendlyByteBuf buffer = buf();
+
+            S2CAtmDepositResultPacket.encode(input, buffer);
+
+            assertEquals(input,
+                    S2CAtmDepositResultPacket.decode(buffer));
+            assertEquals(0, buffer.readableBytes());
+        }
+    }
+
+    @Test
+    void atmDepositLegacySummaryOmitsUnsafeBillPayload() {
+        S2CAtmDepositResultPacket in =
+                new S2CAtmDepositResultPacket(
+                        UUID.fromString(
+                                "34000000-0000-0000-0000-000000000021"),
+                        "LEGACY_MIGRATION_REQUIRED", false, false,
+                        Optional.empty(), 0L, 0, 0L, 0L,
+                        false, 0L, false,
+                        Optional.of(new S2CAtmDepositResultPacket
+                                .LegacyMigrationSummary(5_000L, 5, 2)),
+                        0L);
+        FriendlyByteBuf buffer = buf();
+
+        S2CAtmDepositResultPacket.encode(in, buffer);
+
+        assertEquals(in, S2CAtmDepositResultPacket.decode(buffer));
+        assertEquals(2, in.legacyMigration().orElseThrow().entryCount());
+        assertEquals(0, buffer.readableBytes());
+
+    }
+
+    @Test
+    void atmDepositRateLimitRequiresExactBoundedRetryShape() {
+        UUID requestId = UUID.fromString(
+                "34000000-0000-0000-0000-000000000031");
+        S2CAtmDepositResultPacket rateLimited =
+                new S2CAtmDepositResultPacket(
+                        requestId, "RATE_LIMITED", true, false,
+                        Optional.empty(), 0L, 0, 0L, 0L,
+                        false, 0L, false, Optional.empty(), 1_500L);
+        FriendlyByteBuf buffer = buf();
+        S2CAtmDepositResultPacket.encode(rateLimited, buffer);
+        assertEquals(rateLimited,
+                S2CAtmDepositResultPacket.decode(buffer));
+        assertEquals(0, buffer.readableBytes());
+
+        assertThrows(IllegalArgumentException.class, () ->
+                new S2CAtmDepositResultPacket(
+                        requestId, "RATE_LIMITED", true, false,
+                        Optional.empty(), 0L, 0, 0L, 0L,
+                        false, 0L, false, Optional.empty(), 0L));
+    }
+
+    @Test
+    void atmDepositReplayIsOnlyValidForTerminalSuccess() {
+        UUID requestId = UUID.fromString(
+                "34000000-0000-0000-0000-000000000041");
+        UUID transactionId = UUID.fromString(
+                "34000000-0000-0000-0000-000000000042");
+        S2CAtmDepositResultPacket replayed =
+                new S2CAtmDepositResultPacket(
+                        requestId, "SUCCESS", false, true,
+                        Optional.of(transactionId), 500L, 1,
+                        500L, 0L, true, 2_500L, false,
+                        Optional.empty(), 0L);
+        FriendlyByteBuf buffer = buf();
+        S2CAtmDepositResultPacket.encode(replayed, buffer);
+        assertEquals(replayed,
+                S2CAtmDepositResultPacket.decode(buffer));
+        assertEquals(0, buffer.readableBytes());
+
+        assertThrows(IllegalArgumentException.class, () ->
+                new S2CAtmDepositResultPacket(
+                        requestId, "REQUEST_CONFLICT", false, true,
+                        Optional.of(transactionId), 0L, 0, 0L, 0L,
+                        false, 0L, false, Optional.empty(), 0L));
+
+        S2CAtmDepositResultPacket conflict =
+                new S2CAtmDepositResultPacket(
+                        requestId, "REQUEST_CONFLICT", false, false,
+                        Optional.of(transactionId), 0L, 0, 0L, 0L,
+                        false, 0L, false, Optional.empty(), 0L);
+        FriendlyByteBuf conflictBuffer = buf();
+        S2CAtmDepositResultPacket.encode(conflict, conflictBuffer);
+        assertEquals(conflict,
+                S2CAtmDepositResultPacket.decode(conflictBuffer));
+        assertEquals(0, conflictBuffer.readableBytes());
+
+        S2CAtmDepositResultPacket cancelled =
+                new S2CAtmDepositResultPacket(
+                        requestId, "CANCELLED", false, false,
+                        Optional.of(transactionId), 0L, 0, 0L, 0L,
+                        false, 0L, false, Optional.empty(), 0L);
+        FriendlyByteBuf cancelledBuffer = buf();
+        S2CAtmDepositResultPacket.encode(cancelled, cancelledBuffer);
+        assertEquals(cancelled,
+                S2CAtmDepositResultPacket.decode(cancelledBuffer));
+        assertEquals(0, cancelledBuffer.readableBytes());
+
+        assertThrows(IllegalArgumentException.class, () ->
+                new S2CAtmDepositResultPacket(
+                        requestId, "CANCELLED", false, false,
+                        Optional.of(transactionId), 0L, 0, 0L, 0L,
+                        true, 500L, false, Optional.empty(), 0L));
     }
 }

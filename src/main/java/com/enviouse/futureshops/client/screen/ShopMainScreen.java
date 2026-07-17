@@ -69,7 +69,8 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
     private int nearbyScrollIdx;
 
     /** 0 = All, 1 = Buy, 2 = Barter. All is the default so mixed departments never hide listings. */
-    private int tradeFilter;
+    private int tradeFilter = ServerShopTradeFilterPolicy
+            .defaultFilter().ordinal();
     private boolean nearbyMode;        // false = Server Shop tab, true = Player Shops tab
     private int sortMode;              // 0 = Name, 1 = Price, 2 = Stock
 
@@ -233,11 +234,20 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                     Component.translatable("gui.futureshops.admin_edit.add_items"),
                     ShopUiUtil.ButtonStyle.PRIMARY, true,
                     () -> this.minecraft.setScreen(new AdminItemPickerScreen(this, activeCategoryId(), false)));
-            ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
-                    rowX + addW + ShopUiUtil.PAD_XS, rowY, addW, 16,
-                    Component.translatable("gui.futureshops.admin_edit.add_held"),
-                    ShopUiUtil.ButtonStyle.PRIMARY, true,
-                    () -> this.minecraft.setScreen(new AdminListingEditModal(this)));
+            if (tradeFilter == 0) {
+                ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                        rowX + addW + ShopUiUtil.PAD_XS, rowY, addW, 16,
+                        Component.translatable("gui.futureshops.admin_edit.add_barter_items"),
+                        ShopUiUtil.ButtonStyle.PRIMARY, true,
+                        () -> this.minecraft.setScreen(new AdminItemPickerScreen(
+                                this, activeCategoryId(), true)));
+            } else {
+                ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                        rowX + addW + ShopUiUtil.PAD_XS, rowY, addW, 16,
+                        Component.translatable("gui.futureshops.admin_edit.add_held"),
+                        ShopUiUtil.ButtonStyle.PRIMARY, true,
+                        () -> this.minecraft.setScreen(new AdminListingEditModal(this)));
+            }
         }
 
         // ── Bulk select + delete: a Select toggle, then a Remove(N) button while selecting ──
@@ -377,11 +387,9 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                 // Barter tab: only listings with a barter recipe. Buy tab: everything EXCEPT
                 // pure-barter listings (barter recipe + no money price) — those belong only under
                 // Barter, so a barter add no longer also shows up as a bogus 0-cost Buy entry.
-                .filter(item -> switch (tradeFilter) {
-                    case 1 -> item.buyPrice() > 0 || item.sellPrice() > 0;
-                    case 2 -> item.hasBarterRecipes();
-                    default -> item.hasBarterRecipes() || item.buyPrice() > 0 || item.sellPrice() > 0;
-                })
+                .filter(item -> ServerShopTradeFilterPolicy.matches(
+                        ServerShopTradeFilterPolicy.fromIndex(tradeFilter),
+                        item))
                 .filter(item -> categoryFilter == null || categoryFilter.equals(item.categoryId()))
                 .filter(item -> searchQuery.isBlank()
                         || item.displayName().toLowerCase(Locale.ROOT).contains(searchQuery)

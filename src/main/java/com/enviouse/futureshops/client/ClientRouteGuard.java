@@ -72,6 +72,10 @@ public final class ClientRouteGuard {
         LIVE.cancelOrigin(origin);
     }
 
+    public static void clear() {
+        LIVE.clearTrackedRoutes();
+    }
+
     synchronized void recordStorefront(Object origin, long shopPosition) {
         long now = clock.getAsLong();
         purge(now);
@@ -128,6 +132,11 @@ public final class ClientRouteGuard {
         }
     }
 
+    synchronized void clearTrackedRoutes() {
+        storefrontRequests.clear();
+        atmRequest = null;
+    }
+
     private void cancelPending(long now) {
         storefrontRequests.replaceAll((ignored, request) -> request.pending
                 ? request.cancelled(now, retentionNanos)
@@ -138,8 +147,9 @@ public final class ClientRouteGuard {
     }
 
     private void purge(long now) {
-        storefrontRequests.entrySet().removeIf(entry -> now > entry.getValue().retainUntilNanos);
-        if (atmRequest != null && now > atmRequest.retainUntilNanos) {
+        storefrontRequests.entrySet().removeIf(
+                entry -> entry.getValue().retentionExpired(now));
+        if (atmRequest != null && atmRequest.retentionExpired(now)) {
             atmRequest = null;
         }
     }
@@ -154,35 +164,55 @@ public final class ClientRouteGuard {
 
     private static final class Request {
         private final Object origin;
-        private final long acceptUntilNanos;
-        private final long retainUntilNanos;
+        private final long activeStartedAtNanos;
+        private final long activeNanos;
+        private final long retentionStartedAtNanos;
+        private final long retentionNanos;
         private final boolean pending;
 
-        private Request(Object origin, long acceptUntilNanos, long retainUntilNanos,
-                        boolean pending) {
+        private Request(Object origin, long activeStartedAtNanos,
+                        long activeNanos, long retentionStartedAtNanos,
+                        long retentionNanos, boolean pending) {
             this.origin = origin;
-            this.acceptUntilNanos = acceptUntilNanos;
-            this.retainUntilNanos = retainUntilNanos;
+            this.activeStartedAtNanos = activeStartedAtNanos;
+            this.activeNanos = activeNanos;
+            this.retentionStartedAtNanos = retentionStartedAtNanos;
+            this.retentionNanos = retentionNanos;
             this.pending = pending;
         }
 
         private static Request pending(Object origin, long now, long activeNanos,
                                        long retentionNanos) {
             return new Request(Objects.requireNonNull(origin, "origin"),
-                    Math.addExact(now, activeNanos), Math.addExact(now, retentionNanos), true);
+                    now, activeNanos, now, retentionNanos, true);
         }
 
         private boolean accepts(Object currentScreen, long now) {
-            return pending && currentScreen == origin && now <= acceptUntilNanos;
+            return pending && currentScreen == origin
+                    && !elapsedExceeds(
+                    now, activeStartedAtNanos, activeNanos);
+        }
+
+        private boolean retentionExpired(long now) {
+            return elapsedExceeds(
+                    now, retentionStartedAtNanos, retentionNanos);
         }
 
         private Request consumed(long now, long retentionNanos) {
-            return new Request(origin, acceptUntilNanos,
-                    Math.addExact(now, retentionNanos), false);
+            return new Request(origin, activeStartedAtNanos,
+                    activeNanos, now, retentionNanos, false);
         }
 
         private Request cancelled(long now, long retentionNanos) {
             return consumed(now, retentionNanos);
+        }
+
+        private static boolean elapsedExceeds(
+                long now,
+                long startedAt,
+                long duration
+        ) {
+            return now - startedAt > duration;
         }
     }
 }

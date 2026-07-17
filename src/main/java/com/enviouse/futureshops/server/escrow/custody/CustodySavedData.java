@@ -323,6 +323,52 @@ public final class CustodySavedData extends EscrowManagedSavedData {
         return result;
     }
 
+    public synchronized boolean preflightCommittedBatch(
+            List<CustodyMutation> mutations
+    ) {
+        List<CustodyMutation> candidates = List.copyOf(
+                Objects.requireNonNull(mutations, "mutations"));
+        return validateCommittedBatch(candidates,
+                repository.preflightBatch(candidates));
+    }
+
+    public synchronized boolean applyCommittedBatch(
+            List<CustodyMutation> mutations
+    ) {
+        requireEscrowMutationPermit();
+        List<CustodyMutation> candidates = List.copyOf(
+                Objects.requireNonNull(mutations, "mutations"));
+        boolean replayed = validateCommittedBatch(candidates,
+                repository.applyBatch(candidates));
+        if (!replayed) {
+            setDirty();
+        }
+        return replayed;
+    }
+
+    private static boolean validateCommittedBatch(
+            List<CustodyMutation> mutations,
+            List<CustodyOperationResult> results
+    ) {
+        if (results.size() != mutations.size() || results.isEmpty()) {
+            throw new CustodyConflictException(
+                    "Committed custody batch result is incomplete");
+        }
+        boolean replayed = results.get(0).replayed();
+        for (int index = 0; index < mutations.size(); index++) {
+            CustodyMutation mutation = mutations.get(index);
+            CustodyOperationResult result = results.get(index);
+            if (result.replayed() != replayed
+                    || !result.receipt().equals(mutation.receipt())
+                    || !result.replayed()
+                    && !result.lot().equals(mutation.resultingLot())) {
+                throw new CustodyConflictException(
+                        "Committed custody batch result does not match");
+            }
+        }
+        return replayed;
+    }
+
     private CustodyMutation expectedMutation(CustodyMutation incoming) {
         CustodyOperationReceipt receipt = incoming.receipt();
         if (receipt.operation() == CustodyOperation.RESERVE) {
@@ -441,6 +487,32 @@ public final class CustodySavedData extends EscrowManagedSavedData {
         applyBatchCommitted(commit.batch());
         setDirty();
         return new CustodyBatchApplyResult(commit, false);
+    }
+
+    public synchronized CustodyBatchApplyResult preflightTransientRelease(
+            CustodyBatchCommit commit
+    ) {
+        TransientRelease release = requireTransientRelease(commit);
+        boolean mutationReplay = repository.preflightTransientRelease(
+                release.held(), release.terminal());
+        validatePreparedMutation(release.terminal());
+        CustodyPreparedBatchResult batchResult =
+                preflightBatchCommitted(commit.batch());
+        if (batchResult.replayed() && !mutationReplay) {
+            throw new CustodyConflictException(
+                    "Transient custody release is only partially materialized");
+        }
+        return new CustodyBatchApplyResult(commit,
+                mutationReplay && batchResult.replayed());
+    }
+
+    public synchronized CustodyBatchApplyResult applyTransientRelease(
+            CustodyBatchCommit commit
+    ) {
+        requireEscrowMutationPermit();
+        TransientRelease release = requireTransientRelease(commit);
+        reserveCommitted(release.held());
+        return applyBatchCommit(commit);
     }
 
     public synchronized java.util.List<CustodyPreparedOperation> unresolvedPreparedOperations(int limit) {
@@ -564,7 +636,9 @@ public final class CustodySavedData extends EscrowManagedSavedData {
                     throw new CustodyConflictException("Resolved custody intent references a missing receipt");
                 }
                 intent.resolve(receipt, intent.resolvedAt().orElseThrow());
-            } else if (intent.operation() != CustodyOperation.RESERVE) {
+            } else if (intent.operation() != CustodyOperation.RESERVE
+                    && !CashClaimCustodySupport
+                    .isTransientInventoryRelease(intent)) {
                 CustodyLot lot = lots.get(intent.lotSnapshot().lotId());
                 if (lot == null || lot.state() != CustodyLotState.HELD
                         || !CustodyHashes.equal(lot.assetFingerprint(),
@@ -652,6 +726,32 @@ public final class CustodySavedData extends EscrowManagedSavedData {
                 && first.preparedAt().equals(second.preparedAt());
     }
 
+    private static TransientRelease requireTransientRelease(
+            CustodyBatchCommit commit
+    ) {
+        Objects.requireNonNull(commit, "commit");
+        if (commit.batch().status() != CustodyBatchStatus.APPLIED
+                || commit.batch().operations().size() != 1
+                || commit.mutations().size() != 1) {
+            throw new CustodyConflictException(
+                    "Transient custody release batch is invalid");
+        }
+        CustodyPreparedOperation operation =
+                commit.batch().operations().get(0);
+        CustodyMutation terminal = commit.mutations().get(0);
+        if (!CashClaimCustodySupport.isTransientInventoryRelease(operation)
+                || terminal.receipt().operation()
+                != CustodyOperation.RELEASE
+                || !terminal.receipt().requestKey().equals(
+                operation.requestKey())
+                || !terminal.receipt().lotId().equals(
+                operation.lotSnapshot().lotId())) {
+            throw new CustodyConflictException(
+                    "Transient custody release proof is invalid");
+        }
+        return new TransientRelease(operation.lotSnapshot(), terminal);
+    }
+
     private synchronized CustodyStateSnapshot snapshotForRestore() {
         return new CustodyStateSnapshot(repository.snapshotLots(), repository.snapshotReceipts(),
                 preparedRepository.snapshot(), batchRepository.snapshot());
@@ -662,6 +762,12 @@ public final class CustodySavedData extends EscrowManagedSavedData {
             Map<UUID, CustodyOperationReceipt> receipts,
             Map<UUID, CustodyPreparedOperation> prepared,
             Map<UUID, CustodyPreparedBatch> batches
+    ) {
+    }
+
+    private record TransientRelease(
+            CustodyLot held,
+            CustodyMutation terminal
     ) {
     }
 }

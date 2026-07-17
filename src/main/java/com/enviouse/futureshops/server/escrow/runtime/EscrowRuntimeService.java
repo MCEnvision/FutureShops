@@ -20,27 +20,46 @@ import com.enviouse.futureshops.server.escrow.custody.CustodyBatchExecutor;
 import com.enviouse.futureshops.server.escrow.custody.CustodyBatchPlan;
 import com.enviouse.futureshops.server.escrow.custody.CustodyBatchRecovery;
 import com.enviouse.futureshops.server.escrow.custody.CustodyPreparedBatch;
+import com.enviouse.futureshops.server.escrow.custody.CustodyPreparedOperation;
 import com.enviouse.futureshops.server.escrow.custody.CustodyBatchStatus;
+import com.enviouse.futureshops.server.escrow.custody.CustodyAdapterInspection;
+import com.enviouse.futureshops.server.escrow.custody.CustodyAdapterInspectionStatus;
+import com.enviouse.futureshops.server.escrow.custody.CustodyMutation;
+import com.enviouse.futureshops.server.escrow.custody.CustodyOperation;
 import com.enviouse.futureshops.server.escrow.custody.CustodySavedData;
 import com.enviouse.futureshops.server.escrow.custody.CustodyTransferEvidence;
+import com.enviouse.futureshops.server.escrow.custody.CashClaimCustodySupport;
+import com.enviouse.futureshops.server.escrow.inventory.PlayerInventoryCustodyAdapter;
+import com.enviouse.futureshops.server.escrow.inventory.PlayerInventoryDeliveryToken;
+import com.enviouse.futureshops.money.InternalBillInventoryPlanner;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerSavedData;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerTransaction;
 import com.enviouse.futureshops.server.escrow.model.EscrowOperation;
+import com.enviouse.futureshops.server.escrow.model.EscrowAssetLotType;
 import com.enviouse.futureshops.server.escrow.model.EscrowState;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransactionId;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintEventCodec;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintJournalEvent;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintSavedData;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionCancellation;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionEvidence;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionIntentStore;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionReservation;
+import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionSettlement;
 import com.enviouse.futureshops.server.escrow.store.EscrowTransactionByteCodec;
 import com.enviouse.futureshops.server.escrow.store.EscrowTransactionSavedData;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
 
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.List;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -56,6 +75,11 @@ public final class EscrowRuntimeService implements AutoCloseable {
     private final ClaimSavedData claims;
     private final CustodySavedData custody;
     private final ProtectedMintSavedData protectedMints;
+    private final PlayerInventoryCustodyAdapter playerInventoryAdapter;
+    private final ProtectedCashRedemptionIntentStore protectedCashIntentStore;
+    private final ProtectedCashRedemptionWorkflow protectedCashWorkflow;
+    private final ForeignCashDepositIntentStore foreignCashIntentStore;
+    private final ForeignCashDepositWorkflow foreignCashWorkflow;
     private final EscrowRecoveryScheduler recoveryScheduler;
     private final EscrowSavedDataCheckpointBundle checkpointBundle;
     private final EscrowRuntimeMaintenanceController maintenanceController;
@@ -72,6 +96,22 @@ public final class EscrowRuntimeService implements AutoCloseable {
     private EscrowConservationReport conservationReport;
     private Throwable conservationFailure;
     private boolean conservationAuditComplete;
+    private final ArrayDeque<ProtectedCashRedemptionIntentStore.Inspection>
+            protectedCashDiscoveryWork = new ArrayDeque<>();
+    private boolean protectedCashDiscoveryComplete;
+    private Throwable protectedCashDiscoveryFailure;
+    private int protectedCashDiscoveryFailureCount;
+    private final Map<UUID, ProtectedCashCleanupWork>
+            protectedCashCleanupWork = new LinkedHashMap<>();
+    private Throwable protectedCashCleanupFailure;
+    private final ArrayDeque<ForeignCashDepositIntentStore.Inspection>
+            foreignCashDiscoveryWork = new ArrayDeque<>();
+    private boolean foreignCashDiscoveryComplete;
+    private Throwable foreignCashDiscoveryFailure;
+    private int foreignCashDiscoveryFailureCount;
+    private final Map<UUID, ForeignCashCleanupWork>
+            foreignCashCleanupWork = new LinkedHashMap<>();
+    private Throwable foreignCashCleanupFailure;
 
     private EscrowRuntimeService(MinecraftServer ownerServer,
                                  EscrowRuntimeCoordinator coordinator,
@@ -84,6 +124,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
                                  EscrowRecoveryScheduler recoveryScheduler,
                                  EscrowSavedDataCheckpointBundle checkpointBundle,
                                  EscrowRuntimeMaintenanceController maintenanceController,
+                                 PlayerInventoryCustodyAdapter playerInventoryAdapter,
                                  EscrowRuntimeState unavailableState, Throwable startupFailure) {
         this.ownerServer = Objects.requireNonNull(ownerServer, "ownerServer");
         this.coordinator = coordinator;
@@ -93,11 +134,27 @@ public final class EscrowRuntimeService implements AutoCloseable {
         this.claims = claims;
         this.custody = custody;
         this.protectedMints = protectedMints;
+        this.playerInventoryAdapter = playerInventoryAdapter;
         this.recoveryScheduler = recoveryScheduler;
         this.checkpointBundle = checkpointBundle;
         this.maintenanceController = maintenanceController;
         this.unavailableState = unavailableState;
         this.startupFailure = startupFailure;
+        if (playerInventoryAdapter != null) {
+            custodyRecoveryAdapters.put(
+                    playerInventoryAdapter.adapterId(),
+                    playerInventoryAdapter);
+        }
+        this.protectedCashIntentStore = coordinator == null ? null
+                : new ProtectedCashRedemptionIntentStore();
+        this.protectedCashWorkflow = coordinator == null ? null
+                : new ProtectedCashRedemptionWorkflow(ownerServer, this,
+                protectedCashIntentStore);
+        this.foreignCashIntentStore = coordinator == null ? null
+                : new ForeignCashDepositIntentStore();
+        this.foreignCashWorkflow = coordinator == null ? null
+                : new ForeignCashDepositWorkflow(ownerServer, this,
+                foreignCashIntentStore);
     }
 
     static EscrowRuntimeService open(MinecraftServer server) {
@@ -151,7 +208,9 @@ public final class EscrowRuntimeService implements AutoCloseable {
             EscrowRuntimeService service = new EscrowRuntimeService(
                     server, openedCoordinator, applier, transactions, ledger, claims, custody,
                     protectedMints, recoveryScheduler, checkpointBundle,
-                    maintenanceController, null, null);
+                    maintenanceController,
+                    new PlayerInventoryCustodyAdapter(server, claims),
+                    null, null);
             maintenanceController.attach(service.maintenanceLiveGuard());
             if (openedCoordinator.isReady()) {
                 service.initializeDomainRecovery();
@@ -168,7 +227,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
             }
             return new EscrowRuntimeService(
                     server, null, null, null, null, null, null, null, null, null, null,
-                    EscrowRuntimeState.MAINTENANCE, exception);
+                    null, EscrowRuntimeState.MAINTENANCE, exception);
         }
     }
 
@@ -190,13 +249,25 @@ public final class EscrowRuntimeService implements AutoCloseable {
                     && maintenanceController.maintenanceRequested()) {
                 return EscrowRuntimeState.MAINTENANCE;
             }
-            if (!domainRecoveryInitialized || !recoveryScheduler.enumerationComplete()
+            if (protectedCashDiscoveryFailure != null
+                    || protectedCashCleanupFailure != null
+                    || foreignCashDiscoveryFailure != null
+                    || foreignCashCleanupFailure != null) {
+                return EscrowRuntimeState.MAINTENANCE;
+            }
+            if (!domainRecoveryInitialized || !protectedCashDiscoveryComplete
+                    || !foreignCashDiscoveryComplete
+                    || !recoveryScheduler.enumerationComplete()
                     || recoveryScheduler.hasRunnableWork()
-                    || hasResolvableCustodyRecovery()) {
+                    || hasResolvableCustodyRecovery()
+                    || !protectedCashCleanupWork.isEmpty()
+                    || !foreignCashCleanupWork.isEmpty()) {
                 return EscrowRuntimeState.RECOVERING;
             }
             if (recoveryScheduler.hasBlockingWork()
-                    || hasBlockedCustodyRecovery()) {
+                    || recoveryScheduler.hasManualReviewWork()
+                    || hasBlockedCustodyRecovery()
+                    || protectedCashDiscoveryFailure != null) {
                 return EscrowRuntimeState.MAINTENANCE;
             }
             if (!startupConservationVerified()) {
@@ -217,6 +288,18 @@ public final class EscrowRuntimeService implements AutoCloseable {
         Optional<Throwable> journalFailure = coordinator.failure();
         if (journalFailure.isPresent()) {
             return journalFailure;
+        }
+        if (protectedCashDiscoveryFailure != null) {
+            return Optional.of(protectedCashDiscoveryFailure);
+        }
+        if (protectedCashCleanupFailure != null) {
+            return Optional.of(protectedCashCleanupFailure);
+        }
+        if (foreignCashDiscoveryFailure != null) {
+            return Optional.of(foreignCashDiscoveryFailure);
+        }
+        if (foreignCashCleanupFailure != null) {
+            return Optional.of(foreignCashCleanupFailure);
         }
         if (custodyRecoveryFailure != null) {
             return Optional.of(custodyRecoveryFailure);
@@ -242,6 +325,18 @@ public final class EscrowRuntimeService implements AutoCloseable {
             return worked;
         }
         initializeDomainRecovery();
+        if (remaining > 0 && !protectedCashDiscoveryComplete) {
+            int discovered = withRecoveryLane(
+                    this::recoverOneProtectedCashDiscovery);
+            worked += discovered;
+            remaining -= discovered;
+        }
+        if (remaining > 0 && !foreignCashDiscoveryComplete) {
+            int discovered = withRecoveryLane(
+                    this::recoverOneForeignCashDiscovery);
+            worked += discovered;
+            remaining -= discovered;
+        }
         if (remaining > 0 && !recoveryScheduler.enumerationComplete()) {
             int enumerationBudget = recoveryScheduler.hasRunnableWork()
                     ? Math.max(1, remaining / 2) : remaining;
@@ -251,6 +346,12 @@ public final class EscrowRuntimeService implements AutoCloseable {
         }
         if (maintenanceController != null
                 && maintenanceController.maintenanceRequested()) {
+            if (remaining > 0 && !protectedCashCleanupWork.isEmpty()) {
+                worked += recoverOneProtectedCashCleanup();
+            } else if (remaining > 0
+                    && !foreignCashCleanupWork.isEmpty()) {
+                worked += recoverOneForeignCashCleanup();
+            }
             return worked;
         }
         if (remaining > 0 && recoveryScheduler.hasRunnableWork()) {
@@ -261,7 +362,16 @@ public final class EscrowRuntimeService implements AutoCloseable {
             remaining -= result.examined();
         }
         if (remaining > 0 && hasResolvableCustodyRecovery()) {
-            worked += recoverOneCustodyOperation();
+            int custodyWork = recoverOneCustodyOperation();
+            worked += custodyWork;
+            remaining -= custodyWork;
+        }
+        if (remaining > 0 && !protectedCashCleanupWork.isEmpty()) {
+            worked += recoverOneProtectedCashCleanup();
+            remaining--;
+        }
+        if (remaining > 0 && !foreignCashCleanupWork.isEmpty()) {
+            worked += recoverOneForeignCashCleanup();
         }
         if (worked > 0) {
             invalidateConservationAudit();
@@ -282,12 +392,20 @@ public final class EscrowRuntimeService implements AutoCloseable {
         if (maintenanceController != null
                 && maintenanceController.maintenanceRequested()) {
             return !domainRecoveryInitialized
-                    || !recoveryScheduler.enumerationComplete();
+                    || !protectedCashDiscoveryComplete
+                    || !foreignCashDiscoveryComplete
+                    || !recoveryScheduler.enumerationComplete()
+                    || !protectedCashCleanupWork.isEmpty()
+                    || !foreignCashCleanupWork.isEmpty();
         }
         return !domainRecoveryInitialized
+                || !protectedCashDiscoveryComplete
+                || !foreignCashDiscoveryComplete
                 || !recoveryScheduler.enumerationComplete()
                 || recoveryScheduler.hasRunnableWork()
-                || hasResolvableCustodyRecovery();
+                || hasResolvableCustodyRecovery()
+                || !protectedCashCleanupWork.isEmpty()
+                || !foreignCashCleanupWork.isEmpty();
     }
 
     public synchronized boolean tickCheckpoint(int intervalSeconds) {
@@ -364,6 +482,248 @@ public final class EscrowRuntimeService implements AutoCloseable {
         return result;
     }
 
+    synchronized EscrowCommitResult commitProtectedCashReservation(
+            ProtectedCashRedemptionReservation reservation
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(reservation, "reservation");
+        EscrowCommitResult result = requireReadyCoordinator()
+                .commitProtectedCashReservation(reservation);
+        invalidateConservationAudit();
+        return result;
+    }
+
+    synchronized EscrowCommitResult commitProtectedCashSettlement(
+            ProtectedCashRedemptionSettlement settlement
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(settlement, "settlement");
+        EscrowCommitResult result = requireReadyCoordinator()
+                .commitProtectedCashSettlement(settlement);
+        invalidateConservationAudit();
+        return result;
+    }
+
+    synchronized EscrowCommitResult commitProtectedCashCancellation(
+            ProtectedCashRedemptionCancellation cancellation
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(cancellation, "cancellation");
+        EscrowCommitResult result = requireReadyCoordinator()
+                .commitProtectedCashCancellation(cancellation);
+        invalidateConservationAudit();
+        return result;
+    }
+
+    synchronized EscrowCommitResult commitForeignCashReservation(
+            ForeignCashDepositReservation reservation
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(reservation, "reservation");
+        EscrowCommitResult result = requireReadyCoordinator()
+                .commitForeignCashReservation(reservation);
+        invalidateConservationAudit();
+        return result;
+    }
+
+    synchronized EscrowCommitResult commitForeignCashSettlement(
+            ForeignCashDepositSettlement settlement
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(settlement, "settlement");
+        EscrowCommitResult result = requireReadyCoordinator()
+                .commitForeignCashSettlement(settlement);
+        invalidateConservationAudit();
+        return result;
+    }
+
+    synchronized EscrowCommitResult commitForeignCashCancellation(
+            ForeignCashDepositCancellation cancellation
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(cancellation, "cancellation");
+        EscrowCommitResult result = requireReadyCoordinator()
+                .commitForeignCashCancellation(cancellation);
+        invalidateConservationAudit();
+        return result;
+    }
+
+    synchronized void enqueueProtectedCashRecovery(UUID transactionId) {
+        assertServerThread();
+        EscrowTransaction current = transactions.getTransaction(
+                new EscrowTransactionId(Objects.requireNonNull(
+                        transactionId, "transactionId")));
+        if (current == null || current.state().isTerminal()
+                || current.operation() != EscrowOperation.CURRENCY_DEPOSIT
+                || current.assetLots().stream().noneMatch(lot -> lot.type()
+                == EscrowAssetLotType.PROTECTED_PHYSICAL_CURRENCY)) {
+            throw new EscrowRuntimeException(
+                    "Protected cash recovery transaction is invalid");
+        }
+        recoveryScheduler.enqueue(current);
+    }
+
+    synchronized boolean enqueueProtectedCashIntentRecovery(
+            ProtectedCashRedemptionEvidence evidence
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(evidence, "evidence");
+        if (evidence.phase()
+                != ProtectedCashRedemptionEvidence.Phase.INTENT) {
+            throw new IllegalArgumentException(
+                    "Protected cash orphan recovery requires intent evidence");
+        }
+        ProtectedCashRedemptionIntentStore.Inspection inspection =
+                protectedCashIntentStore.inspect(ownerServer,
+                        evidence.playerId(), evidence.transactionId());
+        if (inspection.status()
+                == ProtectedCashRedemptionIntentStore.InspectionStatus.MISSING) {
+            return false;
+        }
+        boolean alreadyQueued = protectedCashDiscoveryWork.stream()
+                .anyMatch(queued -> queued.transactionId()
+                        .filter(evidence.transactionId()::equals)
+                        .isPresent());
+        if (!alreadyQueued) {
+            protectedCashDiscoveryWork.addLast(inspection);
+        }
+        protectedCashDiscoveryComplete = false;
+        return true;
+    }
+
+    synchronized void scheduleProtectedCashCleanup(
+            UUID playerId,
+            UUID transactionId
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(transactionId, "transactionId");
+        EscrowTransaction current = transactions.getTransaction(
+                new EscrowTransactionId(transactionId));
+        if (current == null || !current.state().isTerminal()
+                || current.operation() != EscrowOperation.CURRENCY_DEPOSIT) {
+            throw new EscrowRuntimeException(
+                    "Protected cash cleanup requires a terminal transaction");
+        }
+        protectedCashCleanupWork.putIfAbsent(transactionId,
+                new ProtectedCashCleanupWork(playerId, transactionId));
+    }
+
+    synchronized void enqueueForeignCashRecovery(UUID transactionId) {
+        assertServerThread();
+        EscrowTransaction current = transactions.getTransaction(
+                new EscrowTransactionId(Objects.requireNonNull(
+                        transactionId, "transactionId")));
+        if (current == null || current.state().isTerminal()
+                || current.operation() != EscrowOperation.CURRENCY_DEPOSIT
+                || current.assetLots().stream().noneMatch(lot -> lot.type()
+                == EscrowAssetLotType.FOREIGN_PHYSICAL_CURRENCY)) {
+            throw new EscrowRuntimeException(
+                    "Foreign cash recovery transaction is invalid");
+        }
+        recoveryScheduler.enqueue(current);
+    }
+
+    synchronized boolean enqueueForeignCashIntentRecovery(
+            ForeignCashDepositEvidence evidence
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(evidence, "evidence");
+        if (evidence.phase() != ForeignCashDepositEvidence.Phase.INTENT) {
+            throw new IllegalArgumentException(
+                    "Foreign cash orphan recovery requires intent evidence");
+        }
+        ForeignCashDepositIntentStore.Inspection inspection =
+                foreignCashIntentStore.inspect(ownerServer,
+                        evidence.playerId(), evidence.transactionId());
+        if (inspection.status()
+                == ForeignCashDepositIntentStore.InspectionStatus.MISSING) {
+            return false;
+        }
+        boolean alreadyQueued = foreignCashDiscoveryWork.stream()
+                .anyMatch(queued -> queued.transactionId()
+                        .filter(evidence.transactionId()::equals)
+                        .isPresent());
+        if (!alreadyQueued) {
+            foreignCashDiscoveryWork.addLast(inspection);
+        }
+        foreignCashDiscoveryComplete = false;
+        return true;
+    }
+
+    synchronized void scheduleForeignCashCleanup(
+            UUID playerId,
+            UUID transactionId
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(transactionId, "transactionId");
+        EscrowTransaction current = transactions.getTransaction(
+                new EscrowTransactionId(transactionId));
+        if (current == null || !current.state().isTerminal()
+                || current.operation() != EscrowOperation.CURRENCY_DEPOSIT) {
+            throw new EscrowRuntimeException(
+                    "Foreign cash cleanup requires a terminal transaction");
+        }
+        foreignCashCleanupWork.putIfAbsent(transactionId,
+                new ForeignCashCleanupWork(playerId, transactionId));
+    }
+
+    public synchronized ProtectedCashRedemptionResult redeemProtectedCash(
+            ServerPlayer player,
+            InternalBillInventoryPlanner.ExactPlan plan,
+            UUID transactionId,
+            String requestKey,
+            long configRevision,
+            long walletBalanceLimitMinorUnits,
+            Instant now
+    ) {
+        assertServerThread();
+        if (protectedCashWorkflow == null) {
+            throw new EscrowRuntimeException(
+                    "Protected cash redemption is unavailable",
+                    startupFailure);
+        }
+        requireReadyCoordinator();
+        ProtectedCashRedemptionWorkflow.Outcome outcome =
+                protectedCashWorkflow.redeem(player, plan, transactionId,
+                requestKey, configRevision, walletBalanceLimitMinorUnits,
+                now);
+        ProtectedCashRedemptionSettlement settlement = outcome.settlement();
+        return new ProtectedCashRedemptionResult(transactionId,
+                settlement.amountMinorUnits(),
+                settlement.walletCreditMinorUnits(),
+                settlement.overflowClaimMinorUnits(),
+                outcome.cleanupPending());
+    }
+
+    synchronized ForeignCashDepositResult redeemForeignCash(
+            ServerPlayer player,
+            ForeignCashDepositPlan plan,
+            UUID requestId,
+            UUID transactionId,
+            String requestKey,
+            long walletBalanceLimitMinorUnits,
+            Instant now
+    ) {
+        assertServerThread();
+        if (foreignCashWorkflow == null) {
+            throw new EscrowRuntimeException(
+                    "Foreign cash deposit is unavailable", startupFailure);
+        }
+        requireReadyCoordinator();
+        ForeignCashDepositWorkflow.Outcome outcome =
+                foreignCashWorkflow.deposit(player, plan, requestId,
+                        transactionId, requestKey,
+                        walletBalanceLimitMinorUnits, now);
+        ForeignCashDepositSettlement settlement = outcome.settlement();
+        return new ForeignCashDepositResult(transactionId,
+                settlement.amountMinorUnits(),
+                settlement.walletCreditMinorUnits(),
+                settlement.overflowClaimMinorUnits(),
+                outcome.cleanupPending());
+    }
+
     synchronized long ledgerBalance(
             com.enviouse.futureshops.server.escrow.ledger.LedgerAccountId account
     ) {
@@ -395,6 +755,19 @@ public final class EscrowRuntimeService implements AutoCloseable {
         assertServerThread();
         return ledger.transactionReceipt(transactionId)
                 .map(com.enviouse.futureshops.server.escrow.ledger.LedgerTransactionReceipt::transaction);
+    }
+
+    synchronized Optional<EscrowTransaction> transaction(UUID transactionId) {
+        assertServerThread();
+        Objects.requireNonNull(transactionId, "transactionId");
+        return Optional.ofNullable(transactions.getTransaction(
+                new EscrowTransactionId(transactionId)));
+    }
+
+    synchronized List<EscrowClaim> claimsForTransaction(UUID transactionId) {
+        assertServerThread();
+        return claims.claimsForTransaction(Objects.requireNonNull(
+                transactionId, "transactionId"));
     }
 
     synchronized EscrowCommitResult createClaim(EscrowClaim claim) {
@@ -523,6 +896,11 @@ public final class EscrowRuntimeService implements AutoCloseable {
         Objects.requireNonNull(plannedEvidence, "plannedEvidence");
         Objects.requireNonNull(now, "now");
         requireReadyCoordinator();
+        if (adapter.adapterId().equals(
+                CashClaimCustodySupport.PLAYER_INVENTORY_ADAPTER_ID)) {
+            throw new EscrowRuntimeException(
+                    "Player inventory cash delivery requires a cash claim");
+        }
         if (custodyExecutionScope != null) {
             throw new EscrowRuntimeException("A custody batch is already executing");
         }
@@ -532,6 +910,49 @@ public final class EscrowRuntimeService implements AutoCloseable {
                     adapter, plan, plannedEvidence, now, this::commitScopedCustodyBatch);
         } finally {
             custodyExecutionScope = null;
+            invalidateConservationAudit();
+        }
+    }
+
+    public synchronized CustodyBatchExecutionResult deliverCashClaim(
+            ServerPlayer player,
+            UUID claimId,
+            UUID attemptId,
+            Instant now
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(claimId, "claimId");
+        Objects.requireNonNull(attemptId, "attemptId");
+        Objects.requireNonNull(now, "now");
+        requireReadyCoordinator();
+        if (playerInventoryAdapter == null) {
+            throw new EscrowRuntimeException(
+                    "Player inventory cash delivery is unavailable");
+        }
+        if (custodyExecutionScope != null) {
+            throw new EscrowRuntimeException(
+                    "A custody batch is already executing");
+        }
+        EscrowClaim claim = claims.getClaim(claimId);
+        if (claim == null || !claim.ownerId().equals(player.getUUID())) {
+            throw new EscrowRuntimeException(
+                    "Cash claim does not belong to the player");
+        }
+        CashClaimDeliveryPlan delivery = CashClaimDeliveryPlanner.plan(
+                claim, protectedMints, attemptId);
+        Map<UUID, CustodyTransferEvidence> evidence =
+                playerInventoryAdapter.prepare(player, claim.claimId(),
+                        delivery.custodyPlan(), delivery.deliveredStack(), now);
+        custodyExecutionScope = new CustodyExecutionScope(
+                delivery.custodyPlan(), evidence);
+        try {
+            return new CustodyBatchExecutor().execute(
+                    playerInventoryAdapter, delivery.custodyPlan(), evidence,
+                    now, commit -> commitCashClaimCustodyBatch(claim, commit));
+        } finally {
+            custodyExecutionScope = null;
+            playerInventoryAdapter.clearPrepared();
             invalidateConservationAudit();
         }
     }
@@ -557,6 +978,20 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 AtmWithdrawalCommitCodec.encode(commit));
         EscrowCommitResult result = requireReadyCoordinator().commitAtmWithdrawal(
                 commit.transactionId(), event);
+        invalidateConservationAudit();
+        return result;
+    }
+
+    synchronized EscrowCommitResult commitAtmWithdrawal(
+            ForeignAtmWithdrawalCommit commit
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(commit, "commit");
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.FOREIGN_ATM_WITHDRAWAL_COMMIT,
+                ForeignAtmWithdrawalCommitCodec.encode(commit));
+        EscrowCommitResult result = requireReadyCoordinator()
+                .commitAtmWithdrawal(commit.requestId(), event);
         invalidateConservationAudit();
         return result;
     }
@@ -671,20 +1106,33 @@ public final class EscrowRuntimeService implements AutoCloseable {
     private boolean domainMaintenanceActive() {
         return coordinator != null && coordinator.state() == EscrowRuntimeState.READY
                 && (recoveryScheduler.hasBlockingWork()
+                || recoveryScheduler.hasManualReviewWork()
                 || hasBlockedCustodyRecovery()
                 || custodyRecoveryFailure != null
+                || protectedCashDiscoveryFailure != null
+                || protectedCashCleanupFailure != null
+                || foreignCashDiscoveryFailure != null
+                || foreignCashCleanupFailure != null
                 || conservationFailure != null);
     }
 
     private boolean maintenanceRecoveryClear() {
         return domainRecoveryInitialized
+                && protectedCashDiscoveryComplete
+                && protectedCashDiscoveryFailure == null
+                && foreignCashDiscoveryComplete
+                && foreignCashDiscoveryFailure == null
                 && recoveryScheduler.enumerationComplete()
                 && !recoveryScheduler.hasRunnableWork()
                 && !recoveryScheduler.hasBlockingWork()
                 && !recoveryScheduler.hasScheduledWork()
                 && !recoveryScheduler.hasManualReviewWork()
                 && !hasUnresolvedCustodyRecovery()
-                && custodyRecoveryFailure == null;
+                && custodyRecoveryFailure == null
+                && protectedCashCleanupWork.isEmpty()
+                && protectedCashCleanupFailure == null
+                && foreignCashCleanupWork.isEmpty()
+                && foreignCashCleanupFailure == null;
     }
 
     private boolean maintenanceConservationVerified() {
@@ -771,10 +1219,14 @@ public final class EscrowRuntimeService implements AutoCloseable {
             return withRecoveryLane(() -> {
                 if (selected.status() == CustodyBatchStatus.PREPARED) {
                     commitRecoveryCustodyBatch(selected, CustodyBatchCommit.state(
-                            selected.markNotApplied(selected.revision(), Instant.now(),
+                            selected.markNotApplied(selected.revision(),
+                                    selected.updatedAt(),
                                     "Prepared batch did not reach the custody adapter")));
+                } else if (selectedAdapter == playerInventoryAdapter) {
+                    recoverCashClaimInventoryBatch(selected);
                 } else {
-                    CustodyBatchRecovery.recover(selectedAdapter, selected, Instant.now(),
+                    CustodyBatchRecovery.recover(selectedAdapter, selected,
+                            selected.updatedAt(),
                             commit -> commitRecoveryCustodyBatch(selected, commit));
                 }
                 return 1;
@@ -785,9 +1237,356 @@ public final class EscrowRuntimeService implements AutoCloseable {
         }
     }
 
+    private void recoverCashClaimInventoryBatch(
+            CustodyPreparedBatch selected
+    ) {
+        CustodyPreparedOperation operation = selected.operations().get(0);
+        CustodyAdapterInspection inspection = playerInventoryAdapter.inspect(
+                operation.simulationToken());
+        if (inspection.status()
+                == CustodyAdapterInspectionStatus.APPLIED
+                && inspection.evidenceByLot().equals(
+                selected.plannedEvidenceByLot())) {
+            CustodyMutation mutation = CustodyMutation.terminal(
+                    operation.lotSnapshot(), CustodyOperation.RELEASE,
+                    operation.requestKey(),
+                    inspection.evidenceByLot().get(
+                            operation.lotSnapshot().lotId()),
+                    selected.updatedAt());
+            CustodyPreparedBatch applied = selected.markApplied(
+                    selected.revision(), inspection.evidenceByLot(),
+                    selected.updatedAt());
+            EscrowClaim claim = requireCashClaim(selected);
+            appendCashClaimDelivery(requireCoordinator(), claim,
+                    CustodyBatchCommit.applied(applied,
+                            List.of(mutation)));
+            return;
+        }
+        if (inspection.status()
+                == CustodyAdapterInspectionStatus.NOT_APPLIED) {
+            commitRecoveryCustodyBatch(selected, CustodyBatchCommit.state(
+                    selected.markNotApplied(selected.revision(),
+                            selected.updatedAt(), inspection.detail())));
+            return;
+        }
+        EscrowClaim claim = requireCashClaim(selected);
+        appendCashClaimQuarantine(requireCoordinator(), claim,
+                selected.updatedAt());
+        String detail = inspection.status()
+                == CustodyAdapterInspectionStatus.APPLIED
+                ? "Player inventory receipt evidence does not match"
+                : inspection.detail();
+        commitRecoveryCustodyBatch(selected, CustodyBatchCommit.state(
+                selected.quarantine(selected.revision(),
+                        selected.updatedAt(), detail)));
+    }
+
+    private EscrowClaim requireCashClaim(CustodyPreparedBatch batch) {
+        try {
+            PlayerInventoryDeliveryToken token =
+                    PlayerInventoryDeliveryToken.decode(
+                            batch.operations().get(0).simulationToken());
+            EscrowClaim claim = claims.getClaim(token.claimId());
+            if (claim != null && claim.ownerId().equals(token.playerId())
+                    && claim.transactionId().equals(batch.transactionId())
+                    && token.batchId().equals(batch.batchId())
+                    && token.lotId().equals(batch.operations().get(0)
+                    .lotSnapshot().lotId())) {
+                return claim;
+            }
+        } catch (RuntimeException ignored) {
+        }
+        List<EscrowClaim> matches = claims.claimsForTransaction(
+                        batch.transactionId()).stream()
+                .filter(claim -> CashClaimDeliveryPlanner.lotId(
+                        claim.claimId()).equals(batch.operations().get(0)
+                        .lotSnapshot().lotId()))
+                .toList();
+        if (matches.size() != 1) {
+            throw new EscrowRuntimeException(
+                    "Cash claim recovery cannot identify its claim");
+        }
+        return matches.get(0);
+    }
+
+    private int recoverOneProtectedCashDiscovery() {
+        EscrowEvidenceDiscoveryQueue.StepResult result =
+                EscrowEvidenceDiscoveryQueue.processOne(
+                        protectedCashDiscoveryWork,
+                        this::recoverProtectedCashDiscovery);
+        protectedCashDiscoveryComplete = result.complete();
+        result.failure().ifPresent(exception -> {
+            protectedCashDiscoveryFailureCount = Math.addExact(
+                    protectedCashDiscoveryFailureCount, 1);
+            protectedCashDiscoveryFailure = discoveryFailure(
+                    "Protected cash evidence discovery requires maintenance",
+                    protectedCashDiscoveryFailureCount,
+                    protectedCashDiscoveryFailure, exception);
+        });
+        return result.examined();
+    }
+
+    private void recoverProtectedCashDiscovery(
+            ProtectedCashRedemptionIntentStore.Inspection inspection
+    ) {
+        if (inspection.status()
+                == ProtectedCashRedemptionIntentStore.InspectionStatus.UNKNOWN
+                || inspection.status()
+                == ProtectedCashRedemptionIntentStore.InspectionStatus.MISSING) {
+            EscrowTransaction current = inspection.transactionId()
+                    .map(EscrowTransactionId::new)
+                    .map(transactions::getTransaction)
+                    .orElse(null);
+            if (current != null && !current.state().isTerminal()) {
+                recoveryScheduler.enqueue(current);
+                return;
+            }
+            throw discoveryEntryFailure("Protected cash",
+                    inspection.playerId(), inspection.transactionId(),
+                    inspection.detail());
+        }
+        ProtectedCashRedemptionEvidence evidence = inspection.evidence()
+                .orElseThrow(() -> new EscrowRuntimeException(
+                        "Protected cash discovery evidence is missing"));
+        ProtectedCashRedemptionReservation reservation =
+                evidence.reservation();
+        EscrowTransactionId transactionId = new EscrowTransactionId(
+                reservation.transactionId());
+        EscrowTransaction current = transactions.getTransaction(
+                transactionId);
+        if (current == null) {
+            commitProtectedCashReservation(reservation);
+            current = transactions.getTransaction(transactionId);
+        }
+        if (current == null) {
+            throw new EscrowRuntimeException(
+                    "Protected cash reservation did not materialize");
+        }
+        if (!current.state().isTerminal()) {
+            recoveryScheduler.enqueue(current);
+            return;
+        }
+        if (!terminalEvidenceMatches(evidence, current)) {
+            throw new EscrowRuntimeException(
+                    "Protected cash terminal evidence conflicts with its transaction");
+        }
+        scheduleProtectedCashCleanup(evidence.playerId(),
+                evidence.transactionId());
+    }
+
+    private int recoverOneProtectedCashCleanup() {
+        Map.Entry<UUID, ProtectedCashCleanupWork> entry =
+                protectedCashCleanupWork.entrySet().iterator().next();
+        ProtectedCashCleanupWork work = entry.getValue();
+        EscrowTransaction current = transactions.getTransaction(
+                new EscrowTransactionId(work.transactionId()));
+        if (current == null || !current.state().isTerminal()) {
+            protectedCashCleanupFailure = new EscrowRuntimeException(
+                    "Protected cash cleanup lost its terminal transaction");
+            return 1;
+        }
+        try {
+            protectedCashIntentStore.cleanup(ownerServer, work.playerId(),
+                    work.transactionId());
+            protectedCashCleanupWork.remove(entry.getKey());
+            protectedCashCleanupFailure = null;
+        } catch (java.io.IOException | RuntimeException exception) {
+            protectedCashCleanupFailure = new EscrowRuntimeException(
+                    "Protected cash terminal evidence cleanup is uncertain",
+                    exception);
+        }
+        return 1;
+    }
+
+    private int recoverOneForeignCashDiscovery() {
+        EscrowEvidenceDiscoveryQueue.StepResult result =
+                EscrowEvidenceDiscoveryQueue.processOne(
+                        foreignCashDiscoveryWork,
+                        this::recoverForeignCashDiscovery);
+        foreignCashDiscoveryComplete = result.complete();
+        result.failure().ifPresent(exception -> {
+            foreignCashDiscoveryFailureCount = Math.addExact(
+                    foreignCashDiscoveryFailureCount, 1);
+            foreignCashDiscoveryFailure = discoveryFailure(
+                    "Foreign cash evidence discovery requires maintenance",
+                    foreignCashDiscoveryFailureCount,
+                    foreignCashDiscoveryFailure, exception);
+        });
+        return result.examined();
+    }
+
+    private void recoverForeignCashDiscovery(
+            ForeignCashDepositIntentStore.Inspection inspection
+    ) {
+        if (inspection.status()
+                == ForeignCashDepositIntentStore.InspectionStatus.UNKNOWN
+                || inspection.status()
+                == ForeignCashDepositIntentStore.InspectionStatus.MISSING) {
+            EscrowTransaction current = inspection.transactionId()
+                    .map(EscrowTransactionId::new)
+                    .map(transactions::getTransaction)
+                    .orElse(null);
+            if (current != null && !current.state().isTerminal()) {
+                recoveryScheduler.enqueue(current);
+                return;
+            }
+            throw discoveryEntryFailure("Foreign cash",
+                    inspection.playerId(), inspection.transactionId(),
+                    inspection.detail());
+        }
+        ForeignCashDepositEvidence evidence = inspection.evidence()
+                .orElseThrow(() -> new EscrowRuntimeException(
+                        "Foreign cash discovery evidence is missing"));
+        ForeignCashDepositReservation reservation = evidence.reservation();
+        EscrowTransactionId transactionId = new EscrowTransactionId(
+                reservation.transactionId());
+        EscrowTransaction current = transactions.getTransaction(
+                transactionId);
+        if (current == null) {
+            commitForeignCashReservation(reservation);
+            current = transactions.getTransaction(transactionId);
+        }
+        if (current == null) {
+            throw new EscrowRuntimeException(
+                    "Foreign cash reservation did not materialize");
+        }
+        if (!current.state().isTerminal()) {
+            recoveryScheduler.enqueue(current);
+            return;
+        }
+        if (!terminalEvidenceMatches(evidence, current)) {
+            throw new EscrowRuntimeException(
+                    "Foreign cash terminal evidence conflicts with its transaction");
+        }
+        scheduleForeignCashCleanup(evidence.playerId(),
+                evidence.transactionId());
+    }
+
+    private int recoverOneForeignCashCleanup() {
+        Map.Entry<UUID, ForeignCashCleanupWork> entry =
+                foreignCashCleanupWork.entrySet().iterator().next();
+        ForeignCashCleanupWork work = entry.getValue();
+        EscrowTransaction current = transactions.getTransaction(
+                new EscrowTransactionId(work.transactionId()));
+        if (current == null || !current.state().isTerminal()) {
+            foreignCashCleanupFailure = new EscrowRuntimeException(
+                    "Foreign cash cleanup lost its terminal transaction");
+            return 1;
+        }
+        try {
+            foreignCashIntentStore.cleanup(ownerServer, work.playerId(),
+                    work.transactionId());
+            foreignCashCleanupWork.remove(entry.getKey());
+            foreignCashCleanupFailure = null;
+        } catch (java.io.IOException | RuntimeException exception) {
+            foreignCashCleanupFailure = new EscrowRuntimeException(
+                    "Foreign cash terminal evidence cleanup is uncertain",
+                    exception);
+        }
+        return 1;
+    }
+
+    private static boolean terminalEvidenceMatches(
+            ProtectedCashRedemptionEvidence evidence,
+            EscrowTransaction transaction
+    ) {
+        return switch (evidence.phase()) {
+            case INTENT -> false;
+            case SETTLEMENT -> evidence.settlement().orElseThrow()
+                    .completedTransaction().equals(transaction);
+            case CANCELLATION -> evidence.cancellation().orElseThrow()
+                    .refundedTransaction().equals(transaction);
+        };
+    }
+
+    private static boolean terminalEvidenceMatches(
+            ForeignCashDepositEvidence evidence,
+            EscrowTransaction transaction
+    ) {
+        return switch (evidence.phase()) {
+            case INTENT -> false;
+            case SETTLEMENT -> evidence.settlement().orElseThrow()
+                    .completedTransaction().equals(transaction);
+            case CANCELLATION -> evidence.cancellation().orElseThrow()
+                    .refundedTransaction().equals(transaction);
+        };
+    }
+
+    private static EscrowRuntimeException discoveryFailure(
+            String summary,
+            int failureCount,
+            Throwable previous,
+            RuntimeException current
+    ) {
+        Throwable first = previous != null && previous.getCause() != null
+                ? previous.getCause() : current;
+        EscrowRuntimeException failure = new EscrowRuntimeException(
+                summary + ". Failed entries " + failureCount, first);
+        if (current != first) {
+            failure.addSuppressed(current);
+        }
+        return failure;
+    }
+
+    private static EscrowRuntimeException discoveryEntryFailure(
+            String domain,
+            UUID playerId,
+            Optional<UUID> transactionId,
+            String detail
+    ) {
+        String player = playerId == null ? "unknown" : playerId.toString();
+        String transaction = transactionId.map(UUID::toString)
+                .orElse("unknown");
+        return new EscrowRuntimeException(domain + " evidence for player "
+                + player + " and transaction " + transaction
+                + " requires maintenance. " + detail);
+    }
+
     private void initializeDomainRecovery() {
         if (!domainRecoveryInitialized) {
+            recoveryScheduler.register(
+                    EscrowOperation.ATM_WITHDRAWAL,
+                    new AtmWithdrawalRecoveryHandler(
+                            this, ledger, claims, protectedMints,
+                            Clock.systemUTC()));
+            recoveryScheduler.register(
+                    EscrowOperation.CURRENCY_DEPOSIT,
+                    new ProtectedCashRedemptionRecoveryHandler(
+                            ownerServer, this, protectedCashIntentStore,
+                            Clock.systemUTC(),
+                            new ForeignCashDepositRecoveryHandler(
+                                    ownerServer, this,
+                                    foreignCashIntentStore,
+                                    Clock.systemUTC())));
+            protectedCashDiscoveryWork.addAll(
+                    protectedCashIntentStore.discover(ownerServer));
+            protectedCashDiscoveryComplete =
+                    protectedCashDiscoveryWork.isEmpty();
+            foreignCashDiscoveryWork.addAll(
+                    foreignCashIntentStore.discover(ownerServer));
+            foreignCashDiscoveryComplete =
+                    foreignCashDiscoveryWork.isEmpty();
             domainRecoveryInitialized = true;
+        }
+    }
+
+    private record ProtectedCashCleanupWork(
+            UUID playerId,
+            UUID transactionId
+    ) {
+        private ProtectedCashCleanupWork {
+            Objects.requireNonNull(playerId, "playerId");
+            Objects.requireNonNull(transactionId, "transactionId");
+        }
+    }
+
+    private record ForeignCashCleanupWork(
+            UUID playerId,
+            UUID transactionId
+    ) {
+        private ForeignCashCleanupWork {
+            Objects.requireNonNull(playerId, "playerId");
+            Objects.requireNonNull(transactionId, "transactionId");
         }
     }
 
@@ -802,6 +1601,80 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 ? requireReadyCoordinator() : requireCoordinator();
         appendCustodyBatch(available, commit);
         scope.accept(commit);
+    }
+
+    private void commitCashClaimCustodyBatch(
+            EscrowClaim claim,
+            CustodyBatchCommit commit
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(claim, "claim");
+        CustodyExecutionScope scope = custodyExecutionScope;
+        if (scope == null) {
+            throw new EscrowRuntimeException(
+                    "Cash claim custody execution scope is missing");
+        }
+        scope.validate(commit);
+        EscrowRuntimeCoordinator available = scope.phase == 0
+                ? requireReadyCoordinator() : requireCoordinator();
+        if (commit.batch().status() == CustodyBatchStatus.APPLIED) {
+            appendCashClaimDelivery(available, claim, commit);
+            try {
+                playerInventoryAdapter.complete(
+                        commit.batch().operations().get(0)
+                                .simulationToken());
+            } catch (RuntimeException ignored) {
+            }
+        } else {
+            if (commit.batch().status()
+                    == CustodyBatchStatus.QUARANTINED) {
+                appendCashClaimQuarantine(available, claim,
+                        commit.batch().updatedAt());
+            }
+            appendCustodyBatch(available, commit);
+        }
+        scope.accept(commit);
+    }
+
+    private void appendCashClaimDelivery(
+            EscrowRuntimeCoordinator available,
+            EscrowClaim claim,
+            CustodyBatchCommit custodyCommit
+    ) {
+        if (!available.isReady()) {
+            throw new EscrowRuntimeException(
+                    "Cash claim delivery journal is unavailable in state "
+                            + available.state(),
+                    available.failure().orElse(null));
+        }
+        ClaimDeliveryCommit delivery = new ClaimDeliveryCommit(
+                claim.ownerId(), claim.claimId(),
+                custodyCommit.batch().operations().get(0).requestKey(),
+                claim.originalUnits(), custodyCommit.batch().updatedAt());
+        CashClaimDeliveryCommit commit = new CashClaimDeliveryCommit(
+                delivery, custodyCommit);
+        available.commit(claim.transactionId(), new EscrowJournalEvent(
+                EscrowJournalEventType.CASH_CLAIM_DELIVERY_COMMIT,
+                CashClaimDeliveryCommitCodec.encode(commit)));
+    }
+
+    private void appendCashClaimQuarantine(
+            EscrowRuntimeCoordinator available,
+            EscrowClaim claim,
+            Instant quarantinedAt
+    ) {
+        if (!available.isReady()) {
+            throw new EscrowRuntimeException(
+                    "Cash claim quarantine journal is unavailable in state "
+                            + available.state(),
+                    available.failure().orElse(null));
+        }
+        ClaimQuarantineCommit quarantine = ClaimQuarantineCommit.create(
+                claim.ownerId(), claim.claimId(), claim.transactionId(),
+                quarantinedAt, "cash_claim_inventory_delivery_unknown");
+        available.commit(claim.transactionId(), new EscrowJournalEvent(
+                EscrowJournalEventType.CLAIM_QUARANTINE,
+                ClaimJournalCodec.encodeQuarantine(quarantine)));
     }
 
     private void commitRecoveryCustodyBatch(CustodyPreparedBatch current,

@@ -133,6 +133,71 @@ public final class CustodyRepository {
         return evaluateBatch(mutations, true);
     }
 
+    synchronized boolean preflightTransientRelease(
+            CustodyLot held,
+            CustodyMutation terminal
+    ) {
+        Objects.requireNonNull(held, "held");
+        Objects.requireNonNull(terminal, "terminal");
+        CustodyOperationReceipt reserve = CustodyOperationReceipt.reserve(held);
+        CustodyOperationReceipt release = terminal.receipt();
+        if (release.operation() != CustodyOperation.RELEASE
+                || !release.lotId().equals(held.lotId())
+                || release.requestKey().equals(held.reserveRequestKey())
+                || !CustodyMutation.terminal(
+                held, CustodyOperation.RELEASE, release.requestKey(),
+                release.evidence(), release.createdAt()).equals(terminal)) {
+            throw new CustodyConflictException(
+                    "Transient custody release does not match its held lot");
+        }
+
+        CustodyLot currentLot = lots.get(held.lotId());
+        CustodyOperationReceipt currentReserve = receiptForRequest(
+                reserve.requestKey());
+        CustodyOperationReceipt currentRelease = receiptForRequest(
+                release.requestKey());
+        boolean absent = currentLot == null
+                && currentReserve == null
+                && currentRelease == null;
+        if (absent) {
+            preflightReserve(held);
+            if (receipts.containsKey(release.receiptId())
+                    || requestIndex.containsKey(release.requestKey())
+                    || reserve.receiptId().equals(release.receiptId())
+                    || Math.addExact(receipts.size(), 2) > maximumReceipts) {
+                throw new CustodyConflictException(
+                        "Transient custody release receipt is unavailable");
+            }
+            return false;
+        }
+
+        boolean reserveOnly = currentLot != null
+                && currentLot.equals(held)
+                && reserve.equals(currentReserve)
+                && currentRelease == null;
+        if (reserveOnly) {
+            CustodyOperationResult result = preflightRelease(
+                    release.lotId(), release.requestKey(), release.evidence(),
+                    release.createdAt());
+            if (!result.receipt().equals(release)
+                    || !result.lot().equals(terminal.resultingLot())) {
+                throw new CustodyConflictException(
+                        "Transient custody release continuation does not match");
+            }
+            return false;
+        }
+
+        boolean replayed = currentLot != null
+                && currentLot.equals(terminal.resultingLot())
+                && reserve.equals(currentReserve)
+                && release.equals(currentRelease);
+        if (!replayed) {
+            throw new CustodyConflictException(
+                    "Transient custody release is only partially materialized");
+        }
+        return true;
+    }
+
     synchronized long lastBatchProbeCount() {
         return lastBatchProbeCount;
     }

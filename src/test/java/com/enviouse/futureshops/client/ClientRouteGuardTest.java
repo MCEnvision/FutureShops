@@ -69,6 +69,28 @@ class ClientRouteGuardTest {
     }
 
     @Test
+    void activeAndRetentionWindowsSurviveNanoTimeWraparound() {
+        AtomicLong now = new AtomicLong(Long.MAX_VALUE - 5L);
+        ClientRouteGuard activeGuard = guard(now);
+        Object origin = new Object();
+        activeGuard.recordAtm(origin);
+
+        now.set(Long.MIN_VALUE + 4L);
+        assertEquals(ClientRouteGuard.ResponseDecision.ACCEPT,
+                activeGuard.evaluateAtm(origin));
+
+        now.set(Long.MAX_VALUE - 5L);
+        ClientRouteGuard retentionGuard = guard(now);
+        retentionGuard.recordStorefront(origin, 42L);
+        now.set(Long.MIN_VALUE + 5L);
+        assertEquals(ClientRouteGuard.ResponseDecision.REJECT,
+                retentionGuard.evaluateStorefront(origin, 42L));
+        now.set(Long.MIN_VALUE + 106L);
+        assertEquals(ClientRouteGuard.ResponseDecision.UNTRACKED,
+                retentionGuard.evaluateStorefront(origin, 42L));
+    }
+
+    @Test
     void cancelledBalanceResponseCannotOpenTheAtm() {
         AtomicLong now = new AtomicLong();
         ClientRouteGuard guard = guard(now);
@@ -117,6 +139,22 @@ class ClientRouteGuardTest {
         ClientRouteGuard.ResponseDecision commandDecision = guard.evaluateAtm(null);
         assertEquals(ClientRouteGuard.ResponseDecision.UNTRACKED, commandDecision);
         assertTrue(ClientRouteGuard.allowsAtmOpen(commandDecision, true, true));
+    }
+
+    @Test
+    void clearingRoutesDropsAtmAndStorefrontTracking() {
+        AtomicLong now = new AtomicLong();
+        ClientRouteGuard guard = guard(now);
+        Object origin = new Object();
+
+        guard.recordStorefront(origin, 42L);
+        guard.recordAtm(origin);
+        guard.clearTrackedRoutes();
+
+        assertEquals(ClientRouteGuard.ResponseDecision.UNTRACKED,
+                guard.evaluateStorefront(origin, 42L));
+        assertEquals(ClientRouteGuard.ResponseDecision.UNTRACKED,
+                guard.evaluateAtm(origin));
     }
 
     private static ClientRouteGuard guard(AtomicLong now) {

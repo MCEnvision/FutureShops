@@ -41,13 +41,22 @@ public final class ProtectedMoneyMintBridge {
                 || count > stack.getMaxStackSize()) {
             throw new IllegalArgumentException("Protected money mint quantity is unavailable");
         }
-        String expectedChecksum = evidenceFactory().checksumEvidence(
-                batch.batchId(), batch.transactionId(), batch.denominationMinorUnits(),
-                batch.authorizedCount(), batch.serverIdentityEvidence(), batch.authorizedAt());
-        if (!constantTimeEquals(expectedChecksum, batch.checksumEvidence())) {
-            throw new IllegalArgumentException("Protected money mint checksum does not match its plan");
-        }
         stack.setCount(count);
+        stack.getOrCreateTag().put(MoneyNbtKeys.ROOT,
+                materializedMoneyData(batch, count));
+        return stack;
+    }
+
+    static CompoundTag materializedMoneyData(
+            ProtectedMintBatch batch,
+            int count
+    ) {
+        Objects.requireNonNull(batch, "batch");
+        if (count <= 0 || count > batch.availableQuantity()
+                || count > 64) {
+            throw new IllegalArgumentException(
+                    "Protected money mint quantity is unavailable");
+        }
         CompoundTag moneyData = new CompoundTag();
         moneyData.putLong(MoneyNbtKeys.DENOMINATION, batch.denominationMinorUnits());
         moneyData.putString(MoneyNbtKeys.MINT_ID, batch.batchId().toString());
@@ -56,8 +65,7 @@ public final class ProtectedMoneyMintBridge {
         moneyData.putString(MoneyNbtKeys.MINT_SERVER, batch.serverIdentityEvidence());
         moneyData.putInt(MoneyNbtKeys.AUTHORIZED_COUNT, batch.authorizedCount());
         moneyData.putString(MoneyNbtKeys.CHECKSUM, batch.checksumEvidence());
-        stack.getOrCreateTag().put(MoneyNbtKeys.ROOT, moneyData);
-        return stack;
+        return moneyData;
     }
 
     public static ProtectedCurrencyProvenance provenance(ItemStack stack) {
@@ -112,25 +120,18 @@ public final class ProtectedMoneyMintBridge {
         long denomination = data.getLong(MoneyNbtKeys.DENOMINATION);
         int authorizedCount = data.getInt(MoneyNbtKeys.AUTHORIZED_COUNT);
         if (denomination <= 0L || authorizedCount <= 0
-                || stack.getCount() > authorizedCount) {
+                || stack.getCount() > authorizedCount
+                || data.getString(MoneyNbtKeys.MINT_SERVER).isEmpty()
+                || data.getString(MoneyNbtKeys.CHECKSUM).isEmpty()) {
             throw new IllegalArgumentException("Protected money quantity is invalid");
         }
-        String expected = MoneyChecksumService.createChecksum(denomination,
-                data.getString(MoneyNbtKeys.MINT_ID),
-                data.getLong(MoneyNbtKeys.MINT_TIMESTAMP),
-                data.getString(MoneyNbtKeys.MINT_PLAYER),
-                data.getString(MoneyNbtKeys.MINT_SERVER), authorizedCount);
-        if (!constantTimeEquals(expected, data.getString(MoneyNbtKeys.CHECKSUM))) {
-            throw new IllegalArgumentException("Protected money checksum is invalid");
+        try {
+            UUID.fromString(data.getString(MoneyNbtKeys.MINT_ID));
+            UUID.fromString(data.getString(MoneyNbtKeys.MINT_PLAYER));
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException(
+                    "Protected money identity is invalid", exception);
         }
         return data;
-    }
-
-    private static boolean constantTimeEquals(String first, String second) {
-        byte[] left = Objects.requireNonNull(first, "first")
-                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        byte[] right = Objects.requireNonNull(second, "second")
-                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        return java.security.MessageDigest.isEqual(left, right);
     }
 }

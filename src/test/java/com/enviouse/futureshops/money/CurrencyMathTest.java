@@ -124,6 +124,28 @@ class CurrencyMathTest {
     }
 
     @Test
+    void hugeBreakdownsFailBeforeMaterializingItems() {
+        CurrencyMath.BreakResult result =
+                CurrencyMath.breakIntoDenominations(
+                        Long.MAX_VALUE, new long[]{1L},
+                        new int[]{64}, 4096);
+
+        assertTrue(result.limitExceeded());
+        assertTrue(result.portions().isEmpty());
+    }
+
+    @Test
+    void exactFallbackHonorsTheTotalItemBudget() {
+        CurrencyMath.BreakResult result =
+                CurrencyMath.breakIntoDenominations(
+                        100L, new long[]{70L, 25L},
+                        new int[]{64, 64}, 3);
+
+        assertTrue(result.limitExceeded());
+        assertTrue(result.portions().isEmpty());
+    }
+
+    @Test
     void apocalypseNowPresetValuesAreArbitrageSafe() {
         // The apocalypsenow preset must keep 8 × coins >= 1 × money, otherwise the
         // mod's cointomoney recipe (8 coins + paper → 1 money) mints value from thin
@@ -149,5 +171,13 @@ class CurrencyMathTest {
                         new long[]{100L, 50L, 10L}, new int[]{1, 1, 6}));
         assertNull(CurrencyMath.exactBoundedCounts(160L,
                 new long[]{100L, 50L, 10L}, new int[]{1, 0, 5}));
+    }
+
+    @Test
+    void boundedExactSelectionHandlesLargeNoncanonicalTargets() {
+        assertArrayEquals(new long[]{1000L, 500L},
+                CurrencyMath.exactBoundedCounts(1_498_500L,
+                        new long[]{1000L, 997L},
+                        new int[]{2000, 2000}));
     }
 }

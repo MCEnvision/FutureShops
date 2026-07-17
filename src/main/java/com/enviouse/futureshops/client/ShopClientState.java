@@ -22,6 +22,7 @@ import java.util.UUID;
  * All fields are set exclusively by incoming S2C packets.
  */
 public final class ShopClientState {
+    public static final long CART_CHECKOUT_TIMEOUT_MILLIS = 15_000L;
 
     private static volatile String activeShopId = "";
     private static volatile long currentBalanceMinorUnits = 0L;
@@ -49,6 +50,8 @@ public final class ShopClientState {
     // variants of one base item are distinct cart lines. ownedItemCounts stays keyed by registry
     // itemId (InventorySyncService reports registry-id counts).
     private static final Map<String, Integer> cart = new LinkedHashMap<>();
+    private static final CartResponsePolicy cartResponsePolicy = new CartResponsePolicy();
+    private static CartCheckoutSubmission trackedCartCheckout;
     private static final Map<String, Integer> ownedItemCounts = new HashMap<>();
     private static volatile ShopStatus status = null;
 
@@ -99,7 +102,10 @@ public final class ShopClientState {
         status = null;
         synchronized (cart) {
             cart.clear();
+            cartNbtSnapshots.clear();
         }
+        cartResponsePolicy.reset();
+        trackedCartCheckout = null;
         synchronized (ownedItemCounts) {
             ownedItemCounts.clear();
         }
@@ -116,6 +122,9 @@ public final class ShopClientState {
     private static final Map<String, String> cartNbtSnapshots = new HashMap<>();
 
     public static void addToCart(String listingId, int quantity) {
+        if (cartCheckoutBlocksMutation()) {
+            return;
+        }
         if (quantity <= 0) {
             return;
         }
@@ -145,6 +154,9 @@ public final class ShopClientState {
     }
 
     public static void setCartQuantity(String listingId, int quantity) {
+        if (cartCheckoutBlocksMutation()) {
+            return;
+        }
         synchronized (cart) {
             if (quantity <= 0) {
                 cart.remove(listingId);
@@ -156,6 +168,9 @@ public final class ShopClientState {
     }
 
     public static void removeFromCart(String listingId) {
+        if (cartCheckoutBlocksMutation()) {
+            return;
+        }
         synchronized (cart) {
             cart.remove(listingId);
             cartNbtSnapshots.remove(listingId);
@@ -166,6 +181,84 @@ public final class ShopClientState {
         synchronized (cart) {
             cart.clear();
             cartNbtSnapshots.clear();
+        }
+        cartResponsePolicy.reset();
+        trackedCartCheckout = null;
+    }
+
+    public static CartResponsePolicy.BeginDecision beginCartCheckout(
+            UUID requestId,
+            List<CartEntry> entries,
+            String paymentSource,
+            long nowMillis
+    ) {
+        List<CartResponsePolicy.Line> lines = entries.stream()
+                .map(entry -> new CartResponsePolicy.Line(
+                        0, entry.listingId(), entry.quantity()))
+                .toList();
+        CartResponsePolicy.BeginDecision decision = cartResponsePolicy.begin(
+                requestId, lines, nowMillis, CART_CHECKOUT_TIMEOUT_MILLIS);
+        if (decision == CartResponsePolicy.BeginDecision.STARTED) {
+            trackedCartCheckout = new CartCheckoutSubmission(
+                    requestId, activeShopId, List.copyOf(entries), paymentSource);
+        }
+        return decision;
+    }
+
+    public static Optional<CartCheckoutSubmission> retryCartCheckout(long nowMillis) {
+        if (cartResponsePolicy.retry(nowMillis, CART_CHECKOUT_TIMEOUT_MILLIS)
+                != CartResponsePolicy.RetryDecision.RETRIED) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(trackedCartCheckout);
+    }
+
+    public static CartResponsePolicy.ResponseResult applyCartCheckoutResponse(
+            UUID requestId,
+            boolean success
+    ) {
+        CartResponsePolicy.ResponseResult result =
+                cartResponsePolicy.onResponse(
+                        requestId, 0, success, true, System.currentTimeMillis());
+        if (!result.linesToClear().isEmpty()) {
+            synchronized (cart) {
+                for (CartResponsePolicy.Line line : result.linesToClear()) {
+                    removeAcknowledgedCartQuantityLocked(line.key(), line.quantity());
+                }
+            }
+        }
+        if (result.checkoutComplete()) {
+            trackedCartCheckout = null;
+        }
+        return result;
+    }
+
+    public static CartResponsePolicy.TimeoutDecision expireCartCheckout(long nowMillis) {
+        return cartResponsePolicy.expire(nowMillis);
+    }
+
+    public static boolean isCartCheckoutPending() {
+        return cartResponsePolicy.isPending();
+    }
+
+    public static boolean hasTrackedCartCheckout() {
+        return cartResponsePolicy.hasTrackedRequest();
+    }
+
+    private static boolean cartCheckoutBlocksMutation() {
+        return cartResponsePolicy.hasTrackedRequest();
+    }
+
+    private static void removeAcknowledgedCartQuantityLocked(String listingId, int quantity) {
+        Integer current = cart.get(listingId);
+        if (current == null) {
+            return;
+        }
+        if (current <= quantity) {
+            cart.remove(listingId);
+            cartNbtSnapshots.remove(listingId);
+        } else {
+            cart.put(listingId, current - quantity);
         }
     }
 
@@ -332,17 +425,9 @@ public final class ShopClientState {
     private static void sanitizeCartLocked() {
         cart.entrySet().removeIf(entry -> {
             CatalogItem item = getCatalogItem(entry.getKey()).orElse(null);
-            if (item == null || item.buyPrice() <= 0L) {
-                return true;
-            }
-
-            int clamped = clampCartQuantity(item.listingId(), entry.getValue());
-            if (clamped <= 0) {
-                return true;
-            }
-            entry.setValue(clamped);
-            return false;
+            return item == null || item.buyPrice() <= 0L || entry.getValue() <= 0;
         });
+        cartNbtSnapshots.keySet().retainAll(cart.keySet());
     }
 
     private static int clampCartQuantity(String listingId, int quantity) {
@@ -360,6 +445,17 @@ public final class ShopClientState {
 
     /** {@code listingId} is the catalog resolution key for this cart line (see {@link CatalogItem}). */
     public record CartEntry(String listingId, int quantity) {
+    }
+
+    public record CartCheckoutSubmission(
+            UUID requestId,
+            String shopId,
+            List<CartEntry> entries,
+            String paymentSource
+    ) {
+        public CartCheckoutSubmission {
+            entries = List.copyOf(entries);
+        }
     }
 
     public record ShopStatus(Component message, boolean success, long expiresAtMillis) {

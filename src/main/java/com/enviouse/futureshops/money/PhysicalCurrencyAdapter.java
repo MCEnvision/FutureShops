@@ -19,6 +19,10 @@ public interface PhysicalCurrencyAdapter {
     /** Config id of this adapter ({@code futureshops}, {@code apocalypsenow}, {@code custom}). */
     String id();
 
+    default String depositConfigurationSignature() {
+        return id();
+    }
+
     /** True only for the built-in checksum+ledger money item. */
     default boolean isInternal() {
         return false;

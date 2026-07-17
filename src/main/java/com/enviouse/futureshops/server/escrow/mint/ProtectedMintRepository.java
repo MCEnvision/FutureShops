@@ -88,6 +88,84 @@ public final class ProtectedMintRepository {
         }
     }
 
+    synchronized List<ProtectedMintApplyResult> preflightTransitionBatch(
+            List<ProtectedMintJournalEvent> events,
+            ProtectedMintOperation requiredOperation
+    ) {
+        return evaluateTransitionBatch(events, requiredOperation, false);
+    }
+
+    synchronized List<ProtectedMintApplyResult> applyTransitionBatch(
+            List<ProtectedMintJournalEvent> events,
+            ProtectedMintOperation requiredOperation
+    ) {
+        return evaluateTransitionBatch(events, requiredOperation, true);
+    }
+
+    private List<ProtectedMintApplyResult> evaluateTransitionBatch(
+            List<ProtectedMintJournalEvent> events,
+            ProtectedMintOperation requiredOperation,
+            boolean commit
+    ) {
+        List<ProtectedMintJournalEvent> candidates = List.copyOf(
+                Objects.requireNonNull(events, "events"));
+        Objects.requireNonNull(requiredOperation, "requiredOperation");
+        if ((requiredOperation != ProtectedMintOperation.RESERVE
+                && requiredOperation != ProtectedMintOperation.COMMIT
+                && requiredOperation != ProtectedMintOperation.RELEASE)
+                || candidates.isEmpty()
+                || candidates.size()
+                > ProtectedMintBatch.MAX_RESERVATION_ENTRIES) {
+            throw new ProtectedMintConflictException(
+                    "Protected mint transition batch is invalid");
+        }
+        Set<UUID> batchIds = new HashSet<>();
+        Set<UUID> receiptIds = new HashSet<>();
+        Set<String> requestKeys = new HashSet<>();
+        List<ProtectedMintApplyResult> results = new ArrayList<>(
+                candidates.size());
+        int additionalReceipts = 0;
+        long additionalReferences = 0L;
+        for (ProtectedMintJournalEvent event : candidates) {
+            Objects.requireNonNull(event, "event");
+            UUID batchId = event.targetBatchId().orElseThrow(() ->
+                    new ProtectedMintConflictException(
+                            "Protected mint transition batch lacks a batch"));
+            if (event.operation() != requiredOperation
+                    || !batchIds.add(batchId)
+                    || !requestKeys.add(event.requestKey())) {
+                throw new ProtectedMintConflictException(
+                        "Protected mint transition batch identity is duplicated");
+            }
+            ProtectedMintApplyResult result = evaluate(event);
+            if (!receiptIds.add(result.receipt().receiptId())) {
+                throw new ProtectedMintConflictException(
+                        "Protected mint transition batch receipt is duplicated");
+            }
+            if (!result.replayed()) {
+                additionalReceipts = Math.addExact(additionalReceipts, 1);
+                additionalReferences = Math.addExact(additionalReferences,
+                        receiptReferences(result.receipt()));
+            }
+            results.add(result);
+        }
+        if (Math.addExact(receipts.size(), additionalReceipts) > MAX_RECEIPTS
+                || Math.addExact(receiptReferenceCount, additionalReferences)
+                > MAX_RECEIPT_REFERENCES) {
+            throw new ProtectedMintConflictException(
+                    "Protected mint transition batch exceeds repository limits");
+        }
+        if (!commit) {
+            return List.copyOf(results);
+        }
+        List<ProtectedMintApplyResult> applied = new ArrayList<>(
+                candidates.size());
+        for (ProtectedMintJournalEvent event : candidates) {
+            applied.add(applyCommitted(event));
+        }
+        return List.copyOf(applied);
+    }
+
     public synchronized ProtectedMintApplyResult materializeCommitted(UUID transactionId,
                                                                       UUID batchId,
                                                                       String requestKey,
@@ -112,6 +190,17 @@ public final class ProtectedMintRepository {
                                                                  int quantity,
                                                                  java.time.Instant now) {
         return applyCommitted(ProtectedMintJournalEvent.commit(transactionId,
+                batchId, requestKey, quantity, now));
+    }
+
+    public synchronized ProtectedMintApplyResult releaseCommitted(
+            UUID transactionId,
+            UUID batchId,
+            String requestKey,
+            int quantity,
+            java.time.Instant now
+    ) {
+        return applyCommitted(ProtectedMintJournalEvent.release(transactionId,
                 batchId, requestKey, quantity, now));
     }
 
@@ -327,6 +416,7 @@ public final class ProtectedMintRepository {
             case MATERIALIZE -> evaluateMaterialize(event, receipt);
             case RESERVE -> evaluateReserve(event, receipt);
             case COMMIT -> evaluateCommit(event, receipt);
+            case RELEASE -> evaluateRelease(event, receipt);
             case REFUND -> evaluateRefund(event, receipt);
             case QUARANTINE -> evaluateQuarantine(event, receipt);
         };
@@ -390,6 +480,24 @@ public final class ProtectedMintRepository {
             throw conflict("Protected mint reservation cannot be committed", exception);
         }
         return new ProtectedMintApplyResult(receipt, List.of(changed), List.of(), false);
+    }
+
+    private ProtectedMintApplyResult evaluateRelease(
+            ProtectedMintJournalEvent event,
+            ProtectedMintReceipt receipt
+    ) {
+        ProtectedMintBatch batch = requireBatch(
+                event.targetBatchId().orElseThrow());
+        ProtectedMintBatch changed;
+        try {
+            changed = batch.release(event.transactionId(), event.quantity(),
+                    event.occurredAt());
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            throw conflict("Protected mint reservation cannot be released",
+                    exception);
+        }
+        return new ProtectedMintApplyResult(receipt, List.of(changed),
+                List.of(), false);
     }
 
     private ProtectedMintApplyResult evaluateRefund(ProtectedMintJournalEvent event,
@@ -529,10 +637,12 @@ public final class ProtectedMintRepository {
         int initiallyAvailable = issued ? batch.authorizedCount() : 0;
         int expectedAuthorized = batch.authorizedCount() - initiallyAvailable
                 - flows.materialized - flows.quarantinedAuthorized;
-        int expectedAvailable = initiallyAvailable + flows.materialized - flows.reserved
+        int expectedAvailable = initiallyAvailable + flows.materialized
+                - flows.reserved + flows.released
                 - flows.quarantinedAvailable;
         Map<UUID, Integer> expectedReserved = difference(flows.reserveByTransaction,
-                flows.commitByTransaction, flows.refundReservedByTransaction,
+                flows.commitByTransaction, flows.releaseByTransaction,
+                flows.refundReservedByTransaction,
                 flows.quarantineReservedByTransaction);
         Map<UUID, Integer> expectedSpent = difference(flows.commitByTransaction,
                 flows.refundSpentByTransaction);
@@ -656,6 +766,7 @@ public final class ProtectedMintRepository {
         private int transitions;
         private int materialized;
         private int reserved;
+        private int released;
         private int refundedReserved;
         private int refundedSpent;
         private int quarantinedAuthorized;
@@ -663,6 +774,7 @@ public final class ProtectedMintRepository {
         private int quarantinedReserved;
         private final Map<UUID, Integer> reserveByTransaction = new HashMap<>();
         private final Map<UUID, Integer> commitByTransaction = new HashMap<>();
+        private final Map<UUID, Integer> releaseByTransaction = new HashMap<>();
         private final Map<UUID, Integer> refundReservedByTransaction = new HashMap<>();
         private final Map<UUID, Integer> refundSpentByTransaction = new HashMap<>();
         private final Map<UUID, Integer> quarantineReservedByTransaction = new HashMap<>();
@@ -689,6 +801,11 @@ public final class ProtectedMintRepository {
                     merge(reserveByTransaction, receipt.transactionId(), quantity);
                 }
                 case COMMIT -> merge(commitByTransaction, receipt.transactionId(), quantity);
+                case RELEASE -> {
+                    released = Math.addExact(released, quantity);
+                    merge(releaseByTransaction, receipt.transactionId(),
+                            quantity);
+                }
                 case REFUND -> {
                     if (receipt.sourceState().orElseThrow() == ProtectedMintState.RESERVED) {
                         refundedReserved = Math.addExact(refundedReserved, quantity);

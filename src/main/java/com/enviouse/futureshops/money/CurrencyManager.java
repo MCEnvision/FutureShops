@@ -12,6 +12,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Resolves the {@code currency.provider} config into a live
@@ -42,12 +44,25 @@ public final class CurrencyManager {
             new CurrencyMath.ItemValue("apocalypsenow:money_block", 900L),
             new CurrencyMath.ItemValue("apocalypsenow:highvaluemoneyblock", 8100L));
 
+    private static final ReentrantReadWriteLock CONFIGURATION_LOCK =
+            new ReentrantReadWriteLock(true);
     private static volatile PhysicalCurrencyAdapter current;
+    private static long configurationGeneration;
 
     private CurrencyManager() {
     }
 
     public static void initialize() {
+        Lock writeLock = CONFIGURATION_LOCK.writeLock();
+        writeLock.lock();
+        try {
+            initializeLocked();
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    private static void initializeLocked() {
         String provider = Config.currencyProvider == null
                 ? PROVIDER_INTERNAL
                 : Config.currencyProvider.trim().toLowerCase(Locale.ROOT);
@@ -80,10 +95,32 @@ public final class CurrencyManager {
                     + "mint-id, and spent-mint ledger dupe prevention is disabled for these foreign items; "
                     + "their source mod controls recipes, loot, and duplication behavior.", current.id());
         }
+        configurationGeneration = nextGeneration(configurationGeneration);
     }
 
     public static void clear() {
-        current = null;
+        withConfigurationWriteLock(() -> {
+            current = null;
+            configurationGeneration = nextGeneration(
+                    configurationGeneration);
+        });
+    }
+
+    public static void withConfigurationWriteLock(Runnable action) {
+        Lock writeLock = CONFIGURATION_LOCK.writeLock();
+        writeLock.lock();
+        try {
+            action.run();
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    public static ConfigurationReadLease acquireConfigurationReadLease() {
+        Lock readLock = CONFIGURATION_LOCK.readLock();
+        readLock.lock();
+        return new ConfigurationReadLease(
+                readLock, configurationGeneration);
     }
 
     /** Active adapter; throws if the server lifecycle hasn't initialized it yet. */
@@ -103,6 +140,41 @@ public final class CurrencyManager {
     public static boolean isInternal() {
         PhysicalCurrencyAdapter adapter = current;
         return adapter == null || adapter.isInternal();
+    }
+
+    private static long nextGeneration(long currentGeneration) {
+        return currentGeneration == Long.MAX_VALUE
+                ? 0L : currentGeneration + 1L;
+    }
+
+    public static final class ConfigurationReadLease
+            implements AutoCloseable {
+        private final Lock lock;
+        private final long generation;
+        private boolean closed;
+
+        private ConfigurationReadLease(Lock lock, long generation) {
+            this.lock = lock;
+            this.generation = generation;
+        }
+
+        public long generation() {
+            if (closed) {
+                throw new IllegalStateException(
+                        "Currency configuration lease is closed");
+            }
+            return generation;
+        }
+
+        @Override
+        public void close() {
+            if (closed) {
+                throw new IllegalStateException(
+                        "Currency configuration lease is closed");
+            }
+            closed = true;
+            lock.unlock();
+        }
     }
 
     private static List<CurrencyMath.ItemValue> parseConfig(List<? extends String> entries) {

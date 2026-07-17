@@ -284,6 +284,18 @@ public final class ClaimRepository {
                 .toList();
     }
 
+    public synchronized List<EscrowClaim> pendingCashFor(UUID ownerId) {
+        Objects.requireNonNull(ownerId, "ownerId");
+        return claims.values().stream()
+                .filter(claim -> claim.ownerId().equals(ownerId))
+                .filter(claim -> claim.status() == ClaimStatus.PENDING)
+                .filter(claim -> claim.kind() == ClaimKind.PROTECTED_CASH
+                        || claim.kind() == ClaimKind.FOREIGN_CASH)
+                .sorted(Comparator.comparing(EscrowClaim::createdAt)
+                        .thenComparing(value -> value.claimId().toString()))
+                .toList();
+    }
+
     public synchronized List<EscrowClaim> forTransaction(UUID transactionId) {
         Objects.requireNonNull(transactionId, "transactionId");
         return claims.values().stream()

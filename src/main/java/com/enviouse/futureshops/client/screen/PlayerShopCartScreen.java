@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.client.screen;
 
 import com.enviouse.futureshops.client.ClientRouteGuard;
+import com.enviouse.futureshops.client.CartResponsePolicy;
 import com.enviouse.futureshops.client.PlayerShopCartState;
 import com.enviouse.futureshops.client.ShopClientState;
 import com.enviouse.futureshops.client.ShopColors;
@@ -15,6 +16,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Items 34+35: Cart screen for player shop purchases.
@@ -32,6 +34,9 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
     private int hoverTooltipY = 0;
     private boolean awaitingVerification = false;
     private ConfirmationModal confirmationModal;
+    private String checkoutStatusMessage;
+    private boolean checkoutStatusSuccess;
+    private long checkoutStatusExpiresAt;
     private static final int SCROLLBAR_RESERVE = 16;
     private static final int REMOVE_BTN_W = 18;
 
@@ -72,6 +77,8 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
                 guiLeft + 10, guiTop + 10, ShopColors.TEXT_STRONG, false);
 
         List<PlayerShopCartState.CartEntry> entries = PlayerShopCartState.getEntries();
+        boolean checkoutPending = PlayerShopCartState.isCheckoutPending();
+        boolean checkoutTracked = PlayerShopCartState.hasTrackedCheckout();
         if (entries.isEmpty()) {
             graphics.drawCenteredString(this.font,
                     Component.translatable("gui.futureshops.player_shop_cart.empty").getString(),
@@ -190,7 +197,7 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
                 if (isBoth) {
                     int toggleIdx = idx;
                     ShopUiUtil.zone(clickZones, panelLeft + 28, badgeY - 2,
-                            (panelRight - 140) - (panelLeft + 28), 14, true,
+                            (panelRight - 140) - (panelLeft + 28), 14, !checkoutTracked,
                             () -> PlayerShopCartState.togglePayment(toggleIdx));
                 }
 
@@ -227,12 +234,12 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
                 final int qtyIdx = idx;
                 ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                         qtyMinusX, qtyBtnY, qtyBtnSize, qtyBtnSize, Component.literal("-"),
-                        ShopUiUtil.ButtonStyle.SECONDARY, true,
+                        ShopUiUtil.ButtonStyle.SECONDARY, !checkoutTracked,
                         () -> PlayerShopCartState.setQuantity(qtyIdx,
                                 qtyEntry.quantity() - (Screen.hasShiftDown() ? 10 : 1)));
                 ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                         qtyPlusX, qtyBtnY, qtyBtnSize, qtyBtnSize, Component.literal("+"),
-                        ShopUiUtil.ButtonStyle.SECONDARY, true,
+                        ShopUiUtil.ButtonStyle.SECONDARY, !checkoutTracked,
                         () -> PlayerShopCartState.setQuantity(qtyIdx,
                                 Math.min(999, qtyEntry.quantity() + (Screen.hasShiftDown() ? 10 : 1))));
                 graphics.drawString(this.font, qtyStr, qtyTextX, centerY, ShopColors.TEXT_STRONG, false);
@@ -274,7 +281,8 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
                 int rmY = y + (rowH - 2 - 14) / 2;
                 ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                         removeX, rmY, REMOVE_BTN_W, 14, Component.literal("✕"),
-                        ShopUiUtil.ButtonStyle.DANGER, true, () -> PlayerShopCartState.remove(qtyIdx));
+                        ShopUiUtil.ButtonStyle.DANGER, !checkoutTracked,
+                        () -> PlayerShopCartState.remove(qtyIdx));
             }
 
             // Scroll indicators
@@ -315,7 +323,9 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
             summary = this.font.plainSubstrByWidth(summary, summaryMaxW - 6) + "§8…";
         }
         // Suppress the summary while the centered "Verifying…" indicator occupies this same band.
-        if (!awaitingVerification) {
+        boolean statusVisible = checkoutStatusMessage != null
+                && System.currentTimeMillis() < checkoutStatusExpiresAt;
+        if (!awaitingVerification && !checkoutTracked && !statusVisible) {
             graphics.drawString(this.font, summary, guiLeft + 66, summaryY + 6, ShopColors.TEXT_STRONG, false);
         }
 
@@ -354,6 +364,19 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
         if (awaitingVerification) {
             graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.player_shop_cart.verifying"),
                     guiLeft + guiW / 2, summaryY + 6, ShopColors.STATUS_WARNING);
+        } else if (checkoutPending) {
+            graphics.drawCenteredString(this.font,
+                    Component.translatable("gui.futureshops.player_shop_cart.processing"),
+                    guiLeft + guiW / 2, summaryY + 6, ShopColors.STATUS_WARNING);
+        } else if (statusVisible) {
+            graphics.drawCenteredString(this.font,
+                    this.font.plainSubstrByWidth(checkoutStatusMessage, guiW - 40),
+                    guiLeft + guiW / 2, summaryY + 6,
+                    checkoutStatusSuccess ? ShopColors.STATUS_SUCCESS : ShopColors.STATUS_DANGER);
+        } else if (checkoutTracked) {
+            graphics.drawCenteredString(this.font,
+                    Component.translatable("gui.futureshops.player_shop_cart.awaiting_result"),
+                    guiLeft + guiW / 2, summaryY + 6, ShopColors.STATUS_WARNING);
         }
 
         // Footer buttons — flat Nocturne primitives at their former bounds.
@@ -362,14 +385,16 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
                 Component.literal("✕"), ShopUiUtil.ButtonStyle.SECONDARY, true, this::onClose);
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + 8, guiTop + guiH - 22, 50, 16,
-                Component.translatable("gui.futureshops.player_shop_cart.clear"), ShopUiUtil.ButtonStyle.DANGER, true, () -> {
+                Component.translatable("gui.futureshops.player_shop_cart.clear"), ShopUiUtil.ButtonStyle.DANGER,
+                !checkoutTracked, () -> {
                     PlayerShopCartState.clear();
                     ShopClientState.clearCartVerification();
                 });
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + guiW - 100, guiTop + guiH - 22, 92, 16,
                 Component.translatable("gui.futureshops.player_shop_cart.checkout"), ShopUiUtil.ButtonStyle.PRIMARY,
-                !entries.isEmpty(), this::requestVerifyAndCheckout);
+                !entries.isEmpty() && !checkoutTracked && !awaitingVerification,
+                this::requestVerifyAndCheckout);
 
         super.render(graphics, mouseX, mouseY, partialTick);
 
@@ -418,6 +443,13 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
     }
 
     private void requestVerifyAndCheckout() {
+        if (PlayerShopCartState.isCheckoutPending() || awaitingVerification) return;
+        if (PlayerShopCartState.hasTrackedCheckout()) {
+            onTransactionResult(false,
+                    Component.translatable(
+                            "gui.futureshops.player_shop_cart.checkout_awaiting_result").getString());
+            return;
+        }
         List<PlayerShopCartState.CartEntry> entries = PlayerShopCartState.getEntries();
         if (entries.isEmpty()) return;
 
@@ -437,6 +469,11 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
     @Override
     public void tick() {
         super.tick();
+        if (PlayerShopCartState.expireCheckout(System.currentTimeMillis())
+                == CartResponsePolicy.TimeoutDecision.TIMED_OUT) {
+            onTransactionResult(false,
+                    Component.translatable("gui.futureshops.player_shop_cart.checkout_timeout").getString());
+        }
         if (awaitingVerification && ShopClientState.isCartVerified()) {
             awaitingVerification = false;
             List<S2CVerifyCartResponsePacket.CartWarning> warnings = ShopClientState.getCartWarnings();
@@ -461,7 +498,10 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
                         Component.translatable("gui.futureshops.player_shop_cart.confirm.items",
                                 summary.itemCount()).getString())),
                 Component.translatable("gui.futureshops.player_shop_block.confirm.total", total).getString(),
-                (modal, paymentSource) -> checkout(paymentSource),
+                (modal, paymentSource) -> {
+                    modal.setProcessing();
+                    checkout(paymentSource);
+                },
                 () -> confirmationModal = null);
     }
 
@@ -472,17 +512,48 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
     }
 
     private void checkout(PaymentSource paymentSource) {
+        long nowMillis = System.currentTimeMillis();
+        if (PlayerShopCartState.hasTrackedCheckout()) {
+            onTransactionResult(false,
+                    Component.translatable(
+                            "gui.futureshops.player_shop_cart.checkout_awaiting_result").getString());
+            return;
+        }
         List<PlayerShopCartState.CartEntry> entries = PlayerShopCartState.getEntries();
-        for (PlayerShopCartState.CartEntry entry : entries) {
+        if (entries.isEmpty()) return;
+        UUID requestId = UUID.randomUUID();
+        CartResponsePolicy.BeginDecision decision = PlayerShopCartState.beginCheckout(
+                requestId, entries, paymentSource.wire(), nowMillis);
+        if (decision != CartResponsePolicy.BeginDecision.STARTED) {
+            onTransactionResult(false,
+                    Component.translatable("gui.futureshops.player_shop_cart.checkout_pending").getString());
+            return;
+        }
+        sendCheckoutSubmission(new PlayerShopCartState.CheckoutSubmission(
+                requestId, entries, paymentSource.wire()));
+        ShopClientState.clearCartVerification();
+    }
+
+    private void sendCheckoutSubmission(PlayerShopCartState.CheckoutSubmission submission) {
+        for (int responseToken = 0; responseToken < submission.entries().size(); responseToken++) {
+            PlayerShopCartState.CartEntry entry = submission.entries().get(responseToken);
             // LGB#4: Pass chosen payment method for BOTH-mode trades
             ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopBuyPacket(
                     entry.shopPos(), entry.listingIndex(), entry.quantity(), entry.chosenPayment(),
-                    paymentSource.wire()));
+                    submission.paymentSource(), submission.requestId(), responseToken));
         }
-        PlayerShopCartState.clear();
-        ShopClientState.clearCartVerification();
-        if (this.minecraft != null) {
-            this.minecraft.setScreen(parent);
+    }
+
+    public void onTransactionResult(boolean success, String message) {
+        checkoutStatusMessage = message;
+        checkoutStatusSuccess = success;
+        checkoutStatusExpiresAt = System.currentTimeMillis() + 6_000L;
+        if (confirmationModal != null) {
+            if (success) {
+                confirmationModal.setSuccess(message);
+            } else {
+                confirmationModal.setFailed(message);
+            }
         }
     }
 

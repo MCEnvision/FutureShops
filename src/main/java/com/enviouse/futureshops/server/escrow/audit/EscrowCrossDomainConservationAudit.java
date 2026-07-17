@@ -363,9 +363,9 @@ public final class EscrowCrossDomainConservationAudit {
         addUnverifiedClaim(result, claims, ClaimLiabilityCategory.ITEM,
                 "CLAIM_ITEMS", "item units");
         addUnverifiedClaim(result, claims, ClaimLiabilityCategory.PROTECTED_CASH,
-                "CLAIM_PROTECTED_CASH", "claim units");
+                "CLAIM_PROTECTED_CASH", "minor units");
         addUnverifiedClaim(result, claims, ClaimLiabilityCategory.FOREIGN_CASH,
-                "CLAIM_FOREIGN_CASH", "claim units");
+                "CLAIM_FOREIGN_CASH", "minor units");
         addUnverifiedClaim(result, claims, ClaimLiabilityCategory.BARTER_ITEM,
                 "CLAIM_BARTER_ITEMS", "item units");
         addUnverifiedClaim(result, claims, ClaimLiabilityCategory.ITEM_REFUND,

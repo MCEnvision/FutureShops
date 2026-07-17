@@ -115,24 +115,53 @@ public final class PlayerShopSettlementSavedData extends SavedData {
                 DATA_NAME);
     }
 
-    public synchronized void recordSale(UUID owner, long shopPosLong, long amountMinor, String itemId, int quantity) {
-        recordSale(owner, shopPosLong, amountMinor, itemId, quantity, "");
+    public synchronized boolean recordSale(UUID owner, long shopPosLong, long amountMinor, String itemId, int quantity) {
+        return recordSale(owner, shopPosLong, amountMinor, itemId, quantity, "");
     }
 
     /** Additive overload: {@code nbtJson} carries the transacted listing's SNBT ("" = no NBT). */
-    public synchronized void recordSale(UUID owner, long shopPosLong, long amountMinor, String itemId, int quantity, String nbtJson) {
+    public synchronized boolean recordSale(UUID owner, long shopPosLong, long amountMinor, String itemId, int quantity, String nbtJson) {
+        if (owner == null || amountMinor < 0L) {
+            return false;
+        }
         ShopSettlement current = settlementsByShopPos.get(shopPosLong);
         if (current == null || !current.owner().equals(owner)) {
             current = new ShopSettlement(owner, 0L, 0L);
         }
+        long pending;
+        long lifetime;
+        try {
+            pending = PlayerShopBuyMath.checkedSettlementTotal(current.pendingMinor(), amountMinor);
+            lifetime = PlayerShopBuyMath.checkedSettlementTotal(current.lifetimeMinor(), amountMinor);
+        } catch (ArithmeticException | IllegalArgumentException exception) {
+            return false;
+        }
         settlementsByShopPos.put(shopPosLong, new ShopSettlement(
                 owner,
-                current.pendingMinor() + Math.max(0L, amountMinor),
-                current.lifetimeMinor() + Math.max(0L, amountMinor)
+                pending,
+                lifetime
         ));
 
         appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, amountMinor, "SALE", itemId == null ? "" : itemId, Math.max(0, quantity), nbtJson == null ? "" : nbtJson));
         setDirty();
+        return true;
+    }
+
+    public synchronized boolean canRecordSale(UUID owner, long shopPosLong, long amountMinor) {
+        if (owner == null || amountMinor < 0L) {
+            return false;
+        }
+        ShopSettlement current = settlementsByShopPos.get(shopPosLong);
+        if (current == null || !current.owner().equals(owner)) {
+            current = new ShopSettlement(owner, 0L, 0L);
+        }
+        try {
+            PlayerShopBuyMath.checkedSettlementTotal(current.pendingMinor(), amountMinor);
+            PlayerShopBuyMath.checkedSettlementTotal(current.lifetimeMinor(), amountMinor);
+            return true;
+        } catch (ArithmeticException | IllegalArgumentException exception) {
+            return false;
+        }
     }
 
     public synchronized long claim(UUID owner, long shopPosLong) {
@@ -289,5 +318,4 @@ public final class PlayerShopSettlementSavedData extends SavedData {
     public record Snapshot(long pendingMinor, long lifetimeMinor, List<String> rows) {
     }
 }
-
 

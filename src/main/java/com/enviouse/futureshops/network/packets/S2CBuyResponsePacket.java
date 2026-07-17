@@ -8,6 +8,7 @@ import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 
 import java.util.function.Supplier;
+import java.util.UUID;
 
 /**
  * Server → client response for a buy request.
@@ -20,7 +21,27 @@ public record S2CBuyResponsePacket(
         ShopResultCode errorCode,
         long resultingBalanceMinorUnits,
         int totalQuantity,
-        long totalMinorUnits) {
+        long totalMinorUnits,
+        UUID requestId) {
+
+    private static final UUID UNCORRELATED_REQUEST_ID = new UUID(0L, 0L);
+
+    public S2CBuyResponsePacket {
+        requestId = requestId == null ? UNCORRELATED_REQUEST_ID : requestId;
+    }
+
+    public S2CBuyResponsePacket(
+            boolean success,
+            boolean cartCheckout,
+            String shopId,
+            ShopResultCode errorCode,
+            long resultingBalanceMinorUnits,
+            int totalQuantity,
+            long totalMinorUnits
+    ) {
+        this(success, cartCheckout, shopId, errorCode, resultingBalanceMinorUnits,
+                totalQuantity, totalMinorUnits, UNCORRELATED_REQUEST_ID);
+    }
 
     public static void encode(S2CBuyResponsePacket packet, FriendlyByteBuf buffer) {
         buffer.writeBoolean(packet.success);
@@ -31,6 +52,7 @@ public record S2CBuyResponsePacket(
         buffer.writeLong(packet.resultingBalanceMinorUnits);
         buffer.writeVarInt(packet.totalQuantity);
         buffer.writeLong(packet.totalMinorUnits);
+        buffer.writeUUID(packet.requestId);
     }
 
     public static S2CBuyResponsePacket decode(FriendlyByteBuf buffer) {
@@ -47,7 +69,8 @@ public record S2CBuyResponsePacket(
         long bal = buffer.readLong();
         int totalQty = buffer.readVarInt();
         long totalMu = buffer.readLong();
-        return new S2CBuyResponsePacket(success, cartCheckout, shopId, code, bal, totalQty, totalMu);
+        return new S2CBuyResponsePacket(
+                success, cartCheckout, shopId, code, bal, totalQty, totalMu, buffer.readUUID());
     }
 
     public static void handle(S2CBuyResponsePacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
@@ -57,5 +80,3 @@ public record S2CBuyResponsePacket(
         context.setPacketHandled(true);
     }
 }
-
-

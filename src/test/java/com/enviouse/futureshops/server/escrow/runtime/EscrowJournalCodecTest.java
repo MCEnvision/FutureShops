@@ -37,6 +37,41 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class EscrowJournalCodecTest {
     @Test
+    void compositeWireIdsRemainAppendOnly() {
+        assertEquals(14,
+                EscrowJournalEventType.ATM_WITHDRAWAL_COMMIT.wireId());
+        assertEquals(15,
+                EscrowJournalEventType.FOREIGN_ATM_WITHDRAWAL_COMMIT
+                        .wireId());
+        assertEquals(16,
+                EscrowJournalEventType.CASH_CLAIM_DELIVERY_COMMIT
+                        .wireId());
+        assertEquals(17, EscrowJournalEventType
+                .PROTECTED_CASH_REDEMPTION_RESERVATION.wireId());
+        assertEquals(18, EscrowJournalEventType
+                .PROTECTED_CASH_REDEMPTION_SETTLEMENT.wireId());
+        assertEquals(19, EscrowJournalEventType
+                .PROTECTED_CASH_REDEMPTION_CANCELLATION.wireId());
+        assertEquals(EscrowJournalEventType.ATM_WITHDRAWAL_COMMIT,
+                EscrowJournalEventType.fromWireId(14));
+        assertEquals(
+                EscrowJournalEventType.FOREIGN_ATM_WITHDRAWAL_COMMIT,
+                EscrowJournalEventType.fromWireId(15));
+        assertEquals(
+                EscrowJournalEventType.CASH_CLAIM_DELIVERY_COMMIT,
+                EscrowJournalEventType.fromWireId(16));
+        assertEquals(EscrowJournalEventType
+                        .PROTECTED_CASH_REDEMPTION_RESERVATION,
+                EscrowJournalEventType.fromWireId(17));
+        assertEquals(EscrowJournalEventType
+                        .PROTECTED_CASH_REDEMPTION_SETTLEMENT,
+                EscrowJournalEventType.fromWireId(18));
+        assertEquals(EscrowJournalEventType
+                        .PROTECTED_CASH_REDEMPTION_CANCELLATION,
+                EscrowJournalEventType.fromWireId(19));
+    }
+
+    @Test
     void envelopeRoundTrips() {
         EscrowJournalEvent event = new EscrowJournalEvent(EscrowJournalEventType.CLAIM_CREATE,
                 new byte[]{1, 2, 3});

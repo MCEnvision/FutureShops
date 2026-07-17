@@ -245,53 +245,54 @@ public class Config {
         if (event.getConfig().getSpec() != SPEC) {
             return;
         }
-        moduleSettings = new ModuleSettings(
-            MODULES_BAZAAR_ENABLED.get(),
-            MODULES_AUCTION_HOUSE_ENABLED.get(),
-            MODULES_SHOW_MODULE_NAVIGATION.get(),
-            MODULES_DEFAULT_MODULE.get()
-        );
-        economyCurrencyName = ECONOMY_CURRENCY_NAME.get();
-        economyCurrencyDecimals = ECONOMY_DECIMALS.get();
-        economyStartingBalanceMinorUnits = ECONOMY_STARTING_BALANCE_MINOR_UNITS.get();
-        economyMaxBalanceMinorUnits = ECONOMY_MAX_BALANCE_MINOR_UNITS.get();
-        economyAllowNegative = ECONOMY_ALLOW_NEGATIVE.get();
+        com.enviouse.futureshops.money.CurrencyManager
+                .withConfigurationWriteLock(() -> {
+                    moduleSettings = new ModuleSettings(
+                        MODULES_BAZAAR_ENABLED.get(),
+                        MODULES_AUCTION_HOUSE_ENABLED.get(),
+                        MODULES_SHOW_MODULE_NAVIGATION.get(),
+                        MODULES_DEFAULT_MODULE.get()
+                    );
+                    economyCurrencyName = ECONOMY_CURRENCY_NAME.get();
+                    economyCurrencyDecimals = ECONOMY_DECIMALS.get();
+                    economyStartingBalanceMinorUnits = ECONOMY_STARTING_BALANCE_MINOR_UNITS.get();
+                    economyMaxBalanceMinorUnits = ECONOMY_MAX_BALANCE_MINOR_UNITS.get();
+                    economyAllowNegative = ECONOMY_ALLOW_NEGATIVE.get();
 
-        currencyProvider = CURRENCY_PROVIDER.get();
-        currencyItems = CURRENCY_ITEMS.get();
-        currencyAcceptOnlyItems = CURRENCY_ACCEPT_ONLY_ITEMS.get();
+                    currencyProvider = CURRENCY_PROVIDER.get();
+                    currencyItems = CURRENCY_ITEMS.get();
+                    currencyAcceptOnlyItems = CURRENCY_ACCEPT_ONLY_ITEMS.get();
 
-        moneyChecksumSalt = MONEY_CHECKSUM_SALT.get();
-        moneyMintServerId = MONEY_MINT_SERVER_ID.get();
-        moneyMaxAgeDays = MONEY_MAX_AGE_DAYS.get();
+                    moneyChecksumSalt = MONEY_CHECKSUM_SALT.get();
+                    moneyMintServerId = MONEY_MINT_SERVER_ID.get();
+                    moneyMaxAgeDays = MONEY_MAX_AGE_DAYS.get();
 
-        playerShopMaxLinkDistanceBlocks = PLAYER_SHOPS_MAX_LINK_DISTANCE_BLOCKS.get();
+                    playerShopMaxLinkDistanceBlocks = PLAYER_SHOPS_MAX_LINK_DISTANCE_BLOCKS.get();
 
-        sessionMaxDistanceBlocks = SESSION_MAX_DISTANCE_BLOCKS.get();
-        sessionCloseOnDamage = SESSION_CLOSE_ON_DAMAGE.get();
+                    sessionMaxDistanceBlocks = SESSION_MAX_DISTANCE_BLOCKS.get();
+                    sessionCloseOnDamage = SESSION_CLOSE_ON_DAMAGE.get();
 
-        dynamicPricingEnabled = DYNAMIC_PRICING_ENABLED.get();
-        dynamicPricingRecalcIntervalSec = DYNAMIC_PRICING_RECALC_INTERVAL_SEC.get();
-        dynamicPricingMaxIncreasePct = DYNAMIC_PRICING_MAX_INCREASE_PCT.get();
-        dynamicPricingMaxDecreasePct = DYNAMIC_PRICING_MAX_DECREASE_PCT.get();
-        dynamicPricingDemandWeight = DYNAMIC_PRICING_DEMAND_WEIGHT.get();
-        dynamicPricingSupplyWeight = DYNAMIC_PRICING_SUPPLY_WEIGHT.get();
-        dynamicPricingDecayRate = DYNAMIC_PRICING_DECAY_RATE.get();
+                    dynamicPricingEnabled = DYNAMIC_PRICING_ENABLED.get();
+                    dynamicPricingRecalcIntervalSec = DYNAMIC_PRICING_RECALC_INTERVAL_SEC.get();
+                    dynamicPricingMaxIncreasePct = DYNAMIC_PRICING_MAX_INCREASE_PCT.get();
+                    dynamicPricingMaxDecreasePct = DYNAMIC_PRICING_MAX_DECREASE_PCT.get();
+                    dynamicPricingDemandWeight = DYNAMIC_PRICING_DEMAND_WEIGHT.get();
+                    dynamicPricingSupplyWeight = DYNAMIC_PRICING_SUPPLY_WEIGHT.get();
+                    dynamicPricingDecayRate = DYNAMIC_PRICING_DECAY_RATE.get();
 
-        stockRefreshCheckIntervalSec = STOCK_REFRESH_CHECK_INTERVAL_SEC.get();
-        stockRefreshEnabled = STOCK_REFRESH_ENABLED.get();
-        eventsTransactionEnabled = EVENTS_TRANSACTION_ENABLED.get();
+                    stockRefreshCheckIntervalSec = STOCK_REFRESH_CHECK_INTERVAL_SEC.get();
+                    stockRefreshEnabled = STOCK_REFRESH_ENABLED.get();
+                    eventsTransactionEnabled = EVENTS_TRANSACTION_ENABLED.get();
 
-        localListingsScanRadiusBlocks = LOCAL_LISTINGS_SCAN_RADIUS_BLOCKS.get();
+                    localListingsScanRadiusBlocks = LOCAL_LISTINGS_SCAN_RADIUS_BLOCKS.get();
 
-        // Config hot-reload while a server is running: rebuild the physical
-        // currency adapter so provider/item edits take effect without a
-        // restart. Guarded on an existing adapter — at initial load registries
-        // aren't ready yet and ServerStarting will do the first initialize.
-        if (event instanceof ModConfigEvent.Reloading
-                && com.enviouse.futureshops.money.CurrencyManager.getOrNull() != null) {
-            com.enviouse.futureshops.money.CurrencyManager.initialize();
-        }
+                    // A running server rebuilds the physical currency adapter.
+                    // Initial loading waits for registered items and server startup.
+                    if (event instanceof ModConfigEvent.Reloading
+                            && com.enviouse.futureshops.money.CurrencyManager.getOrNull() != null) {
+                        com.enviouse.futureshops.money.CurrencyManager.initialize();
+                    }
+                });
     }
 
     public record ModuleSettings(

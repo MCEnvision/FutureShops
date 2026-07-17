@@ -237,13 +237,16 @@ public record AtmWithdrawalCommit(
         for (EscrowClaim claim : claims) {
             ProtectedCashClaimPayload payload = payload(claim);
             byte[] canonicalPayload = ProtectedCashClaimPayloadCodec.encode(payload);
+            long claimUnits = Math.multiplyExact(
+                    payload.denominationMinorUnits(),
+                    (long) payload.billCount());
             if (!Arrays.equals(canonicalPayload, claim.payload())
                     || !claim.transactionId().equals(transactionId)
                     || !claim.ownerId().equals(playerId)
                     || claim.kind() != ClaimKind.PROTECTED_CASH
                     || claim.status() != ClaimStatus.PENDING
-                    || claim.originalUnits() != payload.billCount()
-                    || claim.remainingUnits() != payload.billCount()
+                    || claim.originalUnits() != claimUnits
+                    || claim.remainingUnits() != claimUnits
                     || !claim.createdAt().equals(committedAt)
                     || !claim.updatedAt().equals(committedAt)
                     || !claim.claimId().equals(claimId(

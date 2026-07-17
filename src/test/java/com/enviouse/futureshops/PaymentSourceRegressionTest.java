@@ -19,9 +19,12 @@ class PaymentSourceRegressionTest {
         String playerPacket = read("src/main/java/com/enviouse/futureshops/network/packets/C2SPlayerShopBuyPacket.java");
         assertTrue(adminPacket.contains("String paymentSource"));
         assertTrue(adminPacket.contains("buffer.writeUtf(packet.paymentSource)"));
-        assertTrue(playerPacket.contains("String paymentMethod, String paymentSource"));
-        assertTrue(playerPacket.contains("buffer.writeUtf(packet.paymentMethod())"));
-        assertTrue(playerPacket.contains("buffer.writeUtf(packet.paymentSource())"));
+        assertTrue(playerPacket.contains("String paymentMethod"));
+        assertTrue(playerPacket.contains("String paymentSource"));
+        assertTrue(playerPacket.contains(
+                "buffer.writeUtf(packet.paymentMethod(), MAX_PAYMENT_METHOD_LENGTH)"));
+        assertTrue(playerPacket.contains(
+                "buffer.writeUtf(packet.paymentSource(), MAX_PAYMENT_SOURCE_LENGTH)"));
     }
 
     @Test

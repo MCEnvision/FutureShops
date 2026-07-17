@@ -43,7 +43,8 @@ public final class ShopBuyService {
                 result.errorCode(),
                 result.resultingBalance(),
                 result.totalQuantity(),
-                result.totalCost()));
+                result.totalCost(),
+                packet.requestId()));
 
         if (result.success() && player.getServer() != null) {
             for (PreparedLine line : result.lines()) {
@@ -249,4 +250,3 @@ public final class ShopBuyService {
         }
     }
 }
-

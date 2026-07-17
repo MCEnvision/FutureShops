@@ -30,4 +30,32 @@ class ProtectedMoneyMintBridgeTest {
             Config.moneyMintServerId = priorServerId;
         }
     }
+
+    @Test
+    void materializationKeepsCommittedEvidenceAfterSaltRotation() {
+        String priorServerId = Config.moneyMintServerId;
+        String priorSalt = Config.moneyChecksumSalt;
+        Config.moneyMintServerId = "bridge rotation server";
+        Config.moneyChecksumSalt = "bridge original salt";
+        try {
+            ProtectedMintBatch batch = ProtectedMoneyMintBridge.plan(
+                    UUID.randomUUID(), "bridge rotation", 250L, 8,
+                    Instant.parse("2026-07-18T12:00:00Z"))
+                    .materialize(8,
+                            Instant.parse("2026-07-18T12:00:00Z"));
+            String committedChecksum = batch.checksumEvidence();
+
+            Config.moneyChecksumSalt = "bridge rotated salt";
+
+            assertEquals(committedChecksum,
+                    ProtectedMoneyMintBridge.materializedMoneyData(batch, 4)
+                            .getString(MoneyNbtKeys.CHECKSUM));
+            assertEquals(batch.batchId().toString(),
+                    ProtectedMoneyMintBridge.materializedMoneyData(batch, 4)
+                            .getString(MoneyNbtKeys.MINT_ID));
+        } finally {
+            Config.moneyMintServerId = priorServerId;
+            Config.moneyChecksumSalt = priorSalt;
+        }
+    }
 }

@@ -137,6 +137,26 @@ public final class ProtectedMintSavedData extends EscrowManagedSavedData {
         repository.preflightIssueBatch(events);
     }
 
+    public synchronized List<ProtectedMintApplyResult> preflightTransitionBatch(
+            List<ProtectedMintJournalEvent> events,
+            ProtectedMintOperation requiredOperation
+    ) {
+        return repository.preflightTransitionBatch(events, requiredOperation);
+    }
+
+    public synchronized List<ProtectedMintApplyResult> applyTransitionBatch(
+            List<ProtectedMintJournalEvent> events,
+            ProtectedMintOperation requiredOperation
+    ) {
+        requireEscrowMutationPermit();
+        List<ProtectedMintApplyResult> results =
+                repository.applyTransitionBatch(events, requiredOperation);
+        if (results.stream().anyMatch(result -> !result.replayed())) {
+            setDirty();
+        }
+        return results;
+    }
+
     public synchronized ProtectedMintApplyResult materializeCommitted(UUID transactionId,
                                                                       UUID batchId,
                                                                       String requestKey,
@@ -161,6 +181,17 @@ public final class ProtectedMintSavedData extends EscrowManagedSavedData {
                                                                  int quantity,
                                                                  Instant now) {
         return applyCommitted(ProtectedMintJournalEvent.commit(transactionId,
+                batchId, requestKey, quantity, now));
+    }
+
+    public synchronized ProtectedMintApplyResult releaseCommitted(
+            UUID transactionId,
+            UUID batchId,
+            String requestKey,
+            int quantity,
+            Instant now
+    ) {
+        return applyCommitted(ProtectedMintJournalEvent.release(transactionId,
                 batchId, requestKey, quantity, now));
     }
 

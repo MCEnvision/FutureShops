@@ -5,7 +5,8 @@
   "compatibilityLevel": "JAVA_8",
   "refmap": "futureshops.refmap.json",
   "mixins": [
-    "HandshakeHandlerMixin"
+    "HandshakeHandlerMixin",
+    "PlayerListInvoker"
   ],
   "client": [
   ],

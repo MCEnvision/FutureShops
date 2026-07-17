@@ -7,7 +7,8 @@ public enum ProtectedMintOperation {
     COMMIT(4),
     REFUND(5),
     QUARANTINE(6),
-    ISSUE(7);
+    ISSUE(7),
+    RELEASE(8);
 
     private final int wireId;
 

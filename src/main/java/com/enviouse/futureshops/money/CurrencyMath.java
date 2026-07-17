@@ -21,8 +21,21 @@ public final class CurrencyMath {
     }
 
     /** Greedy breakdown result; {@code remainderMinor > 0} means not representable. */
-    public record BreakResult(List<Portion> portions, long remainderMinor) {
+    public record BreakResult(
+            List<Portion> portions,
+            long remainderMinor,
+            boolean limitExceeded
+    ) {
+        public BreakResult {
+            portions = List.copyOf(portions);
+            if (remainderMinor < 0L) {
+                throw new IllegalArgumentException(
+                        "Currency remainder is invalid");
+            }
+        }
     }
+
+    public static final int DEFAULT_BREAKDOWN_ITEM_LIMIT = 4096;
 
     private CurrencyMath() {
     }
@@ -76,17 +89,57 @@ public final class CurrencyMath {
      * before the amount is declared not representable.</p>
      */
     public static BreakResult breakIntoDenominations(long amountMinor, long[] denomValuesDesc, int[] maxStacks) {
-        BreakResult greedy = greedyBreak(amountMinor, denomValuesDesc, maxStacks);
-        if (greedy.remainderMinor() == 0L) {
-            return greedy;
+        return breakIntoDenominations(amountMinor, denomValuesDesc,
+                maxStacks, DEFAULT_BREAKDOWN_ITEM_LIMIT);
+    }
+
+    public static BreakResult breakIntoDenominations(
+            long amountMinor,
+            long[] denomValuesDesc,
+            int[] maxStacks,
+            int maximumItems
+    ) {
+        if (denomValuesDesc == null || maxStacks == null
+                || denomValuesDesc.length != maxStacks.length
+                || maximumItems <= 0) {
+            throw new IllegalArgumentException(
+                    "Currency breakdown inputs are invalid");
         }
-        long[] exactCounts = exactChangeCounts(amountMinor, denomValuesDesc);
+        if (amountMinor <= 0L) {
+            return new BreakResult(List.of(), 0L, false);
+        }
+        CountResult greedy = greedyCounts(amountMinor, denomValuesDesc);
+        if (greedy.remainderMinor() == 0L) {
+            return materialize(greedy.counts(), 0L, maxStacks,
+                    maximumItems);
+        }
+        long[] exactCounts = exactChangeCounts(
+                amountMinor, denomValuesDesc);
         if (exactCounts == null) {
-            return greedy;
+            return materialize(greedy.counts(), greedy.remainderMinor(),
+                    maxStacks, maximumItems);
+        }
+        return materialize(exactCounts, 0L, maxStacks, maximumItems);
+    }
+
+    private static BreakResult materialize(
+            long[] counts,
+            long remainderMinor,
+            int[] maxStacks,
+            int maximumItems
+    ) {
+        long totalItems = 0L;
+        for (long count : counts) {
+            if (count < 0L || count > maximumItems
+                    || totalItems > maximumItems - count) {
+                return new BreakResult(
+                        List.of(), remainderMinor, true);
+            }
+            totalItems += count;
         }
         List<Portion> portions = new ArrayList<>();
-        for (int i = 0; i < exactCounts.length; i++) {
-            long count = exactCounts[i];
+        for (int i = 0; i < counts.length; i++) {
+            long count = counts[i];
             int maxStack = Math.max(1, maxStacks[i]);
             while (count > 0L) {
                 int batch = (int) Math.min(count, maxStack);
@@ -94,12 +147,15 @@ public final class CurrencyMath {
                 count -= batch;
             }
         }
-        return new BreakResult(portions, 0L);
+        return new BreakResult(portions, remainderMinor, false);
     }
 
-    private static BreakResult greedyBreak(long amountMinor, long[] denomValuesDesc, int[] maxStacks) {
-        List<Portion> portions = new ArrayList<>();
-        long remaining = Math.max(0L, amountMinor);
+    private static CountResult greedyCounts(
+            long amountMinor,
+            long[] denomValuesDesc
+    ) {
+        long[] counts = new long[denomValuesDesc.length];
+        long remaining = amountMinor;
         for (int i = 0; i < denomValuesDesc.length && remaining > 0L; i++) {
             long denom = denomValuesDesc[i];
             if (denom <= 0L) {
@@ -109,26 +165,26 @@ public final class CurrencyMath {
             if (count <= 0L) {
                 continue;
             }
-            remaining -= count * denom;
-            int maxStack = Math.max(1, maxStacks[i]);
-            while (count > 0L) {
-                int batch = (int) Math.min(count, maxStack);
-                portions.add(new Portion(i, batch));
-                count -= batch;
-            }
+            remaining -= Math.multiplyExact(count, denom);
+            counts[i] = count;
         }
-        return new BreakResult(portions, remaining);
+        return new CountResult(counts, remaining);
     }
 
     /** Search-space bound for the exact change-making fallback (gcd-reduced units). */
-    private static final long EXACT_CHANGE_MAX_UNITS = 1_000_000L;
+    private static final long EXACT_CHANGE_MAX_UNITS = 100_000L;
+    private static final long BOUNDED_CHANGE_MAX_UNITS = 5_000_000L;
+    private static final int BOUNDED_CHANGE_MAX_ITEMS = 4096;
 
     /**
      * Exact change-making: per-denomination counts summing to {@code amountMinor},
      * or null when not representable (or the gcd-reduced amount exceeds the
      * search bound). Denomination-indexed DP over gcd-reduced units.
      */
-    private static long[] exactChangeCounts(long amountMinor, long[] denomValuesDesc) {
+    private static long[] exactChangeCounts(
+            long amountMinor,
+            long[] denomValuesDesc
+    ) {
         if (amountMinor <= 0L || denomValuesDesc.length == 0) {
             return null;
         }
@@ -146,16 +202,21 @@ public final class CurrencyMath {
             return null;
         }
         int target = (int) units;
-        // choice[u] = denomination index used to reach u; -1 = unreachable
         int[] choice = new int[target + 1];
+        int[] itemCounts = new int[target + 1];
         java.util.Arrays.fill(choice, -1);
-        choice[0] = denomValuesDesc.length; // sentinel: reachable start
+        java.util.Arrays.fill(itemCounts, Integer.MAX_VALUE);
+        choice[0] = denomValuesDesc.length;
+        itemCounts[0] = 0;
         for (int u = 1; u <= target; u++) {
             for (int i = 0; i < denomValuesDesc.length; i++) {
                 long v = denomValuesDesc[i] / gcd;
-                if (denomValuesDesc[i] > 0L && v <= u && choice[u - (int) v] != -1) {
+                if (denomValuesDesc[i] > 0L && v <= u
+                        && choice[u - (int) v] != -1
+                        && itemCounts[u - (int) v] + 1
+                        < itemCounts[u]) {
                     choice[u] = i;
-                    break;
+                    itemCounts[u] = itemCounts[u - (int) v] + 1;
                 }
             }
         }
@@ -171,9 +232,14 @@ public final class CurrencyMath {
         return counts;
     }
 
+    private record CountResult(long[] counts, long remainderMinor) {
+    }
+
     public static long[] exactBoundedCounts(long amountMinor, long[] denominationValues,
                                             int[] availableCounts) {
-        if (amountMinor < 0L || denominationValues.length == 0
+        if (amountMinor < 0L || denominationValues == null
+                || availableCounts == null
+                || denominationValues.length == 0
                 || denominationValues.length != availableCounts.length) {
             return null;
         }
@@ -197,16 +263,27 @@ public final class CurrencyMath {
         }
 
         long common = 0L;
+        int totalAvailable = 0;
         for (int i = 0; i < denominationValues.length; i++) {
+            if (availableCounts[i] < 0) {
+                return null;
+            }
             if (denominationValues[i] > 0L && availableCounts[i] > 0) {
                 common = gcd(common, denominationValues[i]);
+                try {
+                    totalAvailable = Math.addExact(
+                            totalAvailable, availableCounts[i]);
+                } catch (ArithmeticException exception) {
+                    return null;
+                }
             }
         }
-        if (common <= 0L || amountMinor % common != 0L) {
+        if (common <= 0L || amountMinor % common != 0L
+                || totalAvailable > BOUNDED_CHANGE_MAX_ITEMS) {
             return null;
         }
         long targetUnits = amountMinor / common;
-        if (targetUnits > EXACT_CHANGE_MAX_UNITS) {
+        if (targetUnits > BOUNDED_CHANGE_MAX_UNITS) {
             return null;
         }
 
@@ -223,9 +300,9 @@ public final class CurrencyMath {
             int batch = 1;
             while (left > 0) {
                 int count = Math.min(batch, left);
-                long weight = unitValue * count;
-                if (weight <= target) {
-                    groups.add(new Group(i, count, (int) weight));
+                if (unitValue <= target / (long) count) {
+                    groups.add(new Group(i, count,
+                            Math.toIntExact(unitValue * count)));
                 }
                 left -= count;
                 if (batch <= Integer.MAX_VALUE / 2) {
@@ -234,23 +311,19 @@ public final class CurrencyMath {
             }
         }
 
-        boolean[] reachable = new boolean[target + 1];
+        long[] reachable = new long[(target >>> 6) + 1];
         int[] previous = new int[target + 1];
         int[] chosenGroup = new int[target + 1];
         java.util.Arrays.fill(previous, -1);
         java.util.Arrays.fill(chosenGroup, -1);
-        reachable[0] = true;
+        reachable[0] = 1L;
         for (int groupIndex = 0; groupIndex < groups.size(); groupIndex++) {
             Group group = groups.get(groupIndex);
-            for (int units = target; units >= group.units(); units--) {
-                if (!reachable[units] && reachable[units - group.units()]) {
-                    reachable[units] = true;
-                    previous[units] = units - group.units();
-                    chosenGroup[units] = groupIndex;
-                }
-            }
+            addReachableGroup(reachable, target, group.units(),
+                    previous, chosenGroup, groupIndex);
         }
-        if (!reachable[target]) {
+        if ((reachable[target >>> 6]
+                & (1L << (target & 63))) == 0L) {
             return null;
         }
 
@@ -260,6 +333,41 @@ public final class CurrencyMath {
             counts[group.denominationIndex()] += group.count();
         }
         return counts;
+    }
+
+    private static void addReachableGroup(
+            long[] reachable,
+            int target,
+            int weight,
+            int[] previous,
+            int[] chosenGroup,
+            int groupIndex
+    ) {
+        int wordOffset = weight >>> 6;
+        int bitOffset = weight & 63;
+        int finalWord = target >>> 6;
+        long finalMask = (target & 63) == 63
+                ? -1L : (1L << ((target & 63) + 1)) - 1L;
+        for (int destination = finalWord;
+             destination >= wordOffset; destination--) {
+            int source = destination - wordOffset;
+            long shifted = reachable[source] << bitOffset;
+            if (bitOffset != 0 && source > 0) {
+                shifted |= reachable[source - 1] >>> (64 - bitOffset);
+            }
+            if (destination == finalWord) {
+                shifted &= finalMask;
+            }
+            long added = shifted & ~reachable[destination];
+            reachable[destination] |= shifted;
+            while (added != 0L) {
+                int bit = Long.numberOfTrailingZeros(added);
+                int units = (destination << 6) + bit;
+                previous[units] = units - weight;
+                chosenGroup[units] = groupIndex;
+                added &= added - 1L;
+            }
+        }
     }
 
     private static long gcd(long a, long b) {

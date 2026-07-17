@@ -82,7 +82,8 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + 10, y, 68, 18,
                 Component.translatable("gui.futureshops.local.back"),
-                ShopUiUtil.ButtonStyle.SECONDARY, true, this::onClose);
+                ShopUiUtil.ButtonStyle.SECONDARY, true,
+                () -> applyProfileNavigation(ClientNavigationPolicy.profileBack()));
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + 82, y, 62, 18,
                 Component.translatable("gui.futureshops.balance.atm"),
@@ -98,7 +99,8 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + guiW - 78, y, 60, 18,
                 Component.translatable("gui.futureshops.balance.close"),
-                ShopUiUtil.ButtonStyle.SECONDARY, true, this::openDefaultShop);
+                ShopUiUtil.ButtonStyle.SECONDARY, true,
+                () -> applyProfileNavigation(ClientNavigationPolicy.profileClose()));
     }
 
     private void openAtm() {
@@ -119,6 +121,14 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
     private void openDefaultShop() {
         ClientRouteGuard.cancelFor(this);
         ShopPackets.CHANNEL.sendToServer(new C2SOpenShopPacket("default"));
+    }
+
+    private void applyProfileNavigation(
+            ClientNavigationPolicy.ProfileAction action) {
+        switch (action) {
+            case RETURN_TO_PARENT -> onClose();
+            case OPEN_DEFAULT_SHOP -> openDefaultShop();
+        }
     }
 
     @Override

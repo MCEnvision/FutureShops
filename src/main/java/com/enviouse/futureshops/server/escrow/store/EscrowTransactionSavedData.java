@@ -122,6 +122,63 @@ public final class EscrowTransactionSavedData extends EscrowManagedSavedData {
         return repository.preflight(transaction);
     }
 
+    public synchronized EscrowStoreApplyResult applyFoldedHeldCommitted(
+            EscrowTransaction transaction
+    ) {
+        requireEscrowMutationPermit();
+        EscrowStoreApplyResult result = repository.applyFoldedHeld(transaction);
+        if (result.applied()) {
+            setDirty();
+        }
+        return result;
+    }
+
+    public synchronized EscrowStoreApplyResult preflightFoldedHeldCommitted(
+            EscrowTransaction transaction
+    ) {
+        return repository.preflightFoldedHeld(transaction);
+    }
+
+    public synchronized EscrowStoreApplyResult applyFoldedCompletionCommitted(
+            EscrowTransaction held,
+            EscrowTransaction completed
+    ) {
+        requireEscrowMutationPermit();
+        EscrowStoreApplyResult result = repository.applyFoldedCompletion(
+                held, completed);
+        if (result.applied()) {
+            setDirty();
+        }
+        return result;
+    }
+
+    public synchronized EscrowStoreApplyResult preflightFoldedCompletionCommitted(
+            EscrowTransaction held,
+            EscrowTransaction completed
+    ) {
+        return repository.preflightFoldedCompletion(held, completed);
+    }
+
+    public synchronized EscrowStoreApplyResult applyFoldedRefundCommitted(
+            EscrowTransaction held,
+            EscrowTransaction refunded
+    ) {
+        requireEscrowMutationPermit();
+        EscrowStoreApplyResult result = repository.applyFoldedRefund(
+                held, refunded);
+        if (result.applied()) {
+            setDirty();
+        }
+        return result;
+    }
+
+    public synchronized EscrowStoreApplyResult preflightFoldedRefundCommitted(
+            EscrowTransaction held,
+            EscrowTransaction refunded
+    ) {
+        return repository.preflightFoldedRefund(held, refunded);
+    }
+
     public synchronized EscrowTransaction getTransaction(EscrowTransactionId transactionId) {
         return repository.get(transactionId);
     }

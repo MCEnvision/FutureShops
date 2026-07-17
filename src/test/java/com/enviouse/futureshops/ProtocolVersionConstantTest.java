@@ -6,7 +6,12 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Protocol 32 adds explicit ATM server open intent to the data packet.
+ * Protocol 39 binds ATM deposits to currency catalog signatures.
+ * Protocol 38 adds bounded ATM withdrawal retry timing.
+ * Protocol 37 adds correlated ATM cash deposits.
+ * Protocol 36 adds bounded ATM cash retry timing.
+ * Protocol 35 adds correlated cart checkout responses.
+ * Protocol 34 adds bounded correlated ATM cash claim collection.
  * Pins the network protocol version. Protocol 30 appends the ATM open/data/withdraw/result packets
  * so clients can submit exact denomination plans to the server-authoritative minting path.
  * Protocol 29 changes the protocol-28 barter-batch action from
@@ -38,8 +43,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class ProtocolVersionConstantTest {
 
     @Test
-    void protocolVersionIs32() {
-        assertEquals("32", ShopPackets.PROTOCOL_VERSION,
-                "PROTOCOL_VERSION must be 32 because ATM data now includes open intent");
+    void protocolVersionIs39() {
+        assertEquals("39", ShopPackets.PROTOCOL_VERSION,
+                "PROTOCOL_VERSION must be 39 because ATM deposit packets changed");
     }
 }

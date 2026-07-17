@@ -157,6 +157,16 @@ public record ProtectedMintBatch(UUID batchId, UUID transactionId,
                 refundedQuantity, quarantinedQuantity, now);
     }
 
+    public ProtectedMintBatch release(UUID reservationTransactionId,
+                                      int quantity,
+                                      Instant now) {
+        Map<UUID, Integer> reserved = subtract(reservedQuantities,
+                reservationTransactionId, quantity, "reserved");
+        return changed(authorizedQuantity,
+                Math.addExact(availableQuantity, quantity), reserved,
+                spentQuantities, refundedQuantity, quarantinedQuantity, now);
+    }
+
     public ProtectedMintBatch refund(UUID reservationTransactionId,
                                      ProtectedMintState sourceState,
                                      int quantity, Instant now) {

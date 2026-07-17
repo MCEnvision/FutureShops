@@ -1,11 +1,13 @@
 package com.enviouse.futureshops.client;
 
+import com.enviouse.futureshops.Futureshops;
 import com.enviouse.futureshops.client.screen.BarterScreen;
 import com.enviouse.futureshops.client.screen.CartScreen;
 import com.enviouse.futureshops.client.screen.FranchiseManagementScreen;
 import com.enviouse.futureshops.client.screen.ItemDetailScreen;
 import com.enviouse.futureshops.client.screen.PlayerShopBarterScreen;
 import com.enviouse.futureshops.client.screen.PlayerShopBlockScreen;
+import com.enviouse.futureshops.client.screen.PlayerShopCartScreen;
 import com.enviouse.futureshops.client.screen.PlayerStorefrontScreen;
 import com.enviouse.futureshops.client.screen.BalTopOverviewScreen;
 import com.enviouse.futureshops.client.screen.AtmScreen;
@@ -15,8 +17,13 @@ import com.enviouse.futureshops.client.screen.ShopScreenMarker;
 import com.enviouse.futureshops.client.screen.ShopUiUtil;
 import com.enviouse.futureshops.client.screen.TransactionHistoryScreen;
 import com.enviouse.futureshops.network.packets.S2CAdminEditAckPacket;
+import com.enviouse.futureshops.network.packets.C2SAtmWithdrawPacket;
+import com.enviouse.futureshops.network.packets.C2SAtmCollectCashPacket;
+import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmDataPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmResultPacket;
+import com.enviouse.futureshops.network.packets.S2CAtmCollectCashResultPacket;
+import com.enviouse.futureshops.network.packets.S2CAtmDepositResultPacket;
 import com.enviouse.futureshops.network.packets.S2CBalTopUiPacket;
 import com.enviouse.futureshops.network.packets.S2CBalanceUiPacket;
 import com.enviouse.futureshops.network.ShopPackets;
@@ -36,10 +43,219 @@ import com.enviouse.futureshops.network.packets.S2CVerifyCartResponsePacket;
 import com.enviouse.futureshops.server.shop.ShopResultCode;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 
+import java.util.List;
+import java.util.Optional;
+import java.util.OptionalLong;
+
+@Mod.EventBusSubscriber(modid = Futureshops.MODID, value = Dist.CLIENT)
 public final class ShopClientPacketHandler {
+    private static final AtmWithdrawalTracker ATM_WITHDRAWALS =
+            new AtmWithdrawalTracker();
+    private static final AtmCashClaimCollectionTracker ATM_CASH_COLLECTIONS =
+            new AtmCashClaimCollectionTracker();
+    private static final AtmDepositTracker ATM_DEPOSITS =
+            new AtmDepositTracker();
+    private static volatile S2CAtmResultPacket lastRetryableAtmResult;
+    private static volatile S2CAtmDepositResultPacket
+            lastRetryableAtmDepositResult;
 
     private ShopClientPacketHandler() {
+    }
+
+    public static Optional<AtmWithdrawalTracker.PendingRequest>
+    submitAtmWithdrawal(
+            String currencySignature,
+            List<Integer> denominationCounts,
+            long amountMinor
+    ) {
+        try {
+            AtmWithdrawalTracker.PendingRequest request =
+                    ATM_WITHDRAWALS.begin(currencySignature,
+                            denominationCounts, amountMinor);
+            lastRetryableAtmResult = null;
+            sendAtmWithdrawal(request);
+            return Optional.of(request);
+        } catch (RuntimeException exception) {
+            return Optional.empty();
+        }
+    }
+
+    public static Optional<AtmWithdrawalTracker.PendingRequest>
+    retryAtmWithdrawal() {
+        try {
+            AtmWithdrawalTracker.PendingRequest request =
+                    ATM_WITHDRAWALS.retry();
+            lastRetryableAtmResult = null;
+            sendAtmWithdrawal(request);
+            return Optional.of(request);
+        } catch (RuntimeException exception) {
+            return Optional.empty();
+        }
+    }
+
+    public static Optional<AtmWithdrawalTracker.PendingRequest>
+    pendingAtmWithdrawal() {
+        return ATM_WITHDRAWALS.pending();
+    }
+
+    public static AtmWithdrawalTracker.PendingState atmWithdrawalState() {
+        return ATM_WITHDRAWALS.state();
+    }
+
+    public static Optional<S2CAtmResultPacket> lastRetryableAtmResult() {
+        return Optional.ofNullable(lastRetryableAtmResult);
+    }
+
+    public static void clearAtmWithdrawalState() {
+        ATM_WITHDRAWALS.clear();
+        ATM_CASH_COLLECTIONS.clear();
+        ATM_DEPOSITS.clear();
+        lastRetryableAtmResult = null;
+        lastRetryableAtmDepositResult = null;
+    }
+
+    public static Optional<AtmCashClaimCollectionTracker.PendingRequest>
+    submitAtmCashCollection(List<java.util.UUID> claimIds) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null) {
+            return Optional.empty();
+        }
+        try {
+            Optional<AtmCashClaimCollectionTracker.PendingRequest> request =
+                    ATM_CASH_COLLECTIONS.beginIfFresh(
+                            minecraft.player.getUUID(), claimIds);
+            request.ifPresent(ShopClientPacketHandler::sendAtmCashCollection);
+            return request;
+        } catch (RuntimeException exception) {
+            return Optional.empty();
+        }
+    }
+
+    public static Optional<AtmCashClaimCollectionTracker.PendingRequest>
+    retryAtmCashCollection() {
+        try {
+            AtmCashClaimCollectionTracker.PendingRequest request =
+                    ATM_CASH_COLLECTIONS.retry();
+            sendAtmCashCollection(request);
+            return Optional.of(request);
+        } catch (RuntimeException exception) {
+            return Optional.empty();
+        }
+    }
+
+    public static Optional<AtmCashClaimCollectionTracker.PendingRequest>
+    pendingAtmCashCollection() {
+        return ATM_CASH_COLLECTIONS.pending();
+    }
+
+    public static AtmCashClaimCollectionTracker.PendingState
+    atmCashCollectionState() {
+        return ATM_CASH_COLLECTIONS.state();
+    }
+
+    public static Optional<AtmDepositTracker.PendingRequest>
+    submitAtmDeposit(
+            String currencySignature,
+            C2SAtmDepositPacket.Source source,
+            OptionalLong requestedMinorUnits
+    ) {
+        try {
+            AtmDepositTracker.PendingRequest request = ATM_DEPOSITS.begin(
+                    currencySignature, source, requestedMinorUnits);
+            lastRetryableAtmDepositResult = null;
+            sendAtmDeposit(request);
+            return Optional.of(request);
+        } catch (RuntimeException exception) {
+            return Optional.empty();
+        }
+    }
+
+    public static Optional<AtmDepositTracker.PendingRequest>
+    retryAtmDeposit() {
+        try {
+            AtmDepositTracker.PendingRequest request = ATM_DEPOSITS.retry();
+            lastRetryableAtmDepositResult = null;
+            sendAtmDeposit(request);
+            return Optional.of(request);
+        } catch (RuntimeException exception) {
+            return Optional.empty();
+        }
+    }
+
+    public static Optional<AtmDepositTracker.PendingRequest>
+    pendingAtmDeposit() {
+        return ATM_DEPOSITS.pending();
+    }
+
+    public static AtmDepositTracker.PendingState atmDepositState() {
+        return ATM_DEPOSITS.state();
+    }
+
+    public static Optional<S2CAtmDepositResultPacket>
+    lastRetryableAtmDepositResult() {
+        return Optional.ofNullable(lastRetryableAtmDepositResult);
+    }
+
+    private static void sendAtmDeposit(
+            AtmDepositTracker.PendingRequest request
+    ) {
+        ShopPackets.CHANNEL.sendToServer(atmDepositPacket(request));
+    }
+
+    static C2SAtmDepositPacket atmDepositPacket(
+            AtmDepositTracker.PendingRequest request
+    ) {
+        return new C2SAtmDepositPacket(request.requestId(),
+                request.currencySignature(), request.source(),
+                request.requestedMinorUnits());
+    }
+
+    private static void sendAtmCashCollection(
+            AtmCashClaimCollectionTracker.PendingRequest request
+    ) {
+        ShopPackets.CHANNEL.sendToServer(atmCashCollectionPacket(request));
+    }
+
+    static C2SAtmCollectCashPacket atmCashCollectionPacket(
+            AtmCashClaimCollectionTracker.PendingRequest request
+    ) {
+        return new C2SAtmCollectCashPacket(
+                request.requestId(), request.claimIds());
+    }
+
+    private static void sendAtmWithdrawal(
+            AtmWithdrawalTracker.PendingRequest request
+    ) {
+        ShopPackets.CHANNEL.sendToServer(atmPacket(request));
+    }
+
+    static C2SAtmWithdrawPacket atmPacket(
+            AtmWithdrawalTracker.PendingRequest request
+    ) {
+        return new C2SAtmWithdrawPacket(
+                request.requestId(), request.currencySignature(),
+                request.denominationCounts());
+    }
+
+    static boolean acceptedAtmResult(
+            AtmWithdrawalTracker.ResultDecision decision
+    ) {
+        return decision
+                == AtmWithdrawalTracker.ResultDecision.ACCEPT_RETRYABLE
+                || decision
+                == AtmWithdrawalTracker.ResultDecision.ACCEPT_TERMINAL;
+    }
+
+    static boolean shouldApplyAtmBalance(
+            AtmWithdrawalTracker.ResultDecision decision,
+            boolean balanceKnown
+    ) {
+        return balanceKnown && acceptedAtmResult(decision);
     }
 
     public static void handleAtmData(S2CAtmDataPacket packet) {
@@ -62,11 +278,93 @@ public final class ShopClientPacketHandler {
     public static void handleAtmResult(S2CAtmResultPacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
-            ShopClientState.setCurrentBalanceMinorUnits(packet.balanceMinor());
+            AtmWithdrawalTracker.ResultDecision decision =
+                    ATM_WITHDRAWALS.evaluateResult(
+                            packet.requestId(), packet.currencySignature(),
+                            packet.retryable(), packet.retryAfterMillis(),
+                            packet.deduplicationKey());
+            if (!acceptedAtmResult(decision)) {
+                return;
+            }
+            lastRetryableAtmResult = decision
+                    == AtmWithdrawalTracker.ResultDecision.ACCEPT_RETRYABLE
+                    ? packet : null;
+            if (shouldApplyAtmBalance(decision, packet.balanceKnown())) {
+                ShopClientState.setCurrentBalanceMinorUnits(
+                        packet.balanceMinor());
+            }
             if (mc.screen instanceof AtmScreen atm) {
-                atm.applyResult(packet);
+                atm.applyResult(packet, decision);
             }
         });
+    }
+
+    public static void handleAtmCashCollectionResult(
+            S2CAtmCollectCashResultPacket packet
+    ) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            Optional<AtmCashClaimCollectionTracker.PendingRequest>
+                    pendingBeforeResult = ATM_CASH_COLLECTIONS.pending();
+            AtmCashClaimCollectionTracker.ResultDecision decision =
+                    ATM_CASH_COLLECTIONS.evaluateResult(packet.requestId(),
+                            packet.retryable(), packet.retryAfterMillis(),
+                            packet.deduplicationKey());
+            if (decision
+                    != AtmCashClaimCollectionTracker.ResultDecision
+                    .ACCEPT_RETRYABLE
+                    && decision
+                    != AtmCashClaimCollectionTracker.ResultDecision
+                    .ACCEPT_TERMINAL) {
+                return;
+            }
+            if (mc.screen instanceof AtmScreen atm) {
+                List<java.util.UUID> submittedClaimIds =
+                        pendingBeforeResult
+                                .filter(request -> request.requestId().equals(
+                                        packet.requestId()))
+                                .map(AtmCashClaimCollectionTracker
+                                        .PendingRequest::claimIds)
+                                .orElse(List.of());
+                atm.applyCashCollectionResult(
+                        packet, decision, submittedClaimIds);
+            }
+        });
+    }
+
+    public static void handleAtmDepositResult(
+            S2CAtmDepositResultPacket packet
+    ) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            AtmDepositTracker.ResultDecision decision =
+                    ATM_DEPOSITS.evaluateResult(packet.requestId(),
+                            packet.retryable(), packet.retryAfterMillis(),
+                            packet.deduplicationKey());
+            if (decision != AtmDepositTracker.ResultDecision.ACCEPT_RETRYABLE
+                    && decision
+                    != AtmDepositTracker.ResultDecision.ACCEPT_TERMINAL) {
+                return;
+            }
+            lastRetryableAtmDepositResult = decision
+                    == AtmDepositTracker.ResultDecision.ACCEPT_RETRYABLE
+                    ? packet : null;
+            if (packet.balanceKnown()) {
+                ShopClientState.setCurrentBalanceMinorUnits(
+                        packet.resultingBalanceMinorUnits());
+            }
+            if (mc.screen instanceof AtmScreen atm) {
+                atm.applyDepositResult(packet, decision);
+            }
+        });
+    }
+
+    @SubscribeEvent
+    public static void onClientLoggingOut(
+            ClientPlayerNetworkEvent.LoggingOut ignoredEvent
+    ) {
+        clearAtmWithdrawalState();
+        ClientRouteGuard.clear();
     }
 
     /**
@@ -209,6 +507,9 @@ public final class ShopClientPacketHandler {
     public static void handlePlayerShopData(S2CPlayerShopDataPacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
+            if (PlayerShopCartState.hasTrackedCheckout()) {
+                return;
+            }
             boolean storefrontOpen = mc.screen instanceof PlayerStorefrontScreen;
             boolean storefrontChild = mc.screen instanceof com.enviouse.futureshops.client.screen.PlayerShopBarterScreen
                     || mc.screen instanceof com.enviouse.futureshops.client.screen.PlayerShopSellScreen;
@@ -287,6 +588,24 @@ public final class ShopClientPacketHandler {
                     ? packet.chatMessage()
                     : Component.translatable("gui.futureshops.player_shop.result."
                             + packet.code().toLowerCase(java.util.Locale.ROOT)).getString();
+            boolean cartResponse = !CartResponsePolicy.UNCORRELATED_REQUEST_ID.equals(packet.requestId());
+            if (cartResponse) {
+                CartResponsePolicy.ResponseResult result =
+                        PlayerShopCartState.applyCheckoutResponse(
+                                packet.requestId(), packet.responseToken(), packet.success());
+                if (!result.matched()) {
+                    return;
+                }
+                if (result.checkoutComplete() && mc.screen instanceof PlayerShopCartScreen cartScreen) {
+                    String completionMessage = result.checkoutSuccessful()
+                            ? Component.translatable(
+                                    "gui.futureshops.player_shop_cart.checkout_success").getString()
+                            : Component.translatable(
+                                    "gui.futureshops.player_shop_cart.checkout_partial_failure").getString();
+                    cartScreen.onTransactionResult(result.checkoutSuccessful(), completionMessage);
+                }
+                return;
+            }
             if (mc.screen instanceof PlayerShopBlockScreen psScreen) {
                 psScreen.onTransactionResult(isSuccess, msg);
             } else if (mc.screen instanceof PlayerShopBarterScreen barterScreen) {
@@ -321,6 +640,14 @@ public final class ShopClientPacketHandler {
     public static void handleBuyResponse(S2CBuyResponsePacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
+            CartResponsePolicy.ResponseResult cartResult = null;
+            if (packet.cartCheckout()) {
+                cartResult = ShopClientState.applyCartCheckoutResponse(
+                        packet.requestId(), packet.success());
+                if (!cartResult.matched()) {
+                    return;
+                }
+            }
             ShopClientState.setCurrentBalanceMinorUnits(packet.resultingBalanceMinorUnits());
             ShopClientState.setStatus(buildBuyMessage(packet), packet.success());
 
@@ -330,10 +657,6 @@ public final class ShopClientPacketHandler {
                 ShopPackets.CHANNEL.sendToServer(new com.enviouse.futureshops.network.packets.C2SInventorySyncPacket(
                         ShopClientState.getActiveShopId()));
             }
-            if (packet.success() && packet.cartCheckout()) {
-                ShopClientState.clearCart();
-            }
-
             // Update ConfirmationModal if ItemDetailScreen is open
             if (mc.screen instanceof ItemDetailScreen detailScreen) {
                 detailScreen.onTransactionResult(packet.success(), buildBuyMessage(packet).getString());
@@ -380,6 +703,8 @@ public final class ShopClientPacketHandler {
     public static void handleForceClose(S2CForceClosePacket ignoredPacket) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
+            clearAtmWithdrawalState();
+            ClientRouteGuard.clear();
             ShopClientState.reset();
             PlayerShopCartState.clear(); // Item 34: Clear player shop cart on disconnect
             if (mc.screen instanceof ShopScreenMarker) {

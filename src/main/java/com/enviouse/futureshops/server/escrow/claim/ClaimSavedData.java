@@ -256,6 +256,10 @@ public final class ClaimSavedData extends EscrowManagedSavedData {
         return repository.pendingFor(ownerId, limit);
     }
 
+    public synchronized java.util.List<EscrowClaim> pendingCashFor(UUID ownerId) {
+        return repository.pendingCashFor(ownerId);
+    }
+
     public synchronized boolean hasMaterializedState() {
         return repository.hasMaterializedState();
     }

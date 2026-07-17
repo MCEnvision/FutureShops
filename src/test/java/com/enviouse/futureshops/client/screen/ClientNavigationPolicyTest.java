@@ -32,4 +32,16 @@ class ClientNavigationPolicyTest {
         assertEquals(ClientNavigationPolicy.Action.RETURN_TO_PARENT,
                 ClientNavigationPolicy.playerShopBlockEscape(false));
     }
+
+    @Test
+    void profileBackReturnsToItsExactParent() {
+        assertEquals(ClientNavigationPolicy.ProfileAction.RETURN_TO_PARENT,
+                ClientNavigationPolicy.profileBack());
+    }
+
+    @Test
+    void profileCloseOpensTheDefaultShop() {
+        assertEquals(ClientNavigationPolicy.ProfileAction.OPEN_DEFAULT_SHOP,
+                ClientNavigationPolicy.profileClose());
+    }
 }

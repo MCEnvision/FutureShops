@@ -10,6 +10,7 @@ import java.util.*;
  * No server-side persistence needed — purely ephemeral.
  */
 public final class PlayerShopCartState {
+    public static final long CART_CHECKOUT_TIMEOUT_MILLIS = 15_000L;
 
     /**
      * A single cart entry: which shop, which listing, and how many units.
@@ -30,6 +31,8 @@ public final class PlayerShopCartState {
     }
 
     private static final List<CartEntry> entries = new ArrayList<>();
+    private static final CartResponsePolicy cartResponsePolicy = new CartResponsePolicy();
+    private static CheckoutSubmission trackedCheckout;
 
     private PlayerShopCartState() {
     }
@@ -41,6 +44,7 @@ public final class PlayerShopCartState {
                                  String itemId, String shopName, long unitPriceMinor, int baseQuantity,
                                  String tradeMode, String barterItemId, int barterItemCount, String barterNbtJson,
                                  String nbtJson, boolean nbtAware) {
+        if (checkoutBlocksMutation()) return;
         if (quantity <= 0) return;
         // Reject blank / air listings outright so they can't enter the cart or the
         // transaction history. Modded bundles sometimes expose a primary item as "air"
@@ -77,6 +81,7 @@ public final class PlayerShopCartState {
      * Sets the quantity of a specific cart entry. Removes if quantity <= 0.
      */
     public static void setQuantity(int cartIndex, int quantity) {
+        if (checkoutBlocksMutation()) return;
         synchronized (entries) {
             if (cartIndex < 0 || cartIndex >= entries.size()) return;
             if (quantity <= 0) {
@@ -96,6 +101,7 @@ public final class PlayerShopCartState {
      * and the cart row surfaces a locked "M+B" badge rather than a toggle.
      */
     public static void togglePayment(int cartIndex) {
+        if (checkoutBlocksMutation()) return;
         synchronized (entries) {
             if (cartIndex < 0 || cartIndex >= entries.size()) return;
             CartEntry old = entries.get(cartIndex);
@@ -111,6 +117,7 @@ public final class PlayerShopCartState {
      * Removes a specific entry by index.
      */
     public static void remove(int cartIndex) {
+        if (checkoutBlocksMutation()) return;
         synchronized (entries) {
             if (cartIndex >= 0 && cartIndex < entries.size()) {
                 entries.remove(cartIndex);
@@ -125,6 +132,101 @@ public final class PlayerShopCartState {
         synchronized (entries) {
             entries.clear();
         }
+        cartResponsePolicy.reset();
+        trackedCheckout = null;
+    }
+
+    public static CartResponsePolicy.BeginDecision beginCheckout(
+            UUID requestId,
+            List<CartEntry> checkoutEntries,
+            String paymentSource,
+            long nowMillis
+    ) {
+        List<CartResponsePolicy.Line> lines = new ArrayList<>(checkoutEntries.size());
+        for (int index = 0; index < checkoutEntries.size(); index++) {
+            CartEntry entry = checkoutEntries.get(index);
+            lines.add(new CartResponsePolicy.Line(
+                    index, checkoutKey(entry.shopPos(), entry.listingIndex()), entry.quantity()));
+        }
+        CartResponsePolicy.BeginDecision decision = cartResponsePolicy.begin(
+                requestId, lines, nowMillis, CART_CHECKOUT_TIMEOUT_MILLIS);
+        if (decision == CartResponsePolicy.BeginDecision.STARTED) {
+            trackedCheckout = new CheckoutSubmission(
+                    requestId, List.copyOf(checkoutEntries), paymentSource);
+        }
+        return decision;
+    }
+
+    public static Optional<CheckoutSubmission> retryCheckout(long nowMillis) {
+        if (cartResponsePolicy.retry(nowMillis, CART_CHECKOUT_TIMEOUT_MILLIS)
+                != CartResponsePolicy.RetryDecision.RETRIED) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(trackedCheckout);
+    }
+
+    public static CartResponsePolicy.ResponseResult applyCheckoutResponse(
+            UUID requestId,
+            int responseToken,
+            boolean success
+    ) {
+        CartResponsePolicy.ResponseResult result =
+                cartResponsePolicy.onResponse(
+                        requestId, responseToken, success, true, System.currentTimeMillis());
+        if (!result.linesToClear().isEmpty()) {
+            synchronized (entries) {
+                for (CartResponsePolicy.Line line : result.linesToClear()) {
+                    removeAcknowledgedQuantityLocked(line.key(), line.quantity());
+                }
+            }
+        }
+        if (result.checkoutComplete()) {
+            trackedCheckout = null;
+        }
+        return result;
+    }
+
+    public static CartResponsePolicy.TimeoutDecision expireCheckout(long nowMillis) {
+        return cartResponsePolicy.expire(nowMillis);
+    }
+
+    public static boolean isCheckoutPending() {
+        return cartResponsePolicy.isPending();
+    }
+
+    public static boolean hasTrackedCheckout() {
+        return cartResponsePolicy.hasTrackedRequest();
+    }
+
+    private static boolean checkoutBlocksMutation() {
+        return cartResponsePolicy.hasTrackedRequest();
+    }
+
+    private static void removeAcknowledgedQuantityLocked(String key, int quantity) {
+        for (int index = 0; index < entries.size(); index++) {
+            CartEntry entry = entries.get(index);
+            if (!checkoutKey(entry.shopPos(), entry.listingIndex()).equals(key)) {
+                continue;
+            }
+            if (entry.quantity() <= quantity) {
+                entries.remove(index);
+            } else {
+                entries.set(index, withQuantity(entry, entry.quantity() - quantity));
+            }
+            return;
+        }
+    }
+
+    private static CartEntry withQuantity(CartEntry entry, int quantity) {
+        return new CartEntry(
+                entry.shopPos(), entry.listingIndex(), quantity,
+                entry.itemId(), entry.shopName(), entry.unitPriceMinor(), entry.baseQuantity(),
+                entry.tradeMode(), entry.barterItemId(), entry.barterItemCount(),
+                entry.barterNbtJson(), entry.nbtJson(), entry.chosenPayment(), entry.nbtAware());
+    }
+
+    private static String checkoutKey(BlockPos shopPos, int listingIndex) {
+        return shopPos.asLong() + "." + listingIndex;
     }
 
     /**
@@ -157,6 +259,16 @@ public final class PlayerShopCartState {
     public static long totalPrice() {
         synchronized (entries) {
             return entries.stream().mapToLong(CartEntry::totalPrice).sum();
+        }
+    }
+
+    public record CheckoutSubmission(
+            UUID requestId,
+            List<CartEntry> entries,
+            String paymentSource
+    ) {
+        public CheckoutSubmission {
+            entries = List.copyOf(entries);
         }
     }
 
@@ -204,4 +316,3 @@ public final class PlayerShopCartState {
         map.merge(e.barterItemId(), total, Integer::sum);
     }
 }
-

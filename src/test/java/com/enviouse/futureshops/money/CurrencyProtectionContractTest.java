@@ -20,29 +20,38 @@ class CurrencyProtectionContractTest {
     }
 
     @Test
-    void internalMintStillRegistersLedgerWhileForeignMintStaysPlain() throws Exception {
-        String internal = Files.readString(Path.of(
-                "src/main/java/com/enviouse/futureshops/money/InternalCurrencyAdapter.java"));
-        String foreign = Files.readString(Path.of(
-                "src/main/java/com/enviouse/futureshops/money/ItemValueCurrencyAdapter.java"));
+    void protectedAndForeignAtmRoutesRemainSeparated() throws Exception {
+        String protectedPlan = Files.readString(Path.of(
+                "src/main/java/com/enviouse/futureshops/server/escrow/runtime/ProtectedAtmWithdrawalPlan.java"));
+        String foreignCommit = Files.readString(Path.of(
+                "src/main/java/com/enviouse/futureshops/server/escrow/runtime/ForeignAtmWithdrawalCommit.java"));
 
-        assertTrue(internal.contains("return true;"), "internal adapter must continue reporting protected mode");
-        assertTrue(internal.contains("registerMint("), "internal ATM/command mints must enter the ledger");
-        assertTrue(internal.contains("MoneyMintService.mintStack"), "internal bills must retain checksummed mint NBT");
+        assertTrue(protectedPlan.contains("ProtectedMoneyMintBridge.plan("));
+        assertTrue(protectedPlan.contains("ProtectedMintJournalEvent.issue("));
+        assertTrue(protectedPlan.contains("ClaimKind.PROTECTED_CASH"));
 
-        assertTrue(foreign.contains("new ItemStack(denomination.item(), count)"),
-                "foreign ATM mints must be plain source-mod items");
-        assertFalse(foreign.contains("registerMint("), "foreign items must never enter the FutureShops ledger");
-        assertFalse(foreign.contains("MoneyNbtKeys"), "foreign items must not receive FutureShops protection tags");
+        assertTrue(foreignCommit.contains("LedgerAccountType.FOREIGN_CURRENCY_SINK"));
+        assertTrue(foreignCommit.contains("ClaimKind.FOREIGN_CASH"));
+        assertTrue(foreignCommit.contains("EscrowProtectionLevel.EXTERNAL"));
+        assertFalse(foreignCommit.contains("ProtectedMintJournalEvent"));
+        assertFalse(foreignCommit.contains("MoneyNbtKeys"));
     }
 
     @Test
-    void withdrawalEngineRemovesPartialDeliveryBeforeRefund() throws Exception {
+    void everyLiveWithdrawalEntryPointUsesTheEscrowService() throws Exception {
         String service = Files.readString(Path.of(
                 "src/main/java/com/enviouse/futureshops/money/CurrencyWithdrawalService.java"));
-        int remove = service.indexOf("for (ItemStack template : inserted)");
-        int refund = service.indexOf("provider.deposit(player.getUUID(), amount, \"WITHDRAW_ROLLBACK\")");
-        assertTrue(remove >= 0 && refund > remove,
-                "a failed delivery must remove already-inserted bills before refunding the balance");
+        String command = Files.readString(Path.of(
+                "src/main/java/com/enviouse/futureshops/command/WithdrawCommand.java"));
+        String atm = Files.readString(Path.of(
+                "src/main/java/com/enviouse/futureshops/server/economy/AtmService.java"));
+
+        assertFalse(service.contains("withdrawAutomatic("));
+        assertFalse(service.contains("withdrawSelected("));
+        assertFalse(service.contains("getInventory().add("));
+        assertTrue(command.contains("AtmService.withdrawAutomatic("));
+        assertTrue(atm.contains("EscrowAtmWithdrawalService.withdraw("));
+        assertTrue(atm.contains(
+                "EscrowAtmWithdrawalService.withdrawAutomatic("));
     }
 }

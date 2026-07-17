@@ -35,6 +35,8 @@ public record ProtectedMintJournalEvent(ProtectedMintOperation operation,
                     ProtectedMintState.AVAILABLE, "reserve");
             case COMMIT -> requireSimple(targetBatchId, sourceState, batch,
                     ProtectedMintState.RESERVED, "commit");
+            case RELEASE -> requireSimple(targetBatchId, sourceState, batch,
+                    ProtectedMintState.RESERVED, "release");
             case REFUND -> requireRefund(requestKey, transactionId, targetBatchId,
                     quantity, sourceState, batch, occurredAt);
             case QUARANTINE -> {
@@ -83,6 +85,15 @@ public record ProtectedMintJournalEvent(ProtectedMintOperation operation,
                                                    String requestKey, int quantity,
                                                    Instant occurredAt) {
         return simple(ProtectedMintOperation.COMMIT, transactionId, batchId,
+                requestKey, quantity, ProtectedMintState.RESERVED, occurredAt);
+    }
+
+    public static ProtectedMintJournalEvent release(UUID transactionId,
+                                                     UUID batchId,
+                                                     String requestKey,
+                                                     int quantity,
+                                                     Instant occurredAt) {
+        return simple(ProtectedMintOperation.RELEASE, transactionId, batchId,
                 requestKey, quantity, ProtectedMintState.RESERVED, occurredAt);
     }
 

@@ -23,12 +23,25 @@ public final class ShopTransactionUtil {
     public static final int MAX_SELL_QUANTITY = 2304;
     /** Legacy alias — prefer the specific buy/sell constants. */
     public static final int MAX_QUANTITY = MAX_BUY_QUANTITY;
+    public static final int MAX_PLAYER_SHOP_CART_LINES = MAX_BUY_QUANTITY;
+    public static final int MAX_PLAYER_SHOP_LISTING_INDEX = 65_535;
 
     private static final ConcurrentHashMap<UUID, ReentrantLock> PLAYER_LOCKS = new ConcurrentHashMap<>();
 
     private ShopTransactionUtil() {
     }
 
+    public static boolean isValidBuyQuantity(int quantity) {
+        return quantity >= 1 && quantity <= MAX_BUY_QUANTITY;
+    }
+
+    public static boolean isValidPlayerShopListingIndex(int listingIndex) {
+        return listingIndex >= 0 && listingIndex <= MAX_PLAYER_SHOP_LISTING_INDEX;
+    }
+
+    public static boolean isValidPlayerShopResponseToken(int responseToken) {
+        return responseToken >= 0 && responseToken < MAX_PLAYER_SHOP_CART_LINES;
+    }
 
 
     public static ReentrantLock lockFor(UUID playerUUID) {
@@ -246,4 +259,3 @@ public final class ShopTransactionUtil {
         }
     }
 }
-

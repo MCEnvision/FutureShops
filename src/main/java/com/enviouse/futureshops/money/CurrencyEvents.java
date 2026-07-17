@@ -2,10 +2,9 @@ package com.enviouse.futureshops.money;
 
 import com.enviouse.futureshops.Futureshops;
 import com.enviouse.futureshops.command.EconomyCommandUtil;
-import com.enviouse.futureshops.event.MoneyDepositEvent;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
-import com.enviouse.futureshops.server.economy.TransactionResult;
+import com.enviouse.futureshops.server.escrow.runtime.EscrowCashDepositService;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -17,6 +16,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -51,6 +51,11 @@ public final class CurrencyEvents {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
             return;
         }
+        int decimalPlaces;
+        String currencyName;
+        EscrowCashDepositService.DepositRequest request;
+        try (CurrencyManager.ConfigurationReadLease ignored =
+                     CurrencyManager.acquireConfigurationReadLease()) {
         PhysicalCurrencyAdapter currency = CurrencyManager.getOrNull();
         if (currency == null || currency.isInternal()) {
             return;
@@ -70,43 +75,62 @@ public final class CurrencyEvents {
             LAST_MAIN_HAND_HANDLED.put(player.getUUID(), gameTime);
         }
 
-        // Foreign items have no checksum/ledger, so creative mode would be an
-        // unlimited money printer — refuse the deposit outright.
-        if (player.getAbilities().instabuild) {
-            player.sendSystemMessage(EconomyCommandUtil.warning(
-                    Component.translatable("command.futureshops.deposit.creative_blocked")));
-            event.setCanceled(true);
-            event.setCancellationResult(InteractionResult.FAIL);
-            return;
-        }
-
-        int count = stack.getCount();
-        long value = unitValue * count;
         EconomyProvider provider = BalanceManager.getProvider();
-        TransactionResult result = provider.deposit(player.getUUID(), value);
-        if (!result.success()) {
-            // Nothing was consumed — foreign currency has no ledger, so a failed
-            // credit (e.g. MAX_BALANCE_EXCEEDED) simply leaves the items in hand.
-            EconomyCommandUtil.sendProviderError(player, result.errorCode());
-            event.setCanceled(true);
-            event.setCancellationResult(InteractionResult.FAIL);
+        decimalPlaces = provider.getDecimalPlaces();
+        currencyName = provider.getCurrencyName();
+        EscrowCashDepositService.Source source = event.getHand()
+                == InteractionHand.MAIN_HAND
+                ? EscrowCashDepositService.Source.MAIN_HAND
+                : EscrowCashDepositService.Source.OFF_HAND;
+        OptionalLong all = OptionalLong.empty();
+        request = EscrowCashDepositService.requestForCurrentState(
+                player, source, all);
+        }
+        var result = EscrowCashDepositService.deposit(player, request);
+        event.setCanceled(true);
+        if (result.successful()) {
+            String depositedText = EconomyCommandUtil.formatMinorUnits(
+                    result.depositedMinorUnits(),
+                    decimalPlaces);
+            String balanceText = EconomyCommandUtil.formatMinorUnits(
+                    result.resultingBalanceMinorUnits(),
+                    decimalPlaces);
+            player.sendSystemMessage(EconomyCommandUtil.success(
+                    Component.translatable(
+                            "command.futureshops.deposit.right_click_success",
+                            result.itemsConsumed(), depositedText,
+                            currencyName, balanceText)));
+            event.setCancellationResult(InteractionResult.CONSUME);
             return;
         }
-
-        stack.shrink(count);
-
-        // Fire MoneyDepositEvent (spec §33)
-        net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
-                new MoneyDepositEvent(player.getUUID(), value, count));
-
-        String depositedText = EconomyCommandUtil.formatMinorUnits(value, provider.getDecimalPlaces());
-        String balanceText = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
-        player.sendSystemMessage(EconomyCommandUtil.success(
-                Component.translatable("command.futureshops.deposit.right_click_success",
-                        count, depositedText, provider.getCurrencyName(), balanceText)));
-
-        event.setCanceled(true);
-        event.setCancellationResult(InteractionResult.CONSUME);
+        Component message = switch (result.status()) {
+            case CREATIVE_BLOCKED -> Component.translatable(
+                    "command.futureshops.deposit.creative_blocked");
+            case CONFIG_CHANGED -> Component.translatable(
+                    "command.futureshops.deposit.config_changed");
+            case REQUEST_CONFLICT -> Component.translatable(
+                    "command.futureshops.deposit.request_conflict");
+            case CANCELLED -> Component.translatable(
+                    "command.futureshops.deposit.cancelled");
+            case RATE_LIMITED -> Component.translatable(
+                    "command.futureshops.deposit.rate_limited",
+                    result.retryAfterSeconds());
+            case ESCROW_UNAVAILABLE, RECOVERY_REQUIRED ->
+                    Component.translatable(
+                            "command.futureshops.deposit.recovery_required");
+            case NO_CURRENCY, INVALID_AMOUNT, NOT_ENOUGH_CURRENCY,
+                    INVALID_DENOMINATION, WRONG_PROVIDER,
+                    LEGACY_MIGRATION_REQUIRED, INVALID_CURRENCY ->
+                    Component.translatable(
+                            "command.futureshops.deposit.money_invalid");
+            case TOO_MANY_ITEMS -> Component.translatable(
+                    "command.futureshops.deposit.too_many_items",
+                    EscrowCashDepositService.MAX_ITEMS_CONSUMED);
+            case SUCCESS -> throw new IllegalStateException(
+                    "Successful cash deposit was handled earlier");
+        };
+        player.sendSystemMessage(EconomyCommandUtil.warning(message));
+        event.setCancellationResult(InteractionResult.FAIL);
     }
 
     @SubscribeEvent

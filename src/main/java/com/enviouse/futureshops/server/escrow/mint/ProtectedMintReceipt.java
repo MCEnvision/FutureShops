@@ -41,7 +41,7 @@ public record ProtectedMintReceipt(UUID receiptId, String requestKey,
                     throw new IllegalArgumentException("Protected mint creation receipt is invalid");
                 }
             }
-            case MATERIALIZE, RESERVE, COMMIT, QUARANTINE -> {
+            case MATERIALIZE, RESERVE, COMMIT, RELEASE, QUARANTINE -> {
                 if (sourceBatchId.isEmpty() || resultingBatchId.isEmpty()
                         || !sourceBatchId.equals(resultingBatchId)
                         || sourceState.isEmpty()) {

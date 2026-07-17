@@ -11,20 +11,13 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-import java.time.Instant;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class TransactionHistoryScreen extends Screen implements ShopScreenMarker {
     /** Page size = rows actually shown (computed in init from the table height). A fixed size larger
      *  than the visible rows hid entries and reported too few pages ("Page 1/1" with plenty of history). */
     private int rowsPerPage = 7;
-    private static final DateTimeFormatter TS_FORMAT_24 =
-            DateTimeFormatter.ofPattern("MM-dd HH:mm").withZone(ZoneId.systemDefault());
-    private static final DateTimeFormatter TS_FORMAT_12 =
-            DateTimeFormatter.ofPattern("MM-dd h:mm a").withZone(ZoneId.systemDefault());
-
     private final Screen parent;
 
     /** Per-frame flat-button hit regions, populated in {@link #render}, consulted in mouseClicked. */
@@ -195,8 +188,8 @@ public class TransactionHistoryScreen extends Screen implements ShopScreenMarker
             graphics.drawString(this.font, this.font.plainSubstrByWidth(ShopUiUtil.getItemDisplayNameWithNbt(entry.itemId(), entry.nbtJson()), itemColW), tableX + 74, y + 5, ShopColors.TEXT_STRONG, false);
             graphics.drawString(this.font, Integer.toString(entry.quantity()), tableX + tableW - qtyOffset, y + 5, ShopColors.TEXT_MUTED, false);
             graphics.drawString(this.font, entry.totalMinorUnits() > 0L ? ShopUiUtil.formatMinorUnits(entry.totalMinorUnits()) : "—", tableX + tableW - valueOffset, y + 5, ShopColors.TEXT_CURRENCY, false);
-            DateTimeFormatter timestampFormat = twelveHourTime ? TS_FORMAT_12 : TS_FORMAT_24;
-            graphics.drawString(this.font, timestampFormat.format(Instant.ofEpochSecond(entry.timestampEpochSeconds())),
+            graphics.drawString(this.font, HistoryTimestampFormatter.format(
+                            entry.timestampEpochSeconds(), twelveHourTime, ZoneId.systemDefault()),
                     tableX + tableW - timeOffset, y + 5, ShopColors.TEXT_FAINT, false);
 
             String detail = formatBarterDetail(entry);

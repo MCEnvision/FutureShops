@@ -2,6 +2,7 @@ package com.enviouse.futureshops.config;
 
 import com.enviouse.futureshops.Config;
 import com.enviouse.futureshops.Futureshops;
+import com.enviouse.futureshops.server.security.ServerRequestSecuritySettings;
 import com.mojang.logging.LogUtils;
 import net.minecraftforge.common.ForgeConfigSpec;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -9,6 +10,8 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.config.ModConfigEvent;
 import org.slf4j.Logger;
 
+import java.time.Duration;
+import java.util.Objects;
 import java.util.Set;
 
 @Mod.EventBusSubscriber(modid = Futureshops.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
@@ -19,6 +22,8 @@ public final class EscrowConfig {
     private static final Set<String> REFUND_POLICIES = Set.of("wallet_claim", "original_source");
     private static final Set<String> AUDIT_LEVELS = Set.of("minimal", "standard", "verbose");
     private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
+    private static final ServerRequestSecuritySettings REQUEST_SECURITY_DEFAULTS =
+        ServerRequestSecuritySettings.defaults();
 
     private static final ForgeConfigSpec.IntValue RECOVERY_WORK_PER_TICK = BUILDER
         .comment("Maximum recoverable transactions processed during one server tick.")
@@ -89,6 +94,81 @@ public final class EscrowConfig {
         .comment("Reject external storage operations that cannot provide deterministic reconciliation evidence.")
         .define("storage.strict_external_storage", true);
 
+    private static final ForgeConfigSpec.IntValue REQUEST_SECURITY_TRACKED_KEY_CAP = BUILDER
+        .comment("Maximum player and action request buckets retained by one server. Applied when the server starts.")
+        .defineInRange("request_security.tracked_key_cap",
+            REQUEST_SECURITY_DEFAULTS.trackedKeyCap(), 64, 1000000);
+
+    private static final ForgeConfigSpec.IntValue REQUEST_SECURITY_IDLE_RETENTION_SECONDS = BUILDER
+        .comment("Seconds a fully refilled idle request bucket remains tracked.")
+        .defineInRange("request_security.idle_retention_seconds",
+            Math.toIntExact(REQUEST_SECURITY_DEFAULTS.idleRetention().toSeconds()),
+            10, 86400);
+
+    private static final ForgeConfigSpec.IntValue REQUEST_SECURITY_ATM_DATA_CAPACITY = BUILDER
+        .comment("ATM data request burst capacity per player.")
+        .defineInRange("request_security.atm_data.capacity",
+            REQUEST_SECURITY_DEFAULTS.atmData().capacity(), 1, 1000);
+
+    private static final ForgeConfigSpec.IntValue REQUEST_SECURITY_ATM_DATA_REFILL_TOKENS = BUILDER
+        .comment("ATM data tokens restored each refill period. This value cannot exceed capacity.")
+        .defineInRange("request_security.atm_data.refill_tokens",
+            REQUEST_SECURITY_DEFAULTS.atmData().refillTokens(), 1, 1000);
+
+    private static final ForgeConfigSpec.LongValue REQUEST_SECURITY_ATM_DATA_REFILL_PERIOD_MILLIS = BUILDER
+        .comment("ATM data token refill period in milliseconds.")
+        .defineInRange("request_security.atm_data.refill_period_millis",
+            REQUEST_SECURITY_DEFAULTS.atmData().refillPeriod().toMillis(),
+            50L, 3600000L);
+
+    private static final ForgeConfigSpec.IntValue REQUEST_SECURITY_ATM_WITHDRAWAL_CAPACITY = BUILDER
+        .comment("ATM withdrawal request burst capacity per player.")
+        .defineInRange("request_security.atm_withdrawal.capacity",
+            REQUEST_SECURITY_DEFAULTS.atmWithdrawal().capacity(), 1, 1000);
+
+    private static final ForgeConfigSpec.IntValue REQUEST_SECURITY_ATM_WITHDRAWAL_REFILL_TOKENS = BUILDER
+        .comment("ATM withdrawal tokens restored each refill period. This value cannot exceed capacity.")
+        .defineInRange("request_security.atm_withdrawal.refill_tokens",
+            REQUEST_SECURITY_DEFAULTS.atmWithdrawal().refillTokens(), 1, 1000);
+
+    private static final ForgeConfigSpec.LongValue REQUEST_SECURITY_ATM_WITHDRAWAL_REFILL_PERIOD_MILLIS = BUILDER
+        .comment("ATM withdrawal token refill period in milliseconds.")
+        .defineInRange("request_security.atm_withdrawal.refill_period_millis",
+            REQUEST_SECURITY_DEFAULTS.atmWithdrawal().refillPeriod().toMillis(),
+            50L, 3600000L);
+
+    private static final ForgeConfigSpec.IntValue REQUEST_SECURITY_ATM_CASH_COLLECTION_CAPACITY = BUILDER
+        .comment("ATM cash collection request burst capacity per player.")
+        .defineInRange("request_security.atm_cash_collection.capacity",
+            REQUEST_SECURITY_DEFAULTS.atmCashCollection().capacity(), 1, 1000);
+
+    private static final ForgeConfigSpec.IntValue REQUEST_SECURITY_ATM_CASH_COLLECTION_REFILL_TOKENS = BUILDER
+        .comment("ATM cash collection tokens restored each refill period. This value cannot exceed capacity.")
+        .defineInRange("request_security.atm_cash_collection.refill_tokens",
+            REQUEST_SECURITY_DEFAULTS.atmCashCollection().refillTokens(), 1, 1000);
+
+    private static final ForgeConfigSpec.LongValue REQUEST_SECURITY_ATM_CASH_COLLECTION_REFILL_PERIOD_MILLIS = BUILDER
+        .comment("ATM cash collection token refill period in milliseconds.")
+        .defineInRange("request_security.atm_cash_collection.refill_period_millis",
+            REQUEST_SECURITY_DEFAULTS.atmCashCollection().refillPeriod().toMillis(),
+            50L, 3600000L);
+
+    private static final ForgeConfigSpec.IntValue REQUEST_SECURITY_ATM_DEPOSIT_CAPACITY = BUILDER
+        .comment("Reserved ATM deposit request burst capacity per player.")
+        .defineInRange("request_security.atm_deposit.capacity",
+            REQUEST_SECURITY_DEFAULTS.atmDeposit().capacity(), 1, 1000);
+
+    private static final ForgeConfigSpec.IntValue REQUEST_SECURITY_ATM_DEPOSIT_REFILL_TOKENS = BUILDER
+        .comment("Reserved ATM deposit tokens restored each refill period. This value cannot exceed capacity.")
+        .defineInRange("request_security.atm_deposit.refill_tokens",
+            REQUEST_SECURITY_DEFAULTS.atmDeposit().refillTokens(), 1, 1000);
+
+    private static final ForgeConfigSpec.LongValue REQUEST_SECURITY_ATM_DEPOSIT_REFILL_PERIOD_MILLIS = BUILDER
+        .comment("Reserved ATM deposit token refill period in milliseconds.")
+        .defineInRange("request_security.atm_deposit.refill_period_millis",
+            REQUEST_SECURITY_DEFAULTS.atmDeposit().refillPeriod().toMillis(),
+            50L, 3600000L);
+
     private static final ForgeConfigSpec.ConfigValue<String> CURRENCY_PHYSICAL_REFUND_POLICY = BUILDER
         .comment(
             Config.FOREIGN_CURRENCY_WARNING,
@@ -154,7 +234,31 @@ public final class EscrowConfig {
             CURRENCY_PHYSICAL_REFUND_POLICY.get(),
             AUDIT_DETAIL.get(),
             ADMINISTRATION_REQUIRE_REASON.get(),
-            ADMINISTRATION_REQUIRE_CONFIRMATION.get()
+            ADMINISTRATION_REQUIRE_CONFIRMATION.get(),
+            readRequestSecuritySettings()
+        );
+    }
+
+    private static ServerRequestSecuritySettings readRequestSecuritySettings() {
+        return new ServerRequestSecuritySettings(
+            REQUEST_SECURITY_TRACKED_KEY_CAP.get(),
+            Duration.ofSeconds(REQUEST_SECURITY_IDLE_RETENTION_SECONDS.get()),
+            new ServerRequestSecuritySettings.ActionLimit(
+                REQUEST_SECURITY_ATM_DATA_CAPACITY.get(),
+                REQUEST_SECURITY_ATM_DATA_REFILL_TOKENS.get(),
+                Duration.ofMillis(REQUEST_SECURITY_ATM_DATA_REFILL_PERIOD_MILLIS.get())),
+            new ServerRequestSecuritySettings.ActionLimit(
+                REQUEST_SECURITY_ATM_WITHDRAWAL_CAPACITY.get(),
+                REQUEST_SECURITY_ATM_WITHDRAWAL_REFILL_TOKENS.get(),
+                Duration.ofMillis(REQUEST_SECURITY_ATM_WITHDRAWAL_REFILL_PERIOD_MILLIS.get())),
+            new ServerRequestSecuritySettings.ActionLimit(
+                REQUEST_SECURITY_ATM_CASH_COLLECTION_CAPACITY.get(),
+                REQUEST_SECURITY_ATM_CASH_COLLECTION_REFILL_TOKENS.get(),
+                Duration.ofMillis(REQUEST_SECURITY_ATM_CASH_COLLECTION_REFILL_PERIOD_MILLIS.get())),
+            new ServerRequestSecuritySettings.ActionLimit(
+                REQUEST_SECURITY_ATM_DEPOSIT_CAPACITY.get(),
+                REQUEST_SECURITY_ATM_DEPOSIT_REFILL_TOKENS.get(),
+                Duration.ofMillis(REQUEST_SECURITY_ATM_DEPOSIT_REFILL_PERIOD_MILLIS.get()))
         );
     }
 
@@ -179,7 +283,8 @@ public final class EscrowConfig {
         String physicalRefundPolicy,
         String auditDetail,
         boolean requireAdministrativeReason,
-        boolean requireAdministrativeConfirmation
+        boolean requireAdministrativeConfirmation,
+        ServerRequestSecuritySettings requestSecurity
     ) {
         public Settings {
             ConfigValidation.require(recoveryWorkPerTick > 0, "Recovery work per tick must be positive.");
@@ -211,13 +316,16 @@ public final class EscrowConfig {
             physicalRefundPolicy = ConfigValidation.requireOption(
                 physicalRefundPolicy, REFUND_POLICIES, "Physical refund policy");
             auditDetail = ConfigValidation.requireOption(auditDetail, AUDIT_LEVELS, "Audit detail");
+            requestSecurity = Objects.requireNonNull(
+                requestSecurity, "requestSecurity");
         }
 
         public static Settings defaults() {
             return new Settings(
                 64, 20, 1200, 100000, 256, 30, 2, 67108864L, 50000, 365,
                 true, 64, 32, 256, 1048576, 8388608,
-                true, "wallet_claim", "standard", true, true
+                true, "wallet_claim", "standard", true, true,
+                ServerRequestSecuritySettings.defaults()
             );
         }
     }

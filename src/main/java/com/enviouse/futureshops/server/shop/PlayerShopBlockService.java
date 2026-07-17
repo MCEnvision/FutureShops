@@ -57,6 +57,7 @@ public final class PlayerShopBlockService {
     private static final double OPEN_LOOKING_MAX_DISTANCE_SQ = 12.0D * 12.0D;
     private static final ConcurrentHashMap<Long, ReentrantLock> SHOP_LOCKS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<UUID, BlockPos> PENDING_DESC = new ConcurrentHashMap<>();
+    private static final ThreadLocal<BuyResponseContext> BUY_RESPONSE_CONTEXT = new ThreadLocal<>();
     /** Per-listing description pending entries: stores listing index (-1 = shop-level). */
     private static final ConcurrentHashMap<UUID, PendingDescEntry> PENDING_LISTING_DESC = new ConcurrentHashMap<>();
     private record PendingDescEntry(BlockPos shopPos, int listingIndex) {}
@@ -718,8 +719,127 @@ public final class PlayerShopBlockService {
         return listingIndex;
     }
 
+    private static PurchasePlan preparePurchasePlan(
+            ShopBlockEntity.Listing listing,
+            Item saleItem,
+            int quantity
+    ) throws PurchasePlanException {
+        List<PurchaseOutput> outputs = new ArrayList<>();
+        int totalItems = 0;
+        int totalStacks = 0;
+        if (listing.bundleOutputs().isEmpty()) {
+            int count = PlayerShopBuyMath.checkedItemTotal(listing.baseQuantity(), quantity);
+            totalItems = PlayerShopBuyMath.checkedAggregateItemCount(totalItems, count);
+            totalStacks = PlayerShopBuyMath.checkedAggregateStackCount(
+                    totalStacks,
+                    PlayerShopBuyMath.checkedStackCount(count, saleItem.getMaxStackSize()));
+            outputs.add(new PurchaseOutput(saleItem, count, listing.nbtAware(), listing.nbtTag()));
+        } else {
+            for (ShopBlockEntity.BundleEntry entry : listing.bundleOutputs()) {
+                Item outputItem;
+                try {
+                    outputItem = ShopTransactionUtil.resolveItem(entry.itemId());
+                } catch (RuntimeException exception) {
+                    throw new PurchasePlanException(ShopResultCode.INVALID_ITEM);
+                }
+                if (outputItem == null || outputItem == Items.AIR) {
+                    throw new PurchasePlanException(ShopResultCode.INVALID_ITEM);
+                }
+                int count = PlayerShopBuyMath.checkedItemTotal(entry.count(), quantity);
+                totalItems = PlayerShopBuyMath.checkedAggregateItemCount(totalItems, count);
+                totalStacks = PlayerShopBuyMath.checkedAggregateStackCount(
+                        totalStacks,
+                        PlayerShopBuyMath.checkedStackCount(count, outputItem.getMaxStackSize()));
+                outputs.add(new PurchaseOutput(outputItem, count, entry.nbtTag() != null, entry.nbtTag()));
+            }
+        }
+        if (totalItems <= 0 || totalStacks <= 0 || outputs.isEmpty()) {
+            throw new IllegalArgumentException("purchase output must not be empty");
+        }
+
+        boolean promoActive = listing.promo().active();
+        long basePrice = PlayerShopBuyMath.requireNonnegativePrice(listing.moneyPriceMinor());
+        long effectiveUnitPrice = promoActive
+                ? listing.promo().applyUnitPrice(basePrice)
+                : basePrice;
+        long cost = PlayerShopBuyMath.checkedPriceTotal(
+                basePrice,
+                effectiveUnitPrice,
+                quantity,
+                promoActive,
+                listing.promo().promoType(),
+                listing.promo().buyX(),
+                listing.promo().buyY());
+        return new PurchasePlan(List.copyOf(outputs), cost);
+    }
+
+    private static boolean exactOutputCount(List<ItemStack> stacks, PurchaseOutput output) {
+        if (stacks == null || stacks.isEmpty()) {
+            return false;
+        }
+        int total = 0;
+        for (ItemStack stack : stacks) {
+            if (stack == null || stack.isEmpty()
+                    || !NbtMatchUtil.matches(stack, output.item(), output.nbtAware(), output.nbtTag())) {
+                return false;
+            }
+            try {
+                total = PlayerShopBuyMath.checkedAggregateItemCount(total, stack.getCount());
+            } catch (ArithmeticException | IllegalArgumentException exception) {
+                return false;
+            }
+            if (total > output.count()) {
+                return false;
+            }
+        }
+        return total == output.count();
+    }
+
+    private static void rollbackExtracted(List<LinkedStorage> storages, List<ItemStack> extracted) {
+        if (extracted == null) {
+            return;
+        }
+        for (ItemStack stack : extracted) {
+            if (stack != null && !stack.isEmpty()) {
+                reinsertComposite(storages, stack);
+            }
+        }
+    }
+
     public static void buy(ServerPlayer buyer, BlockPos pos, int listingIndex, int quantity,
                            String paymentMethod, String paymentSourceWire) {
+        buy(buyer, pos, listingIndex, quantity, paymentMethod, paymentSourceWire,
+                new UUID(0L, 0L), 0);
+    }
+
+    public static void buy(ServerPlayer buyer, BlockPos pos, int listingIndex, int quantity,
+                           String paymentMethod, String paymentSourceWire,
+                           UUID requestId, int responseToken) {
+        BuyResponseContext previous = BUY_RESPONSE_CONTEXT.get();
+        BuyResponseContext current = new BuyResponseContext(
+                requestId == null ? new UUID(0L, 0L) : requestId,
+                responseToken);
+        BUY_RESPONSE_CONTEXT.set(current);
+        try {
+            buyInternal(buyer, pos, listingIndex, quantity, paymentMethod, paymentSourceWire);
+            if (!current.responded) {
+                sendResult(buyer, false, ShopResultCode.INVALID_TARGET);
+            }
+        } finally {
+            if (previous == null) {
+                BUY_RESPONSE_CONTEXT.remove();
+            } else {
+                BUY_RESPONSE_CONTEXT.set(previous);
+            }
+        }
+    }
+
+    private static void buyInternal(ServerPlayer buyer, BlockPos pos, int listingIndex, int quantity,
+                                    String paymentMethod, String paymentSourceWire) {
+        if (!ShopTransactionUtil.isValidBuyQuantity(quantity)) {
+            sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+            return;
+        }
         if (!(buyer.level().getBlockEntity(pos) instanceof ShopBlockEntity shop)) {
             return;
         }
@@ -733,7 +853,7 @@ public final class PlayerShopBlockService {
         ReentrantLock lock = SHOP_LOCKS.computeIfAbsent(pos.asLong(), ignored -> new ReentrantLock());
         lock.lock();
         try {
-            int qty = Math.max(1, quantity);
+            int qty = quantity;
             listingIndex = resolveVisitorListingIndex(shop, buyer, listingIndex);
             ShopBlockEntity.Listing listing = shop.getListing(listingIndex);
             if (shop.getOwnerUuid() == null || listing == null || listing.itemId().isBlank()) {
@@ -761,22 +881,28 @@ public final class PlayerShopBlockService {
                 return;
             }
 
-            // NBT-aware matching context
-            boolean nbtAware = listing.nbtAware();
-            CompoundTag nbtTag = listing.nbtTag();
-
-            // Check if this is a bundle listing (Item 11)
-            boolean isBundle = !listing.bundleOutputs().isEmpty();
-
-            // Item 32: actual items to deliver = baseQuantity * qty
-            int deliverCount = listing.baseQuantity() * qty;
+            PurchasePlan purchasePlan;
+            try {
+                purchasePlan = preparePurchasePlan(listing, saleItem, qty);
+            } catch (PurchasePlanException exception) {
+                sendResult(buyer, false, exception.code);
+                return;
+            } catch (ArithmeticException | IllegalArgumentException exception) {
+                sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+                return;
+            }
 
             // ═══ Admin shop short-circuit ═══
             // Infinite stock, money sunk on buys, barter inputs voided. No
             // linked-storage or barter-storage required.
             if (shop.isAdminShopMode()) {
-                handleAdminShopBuy(buyer, shop, pos, listing, qty, deliverCount, saleItem,
+                handleAdminShopBuy(buyer, shop, pos, listing, qty, purchasePlan,
                         paymentMethod, paymentSource);
+                return;
+            }
+
+            if (buyer.getServer() == null) {
+                sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                 return;
             }
 
@@ -787,29 +913,16 @@ public final class PlayerShopBlockService {
             }
 
             // ═══ Stock check — NBT-aware + bundle support, summed across all links ═══
-            if (isBundle) {
-                // Bundle: check each output entry
-                for (ShopBlockEntity.BundleEntry entry : listing.bundleOutputs()) {
-                    Item bundleItem = ShopTransactionUtil.resolveItem(entry.itemId());
-                    if (bundleItem == null || bundleItem == Items.AIR) {
-                        sendResult(buyer, false, ShopResultCode.INVALID_ITEM);
-                        return;
-                    }
-                    int needed = entry.count() * qty;
-                    if (!canExtractComposite(linkedStorages, bundleItem, needed, entry.nbtTag() != null, entry.nbtTag())) {
-                        sendResult(buyer, false, ShopResultCode.OUT_OF_STOCK);
-                        return;
-                    }
-                }
-            } else {
-                if (!canExtractComposite(linkedStorages, saleItem, deliverCount, nbtAware, nbtTag)) {
+            for (PurchaseOutput output : purchasePlan.outputs()) {
+                if (!canExtractComposite(linkedStorages, output.item(), output.count(),
+                        output.nbtAware(), output.nbtTag())) {
                     sendResult(buyer, false, ShopResultCode.OUT_OF_STOCK);
                     return;
                 }
             }
 
             EconomyProvider provider = BalanceManager.getProvider();
-            long cost = Math.max(0L, listing.calculatePrice(qty));
+            long cost = purchasePlan.cost();
             PurchasePaymentService.Receipt paymentReceipt = null;
             boolean recordedSale = false;
             Item barterItem = null;
@@ -863,14 +976,41 @@ public final class PlayerShopBlockService {
                 // Allow external mods to modify price
                 cost = preEvent.getPriceMinor();
             }
+            try {
+                cost = PlayerShopBuyMath.requireNonnegativePrice(cost);
+            } catch (IllegalArgumentException exception) {
+                sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+                return;
+            }
+
+            PlayerShopSettlementSavedData settlementData = PlayerShopSettlementSavedData.get(buyer.getServer());
+            long settlementAmount = barterTrade ? 0L : cost;
+            if (!settlementData.canRecordSale(shop.getOwnerUuid(), pos.asLong(), settlementAmount)) {
+                sendResult(buyer, false, ShopResultCode.MAX_BALANCE_EXCEEDED);
+                return;
+            }
 
             // ═══ Item 16/17: Pre-validate barter payment insertion (overflow detection) ═══
             // Item 24: Use effective barter count (promo-adjusted, rounds up)
             // Item 31: Use resolveBarterStorage() for barter payment destination
             LinkedStorage barterStorage = null;
             if (compoundTrade || barterTrade) {
-                barterItem = ShopTransactionUtil.resolveItem(listing.barterItemId());
-                barterAmount = listing.effectiveBarterTotal(qty);
+                try {
+                    barterItem = ShopTransactionUtil.resolveItem(listing.barterItemId());
+                } catch (RuntimeException exception) {
+                    sendResult(buyer, false, ShopResultCode.INVALID_ITEM);
+                    return;
+                }
+                try {
+                    barterAmount = PlayerShopBuyMath.checkedBarterTotal(
+                            listing.effectiveBarterItemCount(), qty);
+                    if (barterItem != null && barterItem != Items.AIR) {
+                        PlayerShopBuyMath.checkedStackCount(barterAmount, barterItem.getMaxStackSize());
+                    }
+                } catch (ArithmeticException | IllegalArgumentException exception) {
+                    sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+                    return;
+                }
                 // NBT-strict barter payment: if the listing captured an NBT tag for the barter
                 // item (e.g. an "empty" tank, a specific enchanted chestplate), only stacks
                 // matching that tag exactly count as valid payment. Prevents the exploit where
@@ -898,9 +1038,10 @@ public final class PlayerShopBlockService {
                 // what the buyer paid with — enchanted chestplate in, enchanted chestplate
                 // out, rather than a freshly-minted plain one.
                 List<ItemStack> previewPayment = splitStacks(barterItem, barterAmount, barterNbtTag);
-                boolean canInsertPayment = barterStorage.hasAdapter()
+                boolean canInsertPayment = previewPayment.isEmpty()
+                        || (barterStorage.hasAdapter()
                         ? barterStorage.adapter().canInsert(barterStorage.blockEntity(), previewPayment)
-                        : canInsertAll(barterStorage.handler(), previewPayment);
+                        : canInsertAll(barterStorage.handler(), previewPayment));
                 if (!canInsertPayment) {
                     // Item 18: Close UI + chat message for storage full
                     sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, Component.translatable("command.futureshops.shop.barter_storage_full"));
@@ -938,18 +1079,20 @@ public final class PlayerShopBlockService {
                 // Transfer the buyer's ACTUAL stacks (NBT intact) to the owner's storage,
                 // instead of creating fresh plain stacks — so an enchanted / tagged payment
                 // arrives as an enchanted / tagged item in storage.
-                List<ItemStack> paymentStacks = ShopTransactionUtil.collectAndRemoveItems(
+                List<ItemStack> paymentStacks = barterAmount == 0
+                        ? List.of()
+                        : ShopTransactionUtil.collectAndRemoveItems(
                         buyer.getInventory(), barterItem, barterAmount,
                         listing.barterNbtAware(), listing.barterNbtTag());
-                if (paymentStacks.isEmpty()) {
+                if (barterAmount > 0 && paymentStacks.isEmpty()) {
                     PurchasePaymentService.refund(buyer, paymentReceipt);
                     sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, Component.translatable("command.futureshops.shop.barter_not_taken"));
                     return;
                 }
                 // Item 31: Insert barter payment into barter-specific storage
-                boolean insertedOk = barterStorage.hasAdapter()
+                boolean insertedOk = paymentStacks.isEmpty() || (barterStorage.hasAdapter()
                         ? barterStorage.adapter().insert(barterStorage.blockEntity(), paymentStacks)
-                        : insertAll(barterStorage.handler(), paymentStacks);
+                        : insertAll(barterStorage.handler(), paymentStacks));
                 if (!insertedOk) {
                     ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), paymentStacks);
                     PurchasePaymentService.refund(buyer, paymentReceipt);
@@ -957,18 +1100,24 @@ public final class PlayerShopBlockService {
                     return;
                 }
                 insertedPayment = paymentStacks;
-                if (buyer.getServer() != null) {
-                    PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), cost, listing.itemId(), qty, listingNbtJson(listing));
-                    recordedSale = true;
+                if (!settlementData.recordSale(shop.getOwnerUuid(), pos.asLong(), cost,
+                        listing.itemId(), qty, listingNbtJson(listing))) {
+                    rollbackAll(barterStorage, buyer, paymentReceipt, cost, false,
+                            shop.getOwnerUuid(), pos, insertedPayment, true, false);
+                    sendResult(buyer, false, ShopResultCode.MAX_BALANCE_EXCEEDED);
+                    return;
                 }
+                recordedSale = true;
             } else if (!barterTrade) {
                 // LGB#8: Skip money withdrawal if cost is 0 (100% discount)
                 if (cost <= 0L) {
                     // Free item — no withdrawal needed
-                    if (buyer.getServer() != null) {
-                        PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), 0L, listing.itemId(), qty, listingNbtJson(listing));
-                        recordedSale = true;
+                    if (!settlementData.recordSale(shop.getOwnerUuid(), pos.asLong(), 0L,
+                            listing.itemId(), qty, listingNbtJson(listing))) {
+                        sendResult(buyer, false, ShopResultCode.MAX_BALANCE_EXCEEDED);
+                        return;
                     }
+                    recordedSale = true;
                 } else {
                     PurchasePaymentService.Result payment = PurchasePaymentService.charge(
                             buyer, cost, paymentSource);
@@ -977,12 +1126,12 @@ public final class PlayerShopBlockService {
                         return;
                     } else {
                         paymentReceipt = payment.receipt();
-                        if (buyer.getServer() == null) {
+                        if (!settlementData.recordSale(shop.getOwnerUuid(), pos.asLong(), cost,
+                                listing.itemId(), qty, listingNbtJson(listing))) {
                             PurchasePaymentService.refund(buyer, paymentReceipt);
-                            sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                            sendResult(buyer, false, ShopResultCode.MAX_BALANCE_EXCEEDED);
                             return;
                         }
-                        PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), cost, listing.itemId(), qty, listingNbtJson(listing));
                         recordedSale = true;
                     }
                 }
@@ -1013,52 +1162,55 @@ public final class PlayerShopBlockService {
                 }
 
                 // Transfer the buyer's ACTUAL stacks (NBT intact) to the owner's storage.
-                List<ItemStack> paymentStacks = ShopTransactionUtil.collectAndRemoveItems(
+                List<ItemStack> paymentStacks = barterAmount == 0
+                        ? List.of()
+                        : ShopTransactionUtil.collectAndRemoveItems(
                         buyer.getInventory(), barterItem, barterAmount,
                         listing.barterNbtAware(), listing.barterNbtTag());
-                if (paymentStacks.isEmpty()) {
+                if (barterAmount > 0 && paymentStacks.isEmpty()) {
                     sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, Component.translatable("command.futureshops.shop.barter_not_taken"));
                     return;
                 }
-                boolean insertedOk = barterStorage.hasAdapter()
+                boolean insertedOk = paymentStacks.isEmpty() || (barterStorage.hasAdapter()
                         ? barterStorage.adapter().insert(barterStorage.blockEntity(), paymentStacks)
-                        : insertAll(barterStorage.handler(), paymentStacks);
+                        : insertAll(barterStorage.handler(), paymentStacks));
                 if (!insertedOk) {
                     ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), paymentStacks);
                     sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, Component.translatable("command.futureshops.shop.trade_storage_full"));
                     return;
                 }
                 insertedPayment = paymentStacks;
-                if (buyer.getServer() != null) {
-                    PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), 0L, listing.itemId(), qty, listingNbtJson(listing));
-                    recordedSale = true;
+                if (!settlementData.recordSale(shop.getOwnerUuid(), pos.asLong(), 0L,
+                        listing.itemId(), qty, listingNbtJson(listing))) {
+                    rollbackBarterPayment(barterStorage, buyer, insertedPayment);
+                    sendResult(buyer, false, ShopResultCode.MAX_BALANCE_EXCEEDED);
+                    return;
                 }
+                recordedSale = true;
             }
 
             // ═══ Extract sale items — NBT-aware + bundle support ═══
-            List<ItemStack> extracted;
-            if (isBundle) {
-                extracted = new ArrayList<>();
-                for (ShopBlockEntity.BundleEntry entry : listing.bundleOutputs()) {
-                    Item bundleItem = ShopTransactionUtil.resolveItem(entry.itemId());
-                    int needed = entry.count() * qty;
-                    List<ItemStack> part = extractComposite(linkedStorages, bundleItem, needed, entry.nbtTag() != null, entry.nbtTag());
-                    if (part.isEmpty()) {
-                        // Rollback already-extracted items across the composite
-                        for (ItemStack ex : extracted) {
-                            if (!ex.isEmpty()) {
-                                reinsertComposite(linkedStorages, ex);
-                            }
-                        }
-                        rollbackAll(barterStorage, buyer, paymentReceipt, cost, recordedSale,
-                                shop.getOwnerUuid(), pos, insertedPayment, compoundTrade, barterTrade);
-                        sendResult(buyer, false, ShopResultCode.ROLLBACK);
-                        return;
+            List<ItemStack> extracted = new ArrayList<>();
+            for (PurchaseOutput output : purchasePlan.outputs()) {
+                List<ItemStack> part = extractComposite(linkedStorages, output.item(), output.count(),
+                        output.nbtAware(), output.nbtTag());
+                boolean validPart = exactOutputCount(part, output);
+                if (validPart) {
+                    try {
+                        PlayerShopBuyMath.checkedAggregateStackCount(extracted.size(), part.size());
+                    } catch (ArithmeticException | IllegalArgumentException exception) {
+                        validPart = false;
                     }
-                    extracted.addAll(part);
                 }
-            } else {
-                extracted = extractComposite(linkedStorages, saleItem, deliverCount, nbtAware, nbtTag);
+                if (!validPart) {
+                    rollbackExtracted(linkedStorages, part);
+                    rollbackExtracted(linkedStorages, extracted);
+                    rollbackAll(barterStorage, buyer, paymentReceipt, cost, recordedSale,
+                            shop.getOwnerUuid(), pos, insertedPayment, compoundTrade, barterTrade);
+                    sendResult(buyer, false, ShopResultCode.ROLLBACK);
+                    return;
+                }
+                extracted.addAll(part);
             }
 
             if (extracted.isEmpty()) {
@@ -1238,12 +1390,11 @@ public final class PlayerShopBlockService {
      * all storage interactions and settlement bookkeeping.
      */
     private static void handleAdminShopBuy(ServerPlayer buyer, ShopBlockEntity shop, BlockPos pos,
-                                           ShopBlockEntity.Listing listing, int qty, int deliverCount,
-                                           Item saleItem, String paymentMethod,
+                                           ShopBlockEntity.Listing listing, int qty,
+                                           PurchasePlan purchasePlan, String paymentMethod,
                                            PaymentSource paymentSource) {
         EconomyProvider provider = BalanceManager.getProvider();
-        long cost = Math.max(0L, listing.calculatePrice(qty));
-        boolean isBundle = !listing.bundleOutputs().isEmpty();
+        long cost = purchasePlan.cost();
 
         // Resolve trade-mode dispatch identically to the normal path.
         boolean compoundTrade = listing.tradeMode() == ShopBlockEntity.TradeMode.MONEY_AND_BARTER;
@@ -1287,13 +1438,33 @@ public final class PlayerShopBlockService {
             }
             cost = preEvent.getPriceMinor();
         }
+        try {
+            cost = PlayerShopBuyMath.requireNonnegativePrice(cost);
+        } catch (IllegalArgumentException exception) {
+            sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+            return;
+        }
 
         // Validate barter availability without consuming yet.
         Item barterItem = null;
         int barterAmount = 0;
         if (compoundTrade || barterTrade) {
-            barterItem = ShopTransactionUtil.resolveItem(listing.barterItemId());
-            barterAmount = listing.effectiveBarterTotal(qty);
+            try {
+                barterItem = ShopTransactionUtil.resolveItem(listing.barterItemId());
+            } catch (RuntimeException exception) {
+                sendResult(buyer, false, ShopResultCode.INVALID_ITEM);
+                return;
+            }
+            try {
+                barterAmount = PlayerShopBuyMath.checkedBarterTotal(
+                        listing.effectiveBarterItemCount(), qty);
+                if (barterItem != null && barterItem != Items.AIR) {
+                    PlayerShopBuyMath.checkedStackCount(barterAmount, barterItem.getMaxStackSize());
+                }
+            } catch (ArithmeticException | IllegalArgumentException exception) {
+                sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+                return;
+            }
             if (barterItem == null || barterItem == Items.AIR
                     || ShopTransactionUtil.countItems(buyer.getInventory(), barterItem,
                             listing.barterNbtAware(), listing.barterNbtTag()) < barterAmount) {
@@ -1317,10 +1488,12 @@ public final class PlayerShopBlockService {
 
         // Consume barter items — voided (NOT inserted into any storage).
         if (compoundTrade || barterTrade) {
-            List<ItemStack> paymentStacks = ShopTransactionUtil.collectAndRemoveItems(
+            List<ItemStack> paymentStacks = barterAmount == 0
+                    ? List.of()
+                    : ShopTransactionUtil.collectAndRemoveItems(
                     buyer.getInventory(), barterItem, barterAmount,
                     listing.barterNbtAware(), listing.barterNbtTag());
-            if (paymentStacks.isEmpty()) {
+            if (barterAmount > 0 && paymentStacks.isEmpty()) {
                 PurchasePaymentService.refund(buyer, paymentReceipt);
                 sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS,
                         Component.translatable("command.futureshops.shop.barter_not_taken"));
@@ -1331,19 +1504,8 @@ public final class PlayerShopBlockService {
 
         // Deliver freshly minted sale items.
         List<ItemStack> delivered = new ArrayList<>();
-        if (isBundle) {
-            for (ShopBlockEntity.BundleEntry entry : listing.bundleOutputs()) {
-                Item bundleItem = ShopTransactionUtil.resolveItem(entry.itemId());
-                if (bundleItem == null || bundleItem == Items.AIR) continue;
-                delivered.addAll(splitStacks(bundleItem, entry.count() * qty, entry.nbtTag()));
-            }
-        } else {
-            // Admin-shop output is minted from the listing definition, so always
-            // stamp the stored tag — matching the bundle path above and what the
-            // buyer sees in the UI. nbtAware only governs MATCHING (barter
-            // payment, sell-to-shop, storage extraction); minting a TacZ gun
-            // without its GunId tag would deliver a textureless dead gun.
-            delivered.addAll(splitStacks(saleItem, deliverCount, listing.nbtTag()));
+        for (PurchaseOutput output : purchasePlan.outputs()) {
+            delivered.addAll(splitStacks(output.item(), output.count(), output.nbtTag()));
         }
 
         if (!ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), delivered)) {
@@ -1962,7 +2124,16 @@ public final class PlayerShopBlockService {
     }
 
     private static void sendResult(ServerPlayer player, boolean success, ShopResultCode code) {
-        ShopPackets.sendToPlayer(player, new S2CPlayerShopResultPacket(success, code.wire(), ""));
+        BuyResponseContext responseContext = BUY_RESPONSE_CONTEXT.get();
+        UUID requestId = responseContext == null
+                ? new UUID(0L, 0L)
+                : responseContext.requestId;
+        int responseToken = responseContext == null ? 0 : responseContext.responseToken;
+        if (responseContext != null) {
+            responseContext.responded = true;
+        }
+        ShopPackets.sendToPlayer(player, new S2CPlayerShopResultPacket(
+                success, code.wire(), "", requestId, responseToken));
     }
 
     /**
@@ -1987,6 +2158,31 @@ public final class PlayerShopBlockService {
             return FranchiseSavedData.get(player.getServer()).isFranchiseMember(ownerUuid, player.getUUID());
         }
         return false;
+    }
+
+    private static final class BuyResponseContext {
+        private final UUID requestId;
+        private final int responseToken;
+        private boolean responded;
+
+        private BuyResponseContext(UUID requestId, int responseToken) {
+            this.requestId = requestId;
+            this.responseToken = responseToken;
+        }
+    }
+
+    private record PurchaseOutput(Item item, int count, boolean nbtAware, @Nullable CompoundTag nbtTag) {
+    }
+
+    private record PurchasePlan(List<PurchaseOutput> outputs, long cost) {
+    }
+
+    private static final class PurchasePlanException extends Exception {
+        private final ShopResultCode code;
+
+        private PurchasePlanException(ShopResultCode code) {
+            this.code = code;
+        }
     }
 
     private record LinkedStorage(BlockPos pos, IItemHandler handler, ExternalStorageAdapter adapter, BlockEntity blockEntity) {

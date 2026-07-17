@@ -2,6 +2,7 @@ package com.enviouse.futureshops.money;
 
 import com.enviouse.futureshops.event.MoneyMintEvent;
 import com.enviouse.futureshops.init.ModItems;
+import com.enviouse.futureshops.server.escrow.mint.ProtectedMintSavedData;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
@@ -85,11 +86,20 @@ public final class InternalCurrencyAdapter implements PhysicalCurrencyAdapter {
     @Override
     public int destroyCounterfeit(ServerPlayer player) {
         Item coinItem = ModItems.MONEY_ITEM.get();
+        InternalBillAuthorityRouter authority =
+                new InternalBillAuthorityRouter(
+                        ProtectedMintSavedData.get(player.getServer()),
+                        SpentMintsSavedData.get(player.getServer()));
         int destroyed = 0;
         for (ItemStack stack : allCoinContainers(player)) {
             if (stack.getItem() != coinItem) continue;
-            MoneyValidationResult validation = MoneyValidationService.validate(stack);
-            if (!validation.valid()) {
+            InternalBillAuthorityRouter.Resolution resolution =
+                    authority.resolve(stack);
+            if (!resolution.spendable()
+                    && resolution.authority()
+                    != InternalBillAuthorityRouter.Authority.PROTECTED
+                    && resolution.status()
+                    != InternalBillAuthorityRouter.Status.CROSS_STORE_COLLISION) {
                 destroyed += stack.getCount();
                 stack.setCount(0);
             }

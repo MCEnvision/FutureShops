@@ -7,6 +7,11 @@ public final class ClientNavigationPolicy {
         CLOSE
     }
 
+    public enum ProfileAction {
+        RETURN_TO_PARENT,
+        OPEN_DEFAULT_SHOP
+    }
+
     private ClientNavigationPolicy() {
     }
 
@@ -20,5 +25,13 @@ public final class ClientNavigationPolicy {
 
     public static Action playerShopBlockEscape(boolean owner) {
         return owner ? Action.CLOSE : Action.RETURN_TO_PARENT;
+    }
+
+    public static ProfileAction profileBack() {
+        return ProfileAction.RETURN_TO_PARENT;
+    }
+
+    public static ProfileAction profileClose() {
+        return ProfileAction.OPEN_DEFAULT_SHOP;
     }
 }

@@ -284,34 +284,10 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
     }
 
     private void recomputeFiltered() {
-        if (searchQuery.isBlank()) {
-            filteredEntries = allEntries;
-            return;
-        }
-        // "@modname" → exact namespace filter (e.g. @minecraft shows only vanilla),
-        // as opposed to the normal substring match below (which matches id + name anywhere).
-        if (searchQuery.startsWith("@")) {
-            String wantedNamespace = searchQuery.substring(1);
-            List<PickerEntry> out = new ArrayList<>();
-            for (PickerEntry entry : allEntries) {
-                int colon = entry.id().indexOf(':');
-                String namespace = colon >= 0 ? entry.id().substring(0, colon) : entry.id();
-                // Prefix matching keeps the mod filter predictive while the user types
-                // ("@mine" already shows minecraft entries, JEI-style).
-                if (namespace.toLowerCase(Locale.ROOT).startsWith(wantedNamespace)) {
-                    out.add(entry);
-                }
-            }
-            filteredEntries = out;
-            return;
-        }
-        List<PickerEntry> out = new ArrayList<>();
-        for (PickerEntry entry : allEntries) {
-            if (entry.searchText().contains(searchQuery)) {
-                out.add(entry);
-            }
-        }
-        filteredEntries = out;
+        filteredEntries = allEntries.stream()
+                .filter(entry -> AdminItemSearchPolicy.matches(
+                        entry.id(), entry.searchText(), searchQuery))
+                .toList();
     }
 
     private String resolveCategoryLabel() {
