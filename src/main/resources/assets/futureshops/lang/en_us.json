@@ -1156,6 +1156,8 @@
   "gui.futureshops.market.claim_count": "Claims %s",
   "gui.futureshops.market.claim_count_compact": "C %s",
   "gui.futureshops.market.loading": "Loading…",
+  "gui.futureshops.shell.tab_bazaar": "Bazaar",
+  "gui.futureshops.shell.tab_auction": "Auction House",
   "gui.futureshops.market.notifications": "Alerts %s",
   "gui.futureshops.market.notifications_compact": "N %s",
   "gui.futureshops.market.profile_compact": "P",

@@ -1,8 +1,11 @@
 package com.enviouse.futureshops.client.screen;
 
 import com.enviouse.futureshops.client.ClientRouteGuard;
+import com.enviouse.futureshops.client.ShopClientPacketHandler;
 import com.enviouse.futureshops.client.ShopClientState;
 import com.enviouse.futureshops.client.ShopColors;
+import com.enviouse.futureshops.client.market.MarketCapabilityClientState;
+import com.enviouse.futureshops.client.market.MarketModule;
 import com.enviouse.futureshops.data.CatalogCategory;
 import com.enviouse.futureshops.data.CatalogItem;
 import com.enviouse.futureshops.data.LocalShopOwnerEntry;
@@ -11,6 +14,7 @@ import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SAdminShopEditPacket;
 import com.enviouse.futureshops.network.packets.C2SFetchLocalShopsPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenBalanceUiPacket;
+import com.enviouse.futureshops.network.packets.C2SOpenMarketModulePacket;
 import com.enviouse.futureshops.network.packets.C2SOpenShopPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopActionPacket;
 import net.minecraft.client.Minecraft;
@@ -116,6 +120,8 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
 
     // ── Hit models stashed each frame so mouseClicked can route against the exact drawn geometry ──
     private ShopUiUtil.HeaderHit headerHit;
+    /** One capability refresh per screen open (init() re-runs on resize). */
+    private boolean capabilitiesRequested;
     private int[] footerCartRect;
     private int[] segEdges;
     private int segY;
@@ -144,11 +150,66 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
     private boolean compact() { return guiW < 560; }
 
     private String[] tabLabels() {
-        // My Shop is intentionally hidden until Phase 5; append it here to expose it later.
-        return new String[]{
-                Component.translatable("gui.futureshops.shop.title").getString(),
-                Component.translatable("gui.futureshops.shell.tab_player_shops").getString()
-        };
+        // Base Shop tabs, then the module switcher (plan §7: every module shows the switcher).
+        // Extra tabs map 1:1 onto moduleNavTargets() — keep both derivations in sync.
+        List<String> labels = new ArrayList<>();
+        labels.add(Component.translatable("gui.futureshops.shop.title").getString());
+        labels.add(Component.translatable("gui.futureshops.shell.tab_player_shops").getString());
+        for (MarketModule target : moduleNavTargets()) {
+            labels.add(Component.translatable(target == MarketModule.BAZAAR
+                    ? "gui.futureshops.shell.tab_bazaar"
+                    : "gui.futureshops.shell.tab_auction").getString());
+        }
+        return labels.toArray(new String[0]);
+    }
+
+    /**
+     * Modules offered in the Shop header switcher, in stable order. Server-authoritative: shown only
+     * when the latest capability snapshot says navigation is on and the module is visible; the server
+     * re-validates on open and falls back per MarketModuleAccessPolicy (a disabled module with open
+     * claims opens as Claims Only rather than disappearing — claims are never hidden).
+     */
+    private List<MarketModule> moduleNavTargets() {
+        return MarketCapabilityClientState.latest()
+                .filter(snapshot -> snapshot.showNavigation())
+                .map(snapshot -> {
+                    List<MarketModule> targets = new ArrayList<>(2);
+                    var byModule = snapshot.byModule();
+                    for (MarketModule candidate : new MarketModule[]{
+                            MarketModule.BAZAAR, MarketModule.AUCTION_HOUSE}) {
+                        var capability = byModule.get(candidate);
+                        if (capability != null && capability.availability().visible()) {
+                            targets.add(candidate);
+                        }
+                    }
+                    return targets;
+                })
+                .orElse(List.of());
+    }
+
+    /** Header-tab click for index ≥ 2 → open that market module (server routes + falls back). */
+    private boolean switchToModule(int tabIndex) {
+        List<MarketModule> targets = moduleNavTargets();
+        int moduleIdx = tabIndex - 2;
+        if (moduleIdx < 0 || moduleIdx >= targets.size()) {
+            return false;
+        }
+        MarketModule target = targets.get(moduleIdx);
+        // If the shell handed off to this screen its coordinator is still live and the open-response
+        // gate only ACCEPTs requestIds it began — route through it (mirrors the shell's own
+        // switchModule) or the response would be silently dropped. Fresh opens (no live shell
+        // session) take the coordinator-less path, which the handler accepts as a new session.
+        var coordinator = ShopClientPacketHandler.activeMarketNavigation();
+        UUID requestId = UUID.randomUUID();
+        String view = "";
+        if (coordinator != null && coordinator.isOpen()) {
+            var request = coordinator.beginSwitchModule(requestId, target);
+            requestId = request.requestId();
+            view = request.viewId();
+        }
+        ShopPackets.CHANNEL.sendToServer(new C2SOpenMarketModulePacket(
+                requestId, target.id(), view));
+        return true;
     }
 
     private boolean canEdit() {
@@ -178,6 +239,13 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         breadcrumbH = guiH < 300 ? 0 : 16;
         footerH = guiH < 300 ? 24 : 28;
         sidebarW = Math.min(194, Math.max(120, guiW / 5));
+
+        // Refresh module capabilities once per screen open so the header switcher renders the
+        // current Bazaar / Auction House availability (resize re-runs init; the tracker dedupes).
+        if (!capabilitiesRequested && this.minecraft != null && this.minecraft.getConnection() != null) {
+            capabilitiesRequested = true;
+            ShopClientPacketHandler.requestMarketCapabilities();
+        }
 
         rebuildFilteredItems();
 
@@ -1172,6 +1240,9 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
             }
             if (tab == 1) {
                 switchToPlayerShops();
+                return true;
+            }
+            if (tab >= 2 && switchToModule(tab)) {
                 return true;
             }
             if (headerHit.hitBalance(mouseX, mouseY)) {
