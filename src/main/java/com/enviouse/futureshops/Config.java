@@ -239,7 +239,7 @@ public class Config {
     }
 
     @SubscribeEvent
-    static void onLoad(final ModConfigEvent event) {
+    public static void onLoad(final ModConfigEvent event) {
         // This subscriber also sees the separate client presentation config. Only read values from
         // this COMMON spec when its own file loads/reloads; otherwise Forge may report an early get.
         if (event.getConfig().getSpec() != SPEC) {
