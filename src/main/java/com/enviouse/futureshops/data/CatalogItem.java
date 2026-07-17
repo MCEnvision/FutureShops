@@ -31,7 +31,11 @@ public record CatalogItem(
         boolean hasPromo,
         long promoPrice,
         boolean hasBarterRecipes,
-        String nbtJson) {
+        String nbtJson,
+        // Protocol 26: the listing's CONFIGURED stock (admin.json value; -1 = unlimited), distinct
+        // from the live remaining `stock` above. The admin editor edits this so a routine save of a
+        // partially-sold listing doesn't rewrite the configured max down to the live remaining.
+        int configuredStock) {
 
     public static void encode(FriendlyByteBuf buf, CatalogItem item) {
         buf.writeUtf(item.listingId != null ? item.listingId : item.itemId);
@@ -47,6 +51,7 @@ public record CatalogItem(
         buf.writeLong(item.promoPrice);
         buf.writeBoolean(item.hasBarterRecipes);
         buf.writeUtf(item.nbtJson != null ? item.nbtJson : "");
+        buf.writeVarInt(item.configuredStock);
     }
 
     public static CatalogItem decode(FriendlyByteBuf buf) {
@@ -63,6 +68,7 @@ public record CatalogItem(
                 buf.readBoolean(),
                 buf.readLong(),
                 buf.readBoolean(),
-                buf.readUtf());
+                buf.readUtf(),
+                buf.readVarInt());
     }
 }

@@ -15,6 +15,14 @@ import java.util.function.Supplier;
  */
 public record S2CVerifyCartResponsePacket(boolean allOk, List<CartWarning> warnings) {
 
+    /**
+     * Separator packing dynamic args into {@link CartWarning#detail} — the server sends a stable
+     * {@code warningCode} plus args here (never English text) so the client localizes each warning
+     * in the viewer's own language. Shared by the server verification services and the client
+     * renderer (ShopUiUtil.cartWarningComponent).
+     */
+    public static final String WARNING_ARG_SEP = "\u001f";
+
     public record CartWarning(int cartLineIndex, String warningCode, String detail) {
         public static void encode(FriendlyByteBuf buffer, CartWarning warning) {
             buffer.writeVarInt(warning.cartLineIndex);

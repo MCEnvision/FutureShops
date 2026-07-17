@@ -57,6 +57,27 @@ public class AdminCategorySavedData extends SavedData {
     }
 
     /**
+     * Renames an admin-defined category and migrates every item assignment pointing at the old
+     * name. {@link #removeCategory} purges assignments, so a naive remove+add would orphan the
+     * assigned items — this is the only safe rename path (used by the GUI editor's RENAME_CATEGORY).
+     * Returns {@code false} if the old name is unknown or either name is blank.
+     */
+    public boolean renameCategory(String oldName, String newName) {
+        if (oldName == null || oldName.isBlank() || newName == null || newName.isBlank()) return false;
+        String trimmedNew = newName.trim();
+        if (trimmedNew.length() > 48) trimmedNew = trimmedNew.substring(0, 48);
+        if (!categories.remove(oldName.trim())) return false;
+        categories.add(trimmedNew);
+        for (Map.Entry<String, String> entry : itemAssignments.entrySet()) {
+            if (oldName.trim().equalsIgnoreCase(entry.getValue())) {
+                entry.setValue(trimmedNew);
+            }
+        }
+        setDirty();
+        return true;
+    }
+
+    /**
      * Removes an admin-defined category.
      */
     public boolean removeCategory(String name) {

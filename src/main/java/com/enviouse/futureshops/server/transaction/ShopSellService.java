@@ -31,8 +31,9 @@ public final class ShopSellService {
         // Resolve the registry id for the client echo, history, and the public event (all want a valid
         // ResourceLocation). Dynamic pricing stays keyed by the listingId. Fall back to the listingId
         // if the listing vanished between request and now.
-        String registryItemId = ShopCatalog.getItem(result.shopId(), packet.listingId())
-                .map(ItemDef::itemId).orElse(packet.listingId());
+        ItemDef soldDef = ShopCatalog.getItem(result.shopId(), packet.listingId()).orElse(null);
+        String registryItemId = soldDef != null ? soldDef.itemId() : packet.listingId();
+        String soldNbtJson = soldDef == null || soldDef.nbtJson() == null ? "" : soldDef.nbtJson();
         ShopPackets.sendToPlayer(player, new S2CSellResponsePacket(
                 result.success(),
                 result.shopId(),
@@ -43,7 +44,7 @@ public final class ShopSellService {
                 result.totalValue()));
 
         if (result.success() && player.getServer() != null) {
-            TransactionHistoryService.record(player, result.shopId(), "SELL", registryItemId, packet.quantity(), result.totalValue(), "DETAIL");
+            TransactionHistoryService.record(player, result.shopId(), "SELL", registryItemId, packet.quantity(), result.totalValue(), "DETAIL", soldNbtJson);
             // Record sell activity for dynamic pricing (spec §30) — keyed by listingId.
             DynamicPricingEngine.recordSell(player.getServer(), result.shopId(), packet.listingId(), packet.quantity());
             // Fire ShopTransactionEvent.Post (spec §33)

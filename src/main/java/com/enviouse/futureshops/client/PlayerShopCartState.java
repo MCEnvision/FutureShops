@@ -18,8 +18,8 @@ public final class PlayerShopCartState {
      */
     public record CartEntry(BlockPos shopPos, int listingIndex, int quantity,
                             String itemId, String shopName, long unitPriceMinor, int baseQuantity,
-                            String tradeMode, String barterItemId, int barterItemCount, String nbtJson,
-                            String chosenPayment, boolean nbtAware) {
+                            String tradeMode, String barterItemId, int barterItemCount, String barterNbtJson,
+                            String nbtJson, String chosenPayment, boolean nbtAware) {
         public long totalPrice() {
             return unitPriceMinor * quantity;
         }
@@ -39,8 +39,8 @@ public final class PlayerShopCartState {
      */
     public static void addToCart(BlockPos shopPos, int listingIndex, int quantity,
                                  String itemId, String shopName, long unitPriceMinor, int baseQuantity,
-                                 String tradeMode, String barterItemId, int barterItemCount, String nbtJson,
-                                 boolean nbtAware) {
+                                 String tradeMode, String barterItemId, int barterItemCount, String barterNbtJson,
+                                 String nbtJson, boolean nbtAware) {
         if (quantity <= 0) return;
         // Reject blank / air listings outright so they can't enter the cart or the
         // transaction history. Modded bundles sometimes expose a primary item as "air"
@@ -64,12 +64,12 @@ public final class PlayerShopCartState {
                     int newQty = entry.quantity() + quantity;
                     entries.set(entries.indexOf(entry),
                             new CartEntry(shopPos, listingIndex, newQty, itemId, shopName, unitPriceMinor, baseQuantity,
-                                    tradeMode, barterItemId, barterItemCount, nbtJson, entry.chosenPayment(), nbtAware));
+                                    tradeMode, barterItemId, barterItemCount, barterNbtJson, nbtJson, entry.chosenPayment(), nbtAware));
                     return;
                 }
             }
             entries.add(new CartEntry(shopPos, listingIndex, quantity, itemId, shopName, unitPriceMinor, baseQuantity,
-                    tradeMode, barterItemId, barterItemCount, nbtJson, defaultPayment, nbtAware));
+                    tradeMode, barterItemId, barterItemCount, barterNbtJson, nbtJson, defaultPayment, nbtAware));
         }
     }
 
@@ -85,7 +85,7 @@ public final class PlayerShopCartState {
                 CartEntry old = entries.get(cartIndex);
                 entries.set(cartIndex, new CartEntry(old.shopPos(), old.listingIndex(), quantity,
                         old.itemId(), old.shopName(), old.unitPriceMinor(), old.baseQuantity(),
-                        old.tradeMode(), old.barterItemId(), old.barterItemCount(), old.nbtJson(), old.chosenPayment(), old.nbtAware()));
+                        old.tradeMode(), old.barterItemId(), old.barterItemCount(), old.barterNbtJson(), old.nbtJson(), old.chosenPayment(), old.nbtAware()));
             }
         }
     }
@@ -103,7 +103,7 @@ public final class PlayerShopCartState {
             String newPayment = "BARTER".equalsIgnoreCase(old.chosenPayment()) ? "MONEY" : "BARTER";
             entries.set(cartIndex, new CartEntry(old.shopPos(), old.listingIndex(), old.quantity(),
                     old.itemId(), old.shopName(), old.unitPriceMinor(), old.baseQuantity(),
-                    old.tradeMode(), old.barterItemId(), old.barterItemCount(), old.nbtJson(), newPayment, old.nbtAware()));
+                    old.tradeMode(), old.barterItemId(), old.barterItemCount(), old.barterNbtJson(), old.nbtJson(), newPayment, old.nbtAware()));
         }
     }
 

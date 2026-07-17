@@ -19,7 +19,8 @@ public record C2SVerifyCartPacket(List<CartLine> lines) {
 
     public record CartLine(BlockPos shopPos, int listingIndex, int quantity,
                            String expectedItemId, long expectedPriceMinor,
-                           boolean expectedNbtAware, String expectedTradeMode) {
+                           boolean expectedNbtAware, String expectedTradeMode,
+                           String expectedNbtJson) {
 
         public static void encode(FriendlyByteBuf buffer, CartLine line) {
             buffer.writeBlockPos(line.shopPos);
@@ -29,12 +30,16 @@ public record C2SVerifyCartPacket(List<CartLine> lines) {
             buffer.writeLong(line.expectedPriceMinor);
             buffer.writeBoolean(line.expectedNbtAware);
             buffer.writeUtf(line.expectedTradeMode);
+            // Protocol 25: SNBT snapshot of the listing tag at add-to-cart time
+            // (blank = no NBT). Appended last to keep prior field order intact.
+            buffer.writeUtf(line.expectedNbtJson == null ? "" : line.expectedNbtJson);
         }
 
         public static CartLine decode(FriendlyByteBuf buffer) {
             return new CartLine(
                     buffer.readBlockPos(), buffer.readVarInt(), buffer.readVarInt(),
-                    buffer.readUtf(), buffer.readLong(), buffer.readBoolean(), buffer.readUtf());
+                    buffer.readUtf(), buffer.readLong(), buffer.readBoolean(), buffer.readUtf(),
+                    buffer.readUtf());
         }
     }
 

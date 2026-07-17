@@ -111,6 +111,82 @@ public final class AdminShopConfigWriter {
     }
 
     /**
+     * Adds one or more listings AND a matching barter recipe for each, in a SINGLE read/write/reload
+     * (avoids the double-reload stock re-seed of add-then-add-recipe). Each recipe targets its
+     * listing's GENERATED resolution key — never the bare registry itemId — so the Barter-tab filter
+     * binds to the exact new listing rather than a same-item sibling. The recipe is paid with
+     * {@code ingredientItemId × ingredientCount} (blank NBT = lenient identity match). Returns the
+     * number of listings actually added (skips explicit-id collisions).
+     */
+    public static synchronized int addItemsWithBarter(MinecraftServer server, List<AdminShopItemSpec> specs,
+                                                      int outputCount, String ingredientItemId, int ingredientCount) {
+        if (specs == null || specs.isEmpty() || ingredientItemId == null || ingredientItemId.isBlank()) return 0;
+        Path path = ShopDefinitionLoader.adminShopPath();
+        JsonObject root = readOrInit(path);
+        if (root == null) return 0;
+        int added = addItemsWithBarterToRoot(root, specs, outputCount, ingredientItemId, ingredientCount);
+        if (added == 0) return 0;
+        if (!writeJson(path, root)) return 0;
+        ShopCatalog.reload(server);
+        return added;
+    }
+
+    /**
+     * Pure JSON form of {@link #addItemsWithBarter}: for each spec, append a listing (carrying its
+     * categoryId + generated {@code id}) AND a barter recipe whose {@code targetItemId} is that same
+     * generated id, so {@code ShopCatalog.reload} flags the new listing {@code hasBarterRecipes}.
+     * Returns the number added (explicit-id collisions skipped). Package-private for unit tests.
+     */
+    static int addItemsWithBarterToRoot(JsonObject root, List<AdminShopItemSpec> specs,
+                                        int outputCount, String ingredientItemId, int ingredientCount) {
+        if (root == null || specs == null || specs.isEmpty()
+                || ingredientItemId == null || ingredientItemId.isBlank()) return 0;
+        JsonArray items = ensureArray(root, "items");
+        JsonArray recipes = ensureArray(root, "barterRecipes");
+        int outCount = Math.max(1, outputCount);
+        int ingCount = Math.max(1, ingredientCount);
+        int added = 0;
+        for (AdminShopItemSpec spec : specs) {
+            String listingId;
+            if (spec.listingId() == null || spec.listingId().isBlank()) {
+                listingId = nextId(items, spec.itemId());
+            } else {
+                listingId = spec.listingId().trim();
+                if (indexOfByListingId(items, listingId) >= 0) continue; // explicit-id collision — skip
+            }
+            AdminShopItemSpec stamped = withListingId(spec, listingId);
+            items.add(buildItemEntry(stamped));
+
+            JsonObject recipe = new JsonObject();
+            recipe.addProperty("recipeId", nextRecipeId(recipes, listingId));
+            recipe.addProperty("targetItemId", stamped.resolutionKey()); // the generated listing id
+            recipe.addProperty("outputCount", outCount);
+            JsonArray ings = new JsonArray();
+            JsonObject ing = new JsonObject();
+            ing.addProperty("itemId", ingredientItemId);
+            ing.addProperty("count", ingCount);
+            ings.add(ing);
+            recipe.add("ingredients", ings);
+            recipes.add(recipe);
+            added++;
+        }
+        return added;
+    }
+
+    /** Unique recipeId derived from the target key (mirrors {@link #nextId}). */
+    private static String nextRecipeId(JsonArray recipes, String targetKey) {
+        String base = ("barter_" + (targetKey == null ? "recipe" : targetKey))
+                .toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_]", "_");
+        int n = 1;
+        String candidate = base + "_" + n;
+        while (indexOfByField(recipes, "recipeId", candidate) >= 0) {
+            n++;
+            candidate = base + "_" + n;
+        }
+        return candidate;
+    }
+
+    /**
      * Replaces the entry addressed by {@code listingId} in place (keeping its id), using all fields
      * from {@code spec}. Returns {@code false} if no such listing exists. Triggers a reload on success.
      *
@@ -142,7 +218,16 @@ public final class AdminShopConfigWriter {
         JsonArray items = ensureArray(root, "items");
         int idx = indexOfByListingId(items, listingId);
         if (idx < 0) return false;
+        // Capture the listing's target forms BEFORE removing it, so we can also strip any barter
+        // recipe targeting it. Otherwise the recipe is orphaned, and because nextId REUSES freed
+        // ids, a later same-item add would resurrect that stale trade onto the new listing (even a
+        // money-only one) — a silent economy leak the OP thought they'd deleted.
+        JsonObject entry = items.get(idx).getAsJsonObject();
+        String resolutionKey = entry.has("id") ? entry.get("id").getAsString()
+                : (entry.has("itemId") ? entry.get("itemId").getAsString() : listingId);
+        String registryItemId = entry.has("itemId") ? entry.get("itemId").getAsString() : resolutionKey;
         items.remove(idx);
+        removeBarterRecipesFromRoot(root, resolutionKey, registryItemId);
         if (!writeJson(path, root)) return false;
         ShopCatalog.reload(server);
         return true;
@@ -168,6 +253,453 @@ public final class AdminShopConfigWriter {
         if (!writeJson(path, root)) return false;
         ShopCatalog.reload(server);
         return true;
+    }
+
+    /**
+     * Removes every barter recipe whose target is the given listing, making that listing money-only.
+     * Global-catalog "barter" is not a per-item flag — an item is barterable purely because a
+     * {@code barterRecipes[]} entry targets it — so this is the in-game way to turn barter OFF.
+     * Matches a recipe's {@code targetItemId} against the listing's stable resolution key OR its
+     * registry item id (the two forms a target may be written as; a legacy single-variant listing
+     * has both equal). Triggers a catalog reload on success. Returns the number of recipes removed.
+     */
+    public static synchronized int removeBarterRecipesTargeting(MinecraftServer server,
+                                                                String resolutionKey, String registryItemId) {
+        Path path = ShopDefinitionLoader.adminShopPath();
+        JsonObject root = readOrInit(path);
+        if (root == null) return 0;
+        int removed = removeBarterRecipesFromRoot(root, resolutionKey, registryItemId);
+        if (removed == 0) return 0;
+        if (!writeJson(path, root)) return 0;
+        ShopCatalog.reload(server);
+        return removed;
+    }
+
+    /**
+     * Pure {@code barterRecipes} filter for {@link #removeBarterRecipesTargeting} — mutates {@code root}
+     * in place, dropping recipes targeting the listing, and returns how many were removed. Split out so
+     * the matching logic is unit-testable without a running server. Does not write or reload.
+     */
+    static int removeBarterRecipesFromRoot(JsonObject root, String resolutionKey, String registryItemId) {
+        if (root == null || !root.has("barterRecipes") || !root.get("barterRecipes").isJsonArray()) {
+            return 0;
+        }
+        JsonArray recipes = root.getAsJsonArray("barterRecipes");
+        JsonArray kept = new JsonArray();
+        int removed = 0;
+        for (JsonElement el : recipes) {
+            if (el.isJsonObject() && el.getAsJsonObject().has("targetItemId")) {
+                String target = el.getAsJsonObject().get("targetItemId").getAsString();
+                if (target.equals(resolutionKey) || target.equals(registryItemId)) {
+                    removed++;
+                    continue;
+                }
+            }
+            kept.add(el);
+        }
+        if (removed > 0) {
+            root.add("barterRecipes", kept);
+        }
+        return removed;
+    }
+
+    // ─── Multi-ingredient barter editor (OP adds ingredients one held item at a time) ─────────
+
+    /**
+     * Creates a barter TARGET listing from {@code spec} (money prices 0 = barter-only) plus an EMPTY
+     * barter recipe targeting it, and returns the generated listingId. Ingredients are added later,
+     * one at a time, via {@link #addBarterIngredient}. A zero-ingredient recipe is rejected at the buy
+     * path (ShopBarterService), so this transient "no cost yet" state can't be exploited. Null on I/O fail.
+     */
+    public static synchronized String addBarterTargetHeld(MinecraftServer server, AdminShopItemSpec spec, int outputCount) {
+        if (spec == null) return null;
+        Path path = ShopDefinitionLoader.adminShopPath();
+        JsonObject root = readOrInit(path);
+        if (root == null) return null;
+        String listingId = addBarterTargetToRoot(root, spec, outputCount);
+        if (listingId == null || !writeJson(path, root)) return null;
+        ShopCatalog.reload(server);
+        return listingId;
+    }
+
+    /**
+     * Batch variant used by the searchable barter-output picker. Every selected registry item is
+     * appended with an empty, safe-by-default recipe in one read/write/reload. The returned ids are
+     * ordered like {@code specs} so the client can walk the operator through each ingredient editor.
+     */
+    public static synchronized List<String> addBarterTargets(MinecraftServer server,
+                                                             List<AdminShopItemSpec> specs,
+                                                             int outputCount) {
+        if (specs == null || specs.isEmpty()) return List.of();
+        Path path = ShopDefinitionLoader.adminShopPath();
+        JsonObject root = readOrInit(path);
+        if (root == null) return List.of();
+        List<String> listingIds = addBarterTargetsToRoot(root, specs, outputCount);
+        if (listingIds.isEmpty() || !writeJson(path, root)) return List.of();
+        ShopCatalog.reload(server);
+        return listingIds;
+    }
+
+    /** Pure batch target creation for tests and the disk-backed wrapper above. */
+    static List<String> addBarterTargetsToRoot(JsonObject root, List<AdminShopItemSpec> specs, int outputCount) {
+        if (root == null || specs == null || specs.isEmpty()) return List.of();
+        List<String> listingIds = new ArrayList<>();
+        for (AdminShopItemSpec spec : specs) {
+            String listingId = addBarterTargetToRoot(root, spec, outputCount);
+            if (listingId != null && !listingId.isBlank()) {
+                listingIds.add(listingId);
+            }
+        }
+        return List.copyOf(listingIds);
+    }
+
+    /** Pure: appends the target listing + an empty recipe; returns the generated listingId. */
+    static String addBarterTargetToRoot(JsonObject root, AdminShopItemSpec spec, int outputCount) {
+        if (root == null || spec == null || spec.itemId() == null || spec.itemId().isBlank()) return null;
+        JsonArray items = ensureArray(root, "items");
+        JsonArray recipes = ensureArray(root, "barterRecipes");
+        String listingId = nextId(items, spec.itemId());
+        items.add(buildItemEntry(withListingId(spec, listingId)));
+        JsonObject recipe = new JsonObject();
+        recipe.addProperty("recipeId", nextRecipeId(recipes, listingId));
+        recipe.addProperty("targetItemId", listingId);
+        recipe.addProperty("outputCount", Math.max(1, outputCount));
+        recipe.add("ingredients", new JsonArray());
+        recipes.add(recipe);
+        return listingId;
+    }
+
+    /** Appends (or count-merges) one ingredient onto the recipe targeting {@code targetKey}, creating
+     *  the recipe if none exists. {@code ingredientNbt} blank = lenient match. Reloads on success. */
+    public static synchronized boolean addBarterIngredient(MinecraftServer server, String targetKey,
+                                                           String ingredientItemId, String ingredientNbt, int count) {
+        Path path = ShopDefinitionLoader.adminShopPath();
+        JsonObject root = readOrInit(path);
+        if (root == null) return false;
+        if (!addBarterIngredientToRoot(root, targetKey, ingredientItemId, ingredientNbt, count)) return false;
+        if (!writeJson(path, root)) return false;
+        ShopCatalog.reload(server);
+        return true;
+    }
+
+    static boolean addBarterIngredientToRoot(JsonObject root, String targetKey,
+                                             String ingredientItemId, String ingredientNbt, int count) {
+        if (root == null || targetKey == null || targetKey.isBlank()
+                || ingredientItemId == null || ingredientItemId.isBlank()) return false;
+        JsonArray recipes = ensureArray(root, "barterRecipes");
+        JsonObject recipe = findRecipeByTarget(recipes, targetKey);
+        if (recipe == null) {
+            recipe = new JsonObject();
+            recipe.addProperty("recipeId", nextRecipeId(recipes, targetKey));
+            recipe.addProperty("targetItemId", targetKey);
+            recipe.addProperty("outputCount", 1);
+            recipe.add("ingredients", new JsonArray());
+            recipes.add(recipe);
+        }
+        if (!recipe.has("ingredients") || !recipe.get("ingredients").isJsonArray()) {
+            recipe.add("ingredients", new JsonArray());
+        }
+        JsonArray ings = recipe.getAsJsonArray("ingredients");
+        int add = Math.max(1, count);
+        String nbt = ingredientNbt == null ? "" : ingredientNbt;
+        // Count-merge with an existing identical (itemId + nbt) line so adding the same item twice
+        // bumps its count instead of stacking duplicate rows.
+        for (JsonElement el : ings) {
+            if (!el.isJsonObject()) continue;
+            JsonObject o = el.getAsJsonObject();
+            String id = o.has("itemId") ? o.get("itemId").getAsString() : "";
+            String enbt = o.has("nbt") ? o.get("nbt").getAsString() : "";
+            if (id.equals(ingredientItemId) && enbt.equals(nbt)) {
+                o.addProperty("count", (o.has("count") ? o.get("count").getAsInt() : 1) + add);
+                return true;
+            }
+        }
+        JsonObject ing = new JsonObject();
+        ing.addProperty("itemId", ingredientItemId);
+        ing.addProperty("count", add);
+        if (!nbt.isBlank()) ing.addProperty("nbt", nbt);
+        ings.add(ing);
+        return true;
+    }
+
+    /** Removes ingredient {@code index} from the recipe targeting {@code targetKey}; drops the whole
+     *  recipe when its last ingredient goes (a 0-ingredient recipe would be a free trade). Reloads. */
+    public static synchronized boolean removeBarterIngredient(MinecraftServer server, String targetKey, int index) {
+        Path path = ShopDefinitionLoader.adminShopPath();
+        JsonObject root = readOrInit(path);
+        if (root == null) return false;
+        if (!removeBarterIngredientFromRoot(root, targetKey, index)) return false;
+        if (!writeJson(path, root)) return false;
+        ShopCatalog.reload(server);
+        return true;
+    }
+
+    static boolean removeBarterIngredientFromRoot(JsonObject root, String targetKey, int index) {
+        if (root == null || targetKey == null || !root.has("barterRecipes") || !root.get("barterRecipes").isJsonArray()) {
+            return false;
+        }
+        JsonArray recipes = root.getAsJsonArray("barterRecipes");
+        JsonObject recipe = findRecipeByTarget(recipes, targetKey);
+        if (recipe == null || !recipe.has("ingredients") || !recipe.get("ingredients").isJsonArray()) return false;
+        JsonArray ings = recipe.getAsJsonArray("ingredients");
+        if (index < 0 || index >= ings.size()) return false;
+        ings.remove(index);
+        if (ings.size() == 0) {
+            JsonArray kept = new JsonArray();
+            for (JsonElement el : recipes) {
+                if (el != recipe) kept.add(el);
+            }
+            root.add("barterRecipes", kept);
+        }
+        return true;
+    }
+
+    /** Sets the output (reward) count on the recipe targeting {@code targetKey}. Reloads on success. */
+    public static synchronized boolean setBarterOutputCount(MinecraftServer server, String targetKey, int count) {
+        Path path = ShopDefinitionLoader.adminShopPath();
+        JsonObject root = readOrInit(path);
+        if (root == null) return false;
+        if (!setBarterOutputCountInRoot(root, targetKey, count)) return false;
+        if (!writeJson(path, root)) return false;
+        ShopCatalog.reload(server);
+        return true;
+    }
+
+    static boolean setBarterOutputCountInRoot(JsonObject root, String targetKey, int count) {
+        if (root == null || targetKey == null || !root.has("barterRecipes") || !root.get("barterRecipes").isJsonArray()) {
+            return false;
+        }
+        JsonObject recipe = findRecipeByTarget(root.getAsJsonArray("barterRecipes"), targetKey);
+        if (recipe == null) return false;
+        recipe.addProperty("outputCount", Math.max(1, count));
+        return true;
+    }
+
+    /** Sets one ingredient count by row index. Counts are clamped to one; the row identity is kept. */
+    public static synchronized boolean setBarterIngredientCount(MinecraftServer server, String targetKey,
+                                                                int index, int count) {
+        Path path = ShopDefinitionLoader.adminShopPath();
+        JsonObject root = readOrInit(path);
+        if (root == null || !setBarterIngredientCountInRoot(root, targetKey, index, count)) return false;
+        if (!writeJson(path, root)) return false;
+        ShopCatalog.reload(server);
+        return true;
+    }
+
+    static boolean setBarterIngredientCountInRoot(JsonObject root, String targetKey, int index, int count) {
+        if (root == null || targetKey == null || !root.has("barterRecipes")
+                || !root.get("barterRecipes").isJsonArray()) return false;
+        JsonObject recipe = findRecipeByTarget(root.getAsJsonArray("barterRecipes"), targetKey);
+        if (recipe == null || !recipe.has("ingredients") || !recipe.get("ingredients").isJsonArray()) return false;
+        JsonArray ingredients = recipe.getAsJsonArray("ingredients");
+        if (index < 0 || index >= ingredients.size() || !ingredients.get(index).isJsonObject()) return false;
+        ingredients.get(index).getAsJsonObject().addProperty("count", Math.max(1, count));
+        return true;
+    }
+
+    /** First recipe whose targetItemId equals {@code targetKey} (case-insensitive), or null. */
+    private static JsonObject findRecipeByTarget(JsonArray recipes, String targetKey) {
+        if (recipes == null || targetKey == null) return null;
+        String needle = targetKey.toLowerCase(Locale.ROOT);
+        for (JsonElement el : recipes) {
+            if (!el.isJsonObject()) continue;
+            JsonObject o = el.getAsJsonObject();
+            if (o.has("targetItemId") && o.get("targetItemId").getAsString().toLowerCase(Locale.ROOT).equals(needle)) {
+                return o;
+            }
+        }
+        return null;
+    }
+
+    // ─── In-GUI admin editor API ─────────────────────────────────────────────
+    //
+    // Partial in-place mutations for the edit-mode GUI. Unlike editById (which rebuilds the whole
+    // entry from a re-captured spec), these touch ONLY the keys they own so listing fields the GUI
+    // never surfaces — nbt, expiresAtEpoch, stockRefreshSeconds — survive every save untouched.
+    // Each has a pure package-private JsonObject-level helper (unit-testable without a server,
+    // mirroring removeBarterRecipesFromRoot) plus a thin synchronized read/write/reload wrapper.
+
+    /**
+     * Updates the GUI-editable fields of the listing addressed by {@code listingId}: displayName
+     * (blank → removed), categoryId (blank → removed, i.e. "all"), buyPrice, sellPrice and stock.
+     * Never rewrites {@code nbt} / {@code expiresAtEpoch} / {@code stockRefreshSeconds} / {@code id}
+     * / {@code itemId}. Returns {@code false} if no such listing exists or on I/O failure.
+     * Triggers a catalog reload on success.
+     */
+    public static synchronized boolean updateListingFields(MinecraftServer server, String listingId,
+                                                           String displayName, String categoryId,
+                                                           long buyMinor, long sellMinor, int stock) {
+        if (listingId == null || listingId.isBlank()) return false;
+        Path path = ShopDefinitionLoader.adminShopPath();
+        JsonObject root = readOrInit(path);
+        if (root == null) return false;
+        if (!updateListingFieldsInRoot(root, listingId, displayName, categoryId, buyMinor, sellMinor, stock)) {
+            return false;
+        }
+        if (!writeJson(path, root)) return false;
+        ShopCatalog.reload(server);
+        return true;
+    }
+
+    /**
+     * Pure field update for {@link #updateListingFields} — mutates the matched entry in place and
+     * returns whether a listing matched. Does not write or reload.
+     */
+    static boolean updateListingFieldsInRoot(JsonObject root, String listingId, String displayName,
+                                             String categoryId, long buyMinor, long sellMinor, int stock) {
+        JsonArray items = ensureArray(root, "items");
+        int idx = indexOfByListingId(items, listingId);
+        if (idx < 0) return false;
+        JsonObject o = items.get(idx).getAsJsonObject();
+        if (displayName == null || displayName.isBlank()) {
+            o.remove("displayName");
+        } else {
+            o.addProperty("displayName", displayName.trim());
+        }
+        if (categoryId == null || categoryId.isBlank()) {
+            o.remove("categoryId");
+        } else {
+            o.addProperty("categoryId", categoryId);
+        }
+        o.addProperty("buyPrice", buyMinor);
+        o.addProperty("sellPrice", sellMinor);
+        o.addProperty("stock", stock);
+        return true;
+    }
+
+    /**
+     * Rewrites the displayName of the category entry with the given id, KEEPING its {@code id} and
+     * {@code sortOrder} untouched — so items assigned to the id and the tab ordering both survive.
+     * Returns {@code false} if no category with that id exists in admin.json or on I/O failure.
+     * Triggers a catalog reload on success.
+     */
+    public static synchronized boolean renameCategory(MinecraftServer server, String categoryId, String newDisplayName) {
+        if (categoryId == null || categoryId.isBlank() || newDisplayName == null || newDisplayName.isBlank()) return false;
+        Path path = ShopDefinitionLoader.adminShopPath();
+        JsonObject root = readOrInit(path);
+        if (root == null) return false;
+        if (!renameCategoryInRoot(root, categoryId, newDisplayName.trim())) return false;
+        if (!writeJson(path, root)) return false;
+        ShopCatalog.reload(server);
+        return true;
+    }
+
+    /** Pure displayName rewrite for {@link #renameCategory}. Does not write or reload. */
+    static boolean renameCategoryInRoot(JsonObject root, String categoryId, String newDisplayName) {
+        JsonArray cats = ensureArray(root, "categories");
+        int idx = indexOfByField(cats, "id", categoryId);
+        if (idx < 0) return false;
+        cats.get(idx).getAsJsonObject().addProperty("displayName", newDisplayName);
+        return true;
+    }
+
+    /**
+     * Rewrites each listed category's {@code sortOrder} to its index in {@code categoryIdsInOrder}
+     * (0..n-1); categories not listed keep their current sortOrder. The edit service composes the
+     * neighbour swap and passes the full desired order. Returns {@code false} when no listed
+     * category matched or on I/O failure. Triggers a catalog reload on success.
+     */
+    public static synchronized boolean setCategorySortOrders(MinecraftServer server, List<String> categoryIdsInOrder) {
+        if (categoryIdsInOrder == null || categoryIdsInOrder.isEmpty()) return false;
+        Path path = ShopDefinitionLoader.adminShopPath();
+        JsonObject root = readOrInit(path);
+        if (root == null) return false;
+        if (setCategorySortOrdersInRoot(root, categoryIdsInOrder) == 0) return false;
+        if (!writeJson(path, root)) return false;
+        ShopCatalog.reload(server);
+        return true;
+    }
+
+    /**
+     * Pure sortOrder rewrite for {@link #setCategorySortOrders} — returns how many categories were
+     * re-numbered. Does not write or reload.
+     */
+    static int setCategorySortOrdersInRoot(JsonObject root, List<String> categoryIdsInOrder) {
+        JsonArray cats = ensureArray(root, "categories");
+        int updated = 0;
+        for (int i = 0; i < categoryIdsInOrder.size(); i++) {
+            int idx = indexOfByField(cats, "id", categoryIdsInOrder.get(i));
+            if (idx < 0) continue;
+            cats.get(idx).getAsJsonObject().addProperty("sortOrder", i);
+            updated++;
+        }
+        return updated;
+    }
+
+    /**
+     * Returns the ids of admin.json's categories sorted by {@code sortOrder} (stable for ties, file
+     * order). Used by the edit service to compose MOVE_CATEGORY swaps. Reads the file directly.
+     */
+    public static List<String> listCategoryIdsSorted(MinecraftServer server) {
+        Path path = ShopDefinitionLoader.adminShopPath();
+        JsonObject root = readOrInit(path);
+        if (root == null) return List.of();
+        return categoryIdsSortedFromRoot(root);
+    }
+
+    /** Pure ordered-id extraction for {@link #listCategoryIdsSorted}. */
+    static List<String> categoryIdsSortedFromRoot(JsonObject root) {
+        JsonArray cats = ensureArray(root, "categories");
+        record IdOrder(String id, int sortOrder) {
+        }
+        List<IdOrder> rows = new ArrayList<>();
+        for (JsonElement el : cats) {
+            if (!el.isJsonObject()) continue;
+            JsonObject o = el.getAsJsonObject();
+            if (!o.has("id")) continue;
+            int sort = 0;
+            if (o.has("sortOrder")) {
+                try {
+                    sort = o.get("sortOrder").getAsInt();
+                } catch (Exception ignored) {
+                }
+            }
+            rows.add(new IdOrder(o.get("id").getAsString(), sort));
+        }
+        rows.sort(java.util.Comparator.comparingInt(IdOrder::sortOrder));
+        return rows.stream().map(IdOrder::id).toList();
+    }
+
+    /**
+     * Appends a batch of NEW listings — ONE file read, ONE write and ONE catalog reload for the
+     * whole batch (the item picker can add dozens at once; per-item reloads would refill stock and
+     * hammer the disk). Blank {@code listingId}s get generated ids; explicit ids that collide are
+     * skipped. Returns how many listings were added (0 on I/O failure).
+     */
+    public static synchronized int addItems(MinecraftServer server, List<AdminShopItemSpec> specs) {
+        if (specs == null || specs.isEmpty()) return 0;
+        Path path = ShopDefinitionLoader.adminShopPath();
+        JsonObject root = readOrInit(path);
+        if (root == null) return 0;
+        int added = addItemsToRoot(root, specs);
+        if (added == 0) return 0;
+        if (!writeJson(path, root)) return 0;
+        ShopCatalog.reload(server);
+        return added;
+    }
+
+    /**
+     * Pure batch append for {@link #addItems} — returns how many entries were added. Generated ids
+     * are computed against the growing array, so two same-item specs in one batch get distinct ids.
+     * Does not write or reload.
+     */
+    static int addItemsToRoot(JsonObject root, List<AdminShopItemSpec> specs) {
+        JsonArray items = ensureArray(root, "items");
+        int added = 0;
+        for (AdminShopItemSpec spec : specs) {
+            String listingId;
+            if (spec.listingId() == null || spec.listingId().isBlank()) {
+                listingId = nextId(items, spec.itemId());
+            } else {
+                listingId = spec.listingId().trim();
+                if (indexOfByListingId(items, listingId) >= 0) {
+                    continue; // explicit id collides — never silently overwrite
+                }
+            }
+            items.add(buildItemEntry(withListingId(spec, listingId)));
+            added++;
+        }
+        return added;
     }
 
     /**
@@ -289,13 +821,22 @@ public final class AdminShopConfigWriter {
      */
     public static List<String> listAllCategoryDisplayNames(MinecraftServer server) {
         LinkedHashSet<String> names = new LinkedHashSet<>();
+        LinkedHashSet<String> jsonIds = new LinkedHashSet<>();
         for (ShopDefinition def : ShopCatalog.getAllDefinitions()) {
             for (CategoryDef c : def.categories()) {
                 if ("all".equalsIgnoreCase(c.id())) continue;
                 names.add(c.displayName());
+                jsonIds.add(c.id());
             }
         }
-        names.addAll(com.enviouse.futureshops.server.shop.AdminCategorySavedData.get(server).getAllSorted());
+        // Skip any SavedData name whose normalized id already names a JSON category — otherwise a
+        // GUI rename (which changes the JSON displayName but keeps the id + its SavedData twin)
+        // would surface the OLD name here as a phantom duplicate.
+        for (String saved : com.enviouse.futureshops.server.shop.AdminCategorySavedData.get(server).getAllSorted()) {
+            if (!jsonIds.contains(normalizeId(saved))) {
+                names.add(saved);
+            }
+        }
         return new ArrayList<>(names);
     }
 

@@ -18,7 +18,7 @@ import java.util.UUID;
 
 public final class PlayerShopSettlementSavedData extends SavedData {
     private static final String DATA_NAME = "futureshops_player_shop_settlements";
-    private static final int CURRENT_VERSION = 1;
+    private static final int CURRENT_VERSION = 2; // v2: added per-row "nbt" key (SNBT string, "" = none)
     private static final int MAX_ROWS_PER_OWNER = 40;
 
     private final Map<Long, ShopSettlement> settlementsByShopPos = new HashMap<>();
@@ -59,7 +59,8 @@ public final class PlayerShopSettlementSavedData extends SavedData {
                         row.getLong("amount"),
                         row.getString("type"),
                         row.getString("itemId"),
-                        row.getInt("quantity")
+                        row.getInt("quantity"),
+                        row.getString("nbt") // optional; "" when absent (pre-nbt rows)
                 ));
             }
             data.rowsByOwner.put(owner, rows);
@@ -95,6 +96,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
                 rowTag.putString("type", row.type());
                 rowTag.putString("itemId", row.itemId());
                 rowTag.putInt("quantity", row.quantity());
+                rowTag.putString("nbt", row.nbtJson() == null ? "" : row.nbtJson());
                 rowsTag.add(rowTag);
             }
             ownerTag.put("rows", rowsTag);
@@ -114,6 +116,11 @@ public final class PlayerShopSettlementSavedData extends SavedData {
     }
 
     public synchronized void recordSale(UUID owner, long shopPosLong, long amountMinor, String itemId, int quantity) {
+        recordSale(owner, shopPosLong, amountMinor, itemId, quantity, "");
+    }
+
+    /** Additive overload: {@code nbtJson} carries the transacted listing's SNBT ("" = no NBT). */
+    public synchronized void recordSale(UUID owner, long shopPosLong, long amountMinor, String itemId, int quantity, String nbtJson) {
         ShopSettlement current = settlementsByShopPos.get(shopPosLong);
         if (current == null || !current.owner().equals(owner)) {
             current = new ShopSettlement(owner, 0L, 0L);
@@ -124,7 +131,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
                 current.lifetimeMinor() + Math.max(0L, amountMinor)
         ));
 
-        appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, amountMinor, "SALE", itemId == null ? "" : itemId, Math.max(0, quantity)));
+        appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, amountMinor, "SALE", itemId == null ? "" : itemId, Math.max(0, quantity), nbtJson == null ? "" : nbtJson));
         setDirty();
     }
 
@@ -136,7 +143,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
         long pending = Math.max(0L, settlement.pendingMinor());
         settlementsByShopPos.put(shopPosLong, new ShopSettlement(owner, 0L, settlement.lifetimeMinor()));
         if (pending > 0L) {
-            appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, pending, "CLAIM", "", 0));
+            appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, pending, "CLAIM", "", 0, ""));
         }
         setDirty();
         return pending;
@@ -155,7 +162,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
             return false;
         }
         settlementsByShopPos.put(shopPosLong, new ShopSettlement(owner, currentPending - amountMinor, settlement.lifetimeMinor()));
-        appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, amountMinor, "ROLLBACK", "", 0));
+        appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, amountMinor, "ROLLBACK", "", 0, ""));
         setDirty();
         return true;
     }
@@ -220,7 +227,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
         }
         int to = Math.min(filtered.size(), from + safePageSize);
         return filtered.subList(from, to).stream()
-                .map(row -> new SettlementHistoryRow(row.timestampEpochSeconds(), row.amountMinor(), row.type(), row.itemId(), row.quantity()))
+                .map(row -> new SettlementHistoryRow(row.timestampEpochSeconds(), row.amountMinor(), row.type(), row.itemId(), row.quantity(), row.nbtJson()))
                 .toList();
     }
 
@@ -276,7 +283,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
     private record ShopSettlement(UUID owner, long pendingMinor, long lifetimeMinor) {
     }
 
-    private record RevenueRow(long timestampEpochSeconds, long shopPosLong, long amountMinor, String type, String itemId, int quantity) {
+    private record RevenueRow(long timestampEpochSeconds, long shopPosLong, long amountMinor, String type, String itemId, int quantity, String nbtJson) {
     }
 
     public record Snapshot(long pendingMinor, long lifetimeMinor, List<String> rows) {

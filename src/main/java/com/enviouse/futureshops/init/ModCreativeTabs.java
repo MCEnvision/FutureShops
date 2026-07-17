@@ -14,7 +14,7 @@ public final class ModCreativeTabs {
 
     public static final RegistryObject<CreativeModeTab> FUTURESHOPS_TAB = CREATIVE_MODE_TABS.register("futureshops_tab",
             () -> CreativeModeTab.builder()
-                    .title(Component.literal("FutureShops"))
+                    .title(Component.translatable("itemGroup.futureshops.futureshops_tab"))
                     .icon(() -> new ItemStack(ModItems.SHOP_BLOCK_ITEM.get()))
                     .displayItems((params, output) -> {
                         output.accept(ModItems.SHOP_BLOCK_ITEM.get());

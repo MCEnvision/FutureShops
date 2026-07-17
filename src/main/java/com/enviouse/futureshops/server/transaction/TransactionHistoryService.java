@@ -22,13 +22,19 @@ public final class TransactionHistoryService {
     }
 
     public static void record(ServerPlayer player, String shopId, String type, String itemId, int quantity, long totalMinorUnits, String note) {
+        record(player, shopId, type, itemId, quantity, totalMinorUnits, note, "");
+    }
+
+    /** Additive overload: {@code nbtJson} carries the transacted listing's SNBT ("" = no NBT). */
+    public static void record(ServerPlayer player, String shopId, String type, String itemId, int quantity, long totalMinorUnits, String note, String nbtJson) {
         if (player.getServer() == null) {
             return;
         }
         MinecraftServer server = player.getServer();
         TransactionHistorySavedData.get(server).append(
                 player.getUUID(),
-                new TransactionHistoryEntry(Instant.now().getEpochSecond(), type, itemId, quantity, totalMinorUnits, note));
+                new TransactionHistoryEntry(Instant.now().getEpochSecond(), type, itemId, quantity, totalMinorUnits, note,
+                        nbtJson == null ? "" : nbtJson));
         pushLatestToSubscriber(server, player.getUUID(), ShopDataService.resolveShopId(shopId));
     }
 

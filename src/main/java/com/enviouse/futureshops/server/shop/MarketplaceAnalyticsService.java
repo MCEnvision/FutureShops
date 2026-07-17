@@ -1,6 +1,9 @@
 package com.enviouse.futureshops.server.shop;
 
 import com.enviouse.futureshops.block.ShopBlockEntity;
+import com.enviouse.futureshops.catalog.ItemDef;
+import com.enviouse.futureshops.catalog.ShopCatalog;
+import com.enviouse.futureshops.catalog.ShopDefinition;
 import com.enviouse.futureshops.data.BalanceTopEntry;
 import com.enviouse.futureshops.data.FranchiseLeaderboardEntry;
 import com.enviouse.futureshops.data.OwnedShopSummary;
@@ -14,14 +17,17 @@ import com.enviouse.futureshops.server.economy.EconomyProvider;
 import com.enviouse.futureshops.server.transaction.TransactionHistorySavedData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -112,7 +118,8 @@ public final class MarketplaceAnalyticsService {
                 productMetric.itemId(),
                 productMetric.tradeCount(),
                 productMetric.totalQuantity(),
-                franchises));
+                franchises,
+                resolvePopularItemNbt(productMetric.itemId())));
     }
 
     public static DashboardSnapshot snapshotDashboard(ServerPlayer player) {
@@ -155,12 +162,14 @@ public final class MarketplaceAnalyticsService {
             int shopTotalStock = 0;
             int shopLowCount = 0;
             String featuredItemId = shopListingCount > 0 ? shop.getListings().get(0).itemId() : "";
+            CompoundTag featuredTag = shopListingCount > 0 ? shop.getListings().get(0).nbtTag() : null;
+            String featuredNbtJson = featuredTag != null ? featuredTag.toString() : "";
             for (ShopBlockEntity.Listing listing : shop.getListings()) {
                 int stock = PlayerShopBlockService.countStock(level, shop, pos, listing);
                 shopTotalStock += stock;
                 if (stock <= LOW_STOCK_THRESHOLD) {
                     shopLowCount++;
-                    alerts.add(displayItemName(listing.itemId()) + " low at " + shopNameOrBlank
+                    alerts.add(displayItemName(listing.itemId(), listing.nbtTag()) + " low at " + shopNameOrBlank
                             + displayDimension(ref.dimension()) + " " + formatPos(pos) + " (" + stock + ")");
                 }
             }
@@ -175,7 +184,8 @@ public final class MarketplaceAnalyticsService {
                     shopLowCount,
                     shop.getLinkedStoragePos() != null,
                     settlement.pendingMinor(),
-                    settlement.lifetimeMinor()));
+                    settlement.lifetimeMinor(),
+                    featuredNbtJson));
             revenue += settlement.lifetimeMinor();
             pending += settlement.pendingMinor();
             listingCount += shopListingCount;
@@ -236,6 +246,33 @@ public final class MarketplaceAnalyticsService {
         return new TransactionMetrics(activity, product);
     }
 
+    /**
+     * Best-effort NBT resolution for the popular-product spotlight: history entries carry only
+     * the registry itemId, so look the item up in the admin catalog. Returns the listing's
+     * nbtJson only when it is unambiguous — i.e. every catalog listing minting this registry id
+     * agrees on the same tag. Ambiguous (multiple NBT variants) or absent → "" (bare icon).
+     */
+    private static String resolvePopularItemNbt(String itemId) {
+        if (itemId == null || itemId.isBlank()) {
+            return "";
+        }
+        String resolved = null;
+        for (ShopDefinition definition : ShopCatalog.getAllDefinitions()) {
+            for (ItemDef item : definition.items()) {
+                if (!itemId.equals(item.itemId())) {
+                    continue;
+                }
+                String nbt = item.nbtJson() == null ? "" : item.nbtJson();
+                if (resolved == null) {
+                    resolved = nbt;
+                } else if (!resolved.equals(nbt)) {
+                    return ""; // ambiguous: multiple variants share this registry id
+                }
+            }
+        }
+        return resolved == null ? "" : resolved;
+    }
+
     private static PlayerMetric resolveTopSeller(MinecraftServer server) {
         return PlayerShopSettlementSavedData.get(server).snapshotSaleCountByOwner().entrySet().stream()
                 .map(entry -> new PlayerMetric(entry.getKey(), resolvePlayerName(server, entry.getKey()), entry.getValue()))
@@ -262,9 +299,19 @@ public final class MarketplaceAnalyticsService {
         return pos.getX() + ", " + pos.getY() + ", " + pos.getZ();
     }
 
-    private static String displayItemName(String itemId) {
+    private static String displayItemName(String itemId, @Nullable CompoundTag nbtTag) {
         Item item = itemId == null || itemId.isBlank() ? Items.AIR : net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(ResourceLocation.parse(itemId));
-        return item == null || item == Items.AIR ? itemId : item.getDescription().getString();
+        if (item == null || item == Items.AIR) {
+            return itemId;
+        }
+        // Resolve the name from a tag-stamped stack, not the item's raw description
+        // key — tag-dependent items (TacZ guns) take their name from the stack NBT
+        // (mirrors LocalShopAggregator's server-side fallback).
+        ItemStack nameStack = new ItemStack(item);
+        if (nbtTag != null) {
+            nameStack.setTag(nbtTag.copy());
+        }
+        return nameStack.getHoverName().getString();
     }
 
     public record DashboardSnapshot(

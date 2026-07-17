@@ -6,7 +6,6 @@ import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SFranchiseActionPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenBalanceUiPacket;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -34,6 +33,9 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
     private EditBox inviteBox;
     private ConfirmationModal disbandConfirm;
     private ConfirmationModal leaveConfirm;
+
+    /** Per-frame flat-button hit regions, populated in {@link #render}, consulted in mouseClicked. */
+    private final java.util.List<ShopUiUtil.ClickZone> clickZones = new java.util.ArrayList<>();
 
     public FranchiseManagementScreen(boolean inFranchise, UUID franchiseId, String franchiseName,
                                      boolean isLeader, List<FranchiseMemberEntry> members,
@@ -72,11 +74,35 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
         guiTop = (this.height - guiH) / 2;
         visibleMembers = Math.max(2, (guiH - 140) / 22);
 
+        // Only EditBoxes remain real widgets; every button is drawn immediate-mode in render().
+        if (!inFranchise) {
+            // Create franchise — use an EditBox for name input
+            inviteBox = new EditBox(this.font, guiLeft + guiW / 2 - 60, guiTop + 140, 120, 16,
+                    Component.translatable("gui.futureshops.franchise_mgmt.name_narration"));
+            inviteBox.setMaxLength(32);
+            inviteBox.setHint(Component.translatable("gui.futureshops.franchise_mgmt.name_hint"));
+            addRenderableWidget(inviteBox);
+            return;
+        }
+
+        // In franchise — show invite box for leader
+        if (isLeader) {
+            inviteBox = new EditBox(this.font, guiLeft + guiW - 180, guiTop + 56, 110, 14,
+                    Component.translatable("gui.futureshops.franchise_mgmt.invite_narration"));
+            inviteBox.setMaxLength(16);
+            inviteBox.setHint(Component.translatable("gui.futureshops.franchise_mgmt.invite_hint"));
+            addRenderableWidget(inviteBox);
+        }
+    }
+
+    /** Draws every flat Nocturne button and registers its click zone for this frame. */
+    private void renderButtons(GuiGraphics graphics, int mouseX, int mouseY) {
         // Back button (always at the left)
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.cart.back"), button ->
-                        ShopPackets.CHANNEL.sendToServer(new C2SOpenBalanceUiPacket()))
-                .bounds(guiLeft + 6, guiTop + guiH - 22, 50, 16)
-                .build());
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + 6, guiTop + guiH - 22, 50, 16,
+                Component.translatable("gui.futureshops.cart.back"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true,
+                () -> ShopPackets.CHANNEL.sendToServer(new C2SOpenBalanceUiPacket()));
 
         // Close button sits to the LEFT of Disband/Leave to avoid overlap.
         // Reserve right-edge slots for destructive actions when in a franchise.
@@ -88,97 +114,87 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
         } else {
             closeRightEdge = guiLeft + guiW - 6;
         }
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.baltop.close"), button -> onClose())
-                .bounds(closeRightEdge - 50, guiTop + guiH - 22, 50, 16)
-                .build());
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                closeRightEdge - 50, guiTop + guiH - 22, 50, 16,
+                Component.translatable("gui.futureshops.baltop.close"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true, this::onClose);
 
         if (!inFranchise) {
-            // Show pending invite or "no franchise" state
             if (hasPendingInvite) {
-                addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.franchise_mgmt.accept"), button ->
-                                ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("ACCEPT", "")))
-                        .bounds(guiLeft + guiW / 2 - 60, guiTop + 100, 55, 16)
-                        .build());
-                addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.franchise_mgmt.decline"), button ->
-                                ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("DECLINE", "")))
-                        .bounds(guiLeft + guiW / 2 + 5, guiTop + 100, 55, 16)
-                        .build());
+                ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                        guiLeft + guiW / 2 - 60, guiTop + 100, 55, 16,
+                        Component.translatable("gui.futureshops.franchise_mgmt.accept"),
+                        ShopUiUtil.ButtonStyle.PRIMARY, true,
+                        () -> ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("ACCEPT", "")));
+                ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                        guiLeft + guiW / 2 + 5, guiTop + 100, 55, 16,
+                        Component.translatable("gui.futureshops.franchise_mgmt.decline"),
+                        ShopUiUtil.ButtonStyle.SECONDARY, true,
+                        () -> ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("DECLINE", "")));
             }
-            // Create franchise — use an EditBox for name input
-            inviteBox = new EditBox(this.font, guiLeft + guiW / 2 - 60, guiTop + 140, 120, 16,
-                    Component.translatable("gui.futureshops.franchise_mgmt.name_narration"));
-            inviteBox.setMaxLength(32);
-            inviteBox.setHint(Component.translatable("gui.futureshops.franchise_mgmt.name_hint"));
-            addRenderableWidget(inviteBox);
-            // Create button — handled in mouseClicked via custom logic (franchise create uses /franchise create)
             return;
         }
 
-        // In franchise — show invite box for leader
         if (isLeader) {
-            inviteBox = new EditBox(this.font, guiLeft + guiW - 180, guiTop + 56, 110, 14,
-                    Component.translatable("gui.futureshops.franchise_mgmt.invite_narration"));
-            inviteBox.setMaxLength(16);
-            inviteBox.setHint(Component.translatable("gui.futureshops.franchise_mgmt.invite_hint"));
-            addRenderableWidget(inviteBox);
-
-            addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.franchise_mgmt.invite_btn"), button -> {
+            ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                    guiLeft + guiW - 66, guiTop + 56, 54, 14,
+                    Component.translatable("gui.futureshops.franchise_mgmt.invite_btn"),
+                    ShopUiUtil.ButtonStyle.PRIMARY, true, () -> {
                         if (inviteBox != null && !inviteBox.getValue().isBlank()) {
                             ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("INVITE", inviteBox.getValue().trim()));
                             inviteBox.setValue("");
                         }
-                    })
-                    .bounds(guiLeft + guiW - 66, guiTop + 56, 54, 14)
-                    .build());
-        }
-
-        // Leave / Disband buttons
-        if (isLeader) {
-            addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.franchise_mgmt.disband_btn"), button -> openDisbandConfirm())
-                    .bounds(guiLeft + guiW - 80, guiTop + guiH - 22, 70, 16)
-                    .build());
+                    });
+            ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                    guiLeft + guiW - 80, guiTop + guiH - 22, 70, 16,
+                    Component.translatable("gui.futureshops.franchise_mgmt.disband_btn"),
+                    ShopUiUtil.ButtonStyle.DANGER, true, this::openDisbandConfirm);
         } else {
-            addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.franchise_mgmt.leave_btn"), button -> openLeaveConfirm())
-                    .bounds(guiLeft + guiW - 66, guiTop + guiH - 22, 58, 16)
-                    .build());
+            ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                    guiLeft + guiW - 66, guiTop + guiH - 22, 58, 16,
+                    Component.translatable("gui.futureshops.franchise_mgmt.leave_btn"),
+                    ShopUiUtil.ButtonStyle.DANGER, true, this::openLeaveConfirm);
         }
     }
 
     private void openLeaveConfirm() {
-        String name = franchiseName == null || franchiseName.isBlank() ? "this franchise" : franchiseName;
+        String name = franchiseName == null || franchiseName.isBlank()
+                ? Component.translatable("gui.futureshops.franchise_mgmt.this_franchise").getString() : franchiseName;
         leaveConfirm = new ConfirmationModal(
-                "§c↩ Leave Franchise",
+                Component.translatable("gui.futureshops.franchise_mgmt.leave.title").getString(),
                 java.util.List.of(
-                        ConfirmationModal.SummaryLine.text("§fLeave §e\"" + name + "\"§f?"),
-                        ConfirmationModal.SummaryLine.text("§7You'll need a new invite to rejoin.")),
-                "§7Leave confirms immediately.",
+                        ConfirmationModal.SummaryLine.text(Component.translatable("gui.futureshops.franchise_mgmt.leave.line1", name).getString()),
+                        ConfirmationModal.SummaryLine.text(Component.translatable("gui.futureshops.franchise_mgmt.leave.line2").getString())),
+                Component.translatable("gui.futureshops.franchise_mgmt.leave.total").getString(),
                 modal -> {
                     modal.setProcessing();
                     ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("LEAVE", ""));
-                    modal.setSuccess("Left franchise");
+                    modal.setSuccess(Component.translatable("gui.futureshops.franchise_mgmt.leave.success").getString());
                 },
                 () -> leaveConfirm = null);
     }
 
     private void openDisbandConfirm() {
-        String name = franchiseName == null || franchiseName.isBlank() ? "this franchise" : franchiseName;
+        String name = franchiseName == null || franchiseName.isBlank()
+                ? Component.translatable("gui.futureshops.franchise_mgmt.this_franchise").getString() : franchiseName;
         disbandConfirm = new ConfirmationModal(
-                "§c⚠ Disband Franchise",
+                Component.translatable("gui.futureshops.franchise_mgmt.disband.title").getString(),
                 java.util.List.of(
-                        ConfirmationModal.SummaryLine.text("§fDisband §e\"" + name + "\"§f?"),
-                        ConfirmationModal.SummaryLine.text("§7All members will be removed."),
-                        ConfirmationModal.SummaryLine.text("§7This action cannot be undone.")),
-                "§cThis is permanent.",
+                        ConfirmationModal.SummaryLine.text(Component.translatable("gui.futureshops.franchise_mgmt.disband.line1", name).getString()),
+                        ConfirmationModal.SummaryLine.text(Component.translatable("gui.futureshops.franchise_mgmt.disband.line2").getString()),
+                        ConfirmationModal.SummaryLine.text(Component.translatable("gui.futureshops.franchise_mgmt.disband.line3").getString())),
+                Component.translatable("gui.futureshops.franchise_mgmt.disband.total").getString(),
                 modal -> {
                     modal.setProcessing();
                     ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("DISBAND", ""));
-                    modal.setSuccess("Franchise disbanded");
+                    modal.setSuccess(Component.translatable("gui.futureshops.franchise_mgmt.disband.success").getString());
                 },
                 () -> disbandConfirm = null);
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        clickZones.clear();
         ShopUiUtil.renderDimBackdrop(graphics, this.width, this.height);
         graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + guiH, ShopColors.SURFACE_BASE);
         ShopUiUtil.drawSoftOutline(graphics, guiLeft, guiTop, guiW, guiH, ShopColors.BORDER_STRONG, ShopColors.BORDER_SUBTLE);
@@ -189,6 +205,8 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
         } else {
             renderFranchiseView(graphics, mouseX, mouseY);
         }
+
+        renderButtons(graphics, mouseX, mouseY);
 
         super.render(graphics, mouseX, mouseY, partialTick);
 
@@ -210,28 +228,32 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
         // Header
         ShopUiUtil.renderCard(graphics, guiLeft + 10, guiTop + 10, guiW - 20, 40);
         graphics.fill(guiLeft + 10, guiTop + 10, guiLeft + guiW - 10, guiTop + 12, ShopColors.ACCENT_PRIMARY);
-        graphics.drawString(this.font, "⚑ Franchise", guiLeft + 18, guiTop + 18, ShopColors.TEXT_STRONG, true);
-        graphics.drawString(this.font, "You are not in a franchise", guiLeft + 18, guiTop + 32, ShopColors.TEXT_MUTED, false);
+        graphics.drawString(this.font, Component.translatable("gui.futureshops.balance.franchise"), guiLeft + 18, guiTop + 18, ShopColors.TEXT_STRONG, true);
+        graphics.drawString(this.font, Component.translatable("gui.futureshops.franchise_mgmt.not_in"), guiLeft + 18, guiTop + 32, ShopColors.TEXT_MUTED, false);
 
         if (hasPendingInvite) {
             ShopUiUtil.renderCard(graphics, guiLeft + 10, guiTop + 60, guiW - 20, 50);
             graphics.fill(guiLeft + 10, guiTop + 60, guiLeft + guiW - 10, guiTop + 62, ShopColors.STATUS_WARNING);
-            graphics.drawString(this.font, "📨 Pending Invite", guiLeft + 18, guiTop + 68, ShopColors.STATUS_WARNING, true);
-            graphics.drawString(this.font, "You've been invited to \"" + pendingFranchiseName + "\"",
+            graphics.drawString(this.font, Component.translatable("gui.futureshops.franchise_mgmt.pending_invite"), guiLeft + 18, guiTop + 68, ShopColors.STATUS_WARNING, true);
+            graphics.drawString(this.font, Component.translatable("gui.futureshops.franchise_mgmt.invited_to", pendingFranchiseName),
                     guiLeft + 18, guiTop + 82, ShopColors.TEXT_STRONG, false);
         }
 
         // Create franchise section
-        graphics.drawString(this.font, "Create a franchise:", guiLeft + guiW / 2 - 50, guiTop + 128, ShopColors.TEXT_MUTED, false);
+        graphics.drawString(this.font, Component.translatable("gui.futureshops.franchise_mgmt.create_prompt"), guiLeft + guiW / 2 - 50, guiTop + 128, ShopColors.TEXT_MUTED, false);
     }
 
     private void renderFranchiseView(GuiGraphics graphics, int mouseX, int mouseY) {
         // Header with franchise name
         ShopUiUtil.renderCard(graphics, guiLeft + 10, guiTop + 10, guiW - 20, 40);
         graphics.fill(guiLeft + 10, guiTop + 10, guiLeft + guiW - 10, guiTop + 12, ShopColors.ACCENT_PRIMARY);
-        graphics.drawString(this.font, "⚑ " + franchiseName, guiLeft + 18, guiTop + 18, ShopColors.ACCENT_PRIMARY, true);
-        String roleText = isLeader ? "§6Leader" : "§7Member";
-        graphics.drawString(this.font, roleText + " • " + members.size() + " member" + (members.size() != 1 ? "s" : ""),
+        graphics.drawString(this.font, Component.translatable("gui.futureshops.franchise_mgmt.name_header", franchiseName), guiLeft + 18, guiTop + 18, ShopColors.ACCENT_PRIMARY, true);
+        String roleText = isLeader
+                ? Component.translatable("gui.futureshops.franchise_mgmt.role.leader").getString()
+                : Component.translatable("gui.futureshops.franchise_mgmt.role.member").getString();
+        graphics.drawString(this.font, Component.translatable(
+                        members.size() != 1 ? "gui.futureshops.franchise_mgmt.role_summary.many" : "gui.futureshops.franchise_mgmt.role_summary.one",
+                        roleText, members.size()),
                 guiLeft + 18, guiTop + 32, ShopColors.TEXT_MUTED, false);
 
         // Member list
@@ -241,7 +263,7 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
         int listH = guiH - 110;
         ShopUiUtil.renderCard(graphics, listX, listY, listW, listH);
         graphics.fill(listX, listY, listX + listW, listY + 2, ShopColors.ACCENT_PRIMARY);
-        graphics.drawString(this.font, "§l👥 MEMBERS", listX + 8, listY + 6, ShopColors.TEXT_STRONG, false);
+        graphics.drawString(this.font, Component.translatable("gui.futureshops.franchise_mgmt.members_header"), listX + 8, listY + 6, ShopColors.TEXT_STRONG, false);
 
         int maxScroll = Math.max(0, members.size() - visibleMembers);
         memberScroll = Math.max(0, Math.min(memberScroll, maxScroll));
@@ -265,7 +287,7 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
 
             // Name + role
             String nameText = member.name();
-            if (member.leader()) nameText += " §6[Leader]";
+            if (member.leader()) nameText += " " + Component.translatable("gui.futureshops.franchise_mgmt.leader_suffix").getString();
             ShopUiUtil.renderScrollingString(graphics, this.font, nameText,
                     listX + 38, y + 6, listW - 120, ShopColors.TEXT_STRONG);
 
@@ -297,6 +319,10 @@ public class FranchiseManagementScreen extends Screen implements ShopScreenMarke
         }
         if (leaveConfirm != null) {
             return leaveConfirm.mouseClicked(mouseX, mouseY, button, this.font);
+        }
+        // Flat Nocturne buttons: run the top-most hit ClickZone before member/EditBox handling.
+        if (ShopUiUtil.dispatchClicks(clickZones, mouseX, mouseY)) {
+            return true;
         }
         // Handle create franchise (when not in a franchise and inviteBox has text)
         if (!inFranchise && !hasPendingInvite && inviteBox != null && !inviteBox.getValue().isBlank()) {

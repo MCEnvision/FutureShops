@@ -128,8 +128,9 @@ public class ShopBlock extends BaseEntityBlock {
                             .getOwnedShops(player.getUUID()).size();
                     if (!limits.canPlace(player.getUUID(), currentCount)) {
                         // Deny placement — break block and return item
-                        player.sendSystemMessage(Component.literal("§cYou have reached your shop block limit ("
-                                + limits.getMaxShopBlocks(player.getUUID()) + "). Ask an admin to increase it.")
+                        player.sendSystemMessage(Component.translatable(
+                                        "command.futureshops.shop.block_limit_reached",
+                                        limits.getMaxShopBlocks(player.getUUID()))
                                 .withStyle(ChatFormatting.RED));
                         level.destroyBlock(pos, true);
                         return;

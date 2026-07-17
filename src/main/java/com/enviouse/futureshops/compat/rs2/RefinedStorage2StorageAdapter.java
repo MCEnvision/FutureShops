@@ -29,8 +29,15 @@ import java.util.List;
  *     → INetwork.getItemStorageCache() → IStorageCache<ItemStack>
  *       → IStorageCache.getList() → IStackList<ItemStack>
  *         → IStackList.getStacks() → Collection<StackListEntry<ItemStack>>
- *     → INetwork.extractItem(ItemStack, int, Action) → ItemStack (extracted)
+ *     → INetwork.extractItem(ItemStack, int, int flags, Action) → ItemStack (extracted)
  *     → INetwork.insertItem(ItemStack, int, Action) → ItemStack (remainder)
+ *
+ * Count and extract share ONE matching semantic (NbtMatchUtil): when nbtAware, only stacks
+ * whose tag equals the listing tag count/extract; otherwise the match is type-only. RS is
+ * always invoked with IComparer.COMPARE_NBT — RS's 3-arg extractItem hardcodes that flag,
+ * and a flags=0 extract would let RS merge differently-tagged variants into one stack
+ * bearing the first variant's tag — so the type-only path counts and extracts per network
+ * variant instead. Extract is all-or-nothing: on shortfall everything pulled is re-inserted.
  *
  * Falls back to IItemHandler capability if the reflection path fails.
  *
@@ -49,6 +56,9 @@ public final class RefinedStorage2StorageAdapter implements ExternalStorageAdapt
             "com.refinedmods.refinedstorage"
     );
 
+    /** IComparer.COMPARE_NBT — RS compares stack tags when set (flags=0 is type-only). */
+    private static final int COMPARE_NBT = 1;
+
     // ══════════════════════ Reflected RS1 API classes/methods (cached) ══════════════════════
     private static volatile boolean reflectionInitialized = false;
     private static volatile boolean reflectionAvailable = false;
@@ -66,7 +76,7 @@ public final class RefinedStorage2StorageAdapter implements ExternalStorageAdapt
     // INetwork → ItemStack insertItem(ItemStack, int, Action)
     private static Method insertItemMethod;
 
-    // INetwork → ItemStack extractItem(ItemStack, int, Action) [3-arg convenience overload]
+    // INetwork → ItemStack extractItem(ItemStack, int, int flags, Action) [4-arg flags overload]
     private static Method extractItemMethod;
 
     // IStorageCache<T> → IStackList<T> getList()
@@ -74,9 +84,6 @@ public final class RefinedStorage2StorageAdapter implements ExternalStorageAdapt
 
     // IStackList<T> → Collection<StackListEntry<T>> getStacks()
     private static Method getStacksMethod;
-
-    // IStackList<T> → int getCount(T stack, int flags)
-    private static Method getCountMethod;
 
     // StackListEntry<T> → T getStack()
     private static Method entryGetStackMethod;
@@ -114,8 +121,10 @@ public final class RefinedStorage2StorageAdapter implements ExternalStorageAdapt
             // INetwork.insertItem(ItemStack, int, Action) → ItemStack (remainder)
             insertItemMethod = networkClass.getMethod("insertItem", ItemStack.class, int.class, actionClass);
 
-            // INetwork.extractItem(ItemStack, int, Action) → ItemStack (extracted)
-            extractItemMethod = networkClass.getMethod("extractItem", ItemStack.class, int.class, actionClass);
+            // INetwork.extractItem(ItemStack, int, int flags, Action) → ItemStack (extracted).
+            // The 3-arg convenience overload hardcodes flags=COMPARE_NBT; reflecting the 4-arg
+            // form lets extraction state its comparison mode explicitly.
+            extractItemMethod = networkClass.getMethod("extractItem", ItemStack.class, int.class, int.class, actionClass);
 
             // ─── IStorageCache<T> → IStackList<T> getList() ───
             Class<?> storageCacheClass = Class.forName(
@@ -126,8 +135,6 @@ public final class RefinedStorage2StorageAdapter implements ExternalStorageAdapt
             Class<?> stackListClass = Class.forName(
                     "com.refinedmods.refinedstorage.api.util.IStackList");
             getStacksMethod = stackListClass.getMethod("getStacks");
-            // getCount(T stack, int flags)
-            getCountMethod = stackListClass.getMethod("getCount", Object.class, int.class);
 
             // ─── StackListEntry<T> → T getStack() ───
             Class<?> stackListEntryClass = Class.forName(
@@ -263,35 +270,22 @@ public final class RefinedStorage2StorageAdapter implements ExternalStorageAdapt
     }
 
     private boolean stackMatches(ItemStack stack, Item item, boolean nbtAware, @Nullable CompoundTag requiredTag) {
-        if (stack == null || stack.isEmpty()) return false;
-        if (stack.getItem() != item) return false;
-        if (nbtAware && requiredTag != null) {
-            return requiredTag.equals(stack.getTag());
-        }
-        if (nbtAware) {
-            return stack.getTag() == null || stack.getTag().isEmpty();
-        }
-        return true;
+        // Delegates to NbtMatchUtil so network counting matches both the handler path and
+        // RS's COMPARE_NBT extraction (strict tag equality; a null tag only matches no tag).
+        return stack != null && NbtMatchUtil.matches(stack, item, nbtAware, requiredTag);
     }
 
     private int countItemViaNetwork(Object network, Item item, boolean nbtAware, @Nullable CompoundTag requiredTag) {
         try {
-            if (!nbtAware) {
-                // Fast path: use IStackList.getCount(probe, flags=0) for type-only match
-                Object storageCache = getItemStorageCacheMethod.invoke(network);
-                if (storageCache == null) return 0;
-                Object stackList = getListMethod.invoke(storageCache);
-                if (stackList == null) return 0;
-                ItemStack probe = new ItemStack(item, 1);
-                return (int) getCountMethod.invoke(stackList, probe, 0);
-            }
-            // NBT-aware: iterate all stacks
+            // Iterate all variants — IStackList.getCount(probe, flags) returns only the FIRST
+            // matching entry's count, undercounting when the network holds several NBT
+            // variants of the same item.
             Collection<?> entries = getNetworkStacks(network);
             if (entries == null) return 0;
             long total = 0;
             for (Object entry : entries) {
                 ItemStack stack = entryStack(entry);
-                if (stackMatches(stack, item, true, requiredTag)) {
+                if (stackMatches(stack, item, nbtAware, requiredTag)) {
                     total += stack.getCount();
                 }
             }
@@ -304,35 +298,93 @@ public final class RefinedStorage2StorageAdapter implements ExternalStorageAdapt
 
     private boolean canExtractViaNetwork(Object network, Item item, int count, boolean nbtAware, @Nullable CompoundTag requiredTag) {
         try {
-            ItemStack probe = new ItemStack(item, 1);
-            if (nbtAware && requiredTag != null) probe.setTag(requiredTag.copy());
-            // INetwork.extractItem(stack, size, SIMULATE) → returns the EXTRACTED items
-            ItemStack extracted = (ItemStack) extractItemMethod.invoke(network, probe, count, actionSimulate);
-            return !extracted.isEmpty() && extracted.getCount() >= count;
+            if (nbtAware) {
+                ItemStack probe = new ItemStack(item, 1);
+                if (requiredTag != null) probe.setTag(requiredTag.copy());
+                // INetwork.extractItem(stack, size, flags, SIMULATE) → returns the EXTRACTED items
+                ItemStack extracted = (ItemStack) extractItemMethod.invoke(network, probe, count, COMPARE_NBT, actionSimulate);
+                return extracted != null && !extracted.isEmpty() && extracted.getCount() >= count;
+            }
+            // Type-only: simulate per variant (see extractViaNetwork for why flags=0 is unsafe).
+            Collection<?> entries = getNetworkStacks(network);
+            if (entries == null) return false;
+            long available = 0;
+            for (Object entry : entries) {
+                ItemStack stack = entryStack(entry);
+                if (!stackMatches(stack, item, false, null)) continue;
+                ItemStack extracted = (ItemStack) extractItemMethod.invoke(
+                        network, stack.copyWithCount(1), count, COMPARE_NBT, actionSimulate);
+                if (extracted != null) available += extracted.getCount();
+                if (available >= count) return true;
+            }
+            return false;
         } catch (Throwable t) {
             return countItemViaNetwork(network, item, nbtAware, requiredTag) >= count;
         }
     }
 
     private List<ItemStack> extractViaNetwork(Object network, Item item, int count, boolean nbtAware, @Nullable CompoundTag requiredTag) {
+        List<ItemStack> extractedStacks = new ArrayList<>();
         try {
-            ItemStack probe = new ItemStack(item, 1);
-            if (nbtAware && requiredTag != null) probe.setTag(requiredTag.copy());
-            // RS1 INetwork.extractItem(stack, size, Action) → returns the EXTRACTED ItemStack
-            ItemStack extracted = (ItemStack) extractItemMethod.invoke(network, probe, count, actionPerform);
-            if (extracted == null || extracted.isEmpty()) {
+            if (nbtAware) {
+                ItemStack probe = new ItemStack(item, 1);
+                if (requiredTag != null) probe.setTag(requiredTag.copy());
+                // INetwork.extractItem(stack, size, flags, Action) → returns the EXTRACTED ItemStack
+                ItemStack extracted = (ItemStack) extractItemMethod.invoke(network, probe, count, COMPARE_NBT, actionPerform);
+                if (extracted != null && !extracted.isEmpty()) {
+                    extractedStacks.add(extracted);
+                }
+            } else {
+                // Type-only: extract per variant, each with its own exact tag. A single flags=0
+                // extract would let RS merge differently-tagged variants into one stack bearing
+                // the first variant's tag (variant transmutation). Snapshot candidates first —
+                // PERFORM extracts mutate the stack list being iterated.
+                Collection<?> entries = getNetworkStacks(network);
+                if (entries == null) return List.of();
+                List<ItemStack> candidates = new ArrayList<>();
+                for (Object entry : entries) {
+                    ItemStack stack = entryStack(entry);
+                    if (stackMatches(stack, item, false, null)) {
+                        candidates.add(stack.copy());
+                    }
+                }
+                int remaining = count;
+                for (ItemStack candidate : candidates) {
+                    if (remaining <= 0) break;
+                    ItemStack extracted = (ItemStack) extractItemMethod.invoke(
+                            network, candidate.copyWithCount(1), remaining, COMPARE_NBT, actionPerform);
+                    if (extracted == null || extracted.isEmpty()) continue;
+                    remaining -= extracted.getCount();
+                    extractedStacks.add(extracted);
+                }
+            }
+            int totalExtracted = 0;
+            for (ItemStack extracted : extractedStacks) {
+                totalExtracted += extracted.getCount();
+            }
+            if (totalExtracted < count) {
+                // All-or-nothing: put back everything pulled so far.
+                if (totalExtracted > 0) {
+                    LOGGER.warn("FutureShops RS: Partial extract ({}/{}) — rolling back.", totalExtracted, count);
+                    rollbackExtracted(network, extractedStacks);
+                }
                 return List.of();
             }
-            if (extracted.getCount() < count) {
-                // Partial extract — put it back
-                LOGGER.warn("FutureShops RS: Partial extract ({}/{}) — rolling back.", extracted.getCount(), count);
-                insertItemMethod.invoke(network, extracted, extracted.getCount(), actionPerform);
-                return List.of();
-            }
-            return List.of(extracted);
+            return extractedStacks;
         } catch (Throwable t) {
             LOGGER.warn("FutureShops RS: extract via network failed: {}", t.getMessage());
+            rollbackExtracted(network, extractedStacks);
             return List.of();
+        }
+    }
+
+    private void rollbackExtracted(Object network, List<ItemStack> extractedStacks) {
+        for (ItemStack taken : extractedStacks) {
+            try {
+                insertItemMethod.invoke(network, taken, taken.getCount(), actionPerform);
+            } catch (Throwable t) {
+                LOGGER.warn("FutureShops RS: rollback re-insert failed for {}: {}", taken, t.getMessage());
+            }
         }
     }
 
@@ -358,9 +410,9 @@ public final class RefinedStorage2StorageAdapter implements ExternalStorageAdapt
             for (ItemStack stack : stacks) {
                 ItemStack remainder = (ItemStack) insertItemMethod.invoke(network, stack, stack.getCount(), actionPerform);
                 if (remainder != null && !remainder.isEmpty()) {
-                    // Rollback
+                    // Rollback — COMPARE_NBT so each inserted stack is pulled back with its own tag.
                     for (ItemStack prev : insertedStacks) {
-                        extractItemMethod.invoke(network, prev, prev.getCount(), actionPerform);
+                        extractItemMethod.invoke(network, prev, prev.getCount(), COMPARE_NBT, actionPerform);
                     }
                     return false;
                 }

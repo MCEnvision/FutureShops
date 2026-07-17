@@ -39,6 +39,40 @@ public final class ShopUiUtil {
     private static final String TRADE_MODE_KEY_BOTH = "gui.futureshops.trade_mode.both";
     private static final String TRADE_MODE_KEY_COMPOUND = "gui.futureshops.trade_mode.compound";
 
+    /**
+     * Localizes a cart-verification warning in the CLIENT's language. The server sends only a
+     * stable {@code warningCode} plus any dynamic args packed into {@code detail} (never English),
+     * so non-English clients see the warning in their own language. Unknown codes fall back to the
+     * raw detail string.
+     */
+    public static Component cartWarningComponent(String warningCode, String detail) {
+        String[] a = (detail == null || detail.isEmpty())
+                ? new String[0]
+                : detail.split(com.enviouse.futureshops.network.packets.S2CVerifyCartResponsePacket.WARNING_ARG_SEP, -1);
+        String arg0 = a.length > 0 ? a[0] : "";
+        String arg1 = a.length > 1 ? a[1] : "";
+        return switch (warningCode == null ? "" : warningCode) {
+            case "SHOP_REMOVED" -> Component.translatable("gui.futureshops.cart.warn.shop_removed");
+            case "LISTING_REMOVED" -> Component.translatable("gui.futureshops.cart.warn.listing_removed");
+            case "ITEM_REMOVED" -> Component.translatable("gui.futureshops.cart.warn.item_removed");
+            case "ITEM_CHANGED" -> Component.translatable("gui.futureshops.cart.warn.item_changed",
+                    getItemDisplayName(arg0), getItemDisplayName(arg1));
+            case "NBT_DISABLED" -> Component.translatable("gui.futureshops.cart.warn.nbt_disabled");
+            case "NBT_CHANGED" -> Component.translatable("gui.futureshops.cart.warn.nbt_changed");
+            case "MODE_CHANGED" -> Component.translatable("gui.futureshops.cart.warn.mode_changed",
+                    tradeModeLabel(arg0), tradeModeLabel(arg1));
+            case "PRICE_CHANGED" -> Component.translatable("gui.futureshops.cart.warn.price_changed");
+            case "LOW_STOCK" -> Component.translatable("gui.futureshops.cart.warn.low_stock", arg0, arg1);
+            default -> Component.literal(detail == null ? "" : detail);
+        };
+    }
+
+    /** Full warning line "§c⚠ #N: <localized message>" for the cart screens. */
+    public static Component cartWarningLine(int cartLineIndex, String warningCode, String detail) {
+        return Component.translatable("gui.futureshops.cart.warn.line",
+                cartLineIndex + 1, cartWarningComponent(warningCode, detail));
+    }
+
     /** Returns the localized, color-formatted trade-mode label for UI display. */
     public static String tradeModeLabel(String mode) {
         String key = switch (mode == null ? "" : mode.toUpperCase(java.util.Locale.ROOT)) {
@@ -326,7 +360,7 @@ public final class ShopUiUtil {
 
         CatalogBarterIngredient firstIngredient = recipes.get(0).ingredients().get(0);
         int remaining = recipes.get(0).ingredients().size() - 1;
-        String itemName = getItemDisplayName(firstIngredient.itemId());
+        String itemName = getItemDisplayNameWithNbt(firstIngredient.itemId(), firstIngredient.nbtJson());
         if (remaining > 0) {
             return Component.translatable(
                     "gui.futureshops.shop.badge.barter.tooltip.summary.more",
@@ -427,6 +461,434 @@ public final class ShopUiUtil {
      */
     public static void drawGradientH(GuiGraphics graphics, int x, int y, int width, int height, int colorLeft, int colorRight) {
         graphics.fillGradient(x, y, x + width, y + height, colorLeft, colorRight);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Nocturne primitives — the component vocabulary for the redesign.
+    // See docs/redesign-nocturne-spec.md. Dark blurple system: chamfered panels,
+    // one accent, rules + accent lines that fade to transparent at both ends.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /** Returns {@code color} with its alpha channel replaced by {@code alpha} (0-255). */
+    public static int withAlpha(int color, int alpha) {
+        return (color & 0x00FFFFFF) | ((alpha & 0xFF) << 24);
+    }
+
+    /**
+     * Chamfered "rounded" panel: 1px-inset corners (they show the ground behind, reading as a
+     * radius) with a 1px divider outline. The Nocturne surface primitive — use for cards, sidebars,
+     * inspector panels, list rows.
+     */
+    public static void renderNocturnePanel(GuiGraphics graphics, int x, int y, int width, int height, int fill, int border) {
+        // Interior fill, inset 1px so the outline reads cleanly and corners stay open.
+        graphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, fill);
+        // Chamfered outline: each edge stops 1px short of the corners.
+        graphics.fill(x + 1, y, x + width - 1, y + 1, border);                 // top
+        graphics.fill(x + 1, y + height - 1, x + width - 1, y + height, border); // bottom
+        graphics.fill(x, y + 1, x + 1, y + height - 1, border);                 // left
+        graphics.fill(x + width - 1, y + 1, x + width, y + height - 1, border); // right
+    }
+
+    /** {@link #renderNocturnePanel} with the default surface + divider colors. */
+    public static void renderNocturnePanel(GuiGraphics graphics, int x, int y, int width, int height) {
+        renderNocturnePanel(graphics, x, y, width, height, ShopColors.SURFACE_RAISED, ShopColors.BORDER_MUTED);
+    }
+
+    /** Panel + a 2px accent top-line that fades at both ends (inspector / featured cards). */
+    public static void renderNocturnePanelAccentTop(GuiGraphics graphics, int x, int y, int width, int height) {
+        renderNocturnePanel(graphics, x, y, width, height);
+        renderAccentLine(graphics, x + 2, y, width - 4);
+    }
+
+    /**
+     * Horizontal 1px rule that fades to transparent at both ends — the Nocturne signature. Solid in
+     * the middle, alpha-stepped over a ~48px ramp at each end.
+     */
+    public static void renderFadingRule(GuiGraphics graphics, int x, int y, int width, int color) {
+        int fade = Math.min(48, Math.max(1, width / 3));
+        int mid0 = x + fade;
+        int mid1 = x + width - fade;
+        if (mid1 > mid0) {
+            graphics.fill(mid0, y, mid1, y + 1, color);
+        }
+        int steps = 8;
+        int seg = Math.max(1, fade / steps);
+        for (int i = 0; i < steps; i++) {
+            int a = (int) (((i + 1) / (float) (steps + 1)) * (color >>> 24));
+            int c = withAlpha(color, a);
+            // left ramp: faint at the outer edge, stronger toward the middle
+            graphics.fill(x + i * seg, y, x + (i + 1) * seg, y + 1, c);
+            // right ramp mirrored
+            graphics.fill(x + width - (i + 1) * seg, y, x + width - i * seg, y + 1, c);
+        }
+    }
+
+    /** {@link #renderFadingRule} with the default divider color. */
+    public static void renderFadingRule(GuiGraphics graphics, int x, int y, int width) {
+        renderFadingRule(graphics, x, y, width, ShopColors.BORDER_MUTED);
+    }
+
+    /** 2px accent line fading at both ends — the window/dialog top signature. */
+    public static void renderAccentLine(GuiGraphics graphics, int x, int y, int width) {
+        renderFadingRule(graphics, x, y, width, ShopColors.ACCENT_PRIMARY);
+        renderFadingRule(graphics, x, y + 1, width, ShopColors.ACCENT_PRIMARY);
+    }
+
+    /** Tag/pill styles matching the Nocturne {@code .tag-*} classes. */
+    public enum TagStyle { ACCENT, ACCENT2, NEUTRAL, OUTLINE }
+
+    /**
+     * Draws a small tag/pill and returns its width. ACCENT/ACCENT2/NEUTRAL are filled chips;
+     * OUTLINE is a bordered accent chip (the "Trade" badge).
+     */
+    public static int renderTag(GuiGraphics graphics, Font font, int x, int y, String text, TagStyle style) {
+        int textW = font.width(text);
+        int w = Math.max(20, textW + 12);
+        switch (style) {
+            case ACCENT -> { renderNocturnePanel(graphics, x, y, w, 14, ShopColors.ACCENT_800, ShopColors.ACCENT_800);
+                graphics.drawString(font, text, x + 6, y + 3, ShopColors.ACCENT_100, false); }
+            case ACCENT2 -> { renderNocturnePanel(graphics, x, y, w, 14, ShopColors.ACCENT2_800, ShopColors.ACCENT2_800);
+                graphics.drawString(font, text, x + 6, y + 3, ShopColors.ACCENT2_100, false); }
+            case NEUTRAL -> { renderNocturnePanel(graphics, x, y, w, 14, ShopColors.NEUTRAL_900, ShopColors.NEUTRAL_900);
+                graphics.drawString(font, text, x + 6, y + 3, ShopColors.NEUTRAL_300, false); }
+            case OUTLINE -> { renderNocturnePanel(graphics, x, y, w, 14, ShopColors.SURFACE_RAISED, ShopColors.ACCENT_700);
+                graphics.drawString(font, text, x + 6, y + 3, ShopColors.ACCENT_300, false); }
+        }
+        return w;
+    }
+
+    /** Toggle switch: 26x14 pill track + knob, accent when on. Returns its width (26). */
+    public static void renderToggle(GuiGraphics graphics, int x, int y, boolean on) {
+        int trackColor = on ? ShopColors.ACCENT_PRIMARY : ShopColors.NEUTRAL_800;
+        renderNocturnePanel(graphics, x, y, 26, 14, trackColor, trackColor);
+        int knobX = on ? x + 26 - 11 : x + 2;
+        graphics.fill(knobX, y + 2, knobX + 9, y + 12, ShopColors.TEXT_STRONG);
+    }
+
+    /**
+     * Coin glyph + amount, in the lavender currency color. Returns the total width drawn so callers
+     * can lay out following content. The "coin" is a small filled lozenge (no Phosphor in MC).
+     */
+    public static int renderCoinAmount(GuiGraphics graphics, Font font, int x, int y, String amount, int amountColor) {
+        // coin: a 7px filled diamond in the currency lavender
+        int cx = x + 3, cy = y + 4;
+        for (int dy = -3; dy <= 3; dy++) {
+            int half = 3 - Math.abs(dy);
+            graphics.fill(cx - half, cy + dy, cx + half + 1, cy + dy + 1, ShopColors.ACCENT_CURRENCY);
+        }
+        graphics.drawString(font, amount, x + 9, y, amountColor, false);
+        return 9 + font.width(amount);
+    }
+
+    /** A [−] value-box [+] stepper. Returns the clickable regions + total width. */
+    public record Stepper(int minusX, int plusX, int btn, int width) {
+        public boolean hitMinus(int mx, int my, int y) { return mx >= minusX && mx < minusX + btn && my >= y && my < y + btn; }
+        public boolean hitPlus(int mx, int my, int y) { return mx >= plusX && mx < plusX + btn && my >= y && my < y + btn; }
+    }
+
+    /** Draws a stepper of button size {@code btn} (e.g. 24 or 20). */
+    public static Stepper renderStepper(GuiGraphics graphics, Font font, int x, int y, String value, int valueW, int btn) {
+        renderNocturnePanel(graphics, x, y, btn, btn, ShopColors.SURFACE_RAISED, ShopColors.BORDER_MUTED);
+        graphics.drawCenteredString(font, "-", x + btn / 2, y + (btn - 8) / 2, ShopColors.TEXT_MUTED);
+        int boxX = x + btn + 4;
+        renderNocturnePanel(graphics, boxX, y, valueW, btn, ShopColors.SURFACE_BASE, ShopColors.BORDER_MUTED);
+        graphics.drawCenteredString(font, value, boxX + valueW / 2, y + (btn - 8) / 2, ShopColors.TEXT_STRONG);
+        int plusX = boxX + valueW + 4;
+        renderNocturnePanel(graphics, plusX, y, btn, btn, ShopColors.SURFACE_RAISED, ShopColors.BORDER_MUTED);
+        graphics.drawCenteredString(font, "+", plusX + btn / 2, y + (btn - 8) / 2, ShopColors.TEXT_MUTED);
+        return new Stepper(x, plusX, btn, btn + 4 + valueW + 4 + btn);
+    }
+
+    /** Segmented control; active option gets an inset accent outline + accent text. Returns segment x-edges (length = labels+1) for hit-testing. */
+    public static int[] renderSegmented(GuiGraphics graphics, Font font, int x, int y, int height, String[] labels, int activeIdx) {
+        int[] edges = new int[labels.length + 1];
+        edges[0] = x;
+        int cx = x;
+        for (int i = 0; i < labels.length; i++) {
+            int segW = font.width(labels[i]) + 22;
+            boolean active = i == activeIdx;
+            int fill = active ? ShopColors.SURFACE_PRESSED : ShopColors.SURFACE_RAISED;
+            graphics.fill(cx, y, cx + segW, y + height, fill);
+            if (active) {
+                drawBorder(graphics, cx, y, segW, height, ShopColors.ACCENT_PRIMARY);
+            }
+            if (i > 0) {
+                graphics.fill(cx, y, cx + 1, y + height, ShopColors.BORDER_MUTED);
+            }
+            graphics.drawCenteredString(font, labels[i], cx + segW / 2, y + (height - 8) / 2,
+                    active ? ShopColors.ACCENT_300 : ShopColors.TEXT_MUTED);
+            cx += segW;
+            edges[i + 1] = cx;
+        }
+        // outer outline
+        drawBorder(graphics, x, y, cx - x, height, ShopColors.BORDER_MUTED);
+        return edges;
+    }
+
+    /** Big number + unit label (shop cards, payouts). Returns width consumed. */
+    public static int renderStatBlock(GuiGraphics graphics, Font font, int x, int y, String number, String unit) {
+        graphics.drawString(font, number, x, y, ShopColors.TEXT_STRONG, false);
+        int nw = font.width(number);
+        graphics.drawString(font, unit, x + nw + 4, y, ShopColors.NEUTRAL_500, false);
+        return nw + 4 + font.width(unit);
+    }
+
+    /**
+     * Department / nav sidebar row: optional glyph slot, label, right-aligned count, and a 3px accent
+     * left bar when selected. Caller supplies the row rectangle.
+     */
+    public static void renderDeptRow(GuiGraphics graphics, Font font, int x, int y, int width, int height,
+                                     String label, String count, boolean selected, boolean hovered) {
+        if (selected) {
+            graphics.fill(x, y, x + width, y + height, ShopColors.SURFACE_PRESSED);
+            graphics.fill(x, y + 2, x + 3, y + height - 2, ShopColors.ACCENT_PRIMARY);
+        } else if (hovered) {
+            graphics.fill(x, y, x + width, y + height, ShopColors.SURFACE_OVERLAY);
+        }
+        int labelColor = selected ? ShopColors.TEXT_STRONG : ShopColors.TEXT_MUTED;
+        graphics.drawString(font, font.plainSubstrByWidth(label, width - 34), x + 10, y + (height - 8) / 2, labelColor, false);
+        if (count != null && !count.isEmpty()) {
+            int cw = font.width(count);
+            graphics.drawString(font, count, x + width - cw - 8, y + (height - 8) / 2, ShopColors.NEUTRAL_600, false);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Shell chrome — the shared window / header / breadcrumb / footer used by
+    // every top-level view (ShopMainScreen in Phase 3; the player-shop browse in
+    // Phase 4). Deliberately generic: the caller supplies its own tab list,
+    // balance string, crumbs and hint, and gets back a hit model for input
+    // routing. All wordmark / label text routes through Component.translatable so
+    // the i18n guard stays green.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /** Deterministic per-player accent swatch (profile square / shop avatar). */
+    private static final int[] PLAYER_SWATCH = {
+            0xFF9184D9, 0xFF7FCF9E, 0xFFE0B87A, 0xFFE08B93,
+            0xFF6FB7E0, 0xFFC792EA, 0xFFB5ABFC, 0xFF8FD3B0
+    };
+
+    public static int playerColor(UUID uuid) {
+        if (uuid == null) return ShopColors.ACCENT_PRIMARY;
+        return PLAYER_SWATCH[Math.floorMod(uuid.hashCode(), PLAYER_SWATCH.length)];
+    }
+
+    private static Component shellBrand()    { return Component.translatable("gui.futureshops.shell.brand"); }
+    private static Component shellBrandSub() { return Component.translatable("gui.futureshops.shell.brand_sub"); }
+
+    /** SURFACE_BASE ground + hairline outline + the fading blurple accent top-line. */
+    public static void renderShellWindow(GuiGraphics g, int x, int y, int width, int height) {
+        g.fill(x, y, x + width, y + height, ShopColors.SURFACE_BASE);
+        drawBorder(g, x, y, width, height, ShopColors.BORDER_STRONG);
+        renderAccentLine(g, x, y, width);
+    }
+
+    /** Clickable bounds returned by {@link #renderShellHeader}. Rects are {x, y, w, h}. */
+    public record HeaderHit(int[] tabEdges, int tabY, int tabH,
+                            int[] closeRect, int[] profileRect,
+                            int[] searchRect, int[] balanceRect) {
+        static boolean in(int[] r, double mx, double my) {
+            return r != null && mx >= r[0] && mx < r[0] + r[2] && my >= r[1] && my < r[1] + r[3];
+        }
+        public boolean hitClose(double mx, double my)   { return in(closeRect, mx, my); }
+        public boolean hitProfile(double mx, double my) { return in(profileRect, mx, my); }
+        public boolean hitBalance(double mx, double my) { return in(balanceRect, mx, my); }
+        public boolean hitSearch(double mx, double my)  { return in(searchRect, mx, my); }
+        /** Index of the tab under (mx,my), or -1. */
+        public int tabAt(double mx, double my) {
+            if (tabEdges == null || my < tabY || my >= tabY + tabH) return -1;
+            for (int i = 0; i + 1 < tabEdges.length; i++) {
+                if (mx >= tabEdges[i] && mx < tabEdges[i + 1]) return i;
+            }
+            return -1;
+        }
+    }
+
+    /**
+     * Pure layout for {@link #renderShellHeader} — computes the clickable bounds without drawing so
+     * the owning screen can position its search {@code EditBox} in {@code init()} against the exact
+     * geometry the renderer will hit-test. The balance / player-name widths are fixed (content is
+     * clipped), so the search box position stays stable as the balance changes at runtime.
+     */
+    public static HeaderHit headerLayout(Font font, int x, int y, int width, int headerH,
+                                         String[] tabLabels, String balance, String playerName, boolean compact) {
+        int pad = PAD_LG;
+        int ctrlH = 16;
+        int ctrlY = y + (headerH - ctrlH) / 2;
+
+        // In compact mode the logo tile + wordmark are not drawn, so don't reserve their width.
+        int wmW = Math.max(font.width(shellBrand().getString()), font.width(shellBrandSub().getString()));
+        int logoBlockW = compact ? 0 : (18 + 7 + wmW);
+        int tabsX = x + pad + logoBlockW + (compact ? 2 : 14);
+
+        int[] tabEdges = new int[tabLabels.length + 1];
+        tabEdges[0] = tabsX;
+        int cx = tabsX;
+        for (int i = 0; i < tabLabels.length; i++) {
+            cx += font.width(tabLabels[i]) + 20;
+            tabEdges[i + 1] = cx;
+        }
+        int tabsEndX = cx;
+
+        int rightX = x + width - pad;
+        int closeW = 16;
+        int closeX = rightX - closeW;
+        int gap = 8;
+        int profileW = compact ? 22 : 100;
+        int profileX = closeX - gap - profileW;
+        int balanceW = compact ? 46 : 74;
+        int balanceX = profileX - gap - balanceW;
+
+        int searchX = tabsEndX + 12;
+        int searchW = Math.max(46, balanceX - gap - searchX);
+
+        return new HeaderHit(tabEdges, y + 3, headerH - 6,
+                new int[]{closeX, ctrlY, closeW, ctrlH},
+                new int[]{profileX, ctrlY, profileW, ctrlH},
+                new int[]{searchX, ctrlY, searchW, ctrlH},
+                new int[]{balanceX, ctrlY, balanceW, ctrlH});
+    }
+
+    /**
+     * Draws the shell header row (logo + wordmark | primary tabs | search | balance pill | profile
+     * pill | close) and returns the {@link HeaderHit} clickable model. The search pill is drawn here
+     * but the actual {@code EditBox} is a widget the caller overlays inside {@code searchRect}.
+     */
+    public static HeaderHit renderShellHeader(GuiGraphics g, Font font, int x, int y, int width, int headerH,
+                                              String[] tabLabels, int activeIdx, String balance,
+                                              String playerName, UUID playerUuid, boolean compact,
+                                              int mouseX, int mouseY) {
+        HeaderHit hit = headerLayout(font, x, y, width, headerH, tabLabels, balance, playerName, compact);
+        int ctrlY = hit.searchRect()[1];
+        int ctrlH = hit.searchRect()[3];
+        int cy = y + headerH / 2;
+
+        // logo tile + wordmark
+        if (!compact) {
+            int tile = 18;
+            int tileX = x + PAD_LG;
+            int tileY = cy - tile / 2;
+            g.fillGradient(tileX, tileY, tileX + tile, tileY + tile, ShopColors.ACCENT_900, ShopColors.SURFACE_BASE);
+            drawBorder(g, tileX, tileY, tile, tile, ShopColors.ACCENT_700);
+            g.fill(tileX + 4, tileY + 5, tileX + tile - 4, tileY + 7, ShopColors.ACCENT_300);       // awning
+            g.fill(tileX + 7, tileY + 8, tileX + tile - 7, tileY + tile - 4, ShopColors.ACCENT_400); // doorway
+            int wmX = tileX + tile + 7;
+            g.drawString(font, shellBrand(), wmX, cy - 9, ShopColors.TEXT_STRONG, false);
+            g.drawString(font, shellBrandSub(), wmX, cy + 1, ShopColors.NEUTRAL_500, false);
+        }
+
+        // primary tabs
+        int[] edges = hit.tabEdges();
+        for (int i = 0; i < tabLabels.length; i++) {
+            int mid = (edges[i] + edges[i + 1]) / 2;
+            boolean active = i == activeIdx;
+            boolean hover = mouseX >= edges[i] && mouseX < edges[i + 1] && mouseY >= hit.tabY() && mouseY < hit.tabY() + hit.tabH();
+            g.drawCenteredString(font, tabLabels[i], mid, ctrlY + (ctrlH - 8) / 2,
+                    active || hover ? ShopColors.TEXT_STRONG : ShopColors.TEXT_MUTED);
+            if (active) {
+                renderAccentLine(g, edges[i] + 10, y + headerH - 3, (edges[i + 1] - edges[i]) - 20);
+            }
+        }
+
+        // search pill (+ magnifier glyph)
+        int[] s = hit.searchRect();
+        renderNocturnePanel(g, s[0], s[1], s[2], s[3], ShopColors.SURFACE_RAISED, ShopColors.BORDER_MUTED);
+        int gx = s[0] + 4, gy = s[1] + s[3] / 2 - 3;
+        drawBorder(g, gx, gy, 5, 5, ShopColors.NEUTRAL_500);
+        g.fill(gx + 4, gy + 4, gx + 6, gy + 6, ShopColors.NEUTRAL_500);
+
+        // balance pill (coin + amount) — clicks route to history on the screen side
+        int[] b = hit.balanceRect();
+        renderNocturnePanel(g, b[0], b[1], b[2], b[3], ShopColors.SURFACE_RAISED,
+                hit.hitBalance(mouseX, mouseY) ? ShopColors.BORDER_STRONG : ShopColors.BORDER_MUTED);
+        renderCoinAmount(g, font, b[0] + 4, b[1] + (b[3] - 8) / 2,
+                font.plainSubstrByWidth(balance, b[2] - 12), ShopColors.TEXT_STRONG);
+
+        // profile pill (player-color square + initial + name)
+        int[] p = hit.profileRect();
+        renderNocturnePanel(g, p[0], p[1], p[2], p[3], ShopColors.SURFACE_RAISED,
+                hit.hitProfile(mouseX, mouseY) ? ShopColors.BORDER_GLOW : ShopColors.BORDER_MUTED);
+        int sw = 10, swX = p[0] + 4, swY = p[1] + (p[3] - sw) / 2;
+        g.fill(swX, swY, swX + sw, swY + sw, playerColor(playerUuid));
+        drawBorder(g, swX, swY, sw, sw, withAlpha(0xFFFFFFFF, 0x30));
+        String initial = (playerName == null || playerName.isEmpty())
+                ? "" : playerName.substring(0, 1).toUpperCase(java.util.Locale.ROOT);
+        if (!initial.isEmpty()) g.drawCenteredString(font, initial, swX + sw / 2, swY + 1, 0xFFFFFFFF);
+        if (!compact) {
+            String nm = font.plainSubstrByWidth(playerName == null ? "" : playerName, p[2] - sw - 12);
+            g.drawString(font, nm, swX + sw + 4, p[1] + (p[3] - 8) / 2, ShopColors.NEUTRAL_200, false);
+        }
+
+        // close
+        int[] c = hit.closeRect();
+        boolean closeHover = hit.hitClose(mouseX, mouseY);
+        renderNocturnePanel(g, c[0], c[1], c[2], c[3], ShopColors.SURFACE_RAISED,
+                closeHover ? ShopColors.BORDER_STRONG : ShopColors.BORDER_MUTED);
+        g.drawCenteredString(font, "✕", c[0] + c[2] / 2, c[1] + (c[3] - 8) / 2,
+                closeHover ? ShopColors.TEXT_STRONG : ShopColors.TEXT_MUTED);
+        return hit;
+    }
+
+    /**
+     * Breadcrumb strip: crumbs left-aligned with caret separators (last crumb is emphasized),
+     * right-aligned context text. Non-interactive for Phase 3 (the header tabs drive navigation).
+     */
+    public static void renderBreadcrumb(GuiGraphics g, Font font, int x, int y, int width,
+                                        String[] crumbs, String rightText) {
+        int cxp = x;
+        for (int i = 0; i < crumbs.length; i++) {
+            if (i > 0) {
+                g.drawString(font, ">", cxp, y, ShopColors.NEUTRAL_600, false);
+                cxp += font.width(">") + 6;
+            }
+            boolean last = i == crumbs.length - 1;
+            g.drawString(font, crumbs[i], cxp, y, last ? ShopColors.TEXT_STRONG : ShopColors.TEXT_MUTED, false);
+            cxp += font.width(crumbs[i]) + 6;
+        }
+        if (rightText != null && !rightText.isEmpty()) {
+            g.drawString(font, rightText, x + width - font.width(rightText), y, ShopColors.NEUTRAL_500, false);
+        }
+    }
+
+    /**
+     * Footer strip: fading top rule, hint text (left), Cart button with a count badge (right).
+     * Returns the Cart button rect {x, y, w, h} for hit-testing.
+     */
+    public static int[] renderShellFooter(GuiGraphics g, Font font, int x, int y, int width, int height,
+                                          String hint, int cartCount, int mouseX, int mouseY) {
+        renderFadingRule(g, x, y, width);
+
+        Component cartLabel = Component.translatable("gui.futureshops.shell.cart");
+        String cartStr = cartLabel.getString();
+        int badgeW = cartCount > 0 ? Math.max(14, font.width(Integer.toString(cartCount)) + 8) : 0;
+        int glyphW = 12;
+        int btnW = glyphW + 4 + font.width(cartStr) + (badgeW > 0 ? 4 + badgeW : 0) + 16;
+        int btnH = Math.min(height - 2, 18);
+        int btnX = x + width - btnW;
+        int btnY = y + (height - btnH) / 2;
+
+        if (hint != null && !hint.isEmpty()) {
+            g.drawString(font, font.plainSubstrByWidth(hint, Math.max(20, btnX - x - 8)),
+                    x, y + (height - 8) / 2, ShopColors.NEUTRAL_500, false);
+        }
+
+        boolean hover = mouseX >= btnX && mouseX < btnX + btnW && mouseY >= btnY && mouseY < btnY + btnH;
+        renderNocturnePanel(g, btnX, btnY, btnW, btnH, ShopColors.SURFACE_RAISED,
+                hover ? ShopColors.ACCENT_PRIMARY : ShopColors.BORDER_MUTED);
+        // cart glyph (basket + wheels) drawn from fills
+        int ix = btnX + 8, iy = btnY + (btnH - 8) / 2;
+        g.fill(ix, iy, ix + 8, iy + 5, ShopColors.ACCENT_300);
+        g.fill(ix + 1, iy + 5, ix + 2, iy + 7, ShopColors.ACCENT_300);
+        g.fill(ix + 6, iy + 5, ix + 7, iy + 7, ShopColors.ACCENT_300);
+        int tx = ix + glyphW;
+        g.drawString(font, cartStr, tx, btnY + (btnH - 8) / 2, ShopColors.TEXT_STRONG, false);
+        if (badgeW > 0) {
+            int bx = tx + font.width(cartStr) + 4;
+            int by = btnY + (btnH - 12) / 2;
+            renderNocturnePanel(g, bx, by, badgeW, 12, ShopColors.ACCENT_PRIMARY, ShopColors.ACCENT_PRIMARY);
+            g.drawCenteredString(font, Integer.toString(cartCount), bx + badgeW / 2, by + 2, 0xFFFFFFFF);
+        }
+        return new int[]{btnX, btnY, btnW, btnH};
     }
 
     public static int drawWrappedString(GuiGraphics graphics, Font font, Component component, int x, int y, int width, int color, int lineHeight) {
@@ -536,23 +998,50 @@ public final class ShopUiUtil {
     // ═══ Advanced Tooltip Rendering (Item 6) ═══
 
     /**
+     * Icon stacks are rebuilt per icon per frame and SNBT parsing is expensive,
+     * so cache them by (itemId, nbtJson). Cached stacks are shared display-only
+     * instances — callers must never mutate them. Cleared wholesale when full.
+     */
+    private static final int STACK_CACHE_CAP = 512;
+    private static final java.util.Map<String, ItemStack> STACK_CACHE = new java.util.HashMap<>();
+
+    /**
      * Builds an ItemStack from an item ID and optional NBT JSON string.
-     * Returns an empty stack if the item can't be resolved.
+     * Returns an empty stack if the item can't be resolved. The returned stack
+     * is a shared cached instance intended for rendering/tooltips only.
      */
     public static ItemStack buildItemStack(String itemId, String nbtJson) {
+        String cacheKey = itemId + ' ' + (nbtJson == null ? "" : nbtJson);
+        ItemStack cached = STACK_CACHE.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
+        ItemStack stack;
         Item item = ForgeRegistries.ITEMS.getValue(ResourceLocation.parse(itemId));
         if (item == null) {
-            return ItemStack.EMPTY;
-        }
-        ItemStack stack = new ItemStack(item);
-        if (nbtJson != null && !nbtJson.isBlank()) {
-            try {
-                CompoundTag tag = TagParser.parseTag(nbtJson);
-                stack.setTag(tag);
-            } catch (Exception ignored) {
-                // Invalid NBT — use plain stack
+            stack = ItemStack.EMPTY;
+        } else {
+            stack = new ItemStack(item);
+            if (nbtJson != null && !nbtJson.isBlank()) {
+                try {
+                    CompoundTag tag = TagParser.parseTag(nbtJson);
+                    stack.setTag(tag);
+                } catch (Exception ex) {
+                    // Invalid NBT — render the plain stack. Logged (once, thanks to
+                    // the cache) because BEWLR items like TacZ guns render as a
+                    // missing texture without their tag, which reads as a mod bug.
+                    com.mojang.logging.LogUtils.getLogger()
+                            .warn("FutureShops: listing NBT for {} failed to parse, rendering without it: {}",
+                                    itemId, ex.getMessage());
+                }
             }
         }
+
+        if (STACK_CACHE.size() >= STACK_CACHE_CAP) {
+            STACK_CACHE.clear();
+        }
+        STACK_CACHE.put(cacheKey, stack);
         return stack;
     }
 
@@ -599,8 +1088,24 @@ public final class ShopUiUtil {
      * item's default tag.  Items like tools that always carry {Damage:0} are considered
      * "default" and will return false, preventing spurious NBT badges.
      */
+    private static final java.util.Map<String, Boolean> NBT_BADGE_CACHE = new java.util.HashMap<>();
+
     public static boolean hasNonDefaultNbt(String itemId, String nbtJson) {
         if (nbtJson == null || nbtJson.isBlank()) return false;
+        String cacheKey = itemId + ' ' + nbtJson;
+        Boolean cached = NBT_BADGE_CACHE.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+        boolean result = computeHasNonDefaultNbt(itemId, nbtJson);
+        if (NBT_BADGE_CACHE.size() >= STACK_CACHE_CAP) {
+            NBT_BADGE_CACHE.clear();
+        }
+        NBT_BADGE_CACHE.put(cacheKey, result);
+        return result;
+    }
+
+    private static boolean computeHasNonDefaultNbt(String itemId, String nbtJson) {
         try {
             CompoundTag stored = TagParser.parseTag(nbtJson);
             if (stored.isEmpty()) return false;
@@ -684,5 +1189,161 @@ public final class ShopUiUtil {
             return;
         }
         renderScrollingString(graphics, font, text, centerX - maxWidth / 2, y, maxWidth, color);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Flat Nocturne buttons — one immediate-mode primitive replacing vanilla
+    //  Button widgets across every screen. Draw + hit-region come from the SAME
+    //  call (registered into a per-screen ClickZone list), so the two can never
+    //  drift apart the way the old hand-mirrored geometry did.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /** Flat-button variants (see the design's button styles). */
+    public enum ButtonStyle { SECONDARY, PRIMARY, DANGER, DASHED, GHOST }
+
+    /** Danger palette — matches the design's remove-button hex (border/hover fill). */
+    private static final int DANGER_BORDER = 0xFF5A2B33;
+    private static final int DANGER_HOVER  = 0xFF2A181C;
+
+    /**
+     * A registered clickable rectangle with its handler. Screens keep a per-frame list, populated
+     * by {@link #button} as each button is drawn, and consult it in {@code mouseClicked} via
+     * {@link #dispatchClicks}. Disabled zones never fire.
+     */
+    public record ClickZone(int x, int y, int w, int h, Runnable onClick, boolean enabled) {
+        public boolean hit(double mx, double my) {
+            return enabled && mx >= x && mx < x + w && my >= y && my < y + h;
+        }
+    }
+
+    /**
+     * Dispatches a click to the TOP-MOST registered zone that contains {@code (mx,my)} (later-drawn
+     * wins), runs its handler, and returns true if one fired. Iterate a snapshot so a handler that
+     * mutates the list (e.g. opens a sub-screen) can't ConcurrentModify.
+     */
+    public static boolean dispatchClicks(List<ClickZone> zones, double mx, double my) {
+        if (zones == null) return false;
+        for (int i = zones.size() - 1; i >= 0; i--) {
+            ClickZone z = zones.get(i);
+            if (z.hit(mx, my)) {
+                z.onClick().run();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Convenience: flat button with a centered label, no leading symbol/icon. */
+    public static boolean button(GuiGraphics g, Font font, List<ClickZone> zones, int mx, int my,
+                                 int x, int y, int w, int h, Component label, ButtonStyle style,
+                                 boolean enabled, Runnable onClick) {
+        return button(g, font, zones, mx, my, x, y, w, h, label, style, enabled, null, null, onClick);
+    }
+
+    /**
+     * Flat Nocturne button. Optionally draws a leading {@code symbol} (a short glyph string like
+     * "+", "-", "✔", "✕") OR a 16px item {@code icon} before the label. Registers its {@link ClickZone}
+     * into {@code zones} (pass null for a non-interactive draw). Returns whether it is hovered so the
+     * caller can attach a tooltip.
+     */
+    public static boolean button(GuiGraphics g, Font font, List<ClickZone> zones, int mx, int my,
+                                 int x, int y, int w, int h, Component label, ButtonStyle style,
+                                 boolean enabled, String symbol, ItemStack icon, Runnable onClick) {
+        boolean hover = enabled && mx >= x && mx < x + w && my >= y && my < y + h;
+        int fill, border, text;
+        switch (style) {
+            case PRIMARY -> {
+                border = ShopColors.ACCENT_PRIMARY;
+                text = ShopColors.ACCENT_300;
+                fill = hover ? withAlpha(ShopColors.ACCENT_PRIMARY, 0x22) : 0;
+            }
+            case DANGER -> {
+                border = DANGER_BORDER;
+                text = ShopColors.STATUS_DANGER;
+                fill = hover ? DANGER_HOVER : 0;
+            }
+            case DASHED -> {
+                border = ShopColors.NEUTRAL_700;
+                text = hover ? ShopColors.TEXT_STRONG : ShopColors.TEXT_MUTED;
+                fill = hover ? ShopColors.SURFACE_OVERLAY : 0;
+            }
+            case GHOST -> {
+                border = 0;
+                text = hover ? ShopColors.ACCENT_300 : ShopColors.TEXT_MUTED;
+                fill = hover ? ShopColors.SURFACE_OVERLAY : 0;
+            }
+            default -> { // SECONDARY
+                border = hover ? ShopColors.ACCENT_PRIMARY : ShopColors.BORDER_MUTED;
+                text = ShopColors.TEXT_STRONG;
+                fill = hover ? ShopColors.SURFACE_OVERLAY : ShopColors.SURFACE_RAISED;
+            }
+        }
+        if (!enabled) {
+            text = ShopColors.NEUTRAL_700;
+            border = ShopColors.BORDER_MUTED;
+            fill = ShopColors.SURFACE_BASE;
+        }
+        // Draw the shape.
+        if (style == ButtonStyle.DASHED) {
+            if ((fill >>> 24) != 0) g.fill(x + 1, y + 1, x + w - 1, y + h - 1, fill);
+            drawDashedRect(g, x, y, w, h, border);
+        } else if (style == ButtonStyle.GHOST) {
+            if ((fill >>> 24) != 0) g.fill(x + 1, y + 1, x + w - 1, y + h - 1, fill);
+        } else {
+            renderNocturnePanel(g, x, y, w, h, fill == 0 ? 0 : fill, border);
+        }
+        // Leading item icon or symbol, then the label.
+        int labelX = x + 8;
+        boolean centered = true;
+        if (icon != null && !icon.isEmpty()) {
+            g.renderItem(icon, x + 6, y + (h - 16) / 2);
+            labelX = x + 26;
+            centered = false;
+        } else if (symbol != null && !symbol.isBlank()) {
+            g.drawString(font, symbol, x + 8, y + (h - 8) / 2, text, false);
+            labelX = x + 8 + font.width(symbol) + 5;
+            centered = false;
+        }
+        if (label != null) {
+            String s = label.getString();
+            if (centered) {
+                // Only clip when the label genuinely overflows, and reserve just 2px each side —
+                // the old w-12 padding erased symbols on small (~16px) buttons and cut "Back"→"Ba".
+                int avail = Math.max(4, w - 4);
+                if (font.width(s) > avail) {
+                    s = font.plainSubstrByWidth(s, avail);
+                }
+                g.drawString(font, s, x + (w - font.width(s)) / 2, y + (h - 8) / 2, text, false);
+            } else {
+                s = font.plainSubstrByWidth(s, Math.max(4, x + w - labelX - 6));
+                g.drawString(font, s, labelX, y + (h - 8) / 2, text, false);
+            }
+        }
+        if (zones != null && onClick != null) {
+            zones.add(new ClickZone(x, y, w, h, onClick, enabled));
+        }
+        return hover;
+    }
+
+    /** Registers a clickable zone for a non-button control (toggle / segment / row) already drawn. */
+    public static void zone(List<ClickZone> zones, int x, int y, int w, int h, boolean enabled, Runnable onClick) {
+        if (zones != null && onClick != null) {
+            zones.add(new ClickZone(x, y, w, h, onClick, enabled));
+        }
+    }
+
+    /** 1px dashed rectangle border (for DASHED "Add" buttons). */
+    private static void drawDashedRect(GuiGraphics g, int x, int y, int w, int h, int color) {
+        int dash = 3, gap = 2, step = dash + gap;
+        for (int i = x + 1; i < x + w - 1; i += step) {
+            int e = Math.min(i + dash, x + w - 1);
+            g.fill(i, y, e, y + 1, color);                 // top
+            g.fill(i, y + h - 1, e, y + h, color);         // bottom
+        }
+        for (int j = y + 1; j < y + h - 1; j += step) {
+            int e = Math.min(j + dash, y + h - 1);
+            g.fill(x, j, x + 1, e, color);                 // left
+            g.fill(x + w - 1, j, x + w, e, color);         // right
+        }
     }
 }

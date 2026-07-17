@@ -194,7 +194,10 @@ public final class ShopDefinitionLoader {
                         if (!ingredient.has("itemId")) continue;
                         ingredients.add(new BarterIngredientDef(
                                 ingredient.get("itemId").getAsString(),
-                                getInt(ingredient, "count", 1)));
+                                getInt(ingredient, "count", 1),
+                                // Optional SNBT: non-blank makes the ingredient NBT-strict
+                                // (exact tag), blank keeps lenient identity matching.
+                                getString(ingredient, "nbt", "")));
                     }
 
                     barterRecipes.add(new BarterRecipeDef(

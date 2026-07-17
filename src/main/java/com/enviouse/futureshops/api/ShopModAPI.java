@@ -169,9 +169,16 @@ public final class ShopModAPI {
     }
 
     /**
-     * Sums the total coin value a player is carrying in their inventory (minor units).
+     * Sums the total physical currency value a player is carrying (minor units).
+     * Respects the configured {@code currency.provider}: with a foreign provider
+     * active this values that mod's items at their configured face value instead
+     * of FutureShops bills.
      */
     public static long getPhysicalCoinValue(ServerPlayer player) {
+        var currency = com.enviouse.futureshops.money.CurrencyManager.getOrNull();
+        if (currency != null) {
+            return currency.availableValueMinor(player);
+        }
         long total = 0L;
         for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
             ItemStack stack = player.getInventory().getItem(i);
@@ -220,6 +227,10 @@ public final class ShopModAPI {
 
     /**
      * Returns the current stock level for a specific item in an admin shop.
+     * <p>
+     * NOTE: stock is keyed by listingId, so a registry {@code itemId} only reaches legacy
+     * single-variant listings (where {@code listingId == itemId}). Multi-variant NBT listings
+     * carry a distinct listingId — use {@link #getAdminShopStockByListingId(String, String)}.
      *
      * @param shopId the shop ID
      * @param itemId the item resource location string
@@ -231,9 +242,35 @@ public final class ShopModAPI {
 
     /**
      * Sets the stock level for a specific item in an admin shop.
+     * <p>
+     * NOTE: stock is keyed by listingId, so a registry {@code itemId} only reaches legacy
+     * single-variant listings (where {@code listingId == itemId}). Multi-variant NBT listings
+     * carry a distinct listingId — use {@link #setAdminShopStockByListingId(String, String, int)}.
      */
     public static void setAdminShopStock(String shopId, String itemId, int newStock) {
         ShopCatalog.setStock(shopId, itemId, newStock);
+    }
+
+    /**
+     * Returns the current stock level for a specific listing in an admin shop, resolved by its
+     * stable listingId ({@link com.enviouse.futureshops.catalog.ItemDef#resolutionKey()}). This
+     * reaches every listing: for legacy single-variant listings the listingId equals the registry
+     * itemId, while multi-variant NBT listings carry a distinct id of their own.
+     *
+     * @param shopId the shop ID
+     * @param listingId the listing's stable id
+     * @return current stock, or -1 for unlimited (or unknown listing)
+     */
+    public static int getAdminShopStockByListingId(String shopId, String listingId) {
+        return ShopCatalog.getCurrentStock(shopId, listingId);
+    }
+
+    /**
+     * Sets the stock level for a specific listing in an admin shop, resolved by its stable
+     * listingId. No-op for unlimited-stock or unknown listings.
+     */
+    public static void setAdminShopStockByListingId(String shopId, String listingId, int newStock) {
+        ShopCatalog.setStock(shopId, listingId, newStock);
     }
 
     // ═══════════════════════════════════════════════

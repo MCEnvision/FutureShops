@@ -12,7 +12,8 @@ public record TransactionHistoryEntry(
         String itemId,
         int quantity,
         long totalMinorUnits,
-        String note) {
+        String note,
+        String nbtJson) {
 
     public static void encode(FriendlyByteBuf buffer, TransactionHistoryEntry entry) {
         buffer.writeLong(entry.timestampEpochSeconds);
@@ -21,6 +22,7 @@ public record TransactionHistoryEntry(
         buffer.writeVarInt(entry.quantity);
         buffer.writeLong(entry.totalMinorUnits);
         buffer.writeUtf(entry.note);
+        buffer.writeUtf(entry.nbtJson == null ? "" : entry.nbtJson);
     }
 
     public static TransactionHistoryEntry decode(FriendlyByteBuf buffer) {
@@ -30,6 +32,7 @@ public record TransactionHistoryEntry(
                 buffer.readUtf(),
                 buffer.readVarInt(),
                 buffer.readLong(),
+                buffer.readUtf(),
                 buffer.readUtf());
     }
 

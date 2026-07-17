@@ -35,6 +35,9 @@ public final class ShopClientState {
     private static volatile List<CatalogBarterRecipe> catalogBarterRecipes = List.of();
     private static volatile List<TransactionHistoryEntry> transactionHistory = List.of();
     private static volatile boolean adminShopEnabled = true;
+    // Whether the server says this player may use the in-GUI admin editor (permission level 2).
+    // Display gate only — AdminShopEditService re-validates every action server-side.
+    private static volatile boolean canEditAdminShop = false;
     private static volatile List<NearbyShopEntry> nearbyShops = List.of();
     private static volatile List<LocalShopOwnerEntry> localShopOwners = List.of();
     // Precomputed department summary strings (avoids per-frame stream+reduce in ShopMainScreen).
@@ -59,7 +62,7 @@ public final class ShopClientState {
     public static void applyShopData(String shopId, long balanceMinorUnits, String currency, int decimals,
                                      List<CatalogCategory> categories, List<CatalogItem> items,
                                      List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes,
-                                     boolean adminEnabled, List<NearbyShopEntry> nearby) {
+                                     boolean adminEnabled, List<NearbyShopEntry> nearby, boolean canEdit) {
         activeShopId = shopId;
         currentBalanceMinorUnits = balanceMinorUnits;
         currencyName = currency;
@@ -69,6 +72,7 @@ public final class ShopClientState {
         catalogPromos = List.copyOf(promos);
         catalogBarterRecipes = List.copyOf(barterRecipes);
         adminShopEnabled = adminEnabled;
+        canEditAdminShop = canEdit;
         nearbyShops = List.copyOf(nearby);
         transactionHistory = List.of();
         synchronized (ownedItemCounts) {
@@ -89,6 +93,7 @@ public final class ShopClientState {
         catalogPromos = List.of();
         catalogBarterRecipes = List.of();
         adminShopEnabled = true;
+        canEditAdminShop = false;
         nearbyShops = List.of();
         transactionHistory = List.of();
         status = null;
@@ -104,15 +109,38 @@ public final class ShopClientState {
         currentBalanceMinorUnits = balanceMinorUnits;
     }
 
+    // Listing tag snapshots taken at ADD-to-cart time, keyed by listingId — verify-cart
+    // sends these so the server can flag a variant swap. Snapshotting at add time matters:
+    // /shopadmin items edit resends the catalog, so a verify-time lookup would always
+    // "see" the new tag and the warning could never fire.
+    private static final Map<String, String> cartNbtSnapshots = new HashMap<>();
+
     public static void addToCart(String listingId, int quantity) {
         if (quantity <= 0) {
             return;
         }
 
+        int addedQuantity;
+        String itemName;
         synchronized (cart) {
-            int newQuantity = cart.getOrDefault(listingId, 0) + quantity;
-            cart.put(listingId, clampCartQuantity(listingId, newQuantity));
+            int previousQuantity = cart.getOrDefault(listingId, 0);
+            int newQuantity = clampCartQuantity(listingId, previousQuantity + quantity);
+            cart.put(listingId, newQuantity);
+            cartNbtSnapshots.putIfAbsent(listingId,
+                    getCatalogItem(listingId).map(CatalogItem::nbtJson).orElse(""));
             sanitizeCartLocked();
+            addedQuantity = Math.max(0, cart.getOrDefault(listingId, 0) - previousQuantity);
+            itemName = getCatalogItem(listingId).map(CatalogItem::displayName).orElse(listingId);
+        }
+        if (addedQuantity > 0) {
+            setStatus(Component.translatable("gui.futureshops.status.cart.added", addedQuantity, itemName), true);
+        }
+    }
+
+    /** Listing tag as it looked when first added to the cart; "" when unknown/absent. */
+    public static String getCartNbtSnapshot(String listingId) {
+        synchronized (cart) {
+            return cartNbtSnapshots.getOrDefault(listingId, "");
         }
     }
 
@@ -130,12 +158,14 @@ public final class ShopClientState {
     public static void removeFromCart(String listingId) {
         synchronized (cart) {
             cart.remove(listingId);
+            cartNbtSnapshots.remove(listingId);
         }
     }
 
     public static void clearCart() {
         synchronized (cart) {
             cart.clear();
+            cartNbtSnapshots.clear();
         }
     }
 
@@ -183,17 +213,45 @@ public final class ShopClientState {
         return adminShopEnabled;
     }
 
+    /** Whether the server granted this player the in-GUI admin editor (see S2CShopDataPacket.canEdit). */
+    public static boolean canEditAdminShop() {
+        return canEditAdminShop;
+    }
+
     public static List<NearbyShopEntry> getNearbyShops() {
         return nearbyShops;
     }
 
+    /**
+     * Recipes rewarding the given item. Matches the registry {@code targetItemId} (legacy surfaces
+     * such as the barter screen are opened with a registry id) OR the resolved
+     * {@code targetListingId}, so callers holding a specific listing key also find their recipes.
+     * Per-recipe target resolution (icon/name NBT, cart key) should go through the recipe's own
+     * {@code targetListingId} — see BarterScreen.
+     */
     public static List<CatalogBarterRecipe> getBarterRecipesForItem(String itemId) {
-        return catalogBarterRecipes.stream().filter(recipe -> recipe.targetItemId().equals(itemId)).toList();
+        return catalogBarterRecipes.stream()
+                .filter(recipe -> recipe.targetItemId().equals(itemId)
+                        || (!recipe.targetListingId().isBlank() && recipe.targetListingId().equals(itemId)))
+                .toList();
     }
 
     /** Resolves a catalog row by its listingId (the cart/buy/sell key), NOT its registry itemId. */
     public static Optional<CatalogItem> getCatalogItem(String listingId) {
         return catalogItems.stream().filter(item -> item.listingId().equals(listingId)).findFirst();
+    }
+
+    /**
+     * Resolves a catalog row by registry itemId — first match wins, so this is
+     * only well-defined for single-variant items (barter recipes target registry
+     * ids, which is exactly that legacy case). Used to recover display NBT for
+     * surfaces whose wire data carries only an itemId.
+     */
+    public static Optional<CatalogItem> getCatalogItemByRegistryId(String itemId) {
+        if (itemId == null || itemId.isBlank()) {
+            return Optional.empty();
+        }
+        return catalogItems.stream().filter(item -> itemId.equals(item.itemId())).findFirst();
     }
 
     public static int getOwnedCount(String itemId) {
@@ -317,7 +375,8 @@ public final class ShopClientState {
         Map<UUID, String> summaries = new HashMap<>(owners.size() * 2);
         for (LocalShopOwnerEntry owner : owners) {
             if (owner.departments().isEmpty()) {
-                summaries.put(owner.ownerUuid(), "No departments");
+                summaries.put(owner.ownerUuid(),
+                        Component.translatable("gui.futureshops.shop_main.no_depts").getString());
                 continue;
             }
             StringBuilder sb = new StringBuilder();
@@ -339,7 +398,8 @@ public final class ShopClientState {
     /** Returns the cached comma-joined department-name summary for {@code ownerUuid}. */
     public static String getLocalShopDeptSummary(UUID ownerUuid) {
         String cached = localShopDeptSummaries.get(ownerUuid);
-        return cached != null ? cached : "No departments";
+        return cached != null ? cached
+                : Component.translatable("gui.futureshops.shop_main.no_depts").getString();
     }
 
     // -------------------------------------------------------------------------

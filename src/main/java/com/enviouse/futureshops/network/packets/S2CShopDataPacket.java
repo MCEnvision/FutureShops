@@ -24,6 +24,10 @@ import java.util.function.Supplier;
  * <p>Protocol version 14 — added {@code forceOpen} flag so silent refreshes (stock refresh,
  * post-transaction sync, admin reload) can update an already-open screen without spawning one
  * for players whose session is still alive but who have closed the GUI.
+ *
+ * <p>Protocol version 26 — trailing {@code canEdit}: whether the receiving player may use the
+ * in-GUI admin shop editor (server fills {@code player.hasPermissions(2)}). Trailing so all
+ * earlier fields keep their wire positions; backward-compat constructors default it to false.
  */
 public record S2CShopDataPacket(
         String shopId,
@@ -36,21 +40,30 @@ public record S2CShopDataPacket(
         List<CatalogBarterRecipe> barterRecipes,
         boolean adminShopEnabled,
         List<NearbyShopEntry> nearbyShops,
-        boolean forceOpen) {
+        boolean forceOpen,
+        boolean canEdit) {
 
-    /** Backward-compat constructor without nearby shops / admin toggle / forceOpen flag. */
+    /** Backward-compat constructor without nearby shops / admin toggle / forceOpen flag / canEdit. */
     public S2CShopDataPacket(String shopId, long balanceMinorUnits, String currencyName, int currencyDecimals,
                              List<CatalogCategory> categories, List<CatalogItem> items,
                              List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes) {
-        this(shopId, balanceMinorUnits, currencyName, currencyDecimals, categories, items, promos, barterRecipes, true, List.of(), true);
+        this(shopId, balanceMinorUnits, currencyName, currencyDecimals, categories, items, promos, barterRecipes, true, List.of(), true, false);
     }
 
-    /** Backward-compat constructor without forceOpen (defaults to true — preserves legacy open behavior). */
+    /** Backward-compat constructor without forceOpen (defaults to true — preserves legacy open behavior) / canEdit. */
     public S2CShopDataPacket(String shopId, long balanceMinorUnits, String currencyName, int currencyDecimals,
                              List<CatalogCategory> categories, List<CatalogItem> items,
                              List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes,
                              boolean adminShopEnabled, List<NearbyShopEntry> nearbyShops) {
-        this(shopId, balanceMinorUnits, currencyName, currencyDecimals, categories, items, promos, barterRecipes, adminShopEnabled, nearbyShops, true);
+        this(shopId, balanceMinorUnits, currencyName, currencyDecimals, categories, items, promos, barterRecipes, adminShopEnabled, nearbyShops, true, false);
+    }
+
+    /** Backward-compat constructor without canEdit (defaults to false — viewer-only). */
+    public S2CShopDataPacket(String shopId, long balanceMinorUnits, String currencyName, int currencyDecimals,
+                             List<CatalogCategory> categories, List<CatalogItem> items,
+                             List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes,
+                             boolean adminShopEnabled, List<NearbyShopEntry> nearbyShops, boolean forceOpen) {
+        this(shopId, balanceMinorUnits, currencyName, currencyDecimals, categories, items, promos, barterRecipes, adminShopEnabled, nearbyShops, forceOpen, false);
     }
 
     public static void encode(S2CShopDataPacket packet, FriendlyByteBuf buffer) {
@@ -74,6 +87,7 @@ public record S2CShopDataPacket(
             buffer.writeDouble(entry.distance());
         }
         buffer.writeBoolean(packet.forceOpen);
+        buffer.writeBoolean(packet.canEdit);
     }
 
     public static S2CShopDataPacket decode(FriendlyByteBuf buffer) {
@@ -99,7 +113,8 @@ public record S2CShopDataPacket(
             nearbyShops.add(new NearbyShopEntry(pos, ownerUuid, ownerName, shopName, listingCount, totalStock, distance));
         }
         boolean forceOpen = buffer.readBoolean();
-        return new S2CShopDataPacket(shopId, balance, currencyName, decimals, categories, items, promos, barterRecipes, adminShopEnabled, nearbyShops, forceOpen);
+        boolean canEdit = buffer.readBoolean();
+        return new S2CShopDataPacket(shopId, balance, currencyName, decimals, categories, items, promos, barterRecipes, adminShopEnabled, nearbyShops, forceOpen, canEdit);
     }
 
     public static void handle(S2CShopDataPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

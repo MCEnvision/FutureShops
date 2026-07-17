@@ -11,7 +11,8 @@ public record OwnedShopSummary(
         int lowStockListings,
         boolean linked,
         long pendingMinor,
-        long lifetimeMinor) {
+        long lifetimeMinor,
+        String featuredNbtJson) {
 
     public static void encode(FriendlyByteBuf buffer, OwnedShopSummary summary) {
         buffer.writeUtf(summary.dimensionKey());
@@ -23,6 +24,7 @@ public record OwnedShopSummary(
         buffer.writeBoolean(summary.linked());
         buffer.writeLong(summary.pendingMinor());
         buffer.writeLong(summary.lifetimeMinor());
+        buffer.writeUtf(summary.featuredNbtJson() == null ? "" : summary.featuredNbtJson());
     }
 
     public static OwnedShopSummary decode(FriendlyByteBuf buffer) {
@@ -35,7 +37,8 @@ public record OwnedShopSummary(
                 buffer.readVarInt(),
                 buffer.readBoolean(),
                 buffer.readLong(),
-                buffer.readLong());
+                buffer.readLong(),
+                buffer.readUtf());
     }
 }
 

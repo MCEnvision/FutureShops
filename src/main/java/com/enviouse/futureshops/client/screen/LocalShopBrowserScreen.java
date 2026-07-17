@@ -7,12 +7,12 @@ import com.enviouse.futureshops.data.LocalShopOwnerEntry.LocalListing;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopActionPacket;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -33,16 +33,18 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
     private String searchQuery = "";
 
     private enum SortMode {
-        NAME_AZ("Name A-Z"), NAME_ZA("Name Z-A"),
-        PRICE_LOW("Price ↑"), PRICE_HIGH("Price ↓"),
-        STOCK_HIGH("Stock ↓"), STOCK_LOW("Stock ↑");
+        NAME_AZ("gui.futureshops.local.sort.name_az"), NAME_ZA("gui.futureshops.local.sort.name_za"),
+        PRICE_LOW("gui.futureshops.local.sort.price_low"), PRICE_HIGH("gui.futureshops.local.sort.price_high"),
+        STOCK_HIGH("gui.futureshops.local.sort.stock_high"), STOCK_LOW("gui.futureshops.local.sort.stock_low");
 
-        final String label;
-        SortMode(String label) { this.label = label; }
+        final String labelKey;
+        SortMode(String labelKey) { this.labelKey = labelKey; }
         SortMode next() { return values()[(ordinal() + 1) % values().length]; }
     }
     private SortMode sortMode = SortMode.NAME_AZ;
-    private Button sortButton;
+
+    /** Per-frame flat-button hit regions (see ShopUiUtil.button / dispatchClicks). */
+    private final java.util.List<ShopUiUtil.ClickZone> clickZones = new ArrayList<>();
 
     // Tooltip tracking
     private String tooltipItemId = null;
@@ -77,20 +79,12 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
         });
         searchBox.setValue(searchQuery);
         addRenderableWidget(searchBox);
-
-        // Sort button right of the search box
-        sortButton = addRenderableWidget(Button.builder(Component.literal("§7" + sortMode.label), button -> {
-            sortMode = sortMode.next();
-            button.setMessage(Component.literal("§7" + sortMode.label));
-            gridScrollRows = 0;
-        }).bounds(gridX + 8 + searchW + 4, guiTop + 36, sortW, 14).build());
-
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.local.back"), button -> onClose())
-                .bounds(guiLeft + 8, guiTop + guiH - 22, 50, 16).build());
+        // Sort + Back buttons are drawn as flat Nocturne buttons in render().
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        clickZones.clear();
         tooltipItemId = null;
         tooltipNbtJson = null;
 
@@ -100,18 +94,32 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
         graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + 2, ShopColors.ACCENT_PRIMARY);
 
         // Header
-        String title = owner.displayName() + "'s Shop";
+        String title = Component.translatable("gui.futureshops.local.title", owner.displayName()).getString();
         if (!owner.franchiseName().isBlank()) {
             title = owner.franchiseName() + " — " + owner.displayName();
         }
         graphics.drawString(this.font, this.font.plainSubstrByWidth("§l" + title, guiW - 20),
                 guiLeft + 10, guiTop + 8, ShopColors.TEXT_STRONG, false);
-        String info = owner.shopBlockCount() + " shop blocks • " + owner.totalListings() + " listings • " + owner.totalStock() + " stock";
+        String info = Component.translatable("gui.futureshops.local.header_info",
+                owner.shopBlockCount(), owner.totalListings(), owner.totalStock()).getString();
         graphics.drawString(this.font, this.font.plainSubstrByWidth("§7" + info, guiW - 20),
                 guiLeft + 10, guiTop + 20, ShopColors.TEXT_MUTED, false);
 
         renderSidebar(graphics, mouseX, mouseY);
         renderGrid(graphics, mouseX, mouseY);
+
+        // ── Sort + Back (flat Nocturne buttons) ── same geometry the vanilla Buttons used.
+        int gridX = guiLeft + sidebarW + 16;
+        int sortW = 64;
+        int searchW = Math.min(200, guiW - sidebarW - 40 - sortW - 6);
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                gridX + 8 + searchW + 4, guiTop + 36, sortW, 14,
+                Component.translatable(sortMode.labelKey), ShopUiUtil.ButtonStyle.SECONDARY, true,
+                () -> { sortMode = sortMode.next(); gridScrollRows = 0; });
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + 8, guiTop + guiH - 22, 50, 16,
+                Component.translatable("gui.futureshops.local.back"), ShopUiUtil.ButtonStyle.SECONDARY, true,
+                this::onClose);
 
         super.render(graphics, mouseX, mouseY, partialTick);
 
@@ -127,7 +135,7 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
         int h = guiH - 62;
         ShopUiUtil.renderCard(graphics, x, y, sidebarW, h);
         graphics.fill(x, y, x + sidebarW, y + 2, ShopColors.ACCENT_PRIMARY);
-        graphics.drawString(this.font, "§lDepartments", x + 8, y + 6, ShopColors.TEXT_STRONG, false);
+        graphics.drawString(this.font, Component.translatable("gui.futureshops.shop_main.departments"), x + 8, y + 6, ShopColors.TEXT_STRONG, false);
 
         List<LocalDepartment> depts = owner.departments();
         // Add "All" virtual department
@@ -145,7 +153,9 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
             if (selected) {
                 graphics.fill(x + 4, drawY, x + 7, drawY + tabHeight - 2, ShopColors.ACCENT_PRIMARY);
             }
-            String label = i == 0 ? "All" : this.font.plainSubstrByWidth(depts.get(i - 1).name(), sidebarW - 22);
+            String label = i == 0
+                    ? Component.translatable("gui.futureshops.shop_main.tab_all").getString()
+                    : this.font.plainSubstrByWidth(depts.get(i - 1).name(), sidebarW - 22);
             graphics.drawString(this.font, label, x + 12, drawY + 4,
                     selected ? ShopColors.TEXT_STRONG : ShopColors.TEXT_MUTED, false);
             drawY += tabHeight;
@@ -172,20 +182,35 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
         List<LocalListing> filtered = base;
         if (!searchQuery.isEmpty()) {
             filtered = base.stream()
-                    .filter(l -> l.displayName().toLowerCase(Locale.ROOT).contains(searchQuery)
+                    .filter(l -> resolvedName(l).toLowerCase(Locale.ROOT).contains(searchQuery)
                             || l.itemId().toLowerCase(Locale.ROOT).contains(searchQuery))
                     .toList();
         }
         // Sort
         Comparator<LocalListing> cmp = switch (sortMode) {
-            case NAME_AZ -> Comparator.comparing(l -> l.displayName().toLowerCase(Locale.ROOT));
-            case NAME_ZA -> Comparator.<LocalListing, String>comparing(l -> l.displayName().toLowerCase(Locale.ROOT)).reversed();
+            case NAME_AZ -> Comparator.comparing(l -> resolvedName(l).toLowerCase(Locale.ROOT));
+            case NAME_ZA -> Comparator.<LocalListing, String>comparing(l -> resolvedName(l).toLowerCase(Locale.ROOT)).reversed();
             case PRICE_LOW -> Comparator.comparingLong(l -> l.hasPromo() ? l.promoPriceMinor() : l.priceMinor());
             case PRICE_HIGH -> Comparator.<LocalListing>comparingLong(l -> l.hasPromo() ? l.promoPriceMinor() : l.priceMinor()).reversed();
             case STOCK_HIGH -> Comparator.<LocalListing>comparingInt(LocalListing::stock).reversed();
             case STOCK_LOW -> Comparator.comparingInt(LocalListing::stock);
         };
         return filtered.stream().sorted(cmp).toList();
+    }
+
+    /**
+     * Listing display name, resolved locally from the wire NBT when present —
+     * tag-dependent items (TacZ guns) take their name from the stack tag and
+     * only the client has the gun-pack name data, so the server-sent string is
+     * just a fallback for tag-less listings. buildItemStack caches, so this is
+     * cheap per frame.
+     */
+    private static String resolvedName(LocalListing listing) {
+        String nbt = listing.nbtJson();
+        if (nbt != null && !nbt.isBlank()) {
+            return ShopUiUtil.getItemDisplayNameWithNbt(listing.itemId(), nbt);
+        }
+        return listing.displayName();
     }
 
     private void renderGrid(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -198,7 +223,9 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
 
         List<LocalListing> listings = getFilteredListings();
         if (listings.isEmpty()) {
-            String msg = searchQuery.isEmpty() ? "§7No listings in this department" : "§7No results for \"" + searchQuery + "\"";
+            String msg = searchQuery.isEmpty()
+                    ? Component.translatable("gui.futureshops.local.no_listings").getString()
+                    : Component.translatable("gui.futureshops.local.no_results", searchQuery).getString();
             graphics.drawCenteredString(this.font, msg,
                     gridX + gridW / 2, gridY + gridH / 2 - 4, ShopColors.TEXT_MUTED);
             return;
@@ -240,7 +267,7 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
             if (listing.hasPromo() && listing.priceMinor() > 0) {
                 int percent = ShopUiUtil.computePromoPercent(listing.priceMinor(), listing.promoPriceMinor());
                 if (percent > 0) {
-                    String badgeText = percent >= 100 ? "Free!" : "-" + percent + "%";
+                    String badgeText = percent >= 100 ? Component.translatable("gui.futureshops.player_shop_block.detail.promo_free").getString() : "-" + percent + "%";
                     ShopUiUtil.renderAnimatedDiscountBadge(graphics, this.font, cardX + cardW - 6, cardY + 8, badgeText);
                 }
             }
@@ -257,16 +284,14 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
             graphics.fill(x, y, x + width, y + 1, ShopColors.ACCENT_PRIMARY);
         }
 
-        // Item icon
-        String nbt = listing.nbtJson();
-        if (listing.nbtAware() && nbt != null && !nbt.isBlank() && ShopUiUtil.hasNonDefaultNbt(listing.itemId(), nbt)) {
-            ShopUiUtil.renderItemIconWithNbt(graphics, this.font, listing.itemId(), nbt, x + (width - 16) / 2, y + 6);
-        } else {
-            ShopUiUtil.renderItemIcon(graphics, this.font, listing.itemId(), x + (width - 16) / 2, y + 6);
-        }
+        // Item icon — always apply the wire NBT for display: nbtAware only governs
+        // transaction matching, and BEWLR items (TacZ guns etc.) render as a
+        // missing texture without their tag.
+        ShopUiUtil.renderItemIconWithNbt(graphics, this.font, listing.itemId(), listing.nbtJson(),
+                x + (width - 16) / 2, y + 6);
 
         // Name — scrolls when too long so modded items with lengthy names stay fully readable.
-        ShopUiUtil.renderScrollingCentered(graphics, this.font, listing.displayName(),
+        ShopUiUtil.renderScrollingCentered(graphics, this.font, resolvedName(listing),
                 x + width / 2, y + 28, width - 8, ShopColors.TEXT_STRONG);
 
         if (!outOfStock) {
@@ -275,7 +300,7 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
             String priceStr;
             int priceColor;
             if ("BARTER".equalsIgnoreCase(listing.tradeMode())) {
-                priceStr = "§9⚒ Barter";
+                priceStr = Component.translatable("gui.futureshops.item_detail.barter").getString();
                 priceColor = ShopColors.TEXT_BARTER_SOFT;
             } else {
                 priceStr = ShopUiUtil.formatMinorUnits(price);
@@ -284,25 +309,25 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
             graphics.drawCenteredString(this.font, priceStr, x + width / 2, y + 42, priceColor);
 
             // Stock
-            String stockStr = listing.stock() + " left";
+            String stockStr = Component.translatable("gui.futureshops.shop_main.stock_left", listing.stock()).getString();
             graphics.drawCenteredString(this.font, stockStr, x + width / 2, y + 56, ShopColors.TEXT_FAINT);
 
             // Promo badge
             if (listing.hasPromo() && listing.priceMinor() > 0) {
                 int percent = ShopUiUtil.computePromoPercent(listing.priceMinor(), listing.promoPriceMinor());
                 if (percent > 0) {
-                    String badgeText = percent >= 100 ? "Free!" : "-" + percent + "%";
+                    String badgeText = percent >= 100 ? Component.translatable("gui.futureshops.player_shop_block.detail.promo_free").getString() : "-" + percent + "%";
                     ShopUiUtil.renderAnimatedDiscountBadge(graphics, this.font, x + width - 6, y + 8, badgeText);
                 }
             }
         } else {
-            graphics.drawCenteredString(this.font, "§cSold Out", x + width / 2, y + 49, ShopColors.ERROR);
+            graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.shop_main.sold_out"), x + width / 2, y + 49, ShopColors.ERROR);
         }
 
         // Shop name tooltip on hover
         if (hovered) {
             tooltipItemId = listing.itemId();
-            tooltipNbtJson = (listing.nbtAware() && nbt != null && !nbt.isBlank()) ? nbt : "";
+            tooltipNbtJson = listing.nbtJson() == null ? "" : listing.nbtJson();
             tooltipMouseX = mouseX;
             tooltipMouseY = mouseY;
         }
@@ -330,6 +355,8 @@ public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (ShopUiUtil.dispatchClicks(clickZones, mouseX, mouseY)) return true;
+
         // Sidebar department clicks
         int sidebarX = guiLeft + 8;
         int sidebarY = guiTop + 34;

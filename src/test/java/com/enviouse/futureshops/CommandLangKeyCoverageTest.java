@@ -238,6 +238,47 @@ public class CommandLangKeyCoverageTest {
                         + String.join("\n  ", orphans));
     }
 
+    /**
+     * Matches a raw string literal passed as the TEXT argument of a client text sink —
+     * {@code drawString}/{@code drawCenteredString} and the {@code ShopUiUtil.renderScrolling*}
+     * helpers — after the {@code (graphics,) this.font,} prefix, plus {@code plainSubstrByWidth("…")}.
+     * These sinks accept a raw {@code String}, so a hard-coded English literal here bypasses the
+     * {@code Component.literal} scanner entirely — historically the biggest translation leak.
+     * A {@code Component} argument (variable or {@code Component.translatable(...)}) doesn't start
+     * with {@code "} and is correctly ignored.
+     */
+    private static final Pattern TEXT_SINK_LITERAL = Pattern.compile(
+            "(?:draw(?:Centered)?String|renderScrolling(?:String|Centered))\\(\\s*(?:graphics\\s*,\\s*)?this\\.font\\s*,\\s*"
+                    + "\"((?:[^\"\\\\]|\\\\.)*)\""
+                    + "|plainSubstrByWidth\\(\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+
+    /**
+     * Ratchet guard for the raw-{@code String} text-sink channel. Every screen not on
+     * {@link #SCREEN_GRANDFATHERED} must route sink text through a {@code Component} (translatable)
+     * rather than a hard-coded English string literal. Glyph/format-only literals (no letter after
+     * stripping {@code §x} codes, e.g. {@code "§c✕"}, {@code "§a×"}) are allowed — same heuristic as
+     * the {@code Component.literal} scanner.
+     */
+    @Test
+    void noScreenHardCodesEnglishAtTextSinks() throws Exception {
+        List<String> failures = new ArrayList<>();
+        for (Path file : collectJava(SCREEN_ROOT)) {
+            if (SCREEN_GRANDFATHERED.contains(file.getFileName().toString())) continue;
+            String src = stripComments(Files.readString(file));
+            Matcher m = TEXT_SINK_LITERAL.matcher(src);
+            while (m.find()) {
+                String arg = m.group(1) != null ? m.group(1) : m.group(2);
+                if (arg != null && isSentence(arg)) {
+                    failures.add(file + " :: text-sink literal \"" + arg + "\" — "
+                            + "pass a Component.translatable(\"gui.futureshops.<key>\") instead.");
+                }
+            }
+        }
+        assertTrue(failures.isEmpty(),
+                "Client screens hard-coding English at raw-String text sinks:\n  "
+                        + String.join("\n  ", failures));
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────
 
     private static List<Path> collectJava(Path root) throws Exception {

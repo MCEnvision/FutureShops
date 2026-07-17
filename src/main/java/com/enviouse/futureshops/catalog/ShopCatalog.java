@@ -41,6 +41,41 @@ public final class ShopCatalog {
     private ShopCatalog() {
     }
 
+    /**
+     * Items that are inert without their NBT (model, name and function all
+     * resolve from the stack tag — TacZ resolves everything from GunId /
+     * AmmoId / AttachmentId). A listing for one of these with no captured NBT
+     * renders as a missing texture and mints a dead item — silent, so we
+     * surface it at catalog load instead of leaving admins guessing.
+     */
+    private static final java.util.Set<String> TAG_DEPENDENT_ITEM_IDS = java.util.Set.of(
+            "tacz:modern_kinetic_gun", "tacz:ammo", "tacz:attachment");
+
+    /** Warn once per (shop, listing); re-warns only if the NBT disappears again later. */
+    private static final java.util.Set<String> NBT_WARN_EMITTED = ConcurrentHashMap.newKeySet();
+
+    private static void warnIfTagDependentWithoutNbt(String shopId, ItemDef item) {
+        String itemId = item.itemId();
+        if (itemId == null || !TAG_DEPENDENT_ITEM_IDS.contains(itemId)) {
+            return;
+        }
+        String warnKey = shopId + "|" + item.resolutionKey();
+        String nbt = item.nbtJson();
+        if (nbt == null || nbt.isBlank()) {
+            if (NBT_WARN_EMITTED.add(warnKey)) {
+                org.slf4j.LoggerFactory.getLogger(ShopCatalog.class).warn(
+                        "Shop '{}' listing '{}' ({}) has no captured NBT — it will render as a missing"
+                                + " texture and mint a non-functional item. If this listing is in admin.json,"
+                                + " re-capture it while holding the item: /shopadmin items edit <id> ... with"
+                                + " the nbt flag on (or remove and re-add it); otherwise add an \"nbt\" SNBT"
+                                + " field to the listing in its shop JSON file.",
+                        shopId, item.resolutionKey(), itemId);
+            }
+        } else {
+            NBT_WARN_EMITTED.remove(warnKey);
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Lifecycle
     // -------------------------------------------------------------------------
@@ -48,8 +83,25 @@ public final class ShopCatalog {
     /**
      * Clears the current catalog and reloads all shop definitions from disk.
      * Must be called from the server thread (e.g., in {@code ServerStartingEvent}).
+     *
+     * <p>Live per-listing state survives the reload where it still makes sense: every in-GUI admin
+     * edit (and every {@code /shopadmin items ...} write) funnels through here, so naively clearing
+     * STOCKS would refill every limited listing to its configured value on each edit — silently
+     * undoing all sales — and drop every runtime promo. Instead we snapshot live stock counts and
+     * runtime promos before clearing and restore them after the rebuild for keys that still resolve.
+     * Stock is only restored when the CONFIGURED stock is unchanged between old and new definitions;
+     * if the admin deliberately edited a listing's stock, the freshly seeded configured value wins.
      */
     public static void reload(MinecraftServer server) {
+        // Snapshot live state keyed by (shopId, resolutionKey) before wiping.
+        Map<String, Map<String, Integer>> oldLiveStocks = new LinkedHashMap<>();
+        STOCKS.forEach((shopId, byKey) -> oldLiveStocks.put(shopId, new java.util.HashMap<>(byKey)));
+        Map<String, Map<String, ItemDef>> oldItemIndex = CATALOG_BY_ITEM;
+        Map<String, Map<String, PromoDef>> oldRuntimePromos = new LinkedHashMap<>();
+        RUNTIME_PROMOS.forEach((shopId, byKey) -> oldRuntimePromos.put(shopId, new java.util.HashMap<>(byKey)));
+        Map<String, Map<String, RuntimePromoConfig>> oldRuntimePromoConfigs = new LinkedHashMap<>();
+        RUNTIME_PROMO_CONFIGS.forEach((shopId, byKey) -> oldRuntimePromoConfigs.put(shopId, new java.util.HashMap<>(byKey)));
+
         CATALOG.clear();
         STOCKS.clear();
         RUNTIME_PROMOS.clear();
@@ -73,6 +125,7 @@ public final class ShopCatalog {
                 if (!item.isUnlimited()) {
                     stockMap.put(item.resolutionKey(), item.stock());
                 }
+                warnIfTagDependentWithoutNbt(def.shopId(), item);
             }
             STOCKS.put(def.shopId(), stockMap);
             itemIndex.put(def.shopId(), Map.copyOf(byId));
@@ -81,8 +134,15 @@ public final class ShopCatalog {
             Map<String, List<BarterRecipeDef>> byTarget = new LinkedHashMap<>();
             Map<String, BarterRecipeDef> byRecipeId = new LinkedHashMap<>();
             for (BarterRecipeDef recipe : def.barterRecipes()) {
-                barterTargets.add(recipe.targetItemId());
-                byTarget.computeIfAbsent(recipe.targetItemId(), ignored -> new java.util.ArrayList<>()).add(recipe);
+                // Recipe targets resolve listingId-first (falling back to the first listing whose
+                // registry itemId matches), so index by the resolved listing's resolution key —
+                // that is the key stock operations and buildItems' barter flag use. Unresolvable
+                // targets keep the raw string (nothing matches, same as the pre-listingId days).
+                String targetKey = resolveBarterTargetIn(def, recipe.targetItemId())
+                        .map(ItemDef::resolutionKey)
+                        .orElse(recipe.targetItemId());
+                barterTargets.add(targetKey);
+                byTarget.computeIfAbsent(targetKey, ignored -> new java.util.ArrayList<>()).add(recipe);
                 byRecipeId.putIfAbsent(recipe.recipeId(), recipe);
             }
             barterIndex.put(def.shopId(), Set.copyOf(barterTargets));
@@ -98,9 +158,77 @@ public final class ShopCatalog {
         BARTER_BY_TARGET = Map.copyOf(barterByTargetIndex);
         BARTER_BY_ID = Map.copyOf(barterByIdIndex);
 
+        // Restore live stock counts for listings that survived the reload with an UNCHANGED
+        // configured stock. A changed configured value means the admin deliberately re-stocked
+        // that listing, so the fresh seed stands.
+        CATALOG_BY_ITEM.forEach((shopId, newById) -> {
+            Map<String, ItemDef> oldById = oldItemIndex.get(shopId);
+            Map<String, Integer> oldLive = oldLiveStocks.get(shopId);
+            if (oldById == null || oldLive == null) {
+                return;
+            }
+            ConcurrentHashMap<String, Integer> stockMap = STOCKS.get(shopId);
+            if (stockMap == null) {
+                return;
+            }
+            newById.forEach((key, newDef) -> {
+                if (newDef.isUnlimited()) {
+                    return;
+                }
+                ItemDef oldDef = oldById.get(key);
+                if (oldDef == null || oldDef.stock() != newDef.stock()) {
+                    return;
+                }
+                Integer live = oldLive.get(key);
+                if (live != null) {
+                    stockMap.put(key, live);
+                }
+            });
+        });
+
+        // Restore runtime promos (and their activation windows) whose listing still resolves.
+        oldRuntimePromos.forEach((shopId, byKey) -> {
+            Map<String, ItemDef> newById = CATALOG_BY_ITEM.get(shopId);
+            if (newById == null) {
+                return;
+            }
+            Map<String, RuntimePromoConfig> oldConfigs = oldRuntimePromoConfigs.get(shopId);
+            byKey.forEach((key, promo) -> {
+                if (!newById.containsKey(key)) {
+                    return;
+                }
+                RUNTIME_PROMOS.computeIfAbsent(shopId, ignored -> new ConcurrentHashMap<>()).put(key, promo);
+                RuntimePromoConfig config = oldConfigs == null ? null : oldConfigs.get(key);
+                if (config != null) {
+                    RUNTIME_PROMO_CONFIGS.computeIfAbsent(shopId, ignored -> new ConcurrentHashMap<>()).put(key, config);
+                }
+            });
+        });
+
         // Fire ShopReloadEvent (spec §33)
         net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
                 new com.enviouse.futureshops.event.ShopReloadEvent(CATALOG.size()));
+    }
+
+    /**
+     * Wipes all in-memory catalog state. Called on server stop so the static maps don't leak into
+     * the next world in a single JVM (singleplayer world-switch): {@link #reload} now preserves live
+     * stock across reloads, so without this the next world's start-up reload would inherit the prior
+     * world's depleted counts for any listing whose configured stock happens to match.
+     */
+    public static void clear() {
+        CATALOG.clear();
+        STOCKS.clear();
+        RUNTIME_PROMOS.clear();
+        RUNTIME_PROMO_CONFIGS.clear();
+        STOCK_LOCKS.clear();
+        // Reset the once-per-listing NBT warning dedup too, so a genuinely-broken listing in the
+        // next world (singleplayer) is warned about afresh rather than suppressed by a stale key.
+        NBT_WARN_EMITTED.clear();
+        CATALOG_BY_ITEM = Map.of();
+        BARTER_TARGETS = Map.of();
+        BARTER_BY_TARGET = Map.of();
+        BARTER_BY_ID = Map.of();
     }
 
     // -------------------------------------------------------------------------
@@ -170,7 +298,8 @@ public final class ShopCatalog {
      * Resolves a listing by its registry {@code itemId} rather than its listingId — the first listing
      * whose registry id matches. Used by the barter path, whose recipes target registry ids. For a
      * legacy single-variant item this is the listing itself (listingId == itemId); for a fully
-     * multi-variant item it returns the first-loaded variant (barter outputs a bare item regardless).
+     * multi-variant item it returns the first-loaded variant (barter stamps the returned def's
+     * nbtJson onto its reward, so the delivered variant matches what BarterScreen displays).
      * Always drive stock operations off the returned def's {@link ItemDef#resolutionKey()}.
      */
     public static Optional<ItemDef> getItemByRegistryId(String shopId, String registryItemId) {
@@ -184,6 +313,38 @@ public final class ShopCatalog {
         if (def == null) return Optional.empty();
         for (ItemDef it : def.items()) {
             if (registryItemId.equals(it.itemId())) return Optional.of(it);
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Resolves a barter recipe's raw {@code target} string against the shop's listings —
+     * listingId-FIRST (the listing whose {@link ItemDef#resolutionKey()} equals the target),
+     * falling back to the first listing whose registry {@code itemId} matches (the legacy
+     * pre-listingId behaviour; for legacy single-variant listings both coincide). The barter
+     * service stamps the resolved listing's nbt on the minted reward and keys stock by its
+     * resolution key.
+     */
+    public static Optional<ItemDef> resolveBarterTarget(String shopId, String rawTarget) {
+        if (rawTarget == null || rawTarget.isBlank()) return Optional.empty();
+        Optional<ItemDef> byListing = getItem(shopId, rawTarget);
+        if (byListing.isPresent()) return byListing;
+        return getItemByRegistryId(shopId, rawTarget);
+    }
+
+    /**
+     * Same listingId-first resolution as {@link #resolveBarterTarget(String, String)}, but against
+     * one specific definition — usable during {@link #reload} before the indexes are published.
+     * First match wins in both passes, mirroring the index {@code putIfAbsent} semantics.
+     */
+    // Package-private for unit tests (end-to-end barter-target resolution).
+    static Optional<ItemDef> resolveBarterTargetIn(ShopDefinition def, String rawTarget) {
+        if (rawTarget == null || rawTarget.isBlank()) return Optional.empty();
+        for (ItemDef it : def.items()) {
+            if (rawTarget.equals(it.resolutionKey())) return Optional.of(it);
+        }
+        for (ItemDef it : def.items()) {
+            if (rawTarget.equals(it.itemId())) return Optional.of(it);
         }
         return Optional.empty();
     }
@@ -371,8 +532,19 @@ public final class ShopCatalog {
         return merged;
     }
 
+    /**
+     * Builds the wire barter recipes for the given shop, resolving each recipe's raw target to a
+     * listing (listingId-first, registry fallback) so the DTO ships the resolved
+     * {@code targetListingId} plus the listing's registry {@code targetItemId} for icon fallback.
+     * Unresolvable targets pass the raw string through with a blank {@code targetListingId}.
+     */
     public static List<CatalogBarterRecipe> buildBarterRecipes(String shopId) {
-        return getOrDefault(shopId).map(ShopDefinition::toCatalogBarterRecipes).orElse(List.of());
+        ShopDefinition def = getOrDefault(shopId).orElse(null);
+        if (def == null) return List.of();
+        return def.barterRecipes().stream()
+                .map(recipe -> recipe.toCatalogRecipe(
+                        resolveBarterTargetIn(def, recipe.targetItemId()).orElse(null)))
+                .toList();
     }
 
     public static List<CatalogItem> buildItems(String shopId) {
@@ -432,8 +604,10 @@ public final class ShopCatalog {
                     if (promo == null) promo = promoByItem.get(item.itemId());
                     boolean hasPromo = promo != null;
                     long promoPrice = hasPromo ? applyPromo(item.buyPriceMinorUnits(), promo) : 0L;
-                    // Barter targets are registry ids — keep itemId here.
-                    boolean hasBarterRecipes = barterTargets.contains(item.itemId());
+                    // Barter targets are resolved to listings at reload and indexed by their
+                    // resolution key — flag exactly the listing the recipe rewards (legacy
+                    // single-variant entries have resolutionKey == itemId, so nothing changes).
+                    boolean hasBarterRecipes = barterTargets.contains(item.resolutionKey());
                     int stock = item.isUnlimited()
                             ? -1
                             : (stockMap == null ? item.stock() : stockMap.getOrDefault(item.resolutionKey(), item.stock()));
@@ -452,7 +626,8 @@ public final class ShopCatalog {
                                     catalogItem.barterEnabled(), catId,
                                     catalogItem.hasPromo(), catalogItem.promoPrice(),
                                     catalogItem.hasBarterRecipes(),
-                                    catalogItem.nbtJson());
+                                    catalogItem.nbtJson(),
+                                    catalogItem.configuredStock());
                         }
                     }
                     return catalogItem;
@@ -560,6 +735,11 @@ public final class ShopCatalog {
         return discounted * quantity;
     }
 
+    /**
+     * Returns the recipes whose resolved reward listing has the given resolution key (for legacy
+     * single-variant listings that key equals the registry itemId). Recipes whose target never
+     * resolved to a listing are indexed under their raw target string.
+     */
     public static List<BarterRecipeDef> getBarterRecipesForItem(String shopId, String itemId) {
         Map<String, List<BarterRecipeDef>> byTarget = BARTER_BY_TARGET.get(resolveShopId(shopId));
         if (byTarget == null) return List.of();

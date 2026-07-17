@@ -121,6 +121,9 @@ public record ItemDef(
                 hasPromo,
                 promoPrice,
                 hasBarterRecipes,
-                nbtJson == null ? "" : nbtJson);
+                nbtJson == null ? "" : nbtJson,
+                // Configured max (this listing's admin.json stock), independent of the live
+                // `currentStock` above — the admin editor edits this, not the live remaining.
+                stock);
     }
 }

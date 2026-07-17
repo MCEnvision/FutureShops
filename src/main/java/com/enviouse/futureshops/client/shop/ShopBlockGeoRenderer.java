@@ -18,13 +18,10 @@ import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
-import net.minecraftforge.registries.ForgeRegistries;
 import org.joml.Matrix4f;
 import software.bernie.geckolib.renderer.GeoBlockRenderer;
 
@@ -63,16 +60,15 @@ public class ShopBlockGeoRenderer implements BlockEntityRenderer<ShopBlockEntity
     private void renderListingPreviewAndNameplate(ShopBlockEntity be, PoseStack poseStack,
                                                   MultiBufferSource bufferSource,
                                                   int packedLight, int packedOverlay) {
-        List<String> ids = be.getClientTopItemIds();
+        // Stacks are pre-built (with listing NBT applied) in
+        // ShopBlockEntity.handleUpdateTag, so tag-dependent models like TacZ
+        // guns resolve correctly and no registry work happens per frame.
+        List<ItemStack> stacks = be.getClientTopStacks();
         ItemStack stack = ItemStack.EMPTY;
-        if (!ids.isEmpty()) {
+        if (!stacks.isEmpty()) {
             long nowCycle = System.currentTimeMillis();
-            int idx = (int) Math.floorMod(nowCycle / CYCLE_MS, ids.size());
-            ResourceLocation rl = ResourceLocation.tryParse(ids.get(idx));
-            if (rl != null) {
-                Item item = ForgeRegistries.ITEMS.getValue(rl);
-                if (item != null && item != Items.AIR) stack = new ItemStack(item);
-            }
+            int idx = (int) Math.floorMod(nowCycle / CYCLE_MS, stacks.size());
+            stack = stacks.get(idx);
         }
 
         long now = System.currentTimeMillis();

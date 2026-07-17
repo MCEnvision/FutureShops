@@ -60,6 +60,7 @@ public class Futureshops {
 
         // Register our mod's ForgeConfigSpec so that Forge can create and load the config file for us
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+        ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, ClientConfig.SPEC);
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
@@ -86,6 +87,9 @@ public class Futureshops {
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
         BalanceManager.initialize(event.getServer());
+        // Resolve the configured physical-currency adapter (built-in money item
+        // or a foreign mod's items, e.g. Apocalypse Now cash).
+        com.enviouse.futureshops.money.CurrencyManager.initialize();
         // Eagerly load (or create) the coin-mint registry from disk.
         SpentMintsSavedData.get(event.getServer());
         // Load shop catalog from config/futureshops/shops/*.json (spec §24).
@@ -102,8 +106,11 @@ public class Futureshops {
         // Force-close every open shop session so clients can dismiss their GUIs.
         ShopSessionManager.closeAllAndForceClose(event.getServer(), "SERVER_STOPPING");
         BalanceManager.clear();
+        com.enviouse.futureshops.money.CurrencyManager.clear();
         DynamicPricingEngine.reset();
         StockRefreshScheduler.reset();
+        // Wipe in-memory catalog so live stock doesn't leak into the next world (singleplayer).
+        ShopCatalog.clear();
         com.enviouse.futureshops.server.shop.ShopConfigClipboard.clearAll();
         LOGGER.info("FutureShops server stopping.");
     }
@@ -149,6 +156,11 @@ public class Futureshops {
             event.registerBlockEntityRenderer(
                     ModBlockEntities.SHOP_BLOCK_ENTITY.get(),
                     com.enviouse.futureshops.client.shop.ShopBlockGeoRenderer::new);
+        }
+
+        @SubscribeEvent
+        public static void onRegisterKeyMappings(net.minecraftforge.client.event.RegisterKeyMappingsEvent event) {
+            event.register(com.enviouse.futureshops.client.ModKeyMappings.OPEN_SHOP);
         }
     }
 }

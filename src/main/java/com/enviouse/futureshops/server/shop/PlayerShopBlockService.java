@@ -24,7 +24,11 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -41,8 +45,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 public final class PlayerShopBlockService {
-    private static final int MAX_LINK_DISTANCE = 8;
     private static final double LINK_RAYCAST_RANGE = 8.0D;
+    /**
+     * Server-side reach bound for the keybind-initiated OPEN_LOOKING action
+     * (squared, from the EYE position). Generous vs the ~5-block client pick
+     * range to absorb latency and eye-offset — it only opens a read-only UI,
+     * and the session distance auto-close still applies afterwards.
+     */
+    private static final double OPEN_LOOKING_MAX_DISTANCE_SQ = 12.0D * 12.0D;
     private static final ConcurrentHashMap<Long, ReentrantLock> SHOP_LOCKS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<UUID, BlockPos> PENDING_DESC = new ConcurrentHashMap<>();
     /** Per-listing description pending entries: stores listing index (-1 = shop-level). */
@@ -112,7 +122,7 @@ public final class PlayerShopBlockService {
                 ownerUuid,
                 ownerName,
                 listings,
-                shop.getLinkedStoragePos() != null,
+                shop.hasLinkedStorage(),
                 settlement.pendingMinor(),
                 settlement.lifetimeMinor(),
                 settlement.rows(),
@@ -122,7 +132,63 @@ public final class PlayerShopBlockService {
                 shop.getDescription(),
                 franchiseName,
                 shop.isPlacedByCreative(),
-                shop.isAdminShopMode()));
+                shop.isAdminShopMode(),
+                shop.getFloatingIconMode().name(),
+                shop.getFloatingIconItem(),
+                owner ? buildStorageEntries(player.level(), shop, pos) : List.of(),
+                owner && player.getServer() != null
+                        ? PlayerShopSavedConfigs.get(player.getServer()).names(player.getUUID())
+                        : List.of()));
+    }
+
+    /**
+     * Builds the owner Storage-tab list: one entry per linked position (index-aligned with
+     * {@link ShopBlockEntity#getLinkedStoragePositions()} so {@code UNLINK_INDEX} maps directly),
+     * each carrying the block registry id (client localizes the name) and the total item count.
+     * Unresolvable/unloaded positions still appear (blank block id, count 0) so the owner can
+     * see and unlink a stale link.
+     */
+    private static List<com.enviouse.futureshops.data.PlayerShopStorageEntry> buildStorageEntries(
+            Level level, ShopBlockEntity shop, BlockPos shopPos) {
+        List<BlockPos> positions = shop.getLinkedStoragePositions();
+        if (positions.isEmpty()) {
+            return List.of();
+        }
+        List<com.enviouse.futureshops.data.PlayerShopStorageEntry> out = new ArrayList<>(positions.size());
+        for (BlockPos p : positions) {
+            String blockId = "";
+            int count = 0;
+            if (level.hasChunkAt(p)) {
+                var key = net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(level.getBlockState(p).getBlock());
+                if (key != null) blockId = key.toString();
+                LinkedStorage s = resolveOneStorage(level, shopPos, p);
+                if (s != null) count = totalItemCount(s);
+            }
+            out.add(new com.enviouse.futureshops.data.PlayerShopStorageEntry(p, blockId, count));
+        }
+        return out;
+    }
+
+    /**
+     * Total item count (sum of stack sizes) held in one storage. Falls back to the block's
+     * ITEM_HANDLER capability when {@code handler()} is null — which is the COMMON case, because
+     * {@code ForgeCapabilityStorageAdapter} matches any capability-backed container (vanilla chests
+     * included) so {@code resolveOneStorage} returns it via the adapter branch with a null handler.
+     * Genuinely adapter-only storages that expose no plain handler (e.g. a bare RS controller)
+     * still report 0 — a display-only limitation; per-listing stock uses {@code adapter.countItem}.
+     */
+    private static int totalItemCount(LinkedStorage s) {
+        IItemHandler handler = s.handler();
+        if (handler == null && s.blockEntity() != null) {
+            handler = s.blockEntity().getCapability(ForgeCapabilities.ITEM_HANDLER).resolve().orElse(null);
+        }
+        long total = 0;
+        if (handler != null) {
+            for (int i = 0; i < handler.getSlots(); i++) {
+                total += handler.getStackInSlot(i).getCount();
+            }
+        }
+        return (int) Math.min(Integer.MAX_VALUE, total);
     }
 
     public static void applyConfig(ServerPlayer player, BlockPos pos, String shopName, boolean singleItemMode, boolean barterStorageSame, int selectedListingIndex) {
@@ -154,6 +220,88 @@ public final class PlayerShopBlockService {
         sendResult(player, true, ShopResultCode.CONFIG_SAVED);
     }
 
+    /** Owner-only: sets the floating-icon mode (and custom item) then re-syncs the block-top. */
+    public static void applyFloatingIcon(ServerPlayer player, BlockPos pos, String iconMode, String iconItem) {
+        if (!(player.level().getBlockEntity(pos) instanceof ShopBlockEntity shop)) {
+            return;
+        }
+        if (!isOwnerOrFranchiseMember(shop, player)) {
+            sendResult(player, false, ShopResultCode.NOT_OWNER);
+            return;
+        }
+        shop.setFloatingIconMode(ShopBlockEntity.FloatingIconMode.byName(iconMode));
+        shop.setFloatingIconItem(iconItem);
+        shop.setChanged();
+        shop.syncTopItemsToClients();
+        openFor(player, pos);
+        sendResult(player, true, ShopResultCode.CONFIG_SAVED);
+    }
+
+    /**
+     * Owner-only: unlinks one stock storage BY POSITION (identity), for the Storage-tab per-entry
+     * Unlink button. Race-free — a stale click either matches a currently-linked position or is a
+     * no-op, and can never unlink a different container the way a positional index could.
+     */
+    public static void unlinkStorageByPos(ServerPlayer player, BlockPos shopPos, BlockPos storagePos) {
+        if (!(player.level().getBlockEntity(shopPos) instanceof ShopBlockEntity shop)) {
+            return;
+        }
+        if (!isOwnerOrFranchiseMember(shop, player)) {
+            sendResult(player, false, ShopResultCode.NOT_OWNER);
+            return;
+        }
+        if (storagePos != null && shop.getLinkedStoragePositions().contains(storagePos)) {
+            shop.removeLinkedStorage(storagePos);
+            shop.setChanged();
+        }
+        openFor(player, shopPos);
+    }
+
+    /**
+     * Owner-only: named saved-config operations (Payouts tab). op = SAVE / APPLY / DELETE against
+     * the player's persistent {@link PlayerShopSavedConfigs}. SAVE stores this shop's
+     * {@code exportConfigSnapshot()}; APPLY stamps a named snapshot onto this shop (never touching
+     * owner/pos/links, same as paste); DELETE removes it. No-ops safely on missing names.
+     */
+    public static void handleSavedConfig(ServerPlayer player, BlockPos shopPos, String op, String name) {
+        if (!(player.level().getBlockEntity(shopPos) instanceof ShopBlockEntity shop)) {
+            return;
+        }
+        if (!isOwnerOrFranchiseMember(shop, player)) {
+            sendResult(player, false, ShopResultCode.NOT_OWNER);
+            return;
+        }
+        if (player.getServer() == null) {
+            return;
+        }
+        PlayerShopSavedConfigs store = PlayerShopSavedConfigs.get(player.getServer());
+        UUID uuid = player.getUUID();
+        switch (op == null ? "" : op) {
+            case "SAVE" -> {
+                if (store.save(uuid, name, shop.exportConfigSnapshot())) {
+                    sendResult(player, true, ShopResultCode.CONFIG_COPIED);
+                } else {
+                    sendResult(player, false, ShopResultCode.NO_CLIPBOARD);
+                }
+            }
+            case "APPLY" -> {
+                net.minecraft.nbt.CompoundTag snap = store.get(uuid, name);
+                if (snap == null) {
+                    sendResult(player, false, ShopResultCode.NO_CLIPBOARD);
+                    return;
+                }
+                shop.applyConfigSnapshot(snap);
+                shop.setChanged();
+                sendResult(player, true, ShopResultCode.CONFIG_SAVED);
+            }
+            case "DELETE" -> store.delete(uuid, name);
+            default -> {
+                return;
+            }
+        }
+        openFor(player, shopPos);
+    }
+
     public static void applyOwnerAction(ServerPlayer player, BlockPos pos, String action, int listingIndex, int amount) {
         if (!(player.level().getBlockEntity(pos) instanceof ShopBlockEntity shop)) {
             return;
@@ -162,6 +310,21 @@ public final class PlayerShopBlockService {
         // VISIT action is allowed for any player (used by nearby shop tab)
         if ("VISIT".equals(action)) {
             openFor(player, pos, true); // Always open as visitor
+            return;
+        }
+
+        // OPEN_LOOKING: keybind-initiated open of the shop block the player is
+        // looking at (for held items that suppress right-click, e.g. TacZ guns).
+        // Unlike right-click this arrives as a raw packet, so the server bounds
+        // the distance itself; unlike VISIT it must not force the visitor view
+        // so owners get the same manage UI a right-click gives them. It also
+        // deliberately does NOT claim ownerless shops the way ShopBlock.use
+        // does — a packet must never be able to grab ownership remotely.
+        if ("OPEN_LOOKING".equals(action)) {
+            if (player.getEyePosition().distanceToSqr(Vec3.atCenterOf(pos)) > OPEN_LOOKING_MAX_DISTANCE_SQ) {
+                return;
+            }
+            openFor(player, pos, amount == 1); // amount==1 → sneak: force visitor view
             return;
         }
 
@@ -334,6 +497,23 @@ public final class PlayerShopBlockService {
                 }
                 listing.setNbtAware(!listing.nbtAware());
             }
+            case "TOGGLE_HIDDEN" -> {
+                if (listing == null) {
+                    sendResult(player, false, ShopResultCode.NO_LISTING);
+                    return;
+                }
+                // Hidden and showcase are mutually exclusive presentation states.
+                listing.setHidden(!listing.hidden());
+                if (listing.hidden()) listing.setShowcase(false);
+            }
+            case "TOGGLE_SHOWCASE" -> {
+                if (listing == null) {
+                    sendResult(player, false, ShopResultCode.NO_LISTING);
+                    return;
+                }
+                listing.setShowcase(!listing.showcase());
+                if (listing.showcase()) listing.setHidden(false);
+            }
             case "SET_DEPARTMENT" -> {
                 // Custom department classification — amount encodes the string via a separate field
                 // The department name comes from the action packet's extra string field
@@ -378,7 +558,23 @@ public final class PlayerShopBlockService {
                 sendResult(player, true, ShopResultCode.LISTING_DESC_PENDING);
                 return;
             }
-            case "UNLINK" -> shop.setLinkedStoragePos(null);
+            case "UNLINK" -> {
+                // Remove the specific container the owner is looking at from the linked
+                // set — never silently clear all. Back-compat: when exactly one storage
+                // is linked, an unfocused Unlink clears that sole link (byte-identical to
+                // the pre-multilink single-storage behaviour).
+                BlockPos looked = resolveLookedBlockPos(player);
+                List<BlockPos> linked = shop.getLinkedStoragePositions();
+                if (looked != null && linked.contains(looked)) {
+                    shop.removeLinkedStorage(looked);
+                } else if (linked.size() == 1) {
+                    shop.clearLinkedStorages();
+                }
+                // Multi-storage and not looking at a linked container → no-op.
+            }
+            // Storage-tab per-entry unlink is identity-based via C2SPlayerShopUnlinkStoragePacket
+            // (unlinkStorageByPos), NOT a positional action — a stale index could unlink the wrong
+            // container, so no UNLINK_INDEX action exists.
             case "UNLINK_BARTER" -> shop.setBarterStoragePos(null);
             case "COPY_CONFIG" -> {
                 ShopConfigClipboard.store(player.getUUID(), shop.exportConfigSnapshot());
@@ -506,6 +702,20 @@ public final class PlayerShopBlockService {
         sendResult(player, true, ShopResultCode.PROMO_SET);
     }
 
+    /**
+     * Resolves the raw listing index a VISITOR request targets. In single-item mode a visitor's
+     * client only holds the one visible listing (index 0), but the owner may have chosen a
+     * non-first listing to showcase — so a visitor index in single-item mode always means the
+     * shop's {@code visibleListingIndex}, not the raw index sent. Owners see the full list, so
+     * their indices pass through unchanged.
+     */
+    private static int resolveVisitorListingIndex(ShopBlockEntity shop, ServerPlayer player, int listingIndex) {
+        if (shop.isSingleItemMode() && !isOwnerOrFranchiseMember(shop, player)) {
+            return shop.getVisibleListingIndex();
+        }
+        return listingIndex;
+    }
+
     public static void buy(ServerPlayer buyer, BlockPos pos, int listingIndex, int quantity, String paymentMethod) {
         if (!(buyer.level().getBlockEntity(pos) instanceof ShopBlockEntity shop)) {
             return;
@@ -515,8 +725,17 @@ public final class PlayerShopBlockService {
         lock.lock();
         try {
             int qty = Math.max(1, quantity);
+            listingIndex = resolveVisitorListingIndex(shop, buyer, listingIndex);
             ShopBlockEntity.Listing listing = shop.getListing(listingIndex);
             if (shop.getOwnerUuid() == null || listing == null || listing.itemId().isBlank()) {
+                sendResult(buyer, false, ShopResultCode.UNCONFIGURED);
+                return;
+            }
+            // Redesign: hidden listings are concealed and showcase listings are display-only
+            // ("visit in person") — neither is purchasable by visitors. This is the server
+            // authority backstop; the client also hides/tags them. Owners/franchise members
+            // may still transact (e.g. to test the listing).
+            if ((listing.hidden() || listing.showcase()) && !isOwnerOrFranchiseMember(shop, buyer)) {
                 sendResult(buyer, false, ShopResultCode.UNCONFIGURED);
                 return;
             }
@@ -551,13 +770,13 @@ public final class PlayerShopBlockService {
                 return;
             }
 
-            LinkedStorage linkedStorage = resolveLinkedStorage(buyer.level(), shop, pos);
-            if (linkedStorage == null) {
+            List<LinkedStorage> linkedStorages = resolveLinkedStorages(buyer.level(), shop, pos);
+            if (linkedStorages.isEmpty()) {
                 sendResult(buyer, false, ShopResultCode.NO_LINK);
                 return;
             }
 
-            // ═══ Stock check — NBT-aware + bundle support ═══
+            // ═══ Stock check — NBT-aware + bundle support, summed across all links ═══
             if (isBundle) {
                 // Bundle: check each output entry
                 for (ShopBlockEntity.BundleEntry entry : listing.bundleOutputs()) {
@@ -567,13 +786,13 @@ public final class PlayerShopBlockService {
                         return;
                     }
                     int needed = entry.count() * qty;
-                    if (!canExtractNbt(linkedStorage, bundleItem, needed, entry.nbtTag() != null, entry.nbtTag())) {
+                    if (!canExtractComposite(linkedStorages, bundleItem, needed, entry.nbtTag() != null, entry.nbtTag())) {
                         sendResult(buyer, false, ShopResultCode.OUT_OF_STOCK);
                         return;
                     }
                 }
             } else {
-                if (!canExtractNbt(linkedStorage, saleItem, deliverCount, nbtAware, nbtTag)) {
+                if (!canExtractComposite(linkedStorages, saleItem, deliverCount, nbtAware, nbtTag)) {
                     sendResult(buyer, false, ShopResultCode.OUT_OF_STOCK);
                     return;
                 }
@@ -650,16 +869,16 @@ public final class PlayerShopBlockService {
                 CompoundTag barterNbtTag = listing.barterNbtTag();
                 if (barterItem == null || barterItem == Items.AIR || ShopTransactionUtil.countItems(buyer.getInventory(), barterItem, barterNbtAware, barterNbtTag) < barterAmount) {
                     if (compoundTrade) {
-                        sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, "§cTrade cancelled: you don't have enough barter items.");
+                        sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, Component.translatable("command.futureshops.shop.barter_not_enough"));
                         return;
                     }
                     // BOTH mode: if barter fails, it was fallback — send result
-                    sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, "§cTrade cancelled: you don't have enough barter items.");
+                    sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, Component.translatable("command.futureshops.shop.barter_not_enough"));
                     return;
                 }
                 barterStorage = resolveBarterStorage(buyer.level(), shop, pos);
                 if (barterStorage == null) {
-                    sendResultWithChat(buyer, false, ShopResultCode.NO_LINK, "§cTrade cancelled: barter storage is not linked.");
+                    sendResultWithChat(buyer, false, ShopResultCode.NO_LINK, Component.translatable("command.futureshops.shop.barter_storage_unlinked"));
                     return;
                 }
                 // Pre-flight insert check uses a synthesized stack list so we can validate
@@ -674,7 +893,7 @@ public final class PlayerShopBlockService {
                         : canInsertAll(barterStorage.handler(), previewPayment);
                 if (!canInsertPayment) {
                     // Item 18: Close UI + chat message for storage full
-                    sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, "§cTrade cancelled: the shop's storage is full and cannot accept your barter items.");
+                    sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, Component.translatable("command.futureshops.shop.barter_storage_full"));
                     return;
                 }
             }
@@ -685,7 +904,7 @@ public final class PlayerShopBlockService {
                 if (cost > 0L) {
                     TransactionResult moneyCheck = provider.withdraw(buyer.getUUID(), cost, "BUY");
                     if (!moneyCheck.success()) {
-                        sendResultWithChat(buyer, false, ShopResultCode.INSUFFICIENT_FUNDS, "§cTrade cancelled: insufficient balance for compound trade.");
+                        sendResultWithChat(buyer, false, ShopResultCode.INSUFFICIENT_FUNDS, Component.translatable("command.futureshops.shop.compound_insufficient"));
                         return;
                     }
                     withdrewFromBuyer = true;
@@ -713,7 +932,7 @@ public final class PlayerShopBlockService {
                         listing.barterNbtAware(), listing.barterNbtTag());
                 if (paymentStacks.isEmpty()) {
                     provider.deposit(buyer.getUUID(), cost, "BUY");
-                    sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, "§cTrade cancelled: barter items could not be taken.");
+                    sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, Component.translatable("command.futureshops.shop.barter_not_taken"));
                     return;
                 }
                 // Item 31: Insert barter payment into barter-specific storage
@@ -723,12 +942,12 @@ public final class PlayerShopBlockService {
                 if (!insertedOk) {
                     ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), paymentStacks);
                     provider.deposit(buyer.getUUID(), cost, "BUY");
-                    sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, "§cTrade cancelled: the shop's storage is full.");
+                    sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, Component.translatable("command.futureshops.shop.trade_storage_full"));
                     return;
                 }
                 insertedPayment = paymentStacks;
                 if (buyer.getServer() != null) {
-                    PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), cost, listing.itemId(), qty);
+                    PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), cost, listing.itemId(), qty, listingNbtJson(listing));
                     recordedSale = true;
                 }
             } else if (!barterTrade) {
@@ -736,7 +955,7 @@ public final class PlayerShopBlockService {
                 if (cost <= 0L) {
                     // Free item — no withdrawal needed
                     if (buyer.getServer() != null) {
-                        PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), 0L, listing.itemId(), qty);
+                        PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), 0L, listing.itemId(), qty, listingNbtJson(listing));
                         recordedSale = true;
                     }
                 } else {
@@ -755,7 +974,7 @@ public final class PlayerShopBlockService {
                             sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                             return;
                         }
-                        PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), cost, listing.itemId(), qty);
+                        PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), cost, listing.itemId(), qty, listingNbtJson(listing));
                         recordedSale = true;
                     }
                 }
@@ -768,7 +987,7 @@ public final class PlayerShopBlockService {
                     barterStorage = resolveBarterStorage(buyer.level(), shop, pos);
                 }
                 if (barterStorage == null) {
-                    sendResultWithChat(buyer, false, ShopResultCode.NO_LINK, "§cTrade cancelled: barter storage is not linked.");
+                    sendResultWithChat(buyer, false, ShopResultCode.NO_LINK, Component.translatable("command.futureshops.shop.barter_storage_unlinked"));
                     return;
                 }
 
@@ -790,7 +1009,7 @@ public final class PlayerShopBlockService {
                         buyer.getInventory(), barterItem, barterAmount,
                         listing.barterNbtAware(), listing.barterNbtTag());
                 if (paymentStacks.isEmpty()) {
-                    sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, "§cTrade cancelled: barter items could not be taken.");
+                    sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, Component.translatable("command.futureshops.shop.barter_not_taken"));
                     return;
                 }
                 boolean insertedOk = barterStorage.hasAdapter()
@@ -798,12 +1017,12 @@ public final class PlayerShopBlockService {
                         : insertAll(barterStorage.handler(), paymentStacks);
                 if (!insertedOk) {
                     ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), paymentStacks);
-                    sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, "§cTrade cancelled: the shop's storage is full.");
+                    sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, Component.translatable("command.futureshops.shop.trade_storage_full"));
                     return;
                 }
                 insertedPayment = paymentStacks;
                 if (buyer.getServer() != null) {
-                    PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), 0L, listing.itemId(), qty);
+                    PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), 0L, listing.itemId(), qty, listingNbtJson(listing));
                     recordedSale = true;
                 }
             }
@@ -815,30 +1034,28 @@ public final class PlayerShopBlockService {
                 for (ShopBlockEntity.BundleEntry entry : listing.bundleOutputs()) {
                     Item bundleItem = ShopTransactionUtil.resolveItem(entry.itemId());
                     int needed = entry.count() * qty;
-                    List<ItemStack> part = extractNbt(linkedStorage, bundleItem, needed, entry.nbtTag() != null, entry.nbtTag());
+                    List<ItemStack> part = extractComposite(linkedStorages, bundleItem, needed, entry.nbtTag() != null, entry.nbtTag());
                     if (part.isEmpty()) {
-                        // Rollback already-extracted items
+                        // Rollback already-extracted items across the composite
                         for (ItemStack ex : extracted) {
                             if (!ex.isEmpty()) {
-                                reinsert(linkedStorage, ex);
+                                reinsertComposite(linkedStorages, ex);
                             }
                         }
-                        rollbackAll(linkedStorage, buyer, provider, withdrewFromBuyer, cost, recordedSale,
-                                shop.getOwnerUuid(), pos, barterItem, barterAmount, insertedPayment, compoundTrade, barterTrade,
-                                listing.barterNbtAware(), listing.barterNbtTag());
+                        rollbackAll(barterStorage, buyer, provider, withdrewFromBuyer, cost, recordedSale,
+                                shop.getOwnerUuid(), pos, insertedPayment, compoundTrade, barterTrade);
                         sendResult(buyer, false, ShopResultCode.ROLLBACK);
                         return;
                     }
                     extracted.addAll(part);
                 }
             } else {
-                extracted = extractNbt(linkedStorage, saleItem, deliverCount, nbtAware, nbtTag);
+                extracted = extractComposite(linkedStorages, saleItem, deliverCount, nbtAware, nbtTag);
             }
 
             if (extracted.isEmpty()) {
-                rollbackAll(linkedStorage, buyer, provider, withdrewFromBuyer, cost, recordedSale,
-                        shop.getOwnerUuid(), pos, barterItem, barterAmount, insertedPayment, compoundTrade, barterTrade,
-                        listing.barterNbtAware(), listing.barterNbtTag());
+                rollbackAll(barterStorage, buyer, provider, withdrewFromBuyer, cost, recordedSale,
+                        shop.getOwnerUuid(), pos, insertedPayment, compoundTrade, barterTrade);
                 sendResult(buyer, false, ShopResultCode.ROLLBACK);
                 return;
             }
@@ -865,7 +1082,8 @@ public final class PlayerShopBlockService {
                         listing.itemId(),
                         qty,
                         barterTrade ? 0L : cost,
-                        historyNote);
+                        historyNote,
+                        listingNbtJson(listing));
 
                 // ═══ Fire ShopTransactionEvent.Post (spec §33) ═══
                 if (com.enviouse.futureshops.Config.eventsTransactionEnabled) {
@@ -916,9 +1134,31 @@ public final class PlayerShopBlockService {
             return 0;
         }
         if (pending.barterLink()) {
+            // Barter storage stays single — one dedicated bartered-goods container.
             shop.setBarterStoragePos(target);
         } else {
-            shop.setLinkedStoragePos(target);
+            // Stock storage is composite: ADD the looked-at container to the linked set.
+            // Reject (reusing BAD_LINK_TARGET) when already linked or at the cap — the
+            // distance/validity checks were already applied by validateLinkTarget above.
+            if (shop.getLinkedStoragePositions().contains(target)) {
+                sendResult(player, false, ShopResultCode.BAD_LINK_TARGET);
+                return 0;
+            }
+            // Reject the other half of an already-linked double chest — both halves alias the
+            // same combined inventory, so linking both would be a no-op after dedupe and only
+            // desync the "N/cap" count. Compare by canonical inventory key.
+            long targetKey = canonicalStorageKey(player.level(), target);
+            for (BlockPos linked : shop.getLinkedStoragePositions()) {
+                if (canonicalStorageKey(player.level(), linked) == targetKey) {
+                    sendResult(player, false, ShopResultCode.BAD_LINK_TARGET);
+                    return 0;
+                }
+            }
+            if (!shop.addLinkedStorage(target)) {
+                // addLinkedStorage only fails here for the cap (dupe handled above).
+                sendResult(player, false, ShopResultCode.BAD_LINK_TARGET);
+                return 0;
+            }
         }
         shop.setChanged();
         openFor(player, shopPos);
@@ -1049,7 +1289,7 @@ public final class PlayerShopBlockService {
                     || ShopTransactionUtil.countItems(buyer.getInventory(), barterItem,
                             listing.barterNbtAware(), listing.barterNbtTag()) < barterAmount) {
                 sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS,
-                        "§cTrade cancelled: you don't have enough barter items.");
+                        Component.translatable("command.futureshops.shop.barter_not_enough"));
                 return;
             }
         }
@@ -1073,7 +1313,7 @@ public final class PlayerShopBlockService {
             if (paymentStacks.isEmpty()) {
                 if (withdrewFromBuyer) provider.deposit(buyer.getUUID(), cost, "BUY");
                 sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS,
-                        "§cTrade cancelled: barter items could not be taken.");
+                        Component.translatable("command.futureshops.shop.barter_not_taken"));
                 return;
             }
             // Stacks are intentionally discarded — admin shop voids them.
@@ -1088,7 +1328,12 @@ public final class PlayerShopBlockService {
                 delivered.addAll(splitStacks(bundleItem, entry.count() * qty, entry.nbtTag()));
             }
         } else {
-            delivered.addAll(splitStacks(saleItem, deliverCount, listing.nbtAware() ? listing.nbtTag() : null));
+            // Admin-shop output is minted from the listing definition, so always
+            // stamp the stored tag — matching the bundle path above and what the
+            // buyer sees in the UI. nbtAware only governs MATCHING (barter
+            // payment, sell-to-shop, storage extraction); minting a TacZ gun
+            // without its GunId tag would deliver a textureless dead gun.
+            delivered.addAll(splitStacks(saleItem, deliverCount, listing.nbtTag()));
         }
 
         if (!ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), delivered)) {
@@ -1110,7 +1355,8 @@ public final class PlayerShopBlockService {
                     listing.itemId(),
                     qty,
                     barterTrade ? 0L : cost,
-                    historyNote);
+                    historyNote,
+                    listingNbtJson(listing));
 
             if (com.enviouse.futureshops.Config.eventsTransactionEnabled) {
                 long resultingBal = provider.getBalance(buyer.getUUID());
@@ -1159,13 +1405,19 @@ public final class PlayerShopBlockService {
 
     private static int countSingleItemStock(Level level, ShopBlockEntity shop, BlockPos shopPos,
                                             Item item, boolean nbtAware, @Nullable CompoundTag nbtTag) {
-        LinkedStorage linkedStorage = resolveLinkedStorage(level, shop, shopPos);
-        if (linkedStorage == null) return 0;
-        if (linkedStorage.hasAdapter()) {
-            return linkedStorage.adapter().countItem(linkedStorage.blockEntity(), item, nbtAware, nbtTag);
+        List<LinkedStorage> storages = resolveLinkedStorages(level, shop, shopPos);
+        if (storages.isEmpty()) return 0;
+        return CompositeStorageOps.countAcross(storages,
+                s -> countInStorage(s, item, nbtAware, nbtTag));
+    }
+
+    /** Counts matching items in a SINGLE resolved storage (adapter- or handler-backed). */
+    private static int countInStorage(LinkedStorage storage, Item item, boolean nbtAware, @Nullable CompoundTag nbtTag) {
+        if (storage.hasAdapter()) {
+            return storage.adapter().countItem(storage.blockEntity(), item, nbtAware, nbtTag);
         }
         int total = 0;
-        IItemHandler handler = linkedStorage.handler();
+        IItemHandler handler = storage.handler();
         for (int i = 0; i < handler.getSlots(); i++) {
             ItemStack stack = handler.getStackInSlot(i);
             if (NbtMatchUtil.matches(stack, item, nbtAware, nbtTag)) {
@@ -1216,7 +1468,15 @@ public final class PlayerShopBlockService {
                 listing.direction().name(),
                 listing.buybackPriceMinor(),
                 listing.buybackCap(),
-                listing.buybackRemaining());
+                listing.buybackRemaining(),
+                listing.hidden(),
+                listing.showcase());
+    }
+
+    /** The listing's SNBT for history/settlement rows; "" when the listing carries no tag. */
+    private static String listingNbtJson(ShopBlockEntity.Listing listing) {
+        CompoundTag tag = listing == null ? null : listing.nbtTag();
+        return tag != null ? tag.toString() : "";
     }
 
     private static String resolveOwnerName(ServerPlayer viewer, UUID ownerUuid) {
@@ -1233,14 +1493,15 @@ public final class PlayerShopBlockService {
     }
 
     /**
-     * Unified rollback for buy() failures after payment was taken.
+     * Unified rollback for buy() failures after payment was taken. The barter payment
+     * is pulled back from the barter storage it was inserted into (which may differ
+     * from the sale-item storage and may be adapter-backed).
      */
-    private static void rollbackAll(LinkedStorage linkedStorage, ServerPlayer buyer, EconomyProvider provider,
+    private static void rollbackAll(LinkedStorage barterStorage, ServerPlayer buyer, EconomyProvider provider,
                                     boolean withdrewFromBuyer, long cost, boolean recordedSale,
                                     UUID ownerUuid, BlockPos pos,
-                                    Item barterItem, int barterAmount, List<ItemStack> insertedPayment,
-                                    boolean compoundTrade, boolean barterTrade,
-                                    boolean barterNbtAware, @Nullable CompoundTag barterNbtTag) {
+                                    List<ItemStack> insertedPayment,
+                                    boolean compoundTrade, boolean barterTrade) {
         if (compoundTrade || !barterTrade) {
             if (recordedSale && buyer.getServer() != null) {
                 PlayerShopSettlementSavedData.get(buyer.getServer()).rollbackPending(ownerUuid, pos.asLong(), cost);
@@ -1250,53 +1511,199 @@ public final class PlayerShopBlockService {
             }
         }
         if (compoundTrade || barterTrade) {
-            rollbackBarterPayment(linkedStorage.handler(), buyer, barterItem, barterAmount, insertedPayment, barterNbtAware, barterNbtTag);
+            rollbackBarterPayment(barterStorage, buyer, insertedPayment);
         }
     }
 
-    private static void rollbackBarterPayment(IItemHandler handler, ServerPlayer buyer, Item barterItem, int barterAmount,
-                                              List<ItemStack> insertedPayment,
-                                              boolean nbtAware, @Nullable CompoundTag nbtTag) {
-        if (barterItem == null || insertedPayment.isEmpty()) {
+    private static void rollbackBarterPayment(LinkedStorage barterStorage, ServerPlayer buyer,
+                                              List<ItemStack> insertedPayment) {
+        if (barterStorage == null || insertedPayment.isEmpty()) {
             return;
         }
-        int recovered = extractAmount(handler, barterItem, barterAmount, nbtAware, nbtTag);
-        if (recovered > 0) {
-            ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), splitStacks(barterItem, recovered, nbtTag));
+        // Pull back the buyer's ACTUAL paid stacks — NBT-strict against each paid
+        // stack's own tag (not the listing's), so tagged payments come back tagged
+        // instead of being re-minted bare. MUST be best-effort: the all-or-nothing
+        // extract() discards partially-pulled items on a shortfall, which on this
+        // path would destroy the buyer's payment instead of refunding it.
+        List<ItemStack> recovered = new ArrayList<>();
+        for (ItemStack paid : insertedPayment) {
+            if (paid.isEmpty()) {
+                continue;
+            }
+            if (barterStorage.hasAdapter()) {
+                // Adapter extract is all-or-nothing but non-destructive (reinserts
+                // on shortfall): try the full amount, then fall back to what is
+                // actually available so a one-item shortfall doesn't forfeit the
+                // whole stack refund.
+                List<ItemStack> got = barterStorage.adapter().extract(
+                        barterStorage.blockEntity(), paid.getItem(), paid.getCount(), true, paid.getTag());
+                if (got.isEmpty()) {
+                    int available = barterStorage.adapter().countItem(
+                            barterStorage.blockEntity(), paid.getItem(), true, paid.getTag());
+                    if (available > 0) {
+                        got = barterStorage.adapter().extract(barterStorage.blockEntity(),
+                                paid.getItem(), Math.min(available, paid.getCount()), true, paid.getTag());
+                    }
+                }
+                recovered.addAll(got);
+            } else if (barterStorage.handler() != null) {
+                recovered.addAll(extractStacks(barterStorage.handler(),
+                        paid.getItem(), paid.getCount(), true, paid.getTag()));
+            }
+        }
+        if (!recovered.isEmpty()) {
+            ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), recovered);
         }
     }
 
-    private static void reinsert(LinkedStorage storage, ItemStack stack) {
+    /**
+     * Reinserts one stack into a SINGLE storage during rollback. Any remainder that will not
+     * fit (storage filled concurrently, or an adapter that rejects the whole insert) is dropped
+     * in-world at the storage rather than silently vanishing — rollback must never lose items.
+     */
+    private static void reinsertOne(LinkedStorage storage, ItemStack stack) {
         if (storage.hasAdapter()) {
-            storage.adapter().insert(storage.blockEntity(), List.of(stack));
+            if (!storage.adapter().insert(storage.blockEntity(), List.of(stack))) {
+                dropLeftover(storage, stack);
+            }
         } else if (storage.handler() != null) {
             ItemStack remaining = stack.copy();
             for (int i = 0; i < storage.handler().getSlots() && !remaining.isEmpty(); i++) {
                 remaining = storage.handler().insertItem(i, remaining, false);
             }
+            if (!remaining.isEmpty()) {
+                dropLeftover(storage, remaining);
+            }
         }
     }
 
-    // ═══ NBT-aware extraction helpers ═══
-
-    private static boolean canExtractNbt(LinkedStorage storage, Item item, int count,
-                                          boolean nbtAware, @Nullable CompoundTag nbtTag) {
-        if (storage.hasAdapter()) {
-            return storage.adapter().canExtract(storage.blockEntity(), item, count, nbtAware, nbtTag);
+    /**
+     * Reinserts one stack across the composite, spilling to the next storage when one is full.
+     * Anything the whole composite cannot absorb is dropped in-world (rollback must not lose items).
+     */
+    private static void reinsertComposite(List<LinkedStorage> storages, ItemStack stack) {
+        List<ItemStack> leftover = CompositeStorageOps.spillInsert(storages, new ArrayList<>(List.of(stack)),
+                (s, units) -> insertIntoOne(s, units));
+        if (!leftover.isEmpty() && !storages.isEmpty()) {
+            for (ItemStack ls : leftover) {
+                dropLeftover(storages.get(0), ls);
+            }
         }
-        return canExtract(storage.handler(), item, count, nbtAware, nbtTag);
     }
 
-    private static List<ItemStack> extractNbt(LinkedStorage storage, Item item, int count,
+    /** Drops a stack as a world item at the storage's position — last-resort no-loss rollback. */
+    private static void dropLeftover(LinkedStorage storage, ItemStack stack) {
+        if (stack.isEmpty()) return;
+        Level level = storage.blockEntity() != null ? storage.blockEntity().getLevel() : null;
+        if (level != null && !level.isClientSide) {
+            Block.popResource(level, storage.pos(), stack.copy());
+        }
+    }
+
+    // ═══ NBT-aware composite extraction helpers ═══
+
+    /** Composite stock probe: true when the summed matching stock across all links >= count. */
+    private static boolean canExtractComposite(List<LinkedStorage> storages, Item item, int count,
                                                boolean nbtAware, @Nullable CompoundTag nbtTag) {
-        if (storage.hasAdapter()) {
-            return storage.adapter().extract(storage.blockEntity(), item, count, nbtAware, nbtTag);
-        }
-        return extract(storage.handler(), item, count, nbtAware, nbtTag);
+        return CompositeStorageOps.canExtractAcross(storages, count,
+                s -> countInStorage(s, item, nbtAware, nbtTag));
     }
 
-    private static int extractAmount(IItemHandler handler, Item item, int amount,
-                                     boolean nbtAware, @Nullable CompoundTag nbtTag) {
+    /**
+     * All-or-nothing extraction of {@code count} units across every linked storage in order.
+     * Pulls best-effort from each storage (so no single storage's own all-or-nothing empties
+     * it destructively), and if the composite falls short reinserts everything already pulled —
+     * returning an empty list, exactly matching the single-storage all-or-nothing contract.
+     * Extracted stacks keep their tags intact.
+     */
+    private static List<ItemStack> extractComposite(List<LinkedStorage> storages, Item item, int count,
+                                                    boolean nbtAware, @Nullable CompoundTag nbtTag) {
+        return CompositeStorageOps.extractAcross(
+                storages,
+                count,
+                (s, remaining) -> takeBestEffort(s, item, remaining, nbtAware, nbtTag),
+                ItemStack::getCount,
+                PlayerShopBlockService::reinsertOne);
+    }
+
+    /**
+     * Best-effort extraction from a SINGLE storage: returns the actual stacks (tags intact),
+     * up to {@code remaining} units. Deliberately NON-destructive-on-shortfall — it never
+     * empties a storage and returns nothing; the composite ({@link #extractComposite}) makes
+     * the all-or-nothing decision and rolls back across storages if the total falls short.
+     */
+    private static List<ItemStack> takeBestEffort(LinkedStorage s, Item item, int remaining,
+                                                  boolean nbtAware, @Nullable CompoundTag nbtTag) {
+        if (remaining <= 0) return List.of();
+        if (s.hasAdapter()) {
+            // Adapter.extract is all-or-nothing (non-destructive), so never ask for more than
+            // is present or it forfeits this storage's whole contribution.
+            int avail = s.adapter().countItem(s.blockEntity(), item, nbtAware, nbtTag);
+            int want = Math.min(avail, remaining);
+            return want <= 0 ? List.of() : s.adapter().extract(s.blockEntity(), item, want, nbtAware, nbtTag);
+        }
+        return extractStacks(s.handler(), item, remaining, nbtAware, nbtTag);
+    }
+
+    /**
+     * Inserts as much of {@code units} as fits into a SINGLE storage, returning the leftover.
+     * Adapters are whole-list all-or-nothing (RS etc.): either every unit is accepted or none.
+     */
+    private static List<ItemStack> insertIntoOne(LinkedStorage s, List<ItemStack> units) {
+        if (units.isEmpty()) return new ArrayList<>();
+        if (s.hasAdapter()) {
+            return s.adapter().insert(s.blockEntity(), units) ? new ArrayList<>() : new ArrayList<>(units);
+        }
+        IItemHandler handler = s.handler();
+        List<ItemStack> leftover = new ArrayList<>();
+        for (ItemStack unit : units) {
+            ItemStack remaining = unit.copy();
+            for (int i = 0; i < handler.getSlots() && !remaining.isEmpty(); i++) {
+                remaining = handler.insertItem(i, remaining, false);
+            }
+            if (!remaining.isEmpty()) leftover.add(remaining);
+        }
+        return leftover;
+    }
+
+    /** Simulate-mode counterpart of {@link #insertIntoOne} — no mutation, returns the leftover. */
+    private static List<ItemStack> simulateInsertIntoOne(LinkedStorage s, List<ItemStack> units) {
+        if (units.isEmpty()) return new ArrayList<>();
+        if (s.hasAdapter()) {
+            return s.adapter().canInsert(s.blockEntity(), units) ? new ArrayList<>() : new ArrayList<>(units);
+        }
+        IItemHandler handler = s.handler();
+        List<ItemStack> leftover = new ArrayList<>();
+        for (ItemStack unit : units) {
+            ItemStack remaining = unit.copy();
+            for (int i = 0; i < handler.getSlots() && !remaining.isEmpty(); i++) {
+                remaining = handler.insertItem(i, remaining, true);
+            }
+            if (!remaining.isEmpty()) leftover.add(remaining);
+        }
+        return leftover;
+    }
+
+    /** Composite capacity pre-check: can the linked storages absorb ALL stacks (with spill)? */
+    private static boolean canInsertComposite(List<LinkedStorage> storages, List<ItemStack> stacks) {
+        return CompositeStorageOps.insertAllAcross(storages, stacks,
+                PlayerShopBlockService::simulateInsertIntoOne);
+    }
+
+    /** Composite real insert with spill. @return true iff every stack was absorbed. */
+    private static boolean insertComposite(List<LinkedStorage> storages, List<ItemStack> stacks) {
+        return CompositeStorageOps.insertAllAcross(storages, stacks,
+                PlayerShopBlockService::insertIntoOne);
+    }
+
+    /**
+     * Best-effort, stack-returning extraction used by rollback paths: hands back the
+     * ACTUAL extracted stacks (tags intact) so refunds never re-mint bare items. Unlike
+     * {@link #extract}, a shortfall returns whatever was recovered rather than nothing.
+     */
+    private static List<ItemStack> extractStacks(IItemHandler handler, Item item, int amount,
+                                                 boolean nbtAware, @Nullable CompoundTag nbtTag) {
+        List<ItemStack> result = new ArrayList<>();
         int remaining = amount;
         for (int i = 0; i < handler.getSlots() && remaining > 0; i++) {
             ItemStack probe = handler.extractItem(i, remaining, true);
@@ -1304,64 +1711,116 @@ public final class PlayerShopBlockService {
                 continue;
             }
             ItemStack taken = handler.extractItem(i, remaining, false);
-            remaining -= taken.getCount();
+            if (!taken.isEmpty()) {
+                remaining -= taken.getCount();
+                result.add(taken);
+            }
         }
-        return amount - remaining;
+        return result;
     }
 
-    private static LinkedStorage resolveLinkedStorage(Level level, ShopBlockEntity shop, BlockPos shopPos) {
-        BlockPos linkedPos = shop.getLinkedStoragePos();
-        if (linkedPos == null || linkedPos.equals(shopPos) || !level.hasChunkAt(linkedPos)) {
+    /**
+     * Resolves ONE storage position into a {@link LinkedStorage}, or {@code null} when the
+     * position is invalid, unloaded, the shop itself, or exposes no item storage. Shared by
+     * the composite stock resolver and the single barter-storage resolver.
+     */
+    @Nullable
+    private static LinkedStorage resolveOneStorage(Level level, BlockPos shopPos, @Nullable BlockPos storagePos) {
+        if (storagePos == null || storagePos.equals(shopPos) || !level.hasChunkAt(storagePos)) {
             return null;
         }
-        BlockEntity linked = level.getBlockEntity(linkedPos);
+        BlockEntity linked = level.getBlockEntity(storagePos);
         if (linked == null || linked instanceof ShopBlockEntity) {
             return null;
         }
         ExternalStorageAdapter externalAdapter = ExternalStorageRegistry.findAdapter(linked);
         if (externalAdapter != null) {
-            return new LinkedStorage(linkedPos, null, externalAdapter, linked);
+            return new LinkedStorage(storagePos, null, externalAdapter, linked);
         }
         IItemHandler handler = linked.getCapability(ForgeCapabilities.ITEM_HANDLER).resolve().orElse(null);
         if (handler == null) {
             return null;
         }
-        return new LinkedStorage(linkedPos, handler, null, linked);
+        return new LinkedStorage(storagePos, handler, null, linked);
     }
 
     /**
-     * Item 31: Resolves the barter storage for payment insertion.
-     * When barterStorageSame is false and a separate barter storage pos is set, uses that;
-     * otherwise falls back to the main linked storage.
+     * Resolves the COMPOSITE of every linked stock storage, in link order, skipping any that
+     * are unloaded/invalid. May be empty when nothing resolves. This is the shop's stock:
+     * counts sum across the list, buys pull across it (all-or-nothing), sells spill across it.
+     */
+    private static List<LinkedStorage> resolveLinkedStorages(Level level, ShopBlockEntity shop, BlockPos shopPos) {
+        List<BlockPos> positions = shop.getLinkedStoragePositions();
+        if (positions.isEmpty()) {
+            return List.of();
+        }
+        List<LinkedStorage> resolved = new ArrayList<>(positions.size());
+        // Dedupe storages that ALIAS one underlying inventory. The classic case: a vanilla
+        // double chest — Forge exposes the full 54-slot combined handler from BOTH halves, so
+        // linking both positions would count/insert/extract the same slots twice (phantom stock,
+        // duplicated sells). canonicalStorageKey() collapses both halves to one key.
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        for (BlockPos p : positions) {
+            long key = canonicalStorageKey(level, p);
+            if (seen.contains(key)) {
+                continue;
+            }
+            LinkedStorage s = resolveOneStorage(level, shopPos, p);
+            if (s != null) {
+                resolved.add(s);
+                seen.add(key);
+            }
+        }
+        return resolved;
+    }
+
+    /**
+     * A stable identity for the underlying inventory a linked position resolves to, used to
+     * dedupe aliased links. For a vanilla double chest (either {@link ChestType#LEFT} or
+     * {@code RIGHT} half — trapped chests included, since {@code TrappedChestBlock extends
+     * ChestBlock}) both halves expose the same combined handler, so both must map to ONE key:
+     * the smaller {@code asLong()} of the two half positions. Every other container is its own
+     * position. Modded blocks that independently expose a shared multi-block inventory from more
+     * than one position are not collapsed here (rare; the owner links their own containers).
+     */
+    private static long canonicalStorageKey(Level level, BlockPos pos) {
+        // NEVER force-load a chunk here: this runs for every linked position on the hot stock
+        // path (shop open, every buy/sell). An unloaded storage won't resolve anyway, so its
+        // dedup key is irrelevant — return its own position without touching the world.
+        if (!level.hasChunkAt(pos)) {
+            return pos.asLong();
+        }
+        BlockState state = level.getBlockState(pos);
+        if (state.getBlock() instanceof ChestBlock && state.hasProperty(ChestBlock.TYPE)
+                && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE) {
+            BlockPos partner = pos.relative(ChestBlock.getConnectedDirection(state));
+            return Math.min(pos.asLong(), partner.asLong());
+        }
+        return pos.asLong();
+    }
+
+    /**
+     * Item 31: Resolves the barter storage for payment insertion — ALWAYS a single container.
+     * When a dedicated barter storage is configured (barterStorageSame == false) that pos is
+     * used; otherwise barter falls back to the PRIMARY (first) linked stock storage, keeping
+     * bartered goods in one chest by design even when stock spans multiple linked storages.
      */
     private static LinkedStorage resolveBarterStorage(Level level, ShopBlockEntity shop, BlockPos shopPos) {
         if (shop.isBarterStorageSame() || shop.getBarterStoragePos() == null) {
-            return resolveLinkedStorage(level, shop, shopPos);
+            return resolveOneStorage(level, shopPos, shop.getLinkedStoragePos());
         }
-        BlockPos barterPos = shop.getBarterStoragePos();
-        if (barterPos.equals(shopPos) || !level.hasChunkAt(barterPos)) {
-            return resolveLinkedStorage(level, shop, shopPos);
-        }
-        BlockEntity barterBe = level.getBlockEntity(barterPos);
-        if (barterBe == null || barterBe instanceof ShopBlockEntity) {
-            return resolveLinkedStorage(level, shop, shopPos);
-        }
-        ExternalStorageAdapter externalAdapter = ExternalStorageRegistry.findAdapter(barterBe);
-        if (externalAdapter != null) {
-            return new LinkedStorage(barterPos, null, externalAdapter, barterBe);
-        }
-        IItemHandler handler = barterBe.getCapability(ForgeCapabilities.ITEM_HANDLER).resolve().orElse(null);
-        if (handler == null) {
-            return resolveLinkedStorage(level, shop, shopPos);
-        }
-        return new LinkedStorage(barterPos, handler, null, barterBe);
+        LinkedStorage dedicated = resolveOneStorage(level, shopPos, shop.getBarterStoragePos());
+        // Fall back to the primary stock storage if the dedicated barter container is
+        // invalid/unloaded — matches the pre-multilink fallback behaviour.
+        return dedicated != null ? dedicated : resolveOneStorage(level, shopPos, shop.getLinkedStoragePos());
     }
 
     /** Result of link-target validation. OK means valid. */
     enum LinkTargetResult { OK, BAD_LINK_TARGET, RS_NOT_CONTROLLER }
 
     private static LinkTargetResult validateLinkTarget(Level level, BlockPos shopPos, BlockPos target) {
-        if (target == null || target.equals(shopPos) || target.distManhattan(shopPos) > MAX_LINK_DISTANCE) {
+        if (target == null || target.equals(shopPos)
+                || target.distManhattan(shopPos) > com.enviouse.futureshops.Config.playerShopMaxLinkDistanceBlocks) {
             return LinkTargetResult.BAD_LINK_TARGET;
         }
         if (!level.hasChunkAt(target)) {
@@ -1420,40 +1879,6 @@ public final class PlayerShopBlockService {
         return hitResult.getType() == HitResult.Type.BLOCK ? hitResult.getBlockPos() : null;
     }
 
-    private static boolean canExtract(IItemHandler handler, Item item, int count,
-                                      boolean nbtAware, @Nullable CompoundTag nbtTag) {
-        int remaining = count;
-        for (int i = 0; i < handler.getSlots(); i++) {
-            ItemStack probe = handler.extractItem(i, remaining, true);
-            if (probe.isEmpty() || !NbtMatchUtil.matches(probe, item, nbtAware, nbtTag)) {
-                continue;
-            }
-            remaining -= probe.getCount();
-            if (remaining <= 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static List<ItemStack> extract(IItemHandler handler, Item item, int count,
-                                           boolean nbtAware, @Nullable CompoundTag nbtTag) {
-        List<ItemStack> result = new ArrayList<>();
-        int remaining = count;
-        for (int i = 0; i < handler.getSlots() && remaining > 0; i++) {
-            ItemStack probe = handler.extractItem(i, remaining, true);
-            if (probe.isEmpty() || !NbtMatchUtil.matches(probe, item, nbtAware, nbtTag)) {
-                continue;
-            }
-            ItemStack real = handler.extractItem(i, remaining, false);
-            if (!real.isEmpty()) {
-                remaining -= real.getCount();
-                result.add(real);
-            }
-        }
-        return remaining <= 0 ? result : List.of();
-    }
-
     private static boolean canInsertAll(IItemHandler handler, List<ItemStack> stacks) {
         for (ItemStack stack : stacks) {
             ItemStack remaining = stack.copy();
@@ -1467,17 +1892,46 @@ public final class PlayerShopBlockService {
         return true;
     }
 
+    /**
+     * All-or-nothing insert of every stack in {@code stacks} into {@code handler}. If the whole
+     * list does not fit, everything already committed is extracted back out and {@code false} is
+     * returned — so a partial commit can NEVER happen. This matters because the barter payment
+     * path refunds the buyer the full payment on a {@code false} return; a leftover partial commit
+     * would then duplicate the committed portion into existence. Rolls back via the real handler's
+     * own {@code extractItem} (per-slot delta), so it stays correct for filtered/limited handlers
+     * where a simulated pre-check ({@link #canInsertAll}) can diverge from the real sequential insert.
+     */
     private static boolean insertAll(IItemHandler handler, List<ItemStack> stacks) {
+        int slots = handler.getSlots();
+        int[] added = new int[slots];
+        boolean allFit = true;
         for (ItemStack stack : stacks) {
             ItemStack remaining = stack.copy();
-            for (int i = 0; i < handler.getSlots() && !remaining.isEmpty(); i++) {
+            for (int i = 0; i < slots && !remaining.isEmpty(); i++) {
+                int before = remaining.getCount();
                 remaining = handler.insertItem(i, remaining, false);
+                added[i] += before - remaining.getCount();
             }
             if (!remaining.isEmpty()) {
-                return false;
+                allFit = false;
+                break;
             }
         }
-        return true;
+        if (allFit) {
+            return true;
+        }
+        // Roll back every unit committed above so the caller's full refund can't dupe.
+        for (int i = 0; i < slots; i++) {
+            int n = added[i];
+            while (n > 0) {
+                ItemStack pulled = handler.extractItem(i, n, false);
+                if (pulled.isEmpty()) {
+                    break;
+                }
+                n -= pulled.getCount();
+            }
+        }
+        return false;
     }
 
     private static List<ItemStack> splitStacks(Item item, int totalCount) {
@@ -1503,10 +1957,17 @@ public final class PlayerShopBlockService {
     }
 
     /**
-     * Item 18: Send result with an optional chat message displayed to the buyer.
+     * Item 18: Send result with a chat message displayed to the player.
+     *
+     * <p>Server → player messages must localize in each recipient's own language, so the
+     * human-readable text travels as an unresolved {@link Component} via
+     * {@link ServerPlayer#sendSystemMessage(Component)} rather than a baked English String
+     * inside the result packet. The result packet still carries the {@link ShopResultCode},
+     * which the client localizes for the on-screen status line (and confirmation modal).
      */
-    private static void sendResultWithChat(ServerPlayer player, boolean success, ShopResultCode code, String chatMessage) {
-        ShopPackets.sendToPlayer(player, new S2CPlayerShopResultPacket(success, code.wire(), chatMessage));
+    private static void sendResultWithChat(ServerPlayer player, boolean success, ShopResultCode code, Component chatMessage) {
+        sendResult(player, success, code);
+        player.sendSystemMessage(chatMessage);
     }
 
     private static boolean isOwnerOrFranchiseMember(ShopBlockEntity shop, ServerPlayer player) {
@@ -1569,8 +2030,15 @@ public final class PlayerShopBlockService {
                 sendResult(seller, false, ShopResultCode.UNCONFIGURED);
                 return;
             }
-            ShopBlockEntity.Listing listing = shop.getListing(packet.listingIndex());
+            // Single-item visitors only ever see index 0 → resolve to the showcased listing.
+            ShopBlockEntity.Listing listing = shop.getListing(
+                    resolveVisitorListingIndex(shop, seller, packet.listingIndex()));
             if (listing == null || listing.itemId().isBlank() || !listing.allowsBuy()) {
+                sendResult(seller, false, ShopResultCode.UNCONFIGURED);
+                return;
+            }
+            // Hidden/showcase listings do not transact for visitors (see buy()).
+            if ((listing.hidden() || listing.showcase()) && !isOwnerOrFranchiseMember(shop, seller)) {
                 sendResult(seller, false, ShopResultCode.UNCONFIGURED);
                 return;
             }
@@ -1591,7 +2059,7 @@ public final class PlayerShopBlockService {
             int have = ShopTransactionUtil.countItems(seller.getInventory(), saleItem, nbtAware, nbtTag);
             if (have < needItems) {
                 sendResultWithChat(seller, false, ShopResultCode.MISSING_ITEMS,
-                        "§cYou don't have enough of that item.");
+                        Component.translatable("command.futureshops.shop.missing_items"));
                 return;
             }
             long total = listing.calculateBuybackTotal(qty);
@@ -1601,7 +2069,7 @@ public final class PlayerShopBlockService {
             }
             if (listing.buybackRemaining() < qty) {
                 sendResultWithChat(seller, false, ShopResultCode.BUYBACK_CAP_REACHED,
-                        "§cThe shop has reached its buy-back cap for this item.");
+                        Component.translatable("command.futureshops.shop.buyback_cap_reached"));
                 return;
             }
 
@@ -1625,7 +2093,7 @@ public final class PlayerShopBlockService {
                         seller.getInventory(), saleItem, needItems, nbtAware, nbtTag);
                 if (taken.isEmpty()) {
                     sendResultWithChat(seller, false, ShopResultCode.MISSING_ITEMS,
-                            "§cYou don't have enough of that item.");
+                            Component.translatable("command.futureshops.shop.missing_items"));
                     return;
                 }
                 TransactionResult dep = provider.deposit(seller.getUUID(), total, "SELL_TO_SHOP");
@@ -1640,7 +2108,7 @@ public final class PlayerShopBlockService {
                 firePostSellEvent(seller, shopIdForEvent, listing.itemId(), qty, total, provider);
                 shop.setChanged();
                 openFor(seller, pos, false);
-                sendResultWithChat(seller, true, ShopResultCode.SOLD, "§a✓ Sold to shop.");
+                sendResultWithChat(seller, true, ShopResultCode.SOLD, Component.translatable("command.futureshops.shop.sold_to_shop"));
                 return;
             }
 
@@ -1648,13 +2116,13 @@ public final class PlayerShopBlockService {
             UUID ownerUuid = shop.getOwnerUuid();
             if (provider.getBalance(ownerUuid) < total) {
                 sendResultWithChat(seller, false, ShopResultCode.SHOP_OUT_OF_MONEY,
-                        "§cThe shop owner can't afford this — try again later or sell less.");
+                        Component.translatable("command.futureshops.shop.shop_out_of_money"));
                 return;
             }
-            LinkedStorage storage = resolveLinkedStorage(seller.level(), shop, pos);
-            if (storage == null) {
+            List<LinkedStorage> storages = resolveLinkedStorages(seller.level(), shop, pos);
+            if (storages.isEmpty()) {
                 sendResultWithChat(seller, false, ShopResultCode.NO_LINK,
-                        "§cThis shop has no linked storage.");
+                        Component.translatable("command.futureshops.shop.no_linked_storage"));
                 return;
             }
 
@@ -1663,36 +2131,30 @@ public final class PlayerShopBlockService {
                     seller.getInventory(), saleItem, needItems, nbtAware, nbtTag);
             if (paymentStacks.isEmpty()) {
                 sendResultWithChat(seller, false, ShopResultCode.MISSING_ITEMS,
-                        "§cYou don't have enough of that item.");
+                        Component.translatable("command.futureshops.shop.missing_items"));
                 return;
             }
-            // Capacity check, then atomic insert.
-            boolean canInsert = storage.hasAdapter()
-                    ? storage.adapter().canInsert(storage.blockEntity(), paymentStacks)
-                    : canInsertAll(storage.handler(), paymentStacks);
-            if (!canInsert) {
+            // Composite capacity check (spill across links), then insert.
+            if (!canInsertComposite(storages, paymentStacks)) {
                 ShopTransactionUtil.insertIntoInventory(seller.getInventory(), paymentStacks);
                 sendResultWithChat(seller, false, ShopResultCode.STORAGE_FULL,
-                        "§cThe shop's storage is full and can't accept those items.");
+                        Component.translatable("command.futureshops.shop.storage_full_sell"));
                 return;
             }
-            boolean inserted = storage.hasAdapter()
-                    ? storage.adapter().insert(storage.blockEntity(), paymentStacks)
-                    : insertAll(storage.handler(), paymentStacks);
-            if (!inserted) {
+            if (!insertComposite(storages, paymentStacks)) {
                 ShopTransactionUtil.insertIntoInventory(seller.getInventory(), paymentStacks);
                 sendResultWithChat(seller, false, ShopResultCode.STORAGE_FULL,
-                        "§cThe shop's storage is full and can't accept those items.");
+                        Component.translatable("command.futureshops.shop.storage_full_sell"));
                 return;
             }
 
             // Withdraw from owner.
             TransactionResult ownerWd = provider.withdraw(ownerUuid, total, "BUYBACK");
             if (!ownerWd.success()) {
-                // Roll back the inserted items.
-                rollbackInsertedItems(storage, seller, saleItem, needItems, nbtAware, nbtTag);
+                // Roll back the inserted items across the composite.
+                rollbackInsertedItems(storages, seller, saleItem, needItems, nbtAware, nbtTag);
                 sendResultWithChat(seller, false, ShopResultCode.SHOP_OUT_OF_MONEY,
-                        "§cThe shop owner can't afford this — try again later or sell less.");
+                        Component.translatable("command.futureshops.shop.shop_out_of_money"));
                 return;
             }
 
@@ -1701,7 +2163,7 @@ public final class PlayerShopBlockService {
             if (!sellerDep.success()) {
                 // Refund owner, undo storage.
                 provider.deposit(ownerUuid, total, "BUYBACK_REFUND");
-                rollbackInsertedItems(storage, seller, saleItem, needItems, nbtAware, nbtTag);
+                rollbackInsertedItems(storages, seller, saleItem, needItems, nbtAware, nbtTag);
                 sendResult(seller, false, ShopResultCode.MAX_BALANCE_EXCEEDED);
                 return;
             }
@@ -1711,7 +2173,7 @@ public final class PlayerShopBlockService {
             firePostSellEvent(seller, shopIdForEvent, listing.itemId(), qty, total, provider);
             shop.setChanged();
             openFor(seller, pos, false);
-            sendResultWithChat(seller, true, ShopResultCode.SOLD, "§a✓ Sold to shop.");
+            sendResultWithChat(seller, true, ShopResultCode.SOLD, Component.translatable("command.futureshops.shop.sold_to_shop"));
         } finally {
             lock.unlock();
         }
@@ -1725,19 +2187,30 @@ public final class PlayerShopBlockService {
         listing.setBuybackBought(newCount);
     }
 
-    private static void rollbackInsertedItems(LinkedStorage storage, ServerPlayer seller, Item item, int amount,
+    /**
+     * Rolls a just-inserted sell payment back out of the composite and into the seller.
+     * Best-effort across every link in order: pulls the ACTUAL stacks (tags intact) so refunds
+     * never re-mint bare items. Because the payment was just inserted, the composite is
+     * guaranteed to hold at least {@code amount} matching units, and the item is fungible /
+     * tag-matched, so recovering {@code amount} of it makes the seller whole without touching
+     * the owner's pre-existing stock economically.
+     */
+    private static void rollbackInsertedItems(List<LinkedStorage> storages, ServerPlayer seller, Item item, int amount,
                                               boolean nbtAware, @Nullable CompoundTag nbtTag) {
-        if (storage.hasAdapter()) {
-            List<ItemStack> recovered = storage.adapter().extract(storage.blockEntity(), item, amount, nbtAware, nbtTag);
-            if (!recovered.isEmpty()) {
-                ShopTransactionUtil.insertIntoInventory(seller.getInventory(), recovered);
+        List<ItemStack> recovered = new ArrayList<>();
+        int remaining = amount;
+        for (LinkedStorage storage : storages) {
+            if (remaining <= 0) break;
+            List<ItemStack> got = takeBestEffort(storage, item, remaining, nbtAware, nbtTag);
+            for (ItemStack g : got) {
+                if (!g.isEmpty()) {
+                    remaining -= g.getCount();
+                    recovered.add(g);
+                }
             }
-        } else if (storage.handler() != null) {
-            int got = extractAmount(storage.handler(), item, amount, nbtAware, nbtTag);
-            if (got > 0) {
-                ShopTransactionUtil.insertIntoInventory(seller.getInventory(),
-                        splitStacks(item, got, nbtTag));
-            }
+        }
+        if (!recovered.isEmpty()) {
+            ShopTransactionUtil.insertIntoInventory(seller.getInventory(), recovered);
         }
     }
 
@@ -1751,7 +2224,8 @@ public final class PlayerShopBlockService {
                 listing.itemId(),
                 qty,
                 total,
-                note);
+                note,
+                listingNbtJson(listing));
     }
 
     private static void firePostSellEvent(ServerPlayer seller, String shopIdForEvent, String itemId,

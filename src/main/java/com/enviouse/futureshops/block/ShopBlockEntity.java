@@ -33,6 +33,12 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     /** Default listing cap when maxListings is not overridden (-1 = unlimited). */
     public static final int DEFAULT_MAX_LISTINGS = -1;
     public static final int MAX_BUNDLE_OUTPUTS = 36;
+    /**
+     * Hard cap on the number of storage containers a single shop may link for its
+     * sale-item stock. Stock is summed across all links and a buy pulls across them
+     * (all-or-nothing). Barter storage is separate and always single.
+     */
+    public static final int MAX_LINKED_STORAGES = 6;
 
     public enum TradeMode {
         MONEY,
@@ -79,7 +85,14 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     private boolean barterStorageSame = true;
     private int maxListings = DEFAULT_MAX_LISTINGS; // -1 = unlimited
     private final List<Listing> listings = new ArrayList<>();
-    private BlockPos linkedStoragePos;
+    /**
+     * Ordered, deduped list of linked stock-storage positions (cap
+     * {@link #MAX_LINKED_STORAGES}). The composite of these is the shop's stock: counts
+     * sum across all, buys pull across all (all-or-nothing), sells spill across in order.
+     * Persisted as a long[] under NBT key {@code "LinkedStorages"}; an old single-link
+     * {@code "LinkedStoragePos"} is migrated into a 1-element list on load.
+     */
+    private final List<BlockPos> linkedStoragePositions = new ArrayList<>();
     private BlockPos barterStoragePos;
 
     // Owner-tunable visuals for the spinning listing item on top of the block.
@@ -107,6 +120,30 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
      * {@link #placedByCreative} is true.
      */
     private boolean adminShopMode = false;
+
+    /**
+     * How the floating icon on top of the block is chosen (community request / redesign
+     * "Floating shop icon modes"). CYCLE keeps the legacy behaviour (rotate through the
+     * listing items); OWNER_HEAD shows the owner's player head; CUSTOM_ITEM shows one
+     * fixed item ({@link #floatingIconItem}). The mode is resolved into concrete display
+     * stacks client-side in {@link #handleUpdateTag}, so the renderer stays mode-agnostic.
+     */
+    public enum FloatingIconMode {
+        CYCLE, OWNER_HEAD, CUSTOM_ITEM;
+
+        public static FloatingIconMode byName(String name) {
+            if (name != null) {
+                for (FloatingIconMode m : values()) {
+                    if (m.name().equals(name)) return m;
+                }
+            }
+            return CYCLE;
+        }
+    }
+
+    private FloatingIconMode floatingIconMode = FloatingIconMode.CYCLE;
+    /** Item id shown when {@link #floatingIconMode} is CUSTOM_ITEM (blank falls back to CYCLE). */
+    private String floatingIconItem = "";
 
     public ShopBlockEntity(BlockPos pos, BlockState blockState) {
         super(ModBlockEntities.SHOP_BLOCK_ENTITY.get(), pos, blockState);
@@ -230,6 +267,24 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
 
     public void setSingleItemMode(boolean singleItemMode) {
         this.singleItemMode = singleItemMode;
+        setChanged();
+    }
+
+    public FloatingIconMode getFloatingIconMode() {
+        return floatingIconMode;
+    }
+
+    public void setFloatingIconMode(FloatingIconMode mode) {
+        this.floatingIconMode = mode == null ? FloatingIconMode.CYCLE : mode;
+        setChanged();
+    }
+
+    public String getFloatingIconItem() {
+        return floatingIconItem;
+    }
+
+    public void setFloatingIconItem(String itemId) {
+        this.floatingIconItem = itemId == null ? "" : itemId.trim();
         setChanged();
     }
 
@@ -412,13 +467,58 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         }
     }
 
-    public BlockPos getLinkedStoragePos() {
-        return linkedStoragePos;
+    /** Unmodifiable, ordered view of every linked stock-storage position. */
+    public List<BlockPos> getLinkedStoragePositions() {
+        return Collections.unmodifiableList(linkedStoragePositions);
     }
 
-    public void setLinkedStoragePos(BlockPos linkedStoragePos) {
-        this.linkedStoragePos = linkedStoragePos;
+    /**
+     * Back-compat accessor: the FIRST (primary) linked storage, or {@code null} when
+     * none are linked. Kept so callers that only need "is anything linked" or the
+     * primary container still compile — prefer {@link #hasLinkedStorage()} for the
+     * former and {@link #getLinkedStoragePositions()} for the full set.
+     */
+    @Nullable
+    public BlockPos getLinkedStoragePos() {
+        return linkedStoragePositions.isEmpty() ? null : linkedStoragePositions.get(0);
+    }
+
+    /** True when the shop has at least one linked stock storage. */
+    public boolean hasLinkedStorage() {
+        return !linkedStoragePositions.isEmpty();
+    }
+
+    /**
+     * Adds a stock-storage link. Dedupes (no-op if already linked) and respects the
+     * {@link #MAX_LINKED_STORAGES} cap.
+     *
+     * @return {@code true} if the position was appended, {@code false} if it was null,
+     *         already linked, or the cap was reached.
+     */
+    public boolean addLinkedStorage(BlockPos pos) {
+        if (pos == null) return false;
+        BlockPos immutable = pos.immutable();
+        if (linkedStoragePositions.contains(immutable)) return false;
+        if (linkedStoragePositions.size() >= MAX_LINKED_STORAGES) return false;
+        linkedStoragePositions.add(immutable);
         setChanged();
+        return true;
+    }
+
+    /** Removes a single linked storage. @return true if it was present and removed. */
+    public boolean removeLinkedStorage(BlockPos pos) {
+        if (pos == null) return false;
+        boolean removed = linkedStoragePositions.remove(pos.immutable());
+        if (removed) setChanged();
+        return removed;
+    }
+
+    /** Clears every linked stock storage. */
+    public void clearLinkedStorages() {
+        if (!linkedStoragePositions.isEmpty()) {
+            linkedStoragePositions.clear();
+            setChanged();
+        }
     }
 
     public void clearListing() {
@@ -443,6 +543,8 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         tag.putBoolean("BarterStorageSame", barterStorageSame);
         tag.putInt("MaxListings", maxListings);
         tag.putBoolean("AdminShopMode", adminShopMode);
+        tag.putString("FloatingIconMode", floatingIconMode.name());
+        tag.putString("FloatingIconItem", floatingIconItem);
         ListTag listingTags = new ListTag();
         for (Listing listing : listings) {
             listingTags.add(listing.save());
@@ -468,6 +570,8 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
             // Pasting onto a non-creative-eligible shop forces admin mode off.
             adminShopMode = placedByCreative && tag.getBoolean("AdminShopMode");
         }
+        if (tag.contains("FloatingIconMode")) floatingIconMode = FloatingIconMode.byName(tag.getString("FloatingIconMode"));
+        if (tag.contains("FloatingIconItem")) floatingIconItem = tag.getString("FloatingIconItem");
         if (tag.contains("Listings", Tag.TAG_LIST)) {
             listings.clear();
             ListTag listingTags = tag.getList("Listings", Tag.TAG_COMPOUND);
@@ -503,13 +607,19 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         tag.putBoolean("NameplateHidden", nameplateHidden);
         tag.putBoolean("PlacedByCreative", placedByCreative);
         tag.putBoolean("AdminShopMode", adminShopMode);
+        tag.putString("FloatingIconMode", floatingIconMode.name());
+        tag.putString("FloatingIconItem", floatingIconItem);
         ListTag listingTags = new ListTag();
         for (Listing listing : listings) {
             listingTags.add(listing.save());
         }
         tag.put("Listings", listingTags);
-        if (linkedStoragePos != null) {
-            tag.putLong("LinkedStoragePos", linkedStoragePos.asLong());
+        if (!linkedStoragePositions.isEmpty()) {
+            long[] packed = new long[linkedStoragePositions.size()];
+            for (int i = 0; i < packed.length; i++) {
+                packed[i] = linkedStoragePositions.get(i).asLong();
+            }
+            tag.putLongArray("LinkedStorages", packed);
         }
         if (barterStoragePos != null) {
             tag.putLong("BarterStoragePos", barterStoragePos.asLong());
@@ -538,6 +648,8 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         nameplateHidden = tag.getBoolean("NameplateHidden");
         placedByCreative = tag.getBoolean("PlacedByCreative");
         adminShopMode = placedByCreative && tag.getBoolean("AdminShopMode");
+        floatingIconMode = FloatingIconMode.byName(tag.getString("FloatingIconMode"));
+        floatingIconItem = tag.getString("FloatingIconItem");
         listings.clear();
         if (tag.contains("Listings", Tag.TAG_LIST)) {
             ListTag listingTags = tag.getList("Listings", Tag.TAG_COMPOUND);
@@ -560,7 +672,19 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
                 listings.add(listing);
             }
         }
-        linkedStoragePos = tag.contains("LinkedStoragePos") ? BlockPos.of(tag.getLong("LinkedStoragePos")) : null;
+        linkedStoragePositions.clear();
+        if (tag.contains("LinkedStorages", Tag.TAG_LONG_ARRAY)) {
+            for (long packed : tag.getLongArray("LinkedStorages")) {
+                BlockPos p = BlockPos.of(packed);
+                // Defensive dedupe + cap on load in case the saved data was tampered with.
+                if (!linkedStoragePositions.contains(p) && linkedStoragePositions.size() < MAX_LINKED_STORAGES) {
+                    linkedStoragePositions.add(p);
+                }
+            }
+        } else if (tag.contains("LinkedStoragePos")) {
+            // Legacy single-link migration: existing saved shops keep their one link.
+            linkedStoragePositions.add(BlockPos.of(tag.getLong("LinkedStoragePos")));
+        }
         barterStoragePos = tag.contains("BarterStoragePos") ? BlockPos.of(tag.getLong("BarterStoragePos")) : null;
     }
 
@@ -590,6 +714,11 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         // enchanted chestplate and the server would accept it as if it were the plain variant.
         private boolean barterNbtAware = false;
         private CompoundTag barterNbtTag = null;
+        // Redesign "Listings inspector" visibility flags. hidden = not shown to visitors and
+        // not purchasable by them (owner still sees/manages it). showcase = shown to visitors
+        // as a display-only "visit in person" item that the storefront will not auto-sell.
+        private boolean hidden = false;
+        private boolean showcase = false;
         private final Promo promo = new Promo();
         private final List<BundleEntry> bundleOutputs = new ArrayList<>(); // Item 11
 
@@ -651,6 +780,10 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         public Promo promo() { return promo; }
         public boolean nbtAware() { return nbtAware; }
         public void setNbtAware(boolean nbtAware) { this.nbtAware = nbtAware; }
+        public boolean hidden() { return hidden; }
+        public void setHidden(boolean hidden) { this.hidden = hidden; }
+        public boolean showcase() { return showcase; }
+        public void setShowcase(boolean showcase) { this.showcase = showcase; }
         public CompoundTag nbtTag() { return nbtTag; }
         public void setNbtTag(CompoundTag nbtTag) { this.nbtTag = nbtTag; }
 
@@ -714,6 +847,8 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
             if (barterNbtTag != null) {
                 tag.put("BarterNbtTag", barterNbtTag.copy());
             }
+            tag.putBoolean("Hidden", hidden);
+            tag.putBoolean("Showcase", showcase);
             tag.put("Promo", promo.save());
             // Buyback / direction
             tag.putString("Direction", direction().name());
@@ -752,6 +887,8 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
             if (tag.contains("BarterNbtTag", Tag.TAG_COMPOUND)) {
                 listing.setBarterNbtTag(tag.getCompound("BarterNbtTag"));
             }
+            listing.setHidden(tag.getBoolean("Hidden"));
+            listing.setShowcase(tag.getBoolean("Showcase"));
             if (tag.contains("Promo", Tag.TAG_COMPOUND)) {
                 listing.promo.load(tag.getCompound("Promo"));
             }
@@ -867,18 +1004,44 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     }
 
     // ---- Client sync for the top-of-block spinning listing preview ---------
-    // The renderer only needs the ordered list of listing item ids, not the
-    // rest of the shop state; we ship a compact tag (just "TopItems": [ids])
+    // The renderer only needs the ordered listing item ids + display tags, not
+    // the rest of the shop state; we ship a compact tag (just "TopItems")
     // instead of the full saveAdditional payload which would needlessly
     // expose prices/barter/promos on the network every chunk load.
+
+    /**
+     * Budgets for syncing listing tags to the block-top display, measured with
+     * Tag#sizeInBytes() — an in-memory footprint ESTIMATE that runs roughly 6x
+     * the on-wire NBT size. Per-listing 24576 ≈ 4KB wire (a fully-kitted TacZ
+     * gun with 6 attachments estimates ~4.4KB; shulker contents blow past it).
+     * The AGGREGATE budget keeps a listing-spammed shop from pushing the BE
+     * update / chunk packet toward the 2MB client NBT quota — without it, a
+     * few hundred near-cap listings could disconnect every tracking client.
+     * Over-budget listings still ship their Id and render as a plain icon.
+     */
+    private static final long MAX_SYNCED_DISPLAY_TAG_SIZE_ESTIMATE = 24_576L;
+    private static final long MAX_SYNCED_DISPLAY_TOTAL_SIZE_ESTIMATE = 393_216L;
+
     @Override
     public CompoundTag getUpdateTag() {
         CompoundTag tag = new CompoundTag();
         ListTag items = new ListTag();
+        long totalTagSizeEstimate = 0L;
         for (Listing l : listings) {
             if (l != null && l.itemId() != null && !l.itemId().isBlank()) {
                 CompoundTag e = new CompoundTag();
                 e.putString("Id", l.itemId());
+                // Ship the listing tag so tag-dependent models (TacZ guns read
+                // GunId off the stack) render correctly on the block top.
+                CompoundTag listingNbt = l.nbtTag();
+                if (listingNbt != null) {
+                    long size = listingNbt.sizeInBytes();
+                    if (size <= MAX_SYNCED_DISPLAY_TAG_SIZE_ESTIMATE
+                            && totalTagSizeEstimate + size <= MAX_SYNCED_DISPLAY_TOTAL_SIZE_ESTIMATE) {
+                        e.put("Tag", listingNbt.copy());
+                        totalTagSizeEstimate += size;
+                    }
+                }
                 items.add(e);
             }
         }
@@ -891,18 +1054,32 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         tag.putFloat("DisplayYOffset", displayYOffset);
         tag.putFloat("DisplayScale", displayScale);
         tag.putBoolean("NameplateHidden", nameplateHidden);
+        tag.putString("FloatingIconMode", floatingIconMode.name());
+        tag.putString("FloatingIconItem", floatingIconItem);
         return tag;
     }
 
     @Override
     public void handleUpdateTag(CompoundTag tag) {
-        clientTopItemIds.clear();
+        clientTopStacks.clear();
         if (tag.contains("TopItems", Tag.TAG_LIST)) {
             ListTag items = tag.getList("TopItems", Tag.TAG_COMPOUND);
             for (Tag t : items) {
                 if (t instanceof CompoundTag ct) {
                     String id = ct.getString("Id");
-                    if (!id.isBlank()) clientTopItemIds.add(id);
+                    if (id.isBlank()) continue;
+                    net.minecraft.resources.ResourceLocation rl = net.minecraft.resources.ResourceLocation.tryParse(id);
+                    net.minecraft.world.item.Item item = rl == null
+                            ? null
+                            : net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(rl);
+                    if (item == null || item == net.minecraft.world.item.Items.AIR) continue;
+                    // Build the display stack once per packet (not per frame) so
+                    // the renderer never does registry lookups or tag copies.
+                    net.minecraft.world.item.ItemStack stack = new net.minecraft.world.item.ItemStack(item);
+                    if (ct.contains("Tag", Tag.TAG_COMPOUND)) {
+                        stack.setTag(ct.getCompound("Tag").copy());
+                    }
+                    clientTopStacks.add(stack);
                 }
             }
         }
@@ -926,6 +1103,46 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         if (tag.contains("NameplateHidden")) {
             this.nameplateHidden = tag.getBoolean("NameplateHidden");
         }
+        // Floating icon mode: CYCLE keeps the TopItems stacks built above; OWNER_HEAD and
+        // CUSTOM_ITEM replace them with a single fixed display stack. Owner UUID/name were
+        // already read above, so the head stack can be built here.
+        this.floatingIconMode = FloatingIconMode.byName(tag.getString("FloatingIconMode"));
+        this.floatingIconItem = tag.getString("FloatingIconItem");
+        if (floatingIconMode == FloatingIconMode.CUSTOM_ITEM && !floatingIconItem.isBlank()) {
+            net.minecraft.world.item.ItemStack custom = resolveDisplayStack(floatingIconItem);
+            if (!custom.isEmpty()) {
+                clientTopStacks.clear();
+                clientTopStacks.add(custom);
+            }
+        } else if (floatingIconMode == FloatingIconMode.OWNER_HEAD && ownerUuid != null) {
+            clientTopStacks.clear();
+            clientTopStacks.add(buildOwnerHeadStack(ownerUuid, ownerName));
+        }
+    }
+
+    /** Resolves an item id to a bare display stack, or EMPTY when the id is invalid. */
+    private static net.minecraft.world.item.ItemStack resolveDisplayStack(String id) {
+        net.minecraft.resources.ResourceLocation rl = net.minecraft.resources.ResourceLocation.tryParse(id);
+        net.minecraft.world.item.Item item = rl == null
+                ? null
+                : net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(rl);
+        if (item == null || item == net.minecraft.world.item.Items.AIR) {
+            return net.minecraft.world.item.ItemStack.EMPTY;
+        }
+        return new net.minecraft.world.item.ItemStack(item);
+    }
+
+    /** Builds a player-head display stack for the owner (profile resolves client-side). */
+    private static net.minecraft.world.item.ItemStack buildOwnerHeadStack(UUID uuid, String name) {
+        net.minecraft.world.item.ItemStack head =
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.PLAYER_HEAD);
+        CompoundTag owner = new CompoundTag();
+        owner.putUUID("Id", uuid);
+        if (name != null && !name.isBlank()) {
+            owner.putString("Name", name);
+        }
+        head.getOrCreateTag().put("SkullOwner", owner);
+        return head;
     }
 
     /**
@@ -953,9 +1170,13 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         if (pkt.getTag() != null) handleUpdateTag(pkt.getTag());
     }
 
-    /** Client-visible list of listing item ids, in order. Empty on servers. */
-    public List<String> getClientTopItemIds() {
-        return Collections.unmodifiableList(clientTopItemIds);
+    /**
+     * Client-visible display stacks for the block-top preview (item + listing
+     * tag when synced), in listing order. Empty on servers. Shared display-only
+     * instances — callers must not mutate them.
+     */
+    public List<net.minecraft.world.item.ItemStack> getClientTopStacks() {
+        return Collections.unmodifiableList(clientTopStacks);
     }
 
     /** Call on the server whenever listings change to push a fresh update packet to nearby clients. */
@@ -965,6 +1186,6 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         }
     }
 
-    private final List<String> clientTopItemIds = new ArrayList<>();
+    private final List<net.minecraft.world.item.ItemStack> clientTopStacks = new ArrayList<>();
 }
 

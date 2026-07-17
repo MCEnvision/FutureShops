@@ -1,6 +1,5 @@
 package com.enviouse.futureshops.catalog;
 
-import com.enviouse.futureshops.data.CatalogBarterRecipe;
 import com.enviouse.futureshops.data.CatalogCategory;
 import com.enviouse.futureshops.data.CatalogItem;
 import com.enviouse.futureshops.data.CatalogPromo;
@@ -49,7 +48,13 @@ public record ShopDefinition(
                     PromoDef promo = promoByItem.get(item.itemId());
                     boolean hasPromo = promo != null;
                     long promoPrice = hasPromo ? applyPromo(item.buyPriceMinorUnits(), promo) : 0L;
-                    boolean hasBarterRecipes = barterRecipes.stream().anyMatch(recipe -> recipe.targetItemId().equals(item.itemId()));
+                    // Match the listing's resolutionKey (id when present, else itemId) — a recipe
+                    // targeting a generated listing id ("diamond_1") would never equal the bare
+                    // itemId. Kept consistent with the LIVE path (ShopCatalog.buildItems) so this
+                    // helper can't silently mis-flag barter if ever wired into the send path.
+                    boolean hasBarterRecipes = barterRecipes.stream()
+                            .anyMatch(recipe -> recipe.targetItemId().equals(item.resolutionKey())
+                                    || recipe.targetItemId().equals(item.itemId()));
                     return item.toCatalogItem(item.stock(), hasPromo, promoPrice, hasBarterRecipes);
                 })
                 .collect(Collectors.toList());
@@ -60,10 +65,6 @@ public record ShopDefinition(
                 .filter(p -> !p.isExpired())
                 .map(PromoDef::toCatalogPromo)
                 .collect(Collectors.toList());
-    }
-
-    public List<CatalogBarterRecipe> toCatalogBarterRecipes() {
-        return barterRecipes.stream().map(BarterRecipeDef::toCatalogRecipe).toList();
     }
 
     // -------------------------------------------------------------------------

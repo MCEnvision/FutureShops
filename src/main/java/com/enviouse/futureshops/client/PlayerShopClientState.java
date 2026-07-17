@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.client;
 
 import com.enviouse.futureshops.data.PlayerShopListingData;
+import com.enviouse.futureshops.data.PlayerShopStorageEntry;
 import com.enviouse.futureshops.data.SettlementHistoryRow;
 import net.minecraft.core.BlockPos;
 
@@ -25,6 +26,10 @@ public final class PlayerShopClientState {
     private static long pendingSettlementMinor = 0L;
     private static long lifetimeRevenueMinor = 0L;
     private static List<String> recentRevenueRows = List.of();
+    private static String floatingIconMode = "CYCLE";
+    private static String floatingIconItem = "";
+    private static List<PlayerShopStorageEntry> linkedStorages = List.of();
+    private static List<String> savedConfigNames = List.of();
     private static List<SettlementHistoryRow> settlementHistoryRows = List.of();
     private static int settlementHistoryPage = 1;
     private static int settlementHistoryTotalPages = 1;
@@ -46,7 +51,10 @@ public final class PlayerShopClientState {
                              List<String> recentRevenueRowsValue,
                              String shopNameValue, boolean singleItemModeValue, boolean barterStorageSameValue,
                              String descriptionValue, String franchiseNameValue,
-                             boolean placedByCreativeValue, boolean adminShopModeValue) {
+                             boolean placedByCreativeValue, boolean adminShopModeValue,
+                             String floatingIconModeValue, String floatingIconItemValue,
+                             List<PlayerShopStorageEntry> linkedStoragesValue,
+                             List<String> savedConfigNamesValue) {
         shopPos = pos;
         owner = ownerFlag;
         ownerUuid = ownerUuidValue;
@@ -73,6 +81,10 @@ public final class PlayerShopClientState {
         pendingSettlementMinor = pendingSettlementMinorValue;
         lifetimeRevenueMinor = lifetimeRevenueMinorValue;
         recentRevenueRows = List.copyOf(recentRevenueRowsValue);
+        floatingIconMode = floatingIconModeValue == null ? "CYCLE" : floatingIconModeValue;
+        floatingIconItem = floatingIconItemValue == null ? "" : floatingIconItemValue;
+        linkedStorages = List.copyOf(linkedStoragesValue);
+        savedConfigNames = List.copyOf(savedConfigNamesValue);
     }
 
     public static BlockPos shopPos() { return shopPos; }
@@ -91,6 +103,10 @@ public final class PlayerShopClientState {
     public static long pendingSettlementMinor() { return pendingSettlementMinor; }
     public static long lifetimeRevenueMinor() { return lifetimeRevenueMinor; }
     public static List<String> recentRevenueRows() { return recentRevenueRows; }
+    public static String floatingIconMode() { return floatingIconMode; }
+    public static String floatingIconItem() { return floatingIconItem; }
+    public static List<PlayerShopStorageEntry> linkedStorages() { return linkedStorages; }
+    public static List<String> savedConfigNames() { return savedConfigNames; }
     public static List<SettlementHistoryRow> settlementHistoryRows() { return settlementHistoryRows; }
     public static int settlementHistoryPage() { return settlementHistoryPage; }
     public static int settlementHistoryTotalPages() { return settlementHistoryTotalPages; }

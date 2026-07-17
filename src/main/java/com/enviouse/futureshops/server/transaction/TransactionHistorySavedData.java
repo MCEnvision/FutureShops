@@ -18,7 +18,7 @@ import java.util.UUID;
 /** Persistent per-player transaction history scaffold. */
 public final class TransactionHistorySavedData extends SavedData {
     public static final String DATA_NAME = "futureshops_tx_history";
-    private static final int CURRENT_VERSION = 1;
+    private static final int CURRENT_VERSION = 2; // v2: added per-entry "nbt" key (SNBT string, "" = none)
     private static final int MAX_ENTRIES_PER_PLAYER = 200;
 
     private final Map<UUID, List<TransactionHistoryEntry>> entriesByPlayer = new HashMap<>();
@@ -44,7 +44,8 @@ public final class TransactionHistorySavedData extends SavedData {
                         tx.getString("item"),
                         tx.getInt("qty"),
                         tx.getLong("total"),
-                        tx.getString("note")));
+                        tx.getString("note"),
+                        tx.getString("nbt"))); // optional; "" when absent (pre-nbt entries)
             }
             data.entriesByPlayer.put(uuid, entries);
         }
@@ -67,6 +68,7 @@ public final class TransactionHistorySavedData extends SavedData {
                 txTag.putInt("qty", tx.quantity());
                 txTag.putLong("total", tx.totalMinorUnits());
                 txTag.putString("note", tx.note());
+                txTag.putString("nbt", tx.nbtJson() == null ? "" : tx.nbtJson());
                 entries.add(txTag);
             }
             playerTag.put("entries", entries);

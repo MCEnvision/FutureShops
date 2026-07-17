@@ -50,14 +50,23 @@ public class MoneyItem extends Item {
             return InteractionResultHolder.pass(stack);
         }
 
-        int requested = stack.getCount();
+        // When a foreign currency provider is active (currency.provider config),
+        // FutureShops bills are no longer legal tender — refuse WITHOUT
+        // destroying the stack so nothing is lost if the config is switched back.
+        if (!CurrencyManager.isInternal()) {
+            serverPlayer.sendSystemMessage(EconomyCommandUtil.warning(
+                    Component.translatable("command.futureshops.deposit.wrong_currency",
+                            CurrencyManager.get().id())));
+            return InteractionResultHolder.fail(stack);
+        }
+
         MoneyValidationService.ConsumeOutcome outcome =
                 MoneyValidationService.validateAndConsume(serverPlayer.getServer(), stack);
 
         if (!outcome.success()) {
             // Full rejection: invalid checksum / unknown mint / already consumed.
             serverPlayer.sendSystemMessage(
-                    EconomyCommandUtil.error(Component.translatable("command.futureshops.deposit.coin_invalid")));
+                    EconomyCommandUtil.error(Component.translatable("command.futureshops.deposit.money_invalid")));
             stack.setCount(0);
             return InteractionResultHolder.fail(stack);
         }

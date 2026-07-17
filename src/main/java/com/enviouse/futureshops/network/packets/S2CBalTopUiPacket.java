@@ -27,7 +27,8 @@ public record S2CBalTopUiPacket(
         String popularItemId,
         int popularItemTrades,
         long popularItemQuantity,
-        List<FranchiseLeaderboardEntry> franchises) {
+        List<FranchiseLeaderboardEntry> franchises,
+        String popularItemNbtJson) {
     public static void encode(S2CBalTopUiPacket packet, FriendlyByteBuf buffer) {
         buffer.writeVarInt(packet.page());
         buffer.writeVarInt(packet.totalPages());
@@ -44,6 +45,7 @@ public record S2CBalTopUiPacket(
         buffer.writeVarInt(packet.popularItemTrades());
         buffer.writeLong(packet.popularItemQuantity());
         buffer.writeCollection(packet.franchises(), FranchiseLeaderboardEntry::encode);
+        buffer.writeUtf(packet.popularItemNbtJson() == null ? "" : packet.popularItemNbtJson());
     }
 
     public static S2CBalTopUiPacket decode(FriendlyByteBuf buffer) {
@@ -62,7 +64,8 @@ public record S2CBalTopUiPacket(
                 buffer.readUtf(),
                 buffer.readVarInt(),
                 buffer.readLong(),
-                buffer.readList(FranchiseLeaderboardEntry::decode));
+                buffer.readList(FranchiseLeaderboardEntry::decode),
+                buffer.readUtf());
     }
 
     public static void handle(S2CBalTopUiPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

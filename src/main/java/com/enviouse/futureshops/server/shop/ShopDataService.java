@@ -87,10 +87,21 @@ public final class ShopDataService {
                 adminEnabled ? ShopCatalog.buildBarterRecipes(shopId) : List.of(),
                 adminEnabled,
                 nearbyShops,
-                forceOpen));
+                forceOpen,
+                // In-GUI admin editor gate flag — display only; AdminShopEditService re-checks.
+                player.hasPermissions(2)));
     }
 
     public static void resendActiveSessions(MinecraftServer server) {
+        resendActiveSessions(server, true);
+    }
+
+    /**
+     * Refreshes every live shop session. When {@code includeNearbyShops} is false the expensive
+     * nearby-shop scan is skipped for each player — the in-GUI edit service uses this, since a
+     * catalog edit can't change nearby player shops.
+     */
+    public static void resendActiveSessions(MinecraftServer server, boolean includeNearbyShops) {
         for (Map.Entry<UUID, ShopSession> entry : ShopSessionManager.snapshotSessions().entrySet()) {
             ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
             if (player == null) {
@@ -100,7 +111,7 @@ public final class ShopDataService {
             ShopSession session = entry.getValue();
             if (ShopCatalog.get(session.shopId()).isPresent()) {
                 // forceOpen=false: admin reload should refresh open UIs, not pop them open
-                sendShopData(player, session.shopId(), true, false);
+                sendShopData(player, session.shopId(), includeNearbyShops, false);
             } else {
                 ShopSessionManager.closeAndForceClose(player, "SHOP_REMOVED");
             }

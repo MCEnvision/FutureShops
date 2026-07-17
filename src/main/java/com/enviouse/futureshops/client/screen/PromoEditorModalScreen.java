@@ -5,7 +5,6 @@ import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopPromoPacket;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.resources.language.I18n;
@@ -23,15 +22,17 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
     // Item 36: Promo type is a cycling button, not a text field
     private static final String[] PROMO_TYPES = {"PERCENTAGE", "FLAT", "BUY_X_GET_Y", "FLASH"};
     private int selectedTypeIndex = 0;
-    private Button typeButton;
     private EditBox valueBox;
     private EditBox buyXBox;
     private EditBox buyYBox;
     private EditBox startBox;
     private EditBox durationBox;
     private boolean flash;
-    private Button flashButton;
     private ConfirmationModal clearConfirm;
+
+    // Flat Nocturne buttons: draw + hit-region come from the same ShopUiUtil.button calls,
+    // registered here each render and consulted in mouseClicked via dispatchClicks.
+    private final java.util.List<ShopUiUtil.ClickZone> clickZones = new java.util.ArrayList<>();
 
     public PromoEditorModalScreen(Screen parent) {
         super(Component.translatable("gui.futureshops.promo_editor.title"));
@@ -52,21 +53,7 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
         int fieldX = guiLeft + Math.min(98, modalW / 3);
         int fieldW = Math.max(80, modalW - fieldX + guiLeft - 10);
 
-        // Item 36: Type is a button that cycles through options
-        typeButton = addRenderableWidget(Button.builder(
-                typeLabel(PROMO_TYPES[selectedTypeIndex]),
-                button -> {
-                    selectedTypeIndex = (selectedTypeIndex + 1) % PROMO_TYPES.length;
-                    button.setMessage(typeLabel(PROMO_TYPES[selectedTypeIndex]));
-                    // Item 37: Flash toggle binds to FLASH type
-                    if ("FLASH".equals(PROMO_TYPES[selectedTypeIndex])) {
-                        flash = true;
-                        if (flashButton != null) flashButton.setMessage(Component.translatable("gui.futureshops.promo_editor.flash_on"));
-                    }
-                    updateFieldVisibility();
-                })
-                .bounds(fieldX, guiTop + 26, fieldW, 14)
-                .build());
+        // Item 36: Type is a cycling button — drawn immediate-mode in render().
 
         valueBox = new EditBox(this.font, fieldX, guiTop + 44, fieldW, 14, Component.translatable("gui.futureshops.promo_editor.value"));
         valueBox.setValue("10.00");
@@ -95,25 +82,7 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
         durationBox.setHint(Component.translatable("gui.futureshops.promo_editor.length"));
         addRenderableWidget(durationBox);
 
-        flashButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.promo_editor.flash_off"), button -> {
-                    flash = !flash;
-                    button.setMessage(Component.translatable(flash
-                            ? "gui.futureshops.promo_editor.flash_on"
-                            : "gui.futureshops.promo_editor.flash_off"));
-                })
-                .bounds(fieldX, guiTop + 98, 96, 14)
-                .build());
-
-        int btnW = Math.max(50, (modalW - 20) / 3 - 4);
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.promo_editor.apply"), button -> applyPromo())
-                .bounds(guiLeft + 10, guiTop + modalH - 30, btnW, 18)
-                .build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.promo_editor.clear"), button -> openClearConfirm())
-                .bounds(guiLeft + 14 + btnW, guiTop + modalH - 30, btnW, 18)
-                .build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.promo_editor.back"), button -> onClose())
-                .bounds(guiLeft + 18 + btnW * 2, guiTop + modalH - 30, btnW, 18)
-                .build());
+        // Type / flash toggles + Apply / Clear / Back are drawn immediate-mode in render().
 
         updateFieldVisibility();
     }
@@ -132,6 +101,7 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        clickZones.clear();
         ShopUiUtil.renderDimBackdrop(graphics, this.width, this.height);
         graphics.fill(guiLeft, guiTop, guiLeft + modalW, guiTop + modalH, ShopColors.SURFACE_BASE);
         ShopUiUtil.drawSoftOutline(graphics, guiLeft, guiTop, modalW, modalH, ShopColors.BORDER_STRONG, ShopColors.BORDER_SUBTLE);
@@ -139,9 +109,10 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
 
         graphics.drawString(this.font, I18n.get("gui.futureshops.promo_editor.header"), guiLeft + 8, guiTop + 8, ShopColors.TEXT_STRONG, false);
         String itemId = PlayerShopClientState.selectedListing() == null ? "" : PlayerShopClientState.selectedListing().itemId();
+        String nbtJson = PlayerShopClientState.selectedListing() == null ? "" : PlayerShopClientState.selectedListing().nbtJson();
         String itemName = itemId.isBlank()
                 ? I18n.get("gui.futureshops.promo_editor.item_none")
-                : ShopUiUtil.getItemDisplayName(itemId);
+                : ShopUiUtil.getItemDisplayNameWithNbt(itemId, nbtJson);
         graphics.drawString(this.font, this.font.plainSubstrByWidth(
                 I18n.get("gui.futureshops.promo_editor.item_prefix", itemName), modalW - 16), guiLeft + 8, guiTop + 16, ShopColors.TEXT_MUTED, false);
 
@@ -159,6 +130,36 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
         String scheduleHint = formatScheduleHint(parseInt(startBox.getValue(), 0), parseInt(durationBox.getValue(), 0));
         graphics.drawString(this.font, scheduleHint, guiLeft + 10, guiTop + 114, ShopColors.TEXT_FAINT, false);
 
+        // Flat Nocturne buttons — same bounds as the former widgets.
+        int fieldX = guiLeft + Math.min(98, modalW / 3);
+        int fieldW = Math.max(80, modalW - fieldX + guiLeft - 10);
+        // Item 36: Type cycles through the promo types; selecting FLASH also arms the flash flag.
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                fieldX, guiTop + 26, fieldW, 14, typeLabel(PROMO_TYPES[selectedTypeIndex]),
+                ShopUiUtil.ButtonStyle.SECONDARY, true, () -> {
+                    selectedTypeIndex = (selectedTypeIndex + 1) % PROMO_TYPES.length;
+                    if ("FLASH".equals(PROMO_TYPES[selectedTypeIndex])) {
+                        flash = true;
+                    }
+                    updateFieldVisibility();
+                });
+        // Item 37: Flash toggle.
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                fieldX, guiTop + 98, 96, 14,
+                Component.translatable(flash ? "gui.futureshops.promo_editor.flash_on" : "gui.futureshops.promo_editor.flash_off"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true, () -> flash = !flash);
+
+        int btnW = Math.max(50, (modalW - 20) / 3 - 4);
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + 10, guiTop + modalH - 30, btnW, 18,
+                Component.translatable("gui.futureshops.promo_editor.apply"), ShopUiUtil.ButtonStyle.PRIMARY, true, this::applyPromo);
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + 14 + btnW, guiTop + modalH - 30, btnW, 18,
+                Component.translatable("gui.futureshops.promo_editor.clear"), ShopUiUtil.ButtonStyle.DANGER, true, this::openClearConfirm);
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + 18 + btnW * 2, guiTop + modalH - 30, btnW, 18,
+                Component.translatable("gui.futureshops.promo_editor.back"), ShopUiUtil.ButtonStyle.SECONDARY, true, this::onClose);
+
         super.render(graphics, mouseX, mouseY, partialTick);
 
         if (clearConfirm != null) {
@@ -173,6 +174,10 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (clearConfirm != null) {
             return clearConfirm.mouseClicked(mouseX, mouseY, button, this.font);
+        }
+        // Flat Nocturne buttons run first; EditBox clicks fall through to super for focus.
+        if (ShopUiUtil.dispatchClicks(clickZones, mouseX, mouseY)) {
+            return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
     }
@@ -226,7 +231,8 @@ public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
         if (PlayerShopClientState.selectedListing() == null || PlayerShopClientState.selectedListing().itemId().isBlank()) {
             return;
         }
-        String itemName = ShopUiUtil.getItemDisplayName(PlayerShopClientState.selectedListing().itemId());
+        String itemName = ShopUiUtil.getItemDisplayNameWithNbt(
+                PlayerShopClientState.selectedListing().itemId(), PlayerShopClientState.selectedListing().nbtJson());
         clearConfirm = new ConfirmationModal(
                 I18n.get("gui.futureshops.promo_editor.clear_title"),
                 java.util.List.of(

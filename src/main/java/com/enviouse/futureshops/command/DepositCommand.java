@@ -1,11 +1,8 @@
 package com.enviouse.futureshops.command;
 
-import com.enviouse.futureshops.money.MoneyNbtKeys;
-import com.enviouse.futureshops.money.MoneyValidationResult;
-import com.enviouse.futureshops.money.MoneyValidationService;
-import com.enviouse.futureshops.money.SpentMintsSavedData;
 import com.enviouse.futureshops.event.MoneyDepositEvent;
-import com.enviouse.futureshops.init.ModItems;
+import com.enviouse.futureshops.money.CurrencyManager;
+import com.enviouse.futureshops.money.PhysicalCurrencyAdapter;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
 import com.enviouse.futureshops.server.economy.TransactionResult;
@@ -13,15 +10,8 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 
 public final class DepositCommand {
     private DepositCommand() {
@@ -48,27 +38,40 @@ public final class DepositCommand {
 
     private static int deposit(ServerPlayer player, String requestedAmount) {
         EconomyProvider provider = BalanceManager.getProvider();
-        Item coinItem = ModItems.MONEY_ITEM.get();
-        SpentMintsSavedData mintData = SpentMintsSavedData.get(player.getServer());
+        PhysicalCurrencyAdapter currency = CurrencyManager.get();
 
-        // Phase 1: Destroy coins that fail checksum (malformed / tampered NBT).
+        // Foreign items have no checksum/ledger, so creative mode would be an
+        // unlimited money printer — refuse the deposit outright. (The built-in
+        // currency needs no gate: creative-spawned bills fail the mint ledger.)
+        if (!currency.isInternal() && player.getAbilities().instabuild) {
+            player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable("command.futureshops.deposit.creative_blocked")));
+            return 0;
+        }
+
+        // Phase 1: Destroy currency that fails validation (built-in checksums;
+        // foreign currency has no checksum concept and nothing is destroyed).
         // NB: "already consumed" and "over-authorized" cases are handled atomically
-        // in Phase 4 via SpentMintsSavedData.consume; we don't pre-destroy them
-        // because a stack's MintId might still have remaining balance.
-        int invalidDestroyed = destroyInvalidCoins(player, coinItem);
+        // in Phase 3 via the mint ledger; we don't pre-destroy them because a
+        // stack's MintId might still have remaining balance.
+        int invalidDestroyed = currency.destroyCounterfeit(player);
         if (invalidDestroyed > 0) {
             player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable("command.futureshops.deposit.invalid_destroyed", invalidDestroyed)));
         }
 
-        // Phase 2: Plan per-stack available counts using each mint's remaining balance.
-        // Multiple stacks sharing the same mint ID are allocated in iteration order.
-        List<PlannedStack> planned = planValidStacks(player, coinItem, mintData);
-        if (planned.isEmpty()) {
-            player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable("command.futureshops.deposit.no_coins")));
+        // Phase 2: Total up what's depositable and resolve the requested amount.
+        long totalAvailableMinor = currency.availableValueMinor(player);
+        if (totalAvailableMinor <= 0L) {
+            String accepted = currency.acceptedItemsSummary(provider.getDecimalPlaces());
+            if (accepted != null && !accepted.isBlank()) {
+                // Foreign provider: say exactly what IS accepted, so a config
+                // that dropped e.g. coins from the accepted list is obvious.
+                player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable(
+                        "command.futureshops.deposit.no_currency_accepted", accepted)));
+            } else {
+                player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable("command.futureshops.deposit.no_coins")));
+            }
             return 0;
         }
-
-        long totalAvailableMinor = planned.stream().mapToLong(p -> p.denomination * p.available).sum();
 
         long amountMinorUnits = totalAvailableMinor;
         if (requestedAmount != null) {
@@ -85,130 +88,40 @@ public final class DepositCommand {
             }
         }
 
-        // Phase 3: Consume mint ledger + shrink stacks greedily (largest denomination first).
-        int acceptedTotal = consumeCoinsForAmount(mintData, planned, amountMinorUnits);
-
-        // Phase 4: Credit balance with actually-consumed value.
-        long creditedMinor = 0L;
-        for (PlannedStack p : planned) {
-            creditedMinor += p.denomination * p.taken;
+        // Phase 3: Consume physical currency (built-in: mint ledger + stack
+        // shrink; foreign: face-value stack shrink, never overshooting).
+        PhysicalCurrencyAdapter.ConsumeSummary summary = currency.consumeUpTo(player, amountMinorUnits);
+        if (summary.creditedMinor() <= 0L) {
+            // The player provably holds currency (Phase 2 gate), so the requested
+            // amount just isn't payable in whole units of it.
+            long smallestUnit = currency.denominations().get(currency.denominations().size() - 1).valueMinor();
+            player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable(
+                    "command.futureshops.deposit.invalid_denomination",
+                    EconomyCommandUtil.formatMinorUnits(smallestUnit, provider.getDecimalPlaces()))));
+            return 0;
         }
-        TransactionResult result = provider.deposit(player.getUUID(), creditedMinor);
+
+        // Phase 4: Credit balance with actually-consumed value. Foreign currency
+        // is restored on a failed credit (max balance / cancelled event); the
+        // internal ledger consume is irreversible (pre-2.2 behavior, refundable
+        // list is empty).
+        TransactionResult result = provider.deposit(player.getUUID(), summary.creditedMinor());
         if (!result.success()) {
+            for (var refund : summary.refundableStacks()) {
+                player.getInventory().placeItemBackInInventory(refund);
+            }
             EconomyCommandUtil.sendProviderError(player, result.errorCode());
             return 0;
         }
 
         // Fire MoneyDepositEvent (spec §33)
         net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
-                new MoneyDepositEvent(player.getUUID(), creditedMinor, acceptedTotal));
+                new MoneyDepositEvent(player.getUUID(), summary.creditedMinor(), summary.itemsConsumed()));
 
-        String depositedText = EconomyCommandUtil.formatMinorUnits(creditedMinor, provider.getDecimalPlaces());
+        String depositedText = EconomyCommandUtil.formatMinorUnits(summary.creditedMinor(), provider.getDecimalPlaces());
         String balanceText = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
         player.sendSystemMessage(EconomyCommandUtil.success(Component.translatable("command.futureshops.deposit.success",
                 depositedText, provider.getCurrencyName(), balanceText)));
         return 1;
-    }
-
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
-
-    private static int destroyInvalidCoins(ServerPlayer player, Item coinItem) {
-        int destroyed = 0;
-        for (ItemStack stack : allCoinContainers(player)) {
-            if (stack.getItem() != coinItem) continue;
-            MoneyValidationResult validation = MoneyValidationService.validate(stack);
-            if (!validation.valid()) {
-                destroyed += stack.getCount();
-                stack.setCount(0);
-            }
-        }
-        return destroyed;
-    }
-
-    /**
-     * Collects valid coin stacks and allocates each a per-stack "available" count
-     * capped by the mint record's remaining balance. When multiple stacks share
-     * a mint ID, earlier stacks get first dibs on the remaining balance.
-     */
-    private static List<PlannedStack> planValidStacks(ServerPlayer player, Item coinItem, SpentMintsSavedData mintData) {
-        List<PlannedStack> result = new ArrayList<>();
-        java.util.Map<String, Integer> budget = new java.util.HashMap<>();
-        for (ItemStack stack : allCoinContainers(player)) {
-            if (stack.getItem() != coinItem) continue;
-            MoneyValidationResult validation = MoneyValidationService.validate(stack);
-            if (!validation.valid()) continue;
-            CompoundTag moneyData = stack.getTag().getCompound(MoneyNbtKeys.ROOT);
-            String mintId = moneyData.getString(MoneyNbtKeys.MINT_ID);
-            long denomination = moneyData.getLong(MoneyNbtKeys.DENOMINATION);
-
-            int remaining = budget.computeIfAbsent(mintId, mintData::remainingCount);
-            if (remaining <= 0) continue;
-            int available = Math.min(stack.getCount(), remaining);
-            if (available <= 0) continue;
-            budget.put(mintId, remaining - available);
-            result.add(new PlannedStack(stack, mintId, denomination, validation.authorizedCount(), available));
-        }
-        // Sort by denomination descending so we consume largest bills first.
-        result.sort(Comparator.comparingLong((PlannedStack p) -> p.denomination).reversed());
-        return result;
-    }
-
-    /**
-     * Greedily consumes coins to cover {@code targetMinor}. Mutates {@link PlannedStack#taken}
-     * and physically shrinks the underlying stacks + decrements the mint ledger.
-     * Returns the total number of coins actually consumed.
-     */
-    private static int consumeCoinsForAmount(SpentMintsSavedData mintData,
-                                             List<PlannedStack> planned, long targetMinor) {
-        long remaining = targetMinor;
-        int totalAccepted = 0;
-        for (PlannedStack p : planned) {
-            if (remaining <= 0L) break;
-            if (p.available <= 0) continue;
-
-            long coinsNeeded = (remaining + p.denomination - 1L) / p.denomination;
-            int toTake = (int) Math.min(coinsNeeded, p.available);
-            long valueRemoved = p.denomination * toTake;
-            if (valueRemoved > remaining && toTake > 1) {
-                toTake = (int) (remaining / p.denomination);
-                valueRemoved = p.denomination * toTake;
-            }
-            if (toTake <= 0) continue;
-
-            SpentMintsSavedData.ConsumeResult r = mintData.consume(p.mintId, toTake, p.denomination, p.authorizedCount);
-            if (r.accepted() <= 0) {
-                continue; // Mint race: already drained by another stack this tick.
-            }
-            p.stack.shrink(r.accepted());
-            p.taken += r.accepted();
-            remaining -= p.denomination * r.accepted();
-            totalAccepted += r.accepted();
-        }
-        return totalAccepted;
-    }
-
-    private static List<ItemStack> allCoinContainers(ServerPlayer player) {
-        return java.util.stream.Stream
-                .concat(player.getInventory().items.stream(), player.getInventory().offhand.stream())
-                .toList();
-    }
-
-    private static final class PlannedStack {
-        final ItemStack stack;
-        final String mintId;
-        final long denomination;
-        final int authorizedCount;
-        final int available;
-        int taken;
-
-        PlannedStack(ItemStack stack, String mintId, long denomination, int authorizedCount, int available) {
-            this.stack = stack;
-            this.mintId = mintId;
-            this.denomination = denomination;
-            this.authorizedCount = authorizedCount;
-            this.available = available;
-        }
     }
 }

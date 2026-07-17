@@ -6,18 +6,45 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Pins the network protocol version. The v2.0 admin-NBT-listing work added a leading {@code listingId}
- * field to {@link com.enviouse.futureshops.data.CatalogItem} and the buy/sell/admin-cart wire lines,
- * which is a breaking wire change — so the version was bumped 23 → 24 and v23 clients are refused at
- * handshake. A silent revert to 23 (or any other value) would let mismatched clients desync on the new
- * field; this test makes that a red build.
+ * Pins the network protocol version. Protocol 30 appends the ATM open/data/withdraw/result packets
+ * so clients can submit exact denomination plans to the server-authoritative minting path.
+ * Protocol 29 changes the protocol-28 barter-batch action from
+ * an off-hand-paid atomic add to safe targets followed by searchable ingredient editors. The wire
+ * shape is unchanged, but mixed v28/v29 peers would interpret the same packet differently.
+ * Protocol 27 added: (a) the floating-icon config packet
+ * ({@link com.enviouse.futureshops.network.packets.C2SPlayerShopIconPacket}, registered at the end
+ * of the id space) letting owners set the block-top icon mode (CYCLE / OWNER_HEAD / CUSTOM_ITEM),
+ * with trailing {@code FloatingIconMode}/{@code FloatingIconItem} strings on the block update tag;
+ * and (b) trailing {@code hidden}/{@code showcase} booleans on
+ * {@link com.enviouse.futureshops.data.PlayerShopListingData} for the per-listing visibility flags,
+ * and (c) trailing {@code floatingIconMode}/{@code floatingIconItem} strings + a
+ * {@link com.enviouse.futureshops.data.PlayerShopStorageEntry} list + a {@code savedConfigNames}
+ * string list on {@link com.enviouse.futureshops.network.packets.S2CPlayerShopDataPacket} (owner
+ * Storefront/Storage/Payouts tabs), plus three appended C2S packets
+ * ({@link com.enviouse.futureshops.network.packets.C2SPlayerShopIconPacket},
+ * {@link com.enviouse.futureshops.network.packets.C2SPlayerShopUnlinkStoragePacket},
+ * {@link com.enviouse.futureshops.network.packets.C2SPlayerShopSavedConfigPacket}).
+ * Both are breaking wire changes, so the version was bumped 26 → 27 and v26 clients are refused
+ * at handshake. (Protocol 26 added the in-GUI admin shop editor: a trailing {@code canEdit} boolean
+ * on {@link com.enviouse.futureshops.network.packets.S2CShopDataPacket} plus three new packets;
+ * v25 appended trailing {@code nbtJson} fields to barter ingredients, verify-cart lines,
+ * settlement/history rows, owned-shop summaries and the bal-top popular item, plus a trailing
+ * {@code targetListingId} on {@link com.enviouse.futureshops.data.CatalogBarterRecipe}; v24 added
+ * the leading {@code listingId} to {@link com.enviouse.futureshops.data.CatalogItem} and the
+ * buy/sell/admin-cart lines.) A silent revert would let mismatched clients disagree on packet
+ * fields or semantics; this test makes that a red build.
  */
 public class ProtocolVersionConstantTest {
 
     @Test
-    void protocolVersionIs24() {
-        assertEquals("24", ShopPackets.PROTOCOL_VERSION,
-                "PROTOCOL_VERSION must be \"24\" for the per-listing-id wire format. "
-                        + "If you intentionally changed the wire format, bump it and update this test.");
+    void protocolVersionIs30() {
+        assertEquals("30", ShopPackets.PROTOCOL_VERSION,
+                "PROTOCOL_VERSION must be \"30\" — protocol 30 appended the ATM catalog and exact "
+                        + "denomination withdrawal packets. Protocol 29 changed the barter-batch semantics "
+                        + "from an off-hand-paid atomic add to safe targets followed by ingredient editors. "
+                        + "Protocol 28 added trailing barter fields "
+                        + "(boolean barter, int outputCount, int ingredientCount) to C2SAdminShopAddItemsPacket "
+                        + "for creating barter listings from the OP editor. If you intentionally changed the "
+                        + "wire format or semantics, bump it and update this test.");
     }
 }

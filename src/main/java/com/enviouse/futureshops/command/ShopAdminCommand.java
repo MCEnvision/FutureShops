@@ -230,6 +230,11 @@ public final class ShopAdminCommand {
                                                 .executes(ctx -> itemsRefresh(ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "id"),
                                                         StringArgumentType.getString(ctx, "interval"))))))
+                        .then(Commands.literal("barter")
+                                .then(Commands.argument("id", StringArgumentType.string()).suggests(SUGGEST_LISTING_IDS)
+                                        .then(Commands.literal("off")
+                                                .executes(ctx -> itemsBarterOff(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "id"))))))
                         .then(Commands.literal("sale")
                                 .then(Commands.argument("id", StringArgumentType.string()).suggests(SUGGEST_LISTING_IDS)
                                         .then(Commands.argument("price", StringArgumentType.word())
@@ -521,6 +526,17 @@ public final class ShopAdminCommand {
         }
 
         String nbtJson = (nbtOn && held.hasTag()) ? held.getTag().toString() : "";
+        // Guardrail: listing a tagged item without capturing its NBT is almost
+        // always a mistake — tag-dependent items (TacZ guns etc.) then render
+        // as a missing texture and mint dead. Compare against the item's
+        // default tag so plain tools ({Damage:0}) don't warn spuriously.
+        var heldTag = held.getTag();
+        boolean nonDefaultHeldTag = heldTag != null
+                && !heldTag.equals(new ItemStack(held.getItem()).getTag());
+        if (!nbtOn && nonDefaultHeldTag) {
+            source.sendSuccess(() -> Component.translatable(
+                    "command.futureshops.admin.items.nbt_off_warning").withStyle(ChatFormatting.YELLOW), false);
+        }
         String rawCategory = StringArgumentType.getString(ctx, "category");
         String categoryId = normalizeId(rawCategory);
         ensureCategory(source.getServer(), rawCategory);
@@ -642,6 +658,32 @@ public final class ShopAdminCommand {
             final String shown = secs + "s";
             source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.refresh_set", id, shown).withStyle(ChatFormatting.GREEN), true);
         }
+        return 1;
+    }
+
+    /**
+     * {@code /shopadmin items barter <id> off} — makes a global-catalog listing money-only by
+     * deleting any barter recipe that targets it. Global "barter" is not a per-item flag; an item is
+     * barterable only because a barterRecipes entry targets it, and there was previously no in-game
+     * way to remove one (the source of the "barter+money, can't change" reports).
+     */
+    private static int itemsBarterOff(CommandSourceStack source, String id) {
+        MinecraftServer server = source.getServer();
+        ItemDef def = ShopCatalog.getItem(ADMIN_SHOP_ID, id).orElse(null);
+        if (def == null) {
+            source.sendFailure(Component.translatable("command.futureshops.admin.items.not_found", id).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        int removed = AdminShopConfigWriter.removeBarterRecipesTargeting(server, def.resolutionKey(), def.itemId());
+        if (removed <= 0) {
+            source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.barter_none", id)
+                    .withStyle(ChatFormatting.YELLOW), false);
+            return 0;
+        }
+        ShopDataService.resendActiveSessions(server);
+        final int fRemoved = removed;
+        source.sendSuccess(() -> Component.translatable("command.futureshops.admin.items.barter_off", id, fRemoved)
+                .withStyle(ChatFormatting.GREEN), true);
         return 1;
     }
 
@@ -1220,7 +1262,9 @@ public final class ShopAdminCommand {
         int shown = Math.min(playerMints.size(), 15);
         for (int i = 0; i < shown; i++) {
             MoneyMintRecord r = playerMints.get(i);
-            String status  = r.consumed() ? "§cCONSUMED§r" : "§aACTIVE  §r";
+            Component status = r.consumed()
+                    ? Component.translatable("command.futureshops.admin.coinaudit.status_consumed")
+                    : Component.translatable("command.futureshops.admin.coinaudit.status_active");
             String mintTs  = TS_FMT.format(Instant.ofEpochSecond(r.mintedAt()));
             String eatTs   = r.consumed()
                     ? " → " + TS_FMT.format(Instant.ofEpochSecond(r.consumedAt()))

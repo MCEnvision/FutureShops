@@ -5,10 +5,10 @@ import com.enviouse.futureshops.data.OwnedShopSummary;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SFranchiseActionPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenBalTopUiPacket;
+import com.enviouse.futureshops.network.packets.C2SOpenAtmPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenShopPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopActionPacket;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -30,6 +30,7 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
     private final int lowSupplyCount;
     private final List<OwnedShopSummary> shopSummaries;
     private final List<String> alerts;
+    private final Screen parent;
 
     private int guiLeft;
     private int guiTop;
@@ -40,10 +41,14 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
     private int visibleShopCards;
     private int visibleAlerts;
 
-    public BalanceOverviewScreen(UUID playerUuid, String playerName, long balanceMinorUnits, String currencyName, int currencyDecimals,
+    /** Per-frame flat-button hit regions, populated in {@link #render}, consulted in mouseClicked. */
+    private final java.util.List<ShopUiUtil.ClickZone> clickZones = new java.util.ArrayList<>();
+
+    public BalanceOverviewScreen(Screen parent, UUID playerUuid, String playerName, long balanceMinorUnits, String currencyName, int currencyDecimals,
                                  long totalRevenueMinor, long pendingSettlementMinor, int shopCount, int listingCount,
                                  int totalStock, int lowSupplyCount, List<OwnedShopSummary> shopSummaries, List<String> alerts) {
         super(Component.translatable("gui.futureshops.balance.title"));
+        this.parent = parent;
         this.playerUuid = playerUuid;
         this.playerName = playerName;
         this.balanceMinorUnits = balanceMinorUnits;
@@ -67,26 +72,41 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         guiTop = (this.height - guiH) / 2;
         visibleShopCards = Math.max(2, (guiH - 200) / 52);
         visibleAlerts = Math.max(1, (guiH - 200) / 18);
+        // Footer nav buttons are drawn immediate-mode in render().
+    }
 
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.balance.franchise"), button ->
-                        ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("OPEN", "")))
-                .bounds(guiLeft + guiW - 286, guiTop + guiH - 24, 68, 18)
-                .build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.balance.storefront"), button ->
-                        ShopPackets.CHANNEL.sendToServer(new C2SOpenShopPacket("default")))
-                .bounds(guiLeft + guiW - 214, guiTop + guiH - 24, 68, 18)
-                .build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.balance.leaders"), button ->
-                        ShopPackets.CHANNEL.sendToServer(new C2SOpenBalTopUiPacket(1)))
-                .bounds(guiLeft + guiW - 142, guiTop + guiH - 24, 60, 18)
-                .build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.balance.close"), button -> onClose())
-                .bounds(guiLeft + guiW - 78, guiTop + guiH - 24, 60, 18)
-                .build());
+    /** Draws the footer nav buttons and registers their click zones for this frame. */
+    private void renderButtons(GuiGraphics graphics, int mouseX, int mouseY) {
+        int y = guiTop + guiH - 24;
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + 10, y, 68, 18,
+                Component.translatable("gui.futureshops.local.back"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true, this::onClose);
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + 82, y, 62, 18,
+                Component.translatable("gui.futureshops.balance.atm"),
+                ShopUiUtil.ButtonStyle.PRIMARY, true,
+                () -> ShopPackets.CHANNEL.sendToServer(new C2SOpenAtmPacket()));
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + guiW - 214, y, 68, 18,
+                Component.translatable("gui.futureshops.balance.franchise"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true,
+                () -> ShopPackets.CHANNEL.sendToServer(new C2SFranchiseActionPacket("OPEN", "")));
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + guiW - 142, y, 60, 18,
+                Component.translatable("gui.futureshops.balance.leaders"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true,
+                () -> ShopPackets.CHANNEL.sendToServer(new C2SOpenBalTopUiPacket(1)));
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + guiW - 78, y, 60, 18,
+                Component.translatable("gui.futureshops.balance.close"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true,
+                () -> ShopPackets.CHANNEL.sendToServer(new C2SOpenShopPacket("default")));
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        clickZones.clear();
         ShopUiUtil.renderDimBackdrop(graphics, this.width, this.height);
         graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + guiH, ShopColors.SURFACE_BASE);
         ShopUiUtil.drawSoftOutline(graphics, guiLeft, guiTop, guiW, guiH, ShopColors.BORDER_STRONG, ShopColors.BORDER_SUBTLE);
@@ -96,6 +116,7 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         renderMetrics(graphics);
         renderOwnedShops(graphics, mouseX, mouseY);
         renderAlerts(graphics, mouseX, mouseY);
+        renderButtons(graphics, mouseX, mouseY);
 
         super.render(graphics, mouseX, mouseY, partialTick);
     }
@@ -110,7 +131,8 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         graphics.drawString(this.font, balanceText, guiLeft + guiW - this.font.width(balanceText) - 18, guiTop + 24, ShopColors.TEXT_CURRENCY, false);
         boolean warn = lowSupplyCount > 0;
         ShopUiUtil.renderPill(graphics, this.font, guiLeft + guiW - 112, guiTop + 44,
-                warn ? lowSupplyCount + " low stock" : "Supply stable",
+                warn ? Component.translatable("gui.futureshops.balance.low_stock", lowSupplyCount).getString()
+                     : Component.translatable("gui.futureshops.balance.supply_stable").getString(),
                 ShopColors.SURFACE_OVERLAY,
                 warn ? ShopColors.STATUS_DANGER : ShopColors.STATUS_SUCCESS,
                 warn ? ShopColors.STATUS_DANGER : ShopColors.STATUS_SUCCESS);
@@ -120,10 +142,10 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         int cardY = guiTop + 74;
         int gap = 8;
         int cardW = (guiW - 20 - (gap * 3)) / 4;
-        renderMetricCard(graphics, guiLeft + 10, cardY, cardW, "Revenue", formatMinorUnits(totalRevenueMinor), ShopColors.TEXT_CURRENCY);
-        renderMetricCard(graphics, guiLeft + 10 + (cardW + gap), cardY, cardW, "Pending", formatMinorUnits(pendingSettlementMinor), ShopColors.TEXT_BARTER_SOFT);
+        renderMetricCard(graphics, guiLeft + 10, cardY, cardW, Component.translatable("gui.futureshops.balance.metric.revenue").getString(), formatMinorUnits(totalRevenueMinor), ShopColors.TEXT_CURRENCY);
+        renderMetricCard(graphics, guiLeft + 10 + (cardW + gap), cardY, cardW, Component.translatable("gui.futureshops.balance.metric.pending").getString(), formatMinorUnits(pendingSettlementMinor), ShopColors.TEXT_BARTER_SOFT);
         renderShopsListingsCard(graphics, guiLeft + 10 + (cardW + gap) * 2, cardY, cardW);
-        renderMetricCard(graphics, guiLeft + 10 + (cardW + gap) * 3, cardY, cardW, "Supply", totalStock + " items tracked", ShopColors.TEXT_MUTED);
+        renderMetricCard(graphics, guiLeft + 10 + (cardW + gap) * 3, cardY, cardW, Component.translatable("gui.futureshops.balance.metric.supply").getString(), Component.translatable("gui.futureshops.balance.items_tracked", totalStock).getString(), ShopColors.TEXT_MUTED);
     }
 
     private void renderMetricCard(GuiGraphics graphics, int x, int y, int width, String title, String value, int accent) {
@@ -150,8 +172,8 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         // Center the label + value pair in each half so the SHOPS and LISTINGS halves look
         // like matching columns (labels above numbers, both axis-aligned to the sub-column center)
         // instead of label-left / label-right with numbers floating in between.
-        String shopsLabel = "SHOPS";
-        String listingsLabel = "LISTINGS";
+        String shopsLabel = Component.translatable("gui.futureshops.balance.shops_label").getString();
+        String listingsLabel = Component.translatable("gui.futureshops.balance.listings_label").getString();
         String shopsVal = Integer.toString(shopCount);
         String listingsVal = Integer.toString(listingCount);
 
@@ -171,13 +193,16 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         int panelH = guiH - 160;
         ShopUiUtil.renderCard(graphics, panelX, panelY, panelW, panelH);
         graphics.fill(panelX, panelY, panelX + panelW, panelY + 2, ShopColors.ACCENT_PRIMARY);
-        graphics.drawString(this.font, "Your placed shops", panelX + 8, panelY + 8, ShopColors.TEXT_STRONG, false);
-        graphics.drawString(this.font, shopCount == 0 ? "No shops registered yet" : shopCount + " tracked across the server", panelX + 8, panelY + 20, ShopColors.TEXT_MUTED, false);
+        graphics.drawString(this.font, Component.translatable("gui.futureshops.balance.placed_shops"), panelX + 8, panelY + 8, ShopColors.TEXT_STRONG, false);
+        String subtitle = (shopCount == 0
+                ? Component.translatable("gui.futureshops.balance.no_shops")
+                : Component.translatable("gui.futureshops.balance.shops_tracked", shopCount)).getString();
+        graphics.drawString(this.font, this.font.plainSubstrByWidth(subtitle, panelW - 16), panelX + 8, panelY + 20, ShopColors.TEXT_MUTED, false);
 
         int maxScroll = Math.max(0, shopSummaries.size() - visibleShopCards);
         shopScroll = Math.max(0, Math.min(shopScroll, maxScroll));
         if (shopSummaries.isEmpty()) {
-            graphics.drawString(this.font, "Place and configure a shop block to see revenue, stock, and supply health here.", panelX + 8, panelY + 44, ShopColors.TEXT_FAINT, false);
+            ShopUiUtil.drawWrappedString(graphics, this.font, Component.translatable("gui.futureshops.balance.empty_hint"), panelX + 8, panelY + 44, panelW - 16, ShopColors.TEXT_FAINT, 10);
             return;
         }
 
@@ -194,31 +219,39 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
                 graphics.fill(panelX + 8, y, panelX + panelW - 8, y + 1, ShopColors.ACCENT_PRIMARY);
             }
             if (!summary.featuredItemId().isBlank()) {
-                ShopUiUtil.renderItemIcon(graphics, this.font, summary.featuredItemId(), panelX + 14, y + 14);
+                ShopUiUtil.renderItemIconWithNbt(graphics, this.font, summary.featuredItemId(), summary.featuredNbtJson(), panelX + 14, y + 14);
             }
             BlockPos pos = BlockPos.of(summary.shopPosLong());
-            String title = summary.listingCount() + " listing" + (summary.listingCount() == 1 ? "" : "s") + " • " + displayDimension(summary.dimensionKey());
+            Component title = Component.translatable(
+                    summary.listingCount() == 1 ? "gui.futureshops.balance.shop_card.one" : "gui.futureshops.balance.shop_card.many",
+                    summary.listingCount(), displayDimension(summary.dimensionKey()));
+            // A low/linked pill is drawn at panelX + panelW - 88; when one is present, clip the
+            // title so it ends ~6px before the pill instead of running underneath it.
+            boolean hasPill = summary.lowStockListings() > 0 || summary.linked();
+            int titleW = hasPill ? (panelW - 130) : (panelW - 76);
             ShopUiUtil.renderScrollingString(graphics, this.font, title,
-                    panelX + 36, y + 6, panelW - 76, ShopColors.TEXT_STRONG);
+                    panelX + 36, y + 6, titleW, ShopColors.TEXT_STRONG);
             graphics.drawString(this.font, pos.getX() + ", " + pos.getY() + ", " + pos.getZ(), panelX + 36, y + 18, ShopColors.TEXT_MUTED, false);
-            graphics.drawString(this.font, "Stock " + summary.totalStock() + " • Revenue " + formatMinorUnits(summary.lifetimeMinor()), panelX + 36, y + 30, ShopColors.TEXT_CURRENCY, false);
+            // Clip the stats line so it stops short of the "▶ Click to visit" CTA on hover.
+            String stats = Component.translatable("gui.futureshops.balance.shop_card.stats", summary.totalStock(), formatMinorUnits(summary.lifetimeMinor())).getString();
+            graphics.drawString(this.font, this.font.plainSubstrByWidth(stats, panelW - 125), panelX + 36, y + 30, ShopColors.TEXT_CURRENCY, false);
             if (summary.lowStockListings() > 0) {
                 // Item icons in owned-shop cards render at z≈+150 internally; lift pills above
                 // that layer so the "low"/"linked" badges can't be occluded by a wide icon.
                 graphics.pose().pushPose();
                 graphics.pose().translate(0.0F, 0.0F, 200.0F);
-                ShopUiUtil.renderPill(graphics, this.font, panelX + panelW - 88, y + 6, summary.lowStockListings() + " low",
+                ShopUiUtil.renderPill(graphics, this.font, panelX + panelW - 88, y + 6, Component.translatable("gui.futureshops.balance.pill.low", summary.lowStockListings()).getString(),
                         ShopColors.SURFACE_BASE, ShopColors.STATUS_DANGER, ShopColors.STATUS_DANGER);
                 graphics.pose().popPose();
             } else if (summary.linked()) {
                 graphics.pose().pushPose();
                 graphics.pose().translate(0.0F, 0.0F, 200.0F);
-                ShopUiUtil.renderPill(graphics, this.font, panelX + panelW - 88, y + 6, "linked",
+                ShopUiUtil.renderPill(graphics, this.font, panelX + panelW - 88, y + 6, Component.translatable("gui.futureshops.balance.pill.linked").getString(),
                         ShopColors.SURFACE_BASE, ShopColors.STATUS_INFO, ShopColors.STATUS_INFO);
                 graphics.pose().popPose();
             }
             if (hovered) {
-                String visitText = "§a▶ Click to visit";
+                String visitText = Component.translatable("gui.futureshops.balance.click_to_visit").getString();
                 int vw = this.font.width(visitText);
                 graphics.drawString(this.font, visitText, panelX + panelW - vw - 14, y + 34, ShopColors.ACCENT_PRIMARY, false);
             }
@@ -233,13 +266,15 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
         int panelH = guiH - 160;
         ShopUiUtil.renderCard(graphics, panelX, panelY, panelW, panelH);
         graphics.fill(panelX, panelY, panelX + panelW, panelY + 2, ShopColors.STATUS_WARNING);
-        graphics.drawString(this.font, "Supply warnings", panelX + 8, panelY + 8, ShopColors.TEXT_STRONG, false);
-        graphics.drawString(this.font, alerts.isEmpty() ? "Everything looks healthy" : alerts.size() + " attention point(s)", panelX + 8, panelY + 20, ShopColors.TEXT_MUTED, false);
+        graphics.drawString(this.font, Component.translatable("gui.futureshops.balance.supply_warnings"), panelX + 8, panelY + 8, ShopColors.TEXT_STRONG, false);
+        graphics.drawString(this.font, alerts.isEmpty()
+                ? Component.translatable("gui.futureshops.balance.healthy")
+                : Component.translatable("gui.futureshops.balance.attention_points", alerts.size()), panelX + 8, panelY + 20, ShopColors.TEXT_MUTED, false);
 
         int maxScroll = Math.max(0, alerts.size() - visibleAlerts);
         alertScroll = Math.max(0, Math.min(alertScroll, maxScroll));
         if (alerts.isEmpty()) {
-            graphics.drawString(this.font, "No low-supply or missing-link warnings right now.", panelX + 8, panelY + 44, ShopColors.STATUS_SUCCESS, false);
+            graphics.drawString(this.font, Component.translatable("gui.futureshops.balance.no_warnings"), panelX + 8, panelY + 44, ShopColors.STATUS_SUCCESS, false);
             return;
         }
 
@@ -292,6 +327,10 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Flat Nocturne footer buttons take priority over owned-shop card clicks.
+        if (ShopUiUtil.dispatchClicks(clickZones, mouseX, mouseY)) {
+            return true;
+        }
         // Item 9: Clickable owned shop cards → navigate to shop manage view
         int panelX = guiLeft + 10;
         int panelY = guiTop + 126;
@@ -307,6 +346,18 @@ public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
             }
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public void onClose() {
+        if (this.minecraft != null) {
+            this.minecraft.setScreen(parent);
+        }
+    }
+
+    /** The shop screen this dashboard returns to (used to keep sibling overviews from becoming the parent). */
+    public net.minecraft.client.gui.screens.Screen getParent() {
+        return parent;
     }
 
     @Override

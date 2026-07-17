@@ -1,6 +1,9 @@
 package com.enviouse.futureshops.network;
 
 import com.enviouse.futureshops.Futureshops;
+import com.enviouse.futureshops.network.packets.C2SAdminShopAddItemsPacket;
+import com.enviouse.futureshops.network.packets.C2SAdminShopEditPacket;
+import com.enviouse.futureshops.network.packets.C2SAtmWithdrawPacket;
 import com.enviouse.futureshops.network.packets.C2SBarterRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SFetchDepartmentsPacket;
@@ -10,18 +13,25 @@ import com.enviouse.futureshops.network.packets.C2SFetchSettlementHistoryPacket;
 import com.enviouse.futureshops.network.packets.C2SInventorySyncPacket;
 import com.enviouse.futureshops.network.packets.C2SFranchiseActionPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenBalTopUiPacket;
+import com.enviouse.futureshops.network.packets.C2SOpenAtmPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenBalanceUiPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenShopPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopActionPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuyPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuybackConfigPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopConfigPacket;
+import com.enviouse.futureshops.network.packets.C2SPlayerShopIconPacket;
+import com.enviouse.futureshops.network.packets.C2SPlayerShopSavedConfigPacket;
+import com.enviouse.futureshops.network.packets.C2SPlayerShopUnlinkStoragePacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopPromoPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopSellPacket;
 import com.enviouse.futureshops.network.packets.C2SSellRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SSetDepartmentPacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyAdminCartPacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyCartPacket;
+import com.enviouse.futureshops.network.packets.S2CAdminEditAckPacket;
+import com.enviouse.futureshops.network.packets.S2CAtmDataPacket;
+import com.enviouse.futureshops.network.packets.S2CAtmResultPacket;
 import com.enviouse.futureshops.network.packets.S2CBalTopUiPacket;
 import com.enviouse.futureshops.network.packets.S2CBarterResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CBalanceUiPacket;
@@ -46,10 +56,22 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ShopPackets {
+    // 30: added the server-authoritative ATM catalog, exact denomination withdrawal request,
+    //     and result packets. v29 peers do not know these appended packet registrations.
+    // 29: changed the protocol-28 barter batch from an off-hand-paid atomic add into safe empty
+    //     targets followed by searchable ingredient editors. The wire shape is unchanged, but the
+    //     message semantics are incompatible, so v28 peers must not silently connect.
+    // 26: in-GUI admin shop editor — trailing canEdit on S2CShopDataPacket, trailing configuredStock
+    //     on CatalogItem (the admin editor edits the configured max, not live remaining), plus three
+    //     new packets registered at the end of the id space (C2SAdminShopEditPacket,
+    //     C2SAdminShopAddItemsPacket, S2CAdminEditAckPacket).
+    // 25: trailing nbtJson appended to barter ingredients, verify-cart lines (player AND admin),
+    //     settlement/history rows, owned-shop summaries and bal-top popular item; barter recipes
+    //     gained a trailing targetListingId (blank = unresolved / no NBT keeps legacy behaviour).
     // 24: per-listing id added to CatalogItem + buy/sell/admin-cart wire lines (multi-variant NBT
     //     admin listings). Old v23 clients are refused at handshake so they can't desync on the
     //     new leading listingId field.
-    public static final String PROTOCOL_VERSION = "24";
+    public static final String PROTOCOL_VERSION = "30";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))
@@ -291,6 +313,71 @@ public final class ShopPackets {
             .decoder(S2CFranchiseDataPacket::decode)
             .encoder(S2CFranchiseDataPacket::encode)
             .consumerMainThread(S2CFranchiseDataPacket::handle)
+            .add();
+
+        // In-GUI admin shop editor packets (protocol 26)
+        CHANNEL.messageBuilder(C2SAdminShopEditPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SAdminShopEditPacket::decode)
+            .encoder(C2SAdminShopEditPacket::encode)
+            .consumerMainThread(C2SAdminShopEditPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SAdminShopAddItemsPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SAdminShopAddItemsPacket::decode)
+            .encoder(C2SAdminShopAddItemsPacket::encode)
+            .consumerMainThread(C2SAdminShopAddItemsPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CAdminEditAckPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CAdminEditAckPacket::decode)
+            .encoder(S2CAdminEditAckPacket::encode)
+            .consumerMainThread(S2CAdminEditAckPacket::handle)
+            .add();
+
+        // Floating-icon mode config (protocol 27)
+        CHANNEL.messageBuilder(C2SPlayerShopIconPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SPlayerShopIconPacket::decode)
+            .encoder(C2SPlayerShopIconPacket::encode)
+            .consumerMainThread(C2SPlayerShopIconPacket::handle)
+            .add();
+
+        // Identity-based per-storage unlink for the owner Storage tab (protocol 27)
+        CHANNEL.messageBuilder(C2SPlayerShopUnlinkStoragePacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SPlayerShopUnlinkStoragePacket::decode)
+            .encoder(C2SPlayerShopUnlinkStoragePacket::encode)
+            .consumerMainThread(C2SPlayerShopUnlinkStoragePacket::handle)
+            .add();
+
+        // Named saved-config ops for the owner Payouts tab (protocol 27)
+        CHANNEL.messageBuilder(C2SPlayerShopSavedConfigPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SPlayerShopSavedConfigPacket::decode)
+            .encoder(C2SPlayerShopSavedConfigPacket::encode)
+            .consumerMainThread(C2SPlayerShopSavedConfigPacket::handle)
+            .add();
+
+        // Physical-currency ATM (protocol 30). Appended to preserve every prior id.
+        CHANNEL.messageBuilder(C2SOpenAtmPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SOpenAtmPacket::decode)
+            .encoder(C2SOpenAtmPacket::encode)
+            .consumerMainThread(C2SOpenAtmPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CAtmDataPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CAtmDataPacket::decode)
+            .encoder(S2CAtmDataPacket::encode)
+            .consumerMainThread(S2CAtmDataPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SAtmWithdrawPacket.class, nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SAtmWithdrawPacket::decode)
+            .encoder(C2SAtmWithdrawPacket::encode)
+            .consumerMainThread(C2SAtmWithdrawPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CAtmResultPacket.class, nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CAtmResultPacket::decode)
+            .encoder(S2CAtmResultPacket::encode)
+            .consumerMainThread(S2CAtmResultPacket::handle)
             .add();
     }
 

@@ -32,7 +32,8 @@ public class BuyPacketCallSiteTest {
     private static final List<Path> CALL_SITES = List.of(
             Path.of("src/main/java/com/enviouse/futureshops/client/screen/PlayerShopCartScreen.java"),
             Path.of("src/main/java/com/enviouse/futureshops/client/screen/PlayerShopBlockScreen.java"),
-            Path.of("src/main/java/com/enviouse/futureshops/client/screen/PlayerShopBarterScreen.java"));
+            Path.of("src/main/java/com/enviouse/futureshops/client/screen/PlayerShopBarterScreen.java"),
+            Path.of("src/main/java/com/enviouse/futureshops/client/screen/PlayerStorefrontScreen.java"));
 
     // Locates `new C2SPlayerShopBuyPacket(` prefixes; the matching close paren is found
     // manually by balancing parens so that inner calls like `entry.shopPos()` are not

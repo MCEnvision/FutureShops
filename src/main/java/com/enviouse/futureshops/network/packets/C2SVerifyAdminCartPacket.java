@@ -15,17 +15,23 @@ import java.util.function.Supplier;
  */
 public record C2SVerifyAdminCartPacket(String shopId, List<AdminCartLine> lines) {
 
-    /** One admin-cart line. {@code listingId} is the catalog resolution key (see C2SBuyRequestPacket.LineItem). */
-    public record AdminCartLine(String listingId, int quantity, long expectedPriceMinor) {
+    /**
+     * One admin-cart line. {@code listingId} is the catalog resolution key (see
+     * C2SBuyRequestPacket.LineItem). {@code expectedNbtJson} is the listing tag the
+     * buyer saw at add-to-cart time (v25, trailing; blank = no NBT) so the server
+     * can warn when an operator swapped the variant before checkout.
+     */
+    public record AdminCartLine(String listingId, int quantity, long expectedPriceMinor, String expectedNbtJson) {
 
         public static void encode(FriendlyByteBuf buffer, AdminCartLine line) {
             buffer.writeUtf(line.listingId);
             buffer.writeVarInt(line.quantity);
             buffer.writeLong(line.expectedPriceMinor);
+            buffer.writeUtf(line.expectedNbtJson == null ? "" : line.expectedNbtJson);
         }
 
         public static AdminCartLine decode(FriendlyByteBuf buffer) {
-            return new AdminCartLine(buffer.readUtf(), buffer.readVarInt(), buffer.readLong());
+            return new AdminCartLine(buffer.readUtf(), buffer.readVarInt(), buffer.readLong(), buffer.readUtf());
         }
     }
 

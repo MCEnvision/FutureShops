@@ -3,7 +3,6 @@ package com.enviouse.futureshops.client.screen;
 import com.enviouse.futureshops.client.ShopColors;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
@@ -34,6 +33,10 @@ public class ConfirmationModal {
 
     // Modal dimensions (computed in render)
     private int modalX, modalY, modalW, modalH;
+
+    // Flat Nocturne buttons: draw + hit-region come from the same ShopUiUtil.button calls,
+    // registered here each render and consulted in mouseClicked via dispatchClicks.
+    private final List<ShopUiUtil.ClickZone> clickZones = new java.util.ArrayList<>();
 
     public ConfirmationModal(String title, List<SummaryLine> summaryLines, String totalText,
                              Consumer<ConfirmationModal> onConfirm, Runnable onCancel) {
@@ -95,6 +98,7 @@ public class ConfirmationModal {
     }
 
     private void renderInner(GuiGraphics graphics, Font font, int screenW, int screenH, int mouseX, int mouseY) {
+        clickZones.clear();
         // Dim layer — single pass is enough now that we're drawing above the item-stack
         // Z plane. Previously the layer appeared "weak" because bright item icons / glyphs
         // rendered at a higher Z were punching through.
@@ -122,13 +126,11 @@ public class ConfirmationModal {
             String msg = "✗ " + resultMessage;
             int tw = font.width(msg);
             graphics.drawString(font, msg, modalX + (modalW - tw) / 2, modalY + modalH / 2 - 12, ShopColors.STATUS_DANGER, true);
-            // OK button
+            // OK button — flat Nocturne SECONDARY, dismisses via onCancel.
             int btnX = modalX + (modalW - 50) / 2;
             int btnY = modalY + modalH / 2 + 6;
-            boolean hovered = mouseX >= btnX && mouseX <= btnX + 50 && mouseY >= btnY && mouseY <= btnY + 16;
-            graphics.fill(btnX, btnY, btnX + 50, btnY + 16, hovered ? ShopColors.BTN_HOVER : ShopColors.BTN_REST);
-            ShopUiUtil.drawBorder(graphics, btnX, btnY, 50, 16, ShopColors.BORDER_MUTED);
-            graphics.drawString(font, I18n.get("gui.futureshops.modal.ok"), btnX + 20, btnY + 4, ShopColors.TEXT_STRONG, true);
+            ShopUiUtil.button(graphics, font, clickZones, mouseX, mouseY, btnX, btnY, 50, 16,
+                    Component.translatable("gui.futureshops.modal.ok"), ShopUiUtil.ButtonStyle.SECONDARY, true, onCancel);
             return;
         }
 
@@ -168,33 +170,26 @@ public class ConfirmationModal {
         graphics.drawString(font, totalText, modalX + 10, lineY, ShopColors.TEXT_CURRENCY, true);
         lineY += 16;
 
-        // Buttons
+        // Buttons — flat Nocturne primitives.
         int btnW = 70;
         int btnH = 16;
         int gap = 12;
         int totalBtnW = btnW * 2 + gap;
         int startX = modalX + (modalW - totalBtnW) / 2;
 
-        // Cancel
-        boolean cancelHover = mouseX >= startX && mouseX <= startX + btnW && mouseY >= lineY && mouseY <= lineY + btnH;
-        graphics.fill(startX, lineY, startX + btnW, lineY + btnH, cancelHover ? ShopColors.BTN_HOVER : ShopColors.BTN_REST);
-        ShopUiUtil.drawBorder(graphics, startX, lineY, btnW, btnH, ShopColors.BORDER_MUTED);
-        String cancelText = I18n.get("gui.futureshops.modal.cancel");
-        graphics.drawString(font, cancelText, startX + (btnW - font.width(cancelText)) / 2, lineY + 4, ShopColors.TEXT_MUTED, true);
+        // Cancel — always active (also the escape hatch from PROCESSING).
+        ShopUiUtil.button(graphics, font, clickZones, mouseX, mouseY, startX, lineY, btnW, btnH,
+                Component.translatable("gui.futureshops.modal.cancel"), ShopUiUtil.ButtonStyle.SECONDARY, true, onCancel);
 
-        // Confirm
+        // Confirm — PRIMARY when WAITING; a disabled "Processing…" placeholder while PROCESSING.
         int confirmX = startX + btnW + gap;
         if (state == State.PROCESSING) {
-            graphics.fill(confirmX, lineY, confirmX + btnW, lineY + btnH, ShopColors.BTN_REST);
-            ShopUiUtil.drawBorder(graphics, confirmX, lineY, btnW, btnH, ShopColors.BORDER_MUTED);
-            String proc = I18n.get("gui.futureshops.modal.processing");
-            graphics.drawString(font, proc, confirmX + (btnW - font.width(proc)) / 2, lineY + 4, ShopColors.TEXT_MUTED, false);
+            ShopUiUtil.button(graphics, font, clickZones, mouseX, mouseY, confirmX, lineY, btnW, btnH,
+                    Component.translatable("gui.futureshops.modal.processing"), ShopUiUtil.ButtonStyle.PRIMARY, false, null);
         } else {
-            boolean confirmHover = mouseX >= confirmX && mouseX <= confirmX + btnW && mouseY >= lineY && mouseY <= lineY + btnH;
-            graphics.fill(confirmX, lineY, confirmX + btnW, lineY + btnH, confirmHover ? ShopColors.BTN_CTA_HOVER : ShopColors.BTN_CTA_REST);
-            ShopUiUtil.drawBorder(graphics, confirmX, lineY, btnW, btnH, ShopColors.BORDER_GLOW);
-            String confirmText = I18n.get("gui.futureshops.modal.confirm");
-            graphics.drawString(font, confirmText, confirmX + (btnW - font.width(confirmText)) / 2, lineY + 4, ShopColors.TEXT_STRONG, true);
+            ShopUiUtil.button(graphics, font, clickZones, mouseX, mouseY, confirmX, lineY, btnW, btnH,
+                    Component.translatable("gui.futureshops.modal.confirm"), ShopUiUtil.ButtonStyle.PRIMARY, true,
+                    () -> onConfirm.accept(this));
         }
 
         // Vanilla-style tooltip on hovered item icon so buyers can inspect enchantments,
@@ -208,47 +203,18 @@ public class ConfirmationModal {
      * Handle mouse clicks. Returns true if the modal consumed the click.
      */
     public boolean mouseClicked(double mouseX, double mouseY, int button, Font font) {
-        if (state == State.FAILED) {
-            // OK button
-            int btnX = modalX + (modalW - 50) / 2;
-            int btnY = modalY + modalH / 2 + 6;
-            if (mouseX >= btnX && mouseX <= btnX + 50 && mouseY >= btnY && mouseY <= btnY + 16) {
-                onCancel.run();
-                return true;
-            }
-            return true; // consume click anyway
+        // Flat Nocturne buttons (OK / Cancel / Confirm, registered during render).
+        if (ShopUiUtil.dispatchClicks(clickZones, mouseX, mouseY)) {
+            return true;
         }
-        if (state == State.SUCCESS) {
-            return true; // success auto-dismisses; consume clicks meanwhile
+        if (state == State.FAILED || state == State.SUCCESS) {
+            return true; // OK handled above (FAILED) or auto-dismissing (SUCCESS); consume otherwise.
         }
 
         // Check if click is outside modal → cancel (works in WAITING and PROCESSING)
         if (mouseX < modalX || mouseX > modalX + modalW || mouseY < modalY || mouseY > modalY + modalH) {
             onCancel.run();
             return true;
-        }
-
-        // Button row Y
-        int lineY = modalY + 26 + summaryLines.size() * 16 + 7 + 16;
-        int btnW = 70;
-        int btnH = 16;
-        int gap = 12;
-        int totalBtnW = btnW * 2 + gap;
-        int startX = modalX + (modalW - totalBtnW) / 2;
-
-        // Cancel button — always active (also escape hatch from PROCESSING)
-        if (mouseX >= startX && mouseX <= startX + btnW && mouseY >= lineY && mouseY <= lineY + btnH) {
-            onCancel.run();
-            return true;
-        }
-
-        // Confirm button — only in WAITING state
-        if (state == State.WAITING) {
-            int confirmX = startX + btnW + gap;
-            if (mouseX >= confirmX && mouseX <= confirmX + btnW && mouseY >= lineY && mouseY <= lineY + btnH) {
-                onConfirm.accept(this);
-                return true;
-            }
         }
 
         return true; // consume click inside modal

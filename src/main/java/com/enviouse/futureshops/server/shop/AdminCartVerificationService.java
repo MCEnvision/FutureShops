@@ -20,6 +20,8 @@ public final class AdminCartVerificationService {
 
     public static void verify(ServerPlayer player, String shopId, List<C2SVerifyAdminCartPacket.AdminCartLine> lines) {
         List<CartWarning> warnings = new ArrayList<>();
+        // Warnings carry a stable code + args (never English) so the client localizes them.
+        final String SEP = S2CVerifyCartResponsePacket.WARNING_ARG_SEP;
 
         for (int i = 0; i < lines.size(); i++) {
             C2SVerifyAdminCartPacket.AdminCartLine line = lines.get(i);
@@ -27,7 +29,7 @@ public final class AdminCartVerificationService {
             // Check listing still exists in catalog (resolution key, not registry id)
             var itemOpt = ShopCatalog.getItem(shopId, line.listingId());
             if (itemOpt.isEmpty()) {
-                warnings.add(new CartWarning(i, "ITEM_REMOVED", "Item no longer available in shop"));
+                warnings.add(new CartWarning(i, "ITEM_REMOVED", ""));
                 continue;
             }
 
@@ -36,7 +38,16 @@ public final class AdminCartVerificationService {
             // Check price changed — use effective buy price (includes promos)
             long currentPrice = ShopCatalog.getEffectiveBuyPrice(shopId, line.listingId());
             if (line.expectedPriceMinor() > 0 && currentPrice != line.expectedPriceMinor()) {
-                warnings.add(new CartWarning(i, "PRICE_CHANGED", "Price changed"));
+                warnings.add(new CartWarning(i, "PRICE_CHANGED", ""));
+            }
+
+            // Check NBT payload changed (variant-swap protection, mirrors the
+            // player-shop cart): compare the tag the buyer saw at add-to-cart time
+            // against the listing's CURRENT nbt — /shopadmin items edit can re-stamp
+            // a listingId's tag while it sits in a cart.
+            String currentNbtJson = item.nbtJson() == null ? "" : item.nbtJson();
+            if (!CartVerificationService.nbtJsonEquals(line.expectedNbtJson(), currentNbtJson)) {
+                warnings.add(new CartWarning(i, "NBT_CHANGED", ""));
             }
 
             // Check stock
@@ -44,7 +55,7 @@ public final class AdminCartVerificationService {
                 int stock = ShopCatalog.getCurrentStock(shopId, line.listingId());
                 if (stock >= 0 && stock < line.quantity()) {
                     warnings.add(new CartWarning(i, "LOW_STOCK",
-                            "Only " + stock + " available (you want " + line.quantity() + ")"));
+                            stock + SEP + line.quantity()));
                 }
             }
         }

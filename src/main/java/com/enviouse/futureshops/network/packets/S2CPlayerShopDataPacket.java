@@ -2,6 +2,7 @@ package com.enviouse.futureshops.network.packets;
 
 import com.enviouse.futureshops.client.ShopClientPacketHandler;
 import com.enviouse.futureshops.data.PlayerShopListingData;
+import com.enviouse.futureshops.data.PlayerShopStorageEntry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.api.distmarker.Dist;
@@ -28,7 +29,14 @@ public record S2CPlayerShopDataPacket(
         String description,
         String franchiseName,
         boolean placedByCreative,
-        boolean adminShopMode) {
+        boolean adminShopMode,
+        // Protocol 27: floating block-top icon mode (+ custom item) and the linked-storage list
+        // for the owner Storage sub-tab. Appended LAST to preserve the wire order of older fields.
+        String floatingIconMode,
+        String floatingIconItem,
+        List<PlayerShopStorageEntry> linkedStorages,
+        // Owner Payouts tab: names of the viewer's persistent saved shop configs.
+        List<String> savedConfigNames) {
 
     public static void encode(S2CPlayerShopDataPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.shopPos());
@@ -47,6 +55,10 @@ public record S2CPlayerShopDataPacket(
         buffer.writeUtf(packet.franchiseName());
         buffer.writeBoolean(packet.placedByCreative());
         buffer.writeBoolean(packet.adminShopMode());
+        buffer.writeUtf(packet.floatingIconMode());
+        buffer.writeUtf(packet.floatingIconItem());
+        buffer.writeCollection(packet.linkedStorages(), PlayerShopStorageEntry::encode);
+        buffer.writeCollection(packet.savedConfigNames(), FriendlyByteBuf::writeUtf);
     }
 
     public static S2CPlayerShopDataPacket decode(FriendlyByteBuf buffer) {
@@ -66,7 +78,11 @@ public record S2CPlayerShopDataPacket(
                 buffer.readUtf(),
                 buffer.readUtf(),
                 buffer.readBoolean(),
-                buffer.readBoolean());
+                buffer.readBoolean(),
+                buffer.readUtf(),
+                buffer.readUtf(),
+                buffer.readList(PlayerShopStorageEntry::decode),
+                buffer.readList(FriendlyByteBuf::readUtf));
     }
 
     public static void handle(S2CPlayerShopDataPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

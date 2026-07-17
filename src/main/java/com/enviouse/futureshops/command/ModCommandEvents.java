@@ -17,6 +17,7 @@ public final class ModCommandEvents {
         PayCommand.register(event.getDispatcher());
         BalTopCommand.register(event.getDispatcher());
         WithdrawCommand.register(event.getDispatcher());
+        AtmCommand.register(event.getDispatcher());
         DepositCommand.register(event.getDispatcher());
         ShopAdminCommand.register(event.getDispatcher());
         AdminModeCommand.register(event.getDispatcher());

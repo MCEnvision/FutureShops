@@ -8,7 +8,6 @@ import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyAdminCartPacket;
 import com.enviouse.futureshops.network.packets.S2CVerifyCartResponsePacket;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -22,9 +21,16 @@ public class CartScreen extends Screen implements ShopScreenMarker {
     private int guiH;
     private int visibleRows;
     private int scrollIndex;
-    private Button checkoutButton;
     private boolean awaitingVerification = false;
     private ConfirmationModal confirmationModal = null;
+
+    // Flat Nocturne buttons: draw + hit-region come from the same ShopUiUtil.button call,
+    // registered here each frame and consulted in mouseClicked via dispatchClicks.
+    private final java.util.List<ShopUiUtil.ClickZone> clickZones = new java.util.ArrayList<>();
+    // Set during renderRows when the "+" stepper is hovered, so the Shift=Max tooltip can be
+    // drawn on top after super.render (geometry now comes straight from the stepper button).
+    private int maxTipX = -1;
+    private int maxTipY = -1;
 
     public CartScreen(Screen parent) {
         super(Component.translatable("gui.futureshops.cart.title"));
@@ -33,22 +39,17 @@ public class CartScreen extends Screen implements ShopScreenMarker {
 
     @Override
     protected void init() {
-        guiW = Math.max(360, this.width - 4);
-        guiH = Math.max(250, this.height - 4);
-        guiLeft = (this.width - guiW) / 2;
+        // Right-side drawer (Nocturne cart): a fixed-width panel anchored to the right edge over
+        // the dimmed ground, rather than a full-screen takeover.
+        guiW = Math.min(360, this.width - 8);
+        guiH = Math.max(250, this.height - 20);
+        guiLeft = this.width - guiW - 8;
         guiTop = (this.height - guiH) / 2;
-        visibleRows = Math.max(4, (guiH - 140) / 28);
-
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.cart.back"), button -> onClose())
-                .bounds(guiLeft + 10, guiTop + guiH - 24, 48, 18)
-                .build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.cart.clear_btn"), button -> {
-            ShopClientState.clearCart();
-            ShopClientState.clearCartVerification();
-        }).bounds(guiLeft + 64, guiTop + guiH - 24, 48, 18).build());
-        checkoutButton = addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.cart.checkout_btn"), button -> requestVerifyAndCheckout())
-                .bounds(guiLeft + guiW - 100, guiTop + guiH - 24, 90, 18)
-                .build());
+        // Reserve a taller footer band (rows list shrunk to guiH-150 in renderRows) so verification
+        // warnings have somewhere to go below the card; keep visibleRows in step so rows never
+        // overflow the shorter card into that band.
+        visibleRows = Math.max(3, (guiH - 170) / 28);
+        // Footer buttons are drawn immediate-mode in render(); no widgets to register here.
     }
 
     @Override
@@ -74,13 +75,14 @@ public class CartScreen extends Screen implements ShopScreenMarker {
             // Icon id must be a registry itemId (a valid ResourceLocation); the listingId is only the
             // cart key and may not parse. Fall back to the listingId string only when the row is unknown.
             String iconId = item != null ? item.itemId() : entry.listingId();
-            lines.add(ConfirmationModal.SummaryLine.item(iconId, name + " ×" + entry.quantity()));
+            String nbt = item != null ? item.nbtJson() : "";
+            lines.add(ConfirmationModal.SummaryLine.item(iconId, name + " ×" + entry.quantity(), nbt));
         }
         String totalStr = ShopUiUtil.formatMinorUnits(ShopClientState.getCartTotalMinorUnits());
         confirmationModal = new ConfirmationModal(
-                "Confirm Checkout",
+                Component.translatable("gui.futureshops.cart.confirm.title").getString(),
                 lines,
-                "Total: " + totalStr + " " + ShopClientState.getCurrencyName(),
+                Component.translatable("gui.futureshops.item_detail.total_cost", totalStr, ShopClientState.getCurrencyName()).getString(),
                 modal -> {
                     modal.setProcessing();
                     sendCheckout();
@@ -91,53 +93,71 @@ public class CartScreen extends Screen implements ShopScreenMarker {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        clickZones.clear();
+        maxTipX = -1;
+        maxTipY = -1;
         ShopUiUtil.renderDimBackdrop(graphics, this.width, this.height);
         graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + guiH, ShopColors.SURFACE_BASE);
         ShopUiUtil.drawSoftOutline(graphics, guiLeft, guiTop, guiW, guiH, ShopColors.BORDER_STRONG, ShopColors.BORDER_SUBTLE);
-        graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + 2, ShopColors.ACCENT_PRIMARY);
+        ShopUiUtil.renderAccentLine(graphics, guiLeft + 2, guiTop, guiW - 4);
         renderHeader(graphics);
-        renderRows(graphics);
+        renderRows(graphics, mouseX, mouseY);
         renderSummary(graphics);
 
-        // Cart verification warnings
+        // Cart verification warnings — drawn TOP-DOWN in the band reserved just below the rows
+        // card (listH was shrunk to guiH-150 for exactly this), clipped to a hard lower bound so
+        // extra warnings can never spill back up over the last row or down onto the summary bar.
         List<S2CVerifyCartResponsePacket.CartWarning> warnings = ShopClientState.getCartWarnings();
         if (!warnings.isEmpty()) {
-            int warnY = guiTop + guiH - 62;
-            for (int wi = Math.min(warnings.size(), 3) - 1; wi >= 0; wi--) {
+            int warnY = (guiTop + 52) + (guiH - 150) + 2; // just below the rows card
+            int maxWarnY = guiTop + guiH - 68;            // stay above the summary bar
+            int shown = 0;
+            for (int wi = 0; wi < Math.min(warnings.size(), 3) && warnY <= maxWarnY; wi++) {
                 S2CVerifyCartResponsePacket.CartWarning w = warnings.get(wi);
-                String warnText = "§c⚠ #" + (w.cartLineIndex() + 1) + ": " + w.detail();
+                // Localized on the client from the warning code + args (server sends no English).
+                String warnText = ShopUiUtil.cartWarningLine(w.cartLineIndex(), w.warningCode(), w.detail()).getString();
                 graphics.drawString(this.font, this.font.plainSubstrByWidth(warnText, guiW - 30),
                         guiLeft + 10, warnY, ShopColors.ERROR, false);
-                warnY -= 12;
+                warnY += 12;
+                shown++;
             }
-            if (warnings.size() > 3) {
-                graphics.drawString(this.font, "§c... and " + (warnings.size() - 3) + " more warnings",
+            if (warnings.size() > shown && warnY <= maxWarnY) {
+                graphics.drawString(this.font, Component.translatable("gui.futureshops.cart.more_warnings", warnings.size() - shown),
                         guiLeft + 10, warnY, ShopColors.ERROR, false);
             }
         }
 
         // Awaiting verification indicator
         if (awaitingVerification) {
-            graphics.drawCenteredString(this.font, "§eVerifying cart...",
+            graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.cart.verifying"),
                     guiLeft + guiW / 2, guiTop + guiH - 62, ShopColors.ACCENT_ORANGE);
         }
 
-        ShopUiUtil.renderStatusPanel(graphics, this.font, guiLeft + 10, Math.max(6, guiTop - 24), guiW - 20);
-        checkoutButton.active = !ShopClientState.getCartEntries().isEmpty();
+        // Status toast floats above the drawer, but when the drawer is flush to the top edge there
+        // is no room there — drop it just below the window instead of clamping it onto the header.
+        int statusY = (guiTop - 24 >= 6) ? (guiTop - 24) : (guiTop + guiH + 2);
+        ShopUiUtil.renderStatusPanel(graphics, this.font, guiLeft + 10, statusY, guiW - 20);
+
+        // Footer buttons — flat Nocturne primitives at their former bounds.
+        boolean canCheckout = !ShopClientState.getCartEntries().isEmpty();
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + 10, guiTop + guiH - 24, 48, 18,
+                Component.translatable("gui.futureshops.cart.back"), ShopUiUtil.ButtonStyle.SECONDARY, true, this::onClose);
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + 64, guiTop + guiH - 24, 48, 18,
+                Component.translatable("gui.futureshops.cart.clear_btn"), ShopUiUtil.ButtonStyle.DANGER, true, () -> {
+                    ShopClientState.clearCart();
+                    ShopClientState.clearCartVerification();
+                });
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + guiW - 100, guiTop + guiH - 24, 90, 18,
+                Component.translatable("gui.futureshops.cart.checkout_btn"), ShopUiUtil.ButtonStyle.PRIMARY, canCheckout, this::requestVerifyAndCheckout);
+
         super.render(graphics, mouseX, mouseY, partialTick);
 
-        // Tooltip for cart "+" hover (Shift+Click: Max)
-        List<ShopClientState.CartEntry> tooltipEntries = ShopClientState.getCartEntries();
-        int listX = guiLeft + 10;
-        int rowY = guiTop + 60;
-        int listW = guiW - 20;
-        for (int row = 0; row < visibleRows && row + scrollIndex < tooltipEntries.size(); row++) {
-            int y = rowY + row * 28;
-            int ctrlX = listX + listW - 130;
-            if (mouseX >= ctrlX + 24 && mouseX <= ctrlX + 38 && mouseY >= y && mouseY <= y + 22) {
-                graphics.renderTooltip(this.font, Component.translatable("gui.futureshops.cart.tooltip.shift_max"), mouseX, mouseY);
-                break;
-            }
+        // Tooltip for cart "+" hover (Shift+Click: Max) — geometry captured by the stepper button.
+        if (maxTipX >= 0) {
+            graphics.renderTooltip(this.font, Component.translatable("gui.futureshops.cart.tooltip.shift_max"), maxTipX, maxTipY);
         }
 
         // Spec §8: Render confirmation modal on top of everything
@@ -155,14 +175,15 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         int hw = guiW - 16;
         ShopUiUtil.renderHeroHeader(graphics, this.font, hx, hy, hw,
                 this.title.getString(),
-                "Review every cart line before checkout");
+                Component.translatable("gui.futureshops.cart.subtitle").getString());
     }
 
-    private void renderRows(GuiGraphics graphics) {
+    private void renderRows(GuiGraphics graphics, int mouseX, int mouseY) {
         int listX = guiLeft + 10;
         int listY = guiTop + 52;
         int listW = guiW - 20;
-        int listH = guiH - 120;
+        // Shrunk by 30px vs. the old guiH-120 to reserve a warning band below the card (Fix 1).
+        int listH = guiH - 150;
         ShopUiUtil.renderCard(graphics, listX, listY, listW, listH);
 
         List<ShopClientState.CartEntry> entries = ShopClientState.getCartEntries();
@@ -182,25 +203,61 @@ public class CartScreen extends Screen implements ShopScreenMarker {
             int y = rowY + row * 28;
             int rowBg = row % 2 == 0 ? ShopColors.SURFACE_RAISED : ShopColors.SURFACE_OVERLAY;
             ShopUiUtil.renderPanel(graphics, listX + 6, y, listW - 12, 22, rowBg, ShopColors.BORDER_SUBTLE);
-            ShopUiUtil.renderItemIcon(graphics, this.font, item.itemId(), listX + 10, y + 3);
+            // NBT-aware icon: BEWLR items (TacZ guns etc.) resolve their model
+            // from the listing tag and render as a missing texture without it.
+            ShopUiUtil.renderItemIconWithNbt(graphics, this.font, item.itemId(), item.nbtJson(), listX + 10, y + 3);
 
             // Name — scrolls (ping-pong) when too long so modded items with lengthy names stay readable.
             ShopUiUtil.renderScrollingString(graphics, this.font, item.displayName(),
                     listX + 30, y + 7, listW - 240, ShopColors.TEXT_STRONG);
 
-            // Quantity controls
+            // Quantity controls — flat mini steppers ([−] [N] [+]) with registered ClickZones.
+            final ShopClientState.CartEntry rowEntry = entry;
             int ctrlX = listX + listW - 130;
-            graphics.drawString(this.font, "§7-", ctrlX, y + 7, ShopColors.TEXT_MUTED, false);
-            graphics.drawString(this.font, "§f" + entry.quantity(), ctrlX + 14, y + 7, ShopColors.TEXT_STRONG, false);
-            graphics.drawString(this.font, "§7+", ctrlX + 28, y + 7, ShopColors.TEXT_MUTED, false);
+            ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                    ctrlX, y + 3, 14, 16, Component.literal("-"), ShopUiUtil.ButtonStyle.SECONDARY, true,
+                    () -> ShopClientState.setCartQuantity(rowEntry.listingId(), rowEntry.quantity() - 1));
+            // Wider (18px) qty window between the steppers so 3-4 digit quantities no longer
+            // slide under the "+"; the value is clipped and centered inside that window.
+            int qtyWinX = ctrlX + 16;
+            int qtyWinW = 18;
+            String qtyStr = this.font.plainSubstrByWidth(String.valueOf(entry.quantity()), qtyWinW);
+            graphics.drawString(this.font, qtyStr, qtyWinX + (qtyWinW - this.font.width(qtyStr)) / 2, y + 7, ShopColors.TEXT_STRONG, false);
+            boolean plusHover = ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                    ctrlX + 34, y + 3, 14, 16, Component.literal("+"), ShopUiUtil.ButtonStyle.SECONDARY, true,
+                    () -> {
+                        if (hasShiftDown()) {
+                            CatalogItem it = ShopClientState.getCatalogItem(rowEntry.listingId()).orElse(null);
+                            int max = 2304;
+                            if (it != null) {
+                                if (!it.unlimited()) max = Math.min(max, Math.max(1, it.stock()));
+                                long price = it.hasPromo() ? it.promoPrice() : it.buyPrice();
+                                if (price > 0) {
+                                    long bal = ShopClientState.getCurrentBalanceMinorUnits();
+                                    max = Math.min(max, (int) Math.min(bal / price, 2304));
+                                }
+                            }
+                            ShopClientState.setCartQuantity(rowEntry.listingId(), Math.max(1, max));
+                        } else {
+                            ShopClientState.setCartQuantity(rowEntry.listingId(), rowEntry.quantity() + 1);
+                        }
+                    });
+            if (plusHover) {
+                maxTipX = mouseX;
+                maxTipY = mouseY;
+            }
 
             // Price — currency amber
             long unitPrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
-            String priceStr = this.font.plainSubstrByWidth(ShopUiUtil.formatMinorUnits(unitPrice * entry.quantity()), 60);
-            graphics.drawString(this.font, priceStr, listX + listW - 86, y + 7, ShopColors.TEXT_CURRENCY, false);
+            // Start clear of the shifted "+" stepper (now ends at listW-82) and clip a touch
+            // tighter so the price still stops short of the remove button.
+            String priceStr = this.font.plainSubstrByWidth(ShopUiUtil.formatMinorUnits(unitPrice * entry.quantity()), 54);
+            graphics.drawString(this.font, priceStr, listX + listW - 80, y + 7, ShopColors.TEXT_CURRENCY, false);
 
-            // Remove
-            graphics.drawString(this.font, "§c✕", listX + listW - 22, y + 7, ShopColors.STATUS_DANGER, false);
+            // Remove — flat DANGER "✕" button with a registered ClickZone.
+            ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                    listX + listW - 24, y + 3, 16, 16, Component.literal("✕"), ShopUiUtil.ButtonStyle.DANGER, true,
+                    () -> ShopClientState.removeFromCart(rowEntry.listingId()));
         }
     }
 
@@ -212,10 +269,12 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.drawBorder(graphics, x, y, w, 24, ShopColors.BORDER_MUTED);
         graphics.fill(x, y, x + w, y + 2, ShopColors.ACCENT_CURRENCY);
         // Item count — truncated
-        String items = this.font.plainSubstrByWidth(ShopClientState.getCartTotalQuantity() + " items in cart", w / 2 - 10);
+        String items = this.font.plainSubstrByWidth(
+                Component.translatable("gui.futureshops.cart.items_in_cart", ShopClientState.getCartTotalQuantity()).getString(), w / 2 - 10);
         graphics.drawString(this.font, items, x + 10, y + 8, ShopColors.TEXT_MUTED, false);
         // Total — amber
-        String total = "Total: " + ShopUiUtil.formatMinorUnits(ShopClientState.getCartTotalMinorUnits());
+        String total = Component.translatable("gui.futureshops.cart.total_line",
+                ShopUiUtil.formatMinorUnits(ShopClientState.getCartTotalMinorUnits())).getString();
         String clipped = this.font.plainSubstrByWidth(total, w / 2);
         graphics.drawString(this.font, clipped, x + w - this.font.width(clipped) - 10, y + 8, ShopColors.TEXT_CURRENCY, false);
     }
@@ -240,7 +299,8 @@ public class CartScreen extends Screen implements ShopScreenMarker {
                     if (item != null) {
                         expectedPrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
                     }
-                    return new C2SVerifyAdminCartPacket.AdminCartLine(e.listingId(), e.quantity(), expectedPrice);
+                    return new C2SVerifyAdminCartPacket.AdminCartLine(e.listingId(), e.quantity(), expectedPrice,
+                            ShopClientState.getCartNbtSnapshot(e.listingId()));
                 })
                 .toList();
         ShopClientState.clearCartVerification();
@@ -272,43 +332,9 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         if (confirmationModal != null) {
             return confirmationModal.mouseClicked(mouseX, mouseY, button, this.font);
         }
-        int listX = guiLeft + 10;
-        int rowY = guiTop + 60;
-        int listW = guiW - 20;
-        List<ShopClientState.CartEntry> entries = ShopClientState.getCartEntries();
-        for (int row = 0; row < visibleRows && row + scrollIndex < entries.size(); row++) {
-            ShopClientState.CartEntry entry = entries.get(row + scrollIndex);
-            int y = rowY + row * 28;
-            int ctrlX = listX + listW - 130;
-            // Minus
-            if (mouseX >= ctrlX && mouseX <= ctrlX + 10 && mouseY >= y && mouseY <= y + 22) {
-                ShopClientState.setCartQuantity(entry.listingId(), entry.quantity() - 1);
-                return true;
-            }
-            // Plus (Shift+Click = Max)
-            if (mouseX >= ctrlX + 24 && mouseX <= ctrlX + 38 && mouseY >= y && mouseY <= y + 22) {
-                if (hasShiftDown()) {
-                    CatalogItem item = ShopClientState.getCatalogItem(entry.listingId()).orElse(null);
-                    int max = 2304;
-                    if (item != null) {
-                        if (!item.unlimited()) max = Math.min(max, Math.max(1, item.stock()));
-                        long price = item.hasPromo() ? item.promoPrice() : item.buyPrice();
-                        if (price > 0) {
-                            long bal = ShopClientState.getCurrentBalanceMinorUnits();
-                            max = Math.min(max, (int) Math.min(bal / price, 2304));
-                        }
-                    }
-                    ShopClientState.setCartQuantity(entry.listingId(), Math.max(1, max));
-                } else {
-                    ShopClientState.setCartQuantity(entry.listingId(), entry.quantity() + 1);
-                }
-                return true;
-            }
-            // Remove
-            if (mouseX >= listX + listW - 24 && mouseX <= listX + listW - 10 && mouseY >= y && mouseY <= y + 22) {
-                ShopClientState.removeFromCart(entry.listingId());
-                return true;
-            }
+        // Flat Nocturne buttons (footer + per-row steppers/remove): run the top-most hit zone.
+        if (ShopUiUtil.dispatchClicks(clickZones, mouseX, mouseY)) {
+            return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
     }

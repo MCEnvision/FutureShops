@@ -7,7 +7,6 @@ import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SOpenBalTopUiPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenBalanceUiPacket;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -29,6 +28,7 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
     private String popularItemId;
     private int popularItemTrades;
     private long popularItemQuantity;
+    private String popularItemNbtJson;
     private List<FranchiseLeaderboardEntry> franchises;
 
     private int guiLeft;
@@ -44,10 +44,13 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
     private int highlightContentHeight;
     private int highlightViewportHeight;
 
+    /** Per-frame flat-button hit regions, populated in {@link #render}, consulted in mouseClicked. */
+    private final java.util.List<ShopUiUtil.ClickZone> clickZones = new java.util.ArrayList<>();
+
     public BalTopOverviewScreen(int page, int totalPages, List<BalanceTopEntry> entries, String currencyName, int currencyDecimals,
                                 UUID activityLeaderUuid, String activityLeaderName, int activityLeaderCount,
                                 UUID topSellerUuid, String topSellerName, int topSellerCount,
-                                String popularItemId, int popularItemTrades, long popularItemQuantity,
+                                String popularItemId, int popularItemTrades, long popularItemQuantity, String popularItemNbtJson,
                                 List<FranchiseLeaderboardEntry> franchises) {
         super(Component.translatable("gui.futureshops.baltop.title"));
         this.page = page;
@@ -64,6 +67,7 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
         this.popularItemId = popularItemId;
         this.popularItemTrades = popularItemTrades;
         this.popularItemQuantity = popularItemQuantity;
+        this.popularItemNbtJson = popularItemNbtJson == null ? "" : popularItemNbtJson;
         this.franchises = List.copyOf(franchises);
     }
 
@@ -73,24 +77,32 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
         guiH = Math.max(280, this.height - 4);
         guiLeft = (this.width - guiW) / 2;
         guiTop = (this.height - guiH) / 2;
+        // Footer nav buttons are drawn immediate-mode in render().
+    }
 
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.baltop.back"), button ->
-                        ShopPackets.CHANNEL.sendToServer(new C2SOpenBalanceUiPacket()))
-                .bounds(guiLeft + 10, guiTop + guiH - 24, 48, 18)
-                .build());
-        addRenderableWidget(Button.builder(Component.literal("<"), button -> request(Math.max(1, page - 1)))
-                .bounds(guiLeft + guiW - 106, guiTop + guiH - 24, 18, 18)
-                .build());
-        addRenderableWidget(Button.builder(Component.literal(">"), button -> request(Math.min(totalPages, page + 1)))
-                .bounds(guiLeft + guiW - 84, guiTop + guiH - 24, 18, 18)
-                .build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.baltop.close"), button -> onClose())
-                .bounds(guiLeft + guiW - 62, guiTop + guiH - 24, 54, 18)
-                .build());
+    /** Draws the footer nav buttons and registers their click zones for this frame. */
+    private void renderButtons(GuiGraphics graphics, int mouseX, int mouseY) {
+        int y = guiTop + guiH - 24;
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + 10, y, 48, 18,
+                Component.translatable("gui.futureshops.baltop.back"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true,
+                () -> ShopPackets.CHANNEL.sendToServer(new C2SOpenBalanceUiPacket()));
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + guiW - 106, y, 18, 18, Component.literal("<"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true, () -> request(Math.max(1, page - 1)));
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + guiW - 84, y, 18, 18, Component.literal(">"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true, () -> request(Math.min(totalPages, page + 1)));
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + guiW - 62, y, 54, 18,
+                Component.translatable("gui.futureshops.baltop.close"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true, this::onClose);
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        clickZones.clear();
         ShopUiUtil.renderDimBackdrop(graphics, this.width, this.height);
         graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + guiH, ShopColors.SURFACE_BASE);
         ShopUiUtil.drawSoftOutline(graphics, guiLeft, guiTop, guiW, guiH, ShopColors.BORDER_STRONG, ShopColors.BORDER_SUBTLE);
@@ -100,13 +112,23 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
         renderTopBalances(graphics);
         renderHighlights(graphics);
         renderFranchiseLeaderboard(graphics);
+        renderButtons(graphics, mouseX, mouseY);
 
         super.render(graphics, mouseX, mouseY, partialTick);
     }
 
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (ShopUiUtil.dispatchClicks(clickZones, mouseX, mouseY)) {
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
     private void renderHeader(GuiGraphics graphics) {
         ShopUiUtil.renderHeroHeader(graphics, this.font, guiLeft + 10, guiTop + 10, guiW - 20,
-                this.title.getString(), "Page " + page + " / " + totalPages);
+                this.title.getString(),
+                Component.translatable("gui.futureshops.history.page", page, totalPages).getString());
     }
 
     private void renderTopBalances(GuiGraphics graphics) {
@@ -116,7 +138,7 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
         int panelH = guiH - 92;
         ShopUiUtil.renderCard(graphics, panelX, panelY, panelW, panelH);
         graphics.fill(panelX, panelY, panelX + panelW, panelY + 2, ShopColors.ACCENT_CURRENCY);
-        graphics.drawString(this.font, "Top 10 balances", panelX + 8, panelY + 8, ShopColors.TEXT_STRONG, false);
+        graphics.drawString(this.font, Component.translatable("gui.futureshops.baltop.top_balances"), panelX + 8, panelY + 8, ShopColors.TEXT_STRONG, false);
 
         int rowY = panelY + 28;
         for (int i = 0; i < Math.min(10, entries.size()); i++) {
@@ -133,7 +155,7 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
             graphics.drawString(this.font, this.font.plainSubstrByWidth(balance, 90), panelX + panelW - 98, y + 5, ShopColors.TEXT_CURRENCY, false);
         }
         if (entries.isEmpty()) {
-            graphics.drawString(this.font, "No balance data yet.", panelX + 8, panelY + 32, ShopColors.TEXT_FAINT, false);
+            graphics.drawString(this.font, Component.translatable("gui.futureshops.baltop.no_balance_data"), panelX + 8, panelY + 32, ShopColors.TEXT_FAINT, false);
         }
     }
 
@@ -144,7 +166,7 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
         int highlightH = Math.min(160, (guiH - 92) / 2 + 20);
         ShopUiUtil.renderCard(graphics, panelX, panelY, panelW, highlightH);
         graphics.fill(panelX, panelY, panelX + panelW, panelY + 2, ShopColors.ACCENT_PRIMARY);
-        graphics.drawString(this.font, "Server spotlights", panelX + 8, panelY + 8, ShopColors.TEXT_STRONG, false);
+        graphics.drawString(this.font, Component.translatable("gui.futureshops.baltop.spotlights"), panelX + 8, panelY + 8, ShopColors.TEXT_STRONG, false);
 
         highlightPanelX = panelX;
         highlightPanelY = panelY;
@@ -168,25 +190,25 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
 
         graphics.enableScissor(panelX + 4, viewportY, panelX + panelW - 4, viewportY + viewportH);
 
-        renderHighlightCard(graphics, contentX, cursorY, contentW, cardH, "Most transactions",
-                activityLeaderUuid, activityLeaderName, activityLeaderCount + " total actions", ShopColors.TEXT_BARTER_SOFT);
+        renderHighlightCard(graphics, contentX, cursorY, contentW, cardH, Component.translatable("gui.futureshops.baltop.most_transactions").getString(),
+                activityLeaderUuid, activityLeaderName, Component.translatable("gui.futureshops.baltop.total_actions", activityLeaderCount).getString(), ShopColors.TEXT_BARTER_SOFT);
         cursorY += cardH + gap;
 
-        renderHighlightCard(graphics, contentX, cursorY, contentW, cardH, "Top seller",
-                topSellerUuid, topSellerName, topSellerCount + " shop sales", ShopColors.TEXT_CURRENCY);
+        renderHighlightCard(graphics, contentX, cursorY, contentW, cardH, Component.translatable("gui.futureshops.baltop.top_seller").getString(),
+                topSellerUuid, topSellerName, Component.translatable("gui.futureshops.baltop.shop_sales", topSellerCount).getString(), ShopColors.TEXT_CURRENCY);
         cursorY += cardH + gap;
 
         graphics.fill(contentX, cursorY, contentX + contentW, cursorY + productH, ShopColors.SURFACE_OVERLAY);
         ShopUiUtil.drawBorder(graphics, contentX, cursorY, contentW, productH, ShopColors.BORDER_SUBTLE);
         if (!popularItemId.isBlank()) {
-            ShopUiUtil.renderItemIcon(graphics, this.font, popularItemId, contentX + 6, cursorY + 7);
+            ShopUiUtil.renderItemIconWithNbt(graphics, this.font, popularItemId, popularItemNbtJson, contentX + 6, cursorY + 7);
             ShopUiUtil.renderScrollingString(graphics, this.font,
-                    "★ " + ShopUiUtil.getItemDisplayName(popularItemId),
+                    Component.translatable("gui.futureshops.baltop.popular_item", ShopUiUtil.getItemDisplayNameWithNbt(popularItemId, popularItemNbtJson)),
                     contentX + 26, cursorY + 4, contentW - 32, ShopColors.TEXT_STRONG);
-            graphics.drawString(this.font, popularItemTrades + " trades • " + popularItemQuantity + " qty",
+            graphics.drawString(this.font, Component.translatable("gui.futureshops.baltop.popular_stats", popularItemTrades, popularItemQuantity),
                     contentX + 26, cursorY + 16, ShopColors.TEXT_CURRENCY, false);
         } else {
-            graphics.drawString(this.font, "No product data yet.", contentX + 6, cursorY + 10, ShopColors.TEXT_FAINT, false);
+            graphics.drawString(this.font, Component.translatable("gui.futureshops.baltop.no_product_data"), contentX + 6, cursorY + 10, ShopColors.TEXT_FAINT, false);
         }
 
         graphics.disableScissor();
@@ -229,10 +251,10 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
 
         ShopUiUtil.renderCard(graphics, panelX, panelY, panelW, panelH);
         graphics.fill(panelX, panelY, panelX + panelW, panelY + 2, ShopColors.ACCENT_PRIMARY);
-        graphics.drawString(this.font, "§l⚑ Top 10 Franchises", panelX + 8, panelY + 6, ShopColors.ACCENT_PRIMARY, false);
+        graphics.drawString(this.font, Component.translatable("gui.futureshops.baltop.top_franchises"), panelX + 8, panelY + 6, ShopColors.ACCENT_PRIMARY, false);
 
         if (franchises.isEmpty()) {
-            graphics.drawString(this.font, "§7No franchises yet.", panelX + 8, panelY + 22, ShopColors.TEXT_FAINT, false);
+            graphics.drawString(this.font, Component.translatable("gui.futureshops.baltop.no_franchises"), panelX + 8, panelY + 22, ShopColors.TEXT_FAINT, false);
             return;
         }
 
@@ -254,7 +276,7 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
 
             // Keep the detail right-anchored but allow scrolling within its half so long leader
             // names + member counts don't truncate with a hard cut.
-            String detail = f.memberCount() + " mbr • " + f.leaderName();
+            Component detail = Component.translatable("gui.futureshops.baltop.franchise_detail", f.memberCount(), f.leaderName());
             ShopUiUtil.renderScrollingString(graphics, this.font, detail,
                     panelX + panelW / 2 + 4, y + 3, panelW / 2 - 10, ShopColors.TEXT_BARTER_SOFT);
         }
@@ -278,7 +300,7 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
     public void updatePage(int page, int totalPages, List<BalanceTopEntry> entries,
                            UUID activityLeaderUuid, String activityLeaderName, int activityLeaderCount,
                            UUID topSellerUuid, String topSellerName, int topSellerCount,
-                           String popularItemId, int popularItemTrades, long popularItemQuantity,
+                           String popularItemId, int popularItemTrades, long popularItemQuantity, String popularItemNbtJson,
                            List<FranchiseLeaderboardEntry> franchises) {
         this.page = page;
         this.totalPages = Math.max(1, totalPages);
@@ -292,6 +314,7 @@ public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
         this.popularItemId = popularItemId;
         this.popularItemTrades = popularItemTrades;
         this.popularItemQuantity = popularItemQuantity;
+        this.popularItemNbtJson = popularItemNbtJson == null ? "" : popularItemNbtJson;
         this.franchises = List.copyOf(franchises);
     }
 

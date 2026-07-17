@@ -52,7 +52,7 @@ public final class ShopBuyService {
                 // mods expect). Dynamic pricing is keyed by listingId so per-variant pricing stays
                 // independent — and == itemId for legacy entries, so existing pricing state is preserved.
                 TransactionHistoryService.record(player, result.shopId(), "BUY", line.itemId(), line.quantity(), lineCost,
-                        packet.cartCheckout() ? "CART" : "DETAIL");
+                        packet.cartCheckout() ? "CART" : "DETAIL", line.nbtJson());
                 // Record buy activity for dynamic pricing (spec §30)
                 DynamicPricingEngine.recordBuy(player.getServer(), result.shopId(), line.listingId(), line.quantity());
                 // Fire ShopTransactionEvent.Post (spec §33)
@@ -158,7 +158,7 @@ public final class ShopBuyService {
                     }
                 }
                 rewards.add(rewardStack.copy());
-                preparedLines.add(new PreparedLine(listingId, itemId, quantity, lineCost));
+                preparedLines.add(new PreparedLine(listingId, itemId, quantity, lineCost, nbt == null ? "" : nbt));
             }
 
             if (!ShopTransactionUtil.canFit(inventory, rewards)) {
@@ -226,8 +226,8 @@ public final class ShopBuyService {
         return merged;
     }
 
-    /** {@code listingId} is the catalog resolution key; {@code itemId} is the registry id to mint/log. */
-    private record PreparedLine(String listingId, String itemId, int quantity, long lineCost) {
+    /** {@code listingId} is the catalog resolution key; {@code itemId} is the registry id to mint/log; {@code nbtJson} the listing's SNBT ("" = none). */
+    private record PreparedLine(String listingId, String itemId, int quantity, long lineCost, String nbtJson) {
     }
 
     private record BuyResult(boolean success, String shopId, ShopResultCode errorCode, long resultingBalance, long totalCost, int totalQuantity,

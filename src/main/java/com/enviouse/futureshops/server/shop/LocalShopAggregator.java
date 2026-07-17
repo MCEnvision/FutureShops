@@ -115,15 +115,29 @@ public final class LocalShopAggregator {
 
                     Item item = ForgeRegistries.ITEMS.getValue(
                             net.minecraft.resources.ResourceLocation.tryParse(listing.itemId()));
-                    String displayName = item != null && item != Items.AIR
-                            ? item.getDescription().getString() : listing.itemId();
+                    // Resolve the name from a tag-stamped stack, not the item's raw
+                    // description key — tag-dependent items (TacZ guns) have no lang
+                    // entry for their key and take their name from the stack NBT.
+                    // The client re-resolves NBT-aware names locally anyway; this is
+                    // the best server-side fallback.
+                    String displayName = listing.itemId();
+                    if (item != null && item != Items.AIR) {
+                        net.minecraft.world.item.ItemStack nameStack = new net.minecraft.world.item.ItemStack(item);
+                        if (listing.nbtTag() != null) {
+                            nameStack.setTag(listing.nbtTag().copy());
+                        }
+                        displayName = nameStack.getHoverName().getString();
+                    }
 
                     long price = listing.moneyPriceMinor();
                     boolean hasPromo = listing.promo().active();
                     long promoPrice = hasPromo ? listing.promo().applyUnitPrice(price) : price;
 
+                    // Ship display NBT whenever the listing has a tag — nbtAware only
+                    // governs transaction matching, and icons/names need the tag
+                    // (matches S2CPlayerShopDataPacket's toData behavior).
                     String nbtJson = "";
-                    if (listing.nbtAware() && listing.nbtTag() != null) {
+                    if (listing.nbtTag() != null) {
                         nbtJson = listing.nbtTag().toString();
                     }
 

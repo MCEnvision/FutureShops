@@ -28,7 +28,11 @@ public record PlayerShopListingData(
         String direction,
         long buybackPriceMinor,
         int buybackCap,
-        int buybackRemaining) {
+        int buybackRemaining,
+        // Redesign: per-listing visibility flags (protocol 27). hidden = not shown/sold to
+        // visitors; showcase = shown as display-only "visit in person" (not auto-sold).
+        boolean hidden,
+        boolean showcase) {
 
     /** Item 11: Network DTO for a bundle output entry. */
     public record BundleOutputData(String itemId, int count, String nbtJson) {
@@ -69,6 +73,8 @@ public record PlayerShopListingData(
         buffer.writeLong(data.buybackPriceMinor());
         buffer.writeVarInt(data.buybackCap());
         buffer.writeVarInt(data.buybackRemaining());
+        buffer.writeBoolean(data.hidden());
+        buffer.writeBoolean(data.showcase());
     }
 
     public static PlayerShopListingData decode(FriendlyByteBuf buffer) {
@@ -98,8 +104,10 @@ public record PlayerShopListingData(
         long buybackPriceMinor = buffer.readLong();
         int buybackCap = buffer.readVarInt();
         int buybackRemaining = buffer.readVarInt();
+        boolean hidden = buffer.readBoolean();
+        boolean showcase = buffer.readBoolean();
         return new PlayerShopListingData(itemId, tradeMode, moneyPriceMinor, effectiveUnitPriceMinor,
                 barterItemId, barterItemCount, stock, promo, nbtAware, nbtJson, visible, bundleOutputs, department, baseQuantity, baseBarterItemCount, listingDescription,
-                barterNbtAware, barterNbtJson, direction, buybackPriceMinor, buybackCap, buybackRemaining);
+                barterNbtAware, barterNbtJson, direction, buybackPriceMinor, buybackCap, buybackRemaining, hidden, showcase);
     }
 }

@@ -7,7 +7,6 @@ import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopSellPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -24,8 +23,9 @@ public class PlayerShopSellScreen extends Screen implements ShopScreenMarker {
     private int guiH;
     private int quantity = 1;
     private final int initialQuantity;
-    private Button confirmButton;
     private EditBox qtyBox;
+    // Flat Nocturne buttons: per-frame click zones populated by ShopUiUtil.button in render().
+    private final java.util.List<ShopUiUtil.ClickZone> clickZones = new java.util.ArrayList<>();
 
     public PlayerShopSellScreen(Screen parent) {
         this(parent, 1);
@@ -46,18 +46,10 @@ public class PlayerShopSellScreen extends Screen implements ShopScreenMarker {
 
         quantity = Math.max(1, Math.min(resolveMaxQuantity(), initialQuantity));
 
-        // Cancel (top-left)
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.sell.cancel"),
-                        button -> onClose())
-                .bounds(guiLeft + 6, guiTop + 6, 50, 14)
-                .build());
-
+        // The Cancel / ± / Max / Confirm buttons are flat Nocturne primitives drawn immediate-mode
+        // in render(); only the qty box stays a real EditBox widget.
         int bottomY = guiTop + guiH - 24;
-
-        // Qty controls
         int qtyX = guiLeft + 10;
-        addRenderableWidget(Button.builder(Component.literal("-"), button -> setQuantity(quantity - 1))
-                .bounds(qtyX, bottomY, 16, 16).build());
         qtyBox = new EditBox(this.font, qtyX + 18, bottomY, 36, 16,
                 Component.translatable("gui.futureshops.player_shop_block.sell.qty"));
         qtyBox.setValue(Integer.toString(quantity));
@@ -71,18 +63,6 @@ public class PlayerShopSellScreen extends Screen implements ShopScreenMarker {
             } catch (NumberFormatException ignored) { }
         });
         addRenderableWidget(qtyBox);
-        addRenderableWidget(Button.builder(Component.literal("+"), button -> {
-                    if (hasShiftDown()) setQuantity(resolveMaxQuantity());
-                    else setQuantity(quantity + 1);
-                })
-                .bounds(qtyX + 56, bottomY, 16, 16).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.sell.max"), button -> setQuantity(resolveMaxQuantity()))
-                .bounds(qtyX + 74, bottomY, 28, 16).build());
-
-        confirmButton = addRenderableWidget(Button.builder(
-                        Component.translatable("gui.futureshops.player_shop_block.sell.confirm"),
-                        button -> confirm())
-                .bounds(guiLeft + guiW - 100, bottomY, 90, 16).build());
     }
 
     private void setQuantity(int value) {
@@ -92,6 +72,7 @@ public class PlayerShopSellScreen extends Screen implements ShopScreenMarker {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        clickZones.clear();
         PlayerShopListingData listing = PlayerShopClientState.selectedListing();
 
         ShopUiUtil.renderDimBackdrop(graphics, this.width, this.height);
@@ -101,30 +82,37 @@ public class PlayerShopSellScreen extends Screen implements ShopScreenMarker {
 
         graphics.drawCenteredString(this.font, this.title, guiLeft + guiW / 2, guiTop + 10, ShopColors.TEXT_STRONG);
 
+        // Cancel button top-left — always available, even when no listing is selected.
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + 6, guiTop + 6, 50, 14,
+                Component.translatable("gui.futureshops.player_shop_block.sell.cancel"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true, this::onClose);
+
         if (listing == null) {
-            graphics.drawCenteredString(this.font, "No listing selected.",
+            graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.player_shop_block.sell.no_listing"),
                     guiLeft + guiW / 2, guiTop + guiH / 2, ShopColors.TEXT_MUTED);
             super.render(graphics, mouseX, mouseY, partialTick);
             return;
         }
 
-        // Item preview
+        // Item preview — NBT-aware so BEWLR items (TacZ guns etc.) keep their model
         int previewY = guiTop + 28;
-        ShopUiUtil.renderLargeItemPreview(graphics, this.font, listing.itemId(), guiLeft + (guiW - 80) / 2, previewY, 80);
+        ShopUiUtil.renderLargeItemPreviewWithNbt(graphics, this.font, listing.itemId(), listing.nbtJson(),
+                guiLeft + (guiW - 80) / 2, previewY, 80);
 
-        // Item name
-        String name = ShopUiUtil.getItemDisplayName(listing.itemId());
+        // Item name — NBT-aware: tag-dependent items (TacZ guns) take their name from the tag
+        String name = ShopUiUtil.getItemDisplayNameWithNbt(listing.itemId(), listing.nbtJson());
         graphics.drawCenteredString(this.font, name, guiLeft + guiW / 2, previewY + 64, ShopColors.TEXT_STRONG);
 
         // "Shop pays X each"
         String unitPriceStr = ShopUiUtil.formatMinorUnits(listing.buybackPriceMinor());
-        graphics.drawCenteredString(this.font, "§7Shop pays §a" + unitPriceStr + "§7 each",
+        graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.player_shop_block.sell.pays_each", unitPriceStr),
                 guiLeft + guiW / 2, previewY + 76, ShopColors.TEXT_SECONDARY);
 
         // Cap line
         int cap = listing.buybackCap();
         String capStr = cap == 0 ? "∞" : (listing.buybackRemaining() + "/" + cap);
-        graphics.drawCenteredString(this.font, "§7Cap: §f" + capStr,
+        graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.player_shop_block.sell.cap", capStr),
                 guiLeft + guiW / 2, previewY + 88, ShopColors.TEXT_SECONDARY);
 
         // Total
@@ -134,22 +122,51 @@ public class PlayerShopSellScreen extends Screen implements ShopScreenMarker {
                 Component.translatable("gui.futureshops.player_shop_block.sell.total", totalStr),
                 guiLeft + guiW / 2, previewY + 102, ShopColors.STATUS_SUCCESS);
 
-        // Owned line
-        int owned = ShopUiUtil.countPlayerInventory(listing.itemId());
-        graphics.drawCenteredString(this.font, "§7You have: §f" + owned,
+        // Owned line — counted the way the server's NBT-strict sell path matches
+        int owned = ShopUiUtil.countPlayerInventoryNbt(listing.itemId(), listing.nbtJson(), listing.nbtAware());
+        graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.player_shop_block.sell.you_have", owned),
                 guiLeft + guiW / 2, previewY + 114, ShopColors.TEXT_MUTED);
 
+        // ═══ Bottom-row flat buttons: [−] qty [+] [Max] … [Confirm] ═══
+        int bottomY = guiTop + guiH - 24;
+        int qtyX = guiLeft + 10;
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                qtyX, bottomY, 16, 16, null, ShopUiUtil.ButtonStyle.SECONDARY, true,
+                "-", null, () -> setQuantity(quantity - 1));
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                qtyX + 56, bottomY, 16, 16, null, ShopUiUtil.ButtonStyle.SECONDARY, true,
+                "+", null, () -> {
+                    if (hasShiftDown()) setQuantity(resolveMaxQuantity());
+                    else setQuantity(quantity + 1);
+                });
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                qtyX + 74, bottomY, 28, 16, Component.translatable("gui.futureshops.player_shop_block.sell.max"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true, () -> setQuantity(resolveMaxQuantity()));
+
         int max = resolveMaxQuantity();
-        confirmButton.active = max > 0 && quantity > 0 && quantity <= max
+        boolean canConfirm = max > 0 && quantity > 0 && quantity <= max
                 && listing.buybackPriceMinor() > 0;
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + guiW - 100, bottomY, 90, 16,
+                Component.translatable("gui.futureshops.player_shop_block.sell.confirm"),
+                ShopUiUtil.ButtonStyle.PRIMARY, canConfirm, this::confirm);
 
         super.render(graphics, mouseX, mouseY, partialTick);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Flat Nocturne buttons: run the top-most hit ClickZone first.
+        if (ShopUiUtil.dispatchClicks(clickZones, mouseX, mouseY)) {
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     private int resolveMaxQuantity() {
         PlayerShopListingData listing = PlayerShopClientState.selectedListing();
         if (listing == null) return 1;
-        int owned = ShopUiUtil.countPlayerInventory(listing.itemId());
+        int owned = ShopUiUtil.countPlayerInventoryNbt(listing.itemId(), listing.nbtJson(), listing.nbtAware());
         int capRemaining = listing.buybackCap() == 0 ? 9999 : Math.max(0, listing.buybackRemaining());
         return Math.max(1, Math.min(owned > 0 ? owned : 1, capRemaining > 0 ? capRemaining : 1));
     }

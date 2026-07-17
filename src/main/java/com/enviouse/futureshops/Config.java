@@ -2,6 +2,8 @@ package com.enviouse.futureshops;
 
 import net.minecraftforge.common.ForgeConfigSpec;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+
+import java.util.List;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.config.ModConfigEvent;
 
@@ -33,6 +35,46 @@ public class Config {
             "cannot buy anything until their balance is back at zero or above."
         )
         .define("economy.allow_negative", false);
+
+    // ---- Physical currency provider ----
+    private static final ForgeConfigSpec.ConfigValue<String> CURRENCY_PROVIDER = BUILDER
+        .comment(
+            "Which physical currency /withdraw hands out and /deposit (and right-click depositing) accepts.",
+            "Balances, shop prices and transactions are unaffected — this only selects the physical item layer.",
+            "Supported providers:",
+            "  \"futureshops\"   - Built-in Money item with anti-dupe checksums + mint ledger (default).",
+            "  \"apocalypsenow\" - Apocalypse Now cash: apocalypsenow:money (100) and apocalypsenow:coins (25);",
+            "                    money blocks are accepted on deposit (900 / 8100) but never handed out.",
+            "  \"custom\"        - Any mod's items, defined via currency.items / currency.accept_only_items below.",
+            "WARNING: Changing currency.provider away from \"futureshops\" means you lose ALL FutureShops",
+            "physical-currency dupe prevention. Foreign items are spawned and accepted WITHOUT checksums,",
+            "mint IDs, or spent-mint ledger tracking because FutureShops cannot control another mod's",
+            "items, recipes, loot tables, or duplication bugs. The source mod owns that currency's supply.",
+            "If the configured provider/items can't be resolved at server start, FutureShops falls back to",
+            "the built-in currency and logs an error."
+        )
+        .define("currency.provider", "futureshops");
+
+    private static final ForgeConfigSpec.ConfigValue<List<? extends String>> CURRENCY_ITEMS = BUILDER
+        .comment(
+            "Denominations minted by /withdraw AND accepted by /deposit, for provider \"custom\".",
+            "Setting this OR currency.accept_only_items non-empty replaces the ENTIRE \"apocalypsenow\"",
+            "preset (both lists) — re-list the money blocks in accept_only_items if you still want them.",
+            "Format: \"modid:item=value_in_minor_units\" (minor units = cents at the default 2 decimals),",
+            "e.g. [\"apocalypsenow:money=100\", \"apocalypsenow:coins=25\"]. Largest values are handed out first.",
+            "Pick values so no crafting recipe in the source mod can combine cheap items into a dearer one",
+            "at a profit, or players get a money printer."
+        )
+        .defineList("currency.items", List.of(), o -> o instanceof String s && s.contains("="));
+
+    private static final ForgeConfigSpec.ConfigValue<List<? extends String>> CURRENCY_ACCEPT_ONLY_ITEMS = BUILDER
+        .comment(
+            "Items accepted by /deposit at the given value but never handed out by /withdraw",
+            "(e.g. block forms of the currency). Same format as currency.items.",
+            "Setting this OR currency.items non-empty replaces the ENTIRE \"apocalypsenow\" preset",
+            "(both lists), so keep the two lists consistent with each other."
+        )
+        .defineList("currency.accept_only_items", List.of(), o -> o instanceof String s && s.contains("="));
 
     private static final ForgeConfigSpec.ConfigValue<String> MONEY_CHECKSUM_SALT = BUILDER
         .comment("Server-side salt used for MoneyItem checksum generation")
@@ -97,6 +139,15 @@ public class Config {
         .comment("Fire ShopTransactionEvent and BarterTradeEvent on every trade. Disable for slight performance gain if no listeners.")
         .define("events.transaction_events", true);
 
+    // ---- Player shops ----
+    private static final ForgeConfigSpec.IntValue PLAYER_SHOPS_MAX_LINK_DISTANCE_BLOCKS = BUILDER
+        .comment(
+            "Maximum distance (Manhattan, in blocks) between a player shop block and the storage/barter",
+            "container it links to via /link. The player must still stand within ~8 blocks of the target",
+            "block to point at it while confirming the link."
+        )
+        .defineInRange("player_shops.max_link_distance_blocks", 8, 1, 128);
+
     // ---- Local Listings (player-shop discovery via /shop) ----
     private static final ForgeConfigSpec.IntValue LOCAL_LISTINGS_SCAN_RADIUS_BLOCKS = BUILDER
         .comment(
@@ -114,9 +165,15 @@ public class Config {
     public static long economyMaxBalanceMinorUnits;
     public static boolean economyAllowNegative;
 
+    public static String currencyProvider;
+    public static List<? extends String> currencyItems;
+    public static List<? extends String> currencyAcceptOnlyItems;
+
     public static String moneyChecksumSalt;
     public static String moneyMintServerId;
     public static int moneyMaxAgeDays;
+
+    public static int playerShopMaxLinkDistanceBlocks;
 
     public static int sessionMaxDistanceBlocks;
     public static boolean sessionCloseOnDamage;
@@ -142,15 +199,26 @@ public class Config {
 
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event) {
+        // This subscriber also sees the separate client presentation config. Only read values from
+        // this COMMON spec when its own file loads/reloads; otherwise Forge may report an early get.
+        if (event.getConfig().getSpec() != SPEC) {
+            return;
+        }
         economyCurrencyName = ECONOMY_CURRENCY_NAME.get();
         economyCurrencyDecimals = ECONOMY_DECIMALS.get();
         economyStartingBalanceMinorUnits = ECONOMY_STARTING_BALANCE_MINOR_UNITS.get();
         economyMaxBalanceMinorUnits = ECONOMY_MAX_BALANCE_MINOR_UNITS.get();
         economyAllowNegative = ECONOMY_ALLOW_NEGATIVE.get();
 
+        currencyProvider = CURRENCY_PROVIDER.get();
+        currencyItems = CURRENCY_ITEMS.get();
+        currencyAcceptOnlyItems = CURRENCY_ACCEPT_ONLY_ITEMS.get();
+
         moneyChecksumSalt = MONEY_CHECKSUM_SALT.get();
         moneyMintServerId = MONEY_MINT_SERVER_ID.get();
         moneyMaxAgeDays = MONEY_MAX_AGE_DAYS.get();
+
+        playerShopMaxLinkDistanceBlocks = PLAYER_SHOPS_MAX_LINK_DISTANCE_BLOCKS.get();
 
         sessionMaxDistanceBlocks = SESSION_MAX_DISTANCE_BLOCKS.get();
         sessionCloseOnDamage = SESSION_CLOSE_ON_DAMAGE.get();
@@ -168,5 +236,14 @@ public class Config {
         eventsTransactionEnabled = EVENTS_TRANSACTION_ENABLED.get();
 
         localListingsScanRadiusBlocks = LOCAL_LISTINGS_SCAN_RADIUS_BLOCKS.get();
+
+        // Config hot-reload while a server is running: rebuild the physical
+        // currency adapter so provider/item edits take effect without a
+        // restart. Guarded on an existing adapter — at initial load registries
+        // aren't ready yet and ServerStarting will do the first initialize.
+        if (event instanceof ModConfigEvent.Reloading
+                && com.enviouse.futureshops.money.CurrencyManager.getOrNull() != null) {
+            com.enviouse.futureshops.money.CurrencyManager.initialize();
+        }
     }
 }

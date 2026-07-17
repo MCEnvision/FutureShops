@@ -1,12 +1,12 @@
 package com.enviouse.futureshops.client.screen;
 
+import com.enviouse.futureshops.ClientConfig;
 import com.enviouse.futureshops.client.PlayerShopClientState;
 import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.SettlementHistoryRow;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SFetchSettlementHistoryPacket;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -19,8 +19,10 @@ import java.util.List;
 
 public class SettlementHistoryScreen extends Screen implements ShopScreenMarker {
     private static final int PAGE_SIZE = 8;
-    private static final DateTimeFormatter TS_FORMAT =
+    private static final DateTimeFormatter TS_FORMAT_24 =
             DateTimeFormatter.ofPattern("MM-dd HH:mm").withZone(ZoneId.systemDefault());
+    private static final DateTimeFormatter TS_FORMAT_12 =
+            DateTimeFormatter.ofPattern("MM-dd h:mm a").withZone(ZoneId.systemDefault());
 
     private final Screen parent;
     private int guiLeft;
@@ -32,6 +34,9 @@ public class SettlementHistoryScreen extends Screen implements ShopScreenMarker 
     private EditBox fromDateBox;
     private EditBox toDateBox;
     private boolean tightTopBar;
+
+    /** Per-frame flat-button hit regions, populated in {@link #render}, consulted in mouseClicked. */
+    private final java.util.List<ShopUiUtil.ClickZone> clickZones = new java.util.ArrayList<>();
 
     public SettlementHistoryScreen(Screen parent) {
         super(Component.translatable("gui.futureshops.settlement.title"));
@@ -48,23 +53,6 @@ public class SettlementHistoryScreen extends Screen implements ShopScreenMarker 
         // Top bar collapses to two rows when guiW < 400 to avoid the date boxes
         // colliding with the Apply button or overflowing the right edge.
         tightTopBar = guiW < 400;
-
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.settlement.back"), button -> onClose())
-                .bounds(guiLeft + 8, guiTop + 8, 18, 14)
-                .build());
-
-        addRenderableWidget(Button.builder(filterLabel(), button -> {
-                    filter = switch (filter) {
-                        case ALL -> SettlementHistoryRow.SettlementFilter.SALE;
-                        case SALE -> SettlementHistoryRow.SettlementFilter.CLAIM;
-                        case CLAIM -> SettlementHistoryRow.SettlementFilter.ROLLBACK;
-                        case ROLLBACK -> SettlementHistoryRow.SettlementFilter.ALL;
-                    };
-                    button.setMessage(filterLabel());
-                    request(1);
-                })
-                .bounds(guiLeft + 30, guiTop + 8, 70, 14)
-                .build());
 
         int dateRowY = tightTopBar ? guiTop + 24 : guiTop + 8;
         int applyW = 50;
@@ -92,22 +80,49 @@ public class SettlementHistoryScreen extends Screen implements ShopScreenMarker 
         toDateBox.setHint(Component.translatable("gui.futureshops.settlement.date.hint"));
         addRenderableWidget(toDateBox);
 
-        addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.settlement.apply"), button -> request(1))
-                .bounds(applyX, dateRowY, applyW, 14)
-                .build());
-
-        addRenderableWidget(Button.builder(Component.literal("<"), button -> request(PlayerShopClientState.settlementHistoryPage() - 1))
-                .bounds(guiLeft + guiW / 2 - 46, guiTop + guiH - 18, 16, 14)
-                .build());
-        addRenderableWidget(Button.builder(Component.literal(">"), button -> request(PlayerShopClientState.settlementHistoryPage() + 1))
-                .bounds(guiLeft + guiW / 2 + 30, guiTop + guiH - 18, 16, 14)
-                .build());
-
+        // Back / Filter / Apply / prev / next are flat Nocturne buttons drawn in render().
         request(PlayerShopClientState.settlementHistoryPage());
+    }
+
+    /** Draws every flat Nocturne button and registers its click zone for this frame. */
+    private void renderButtons(GuiGraphics graphics, int mouseX, int mouseY) {
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + 8, guiTop + 8, 18, 14,
+                Component.translatable("gui.futureshops.settlement.back"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true, this::onClose);
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + 30, guiTop + 8, 70, 14, filterLabel(),
+                ShopUiUtil.ButtonStyle.SECONDARY, true, () -> {
+                    filter = switch (filter) {
+                        case ALL -> SettlementHistoryRow.SettlementFilter.SALE;
+                        case SALE -> SettlementHistoryRow.SettlementFilter.CLAIM;
+                        case CLAIM -> SettlementHistoryRow.SettlementFilter.ROLLBACK;
+                        case ROLLBACK -> SettlementHistoryRow.SettlementFilter.ALL;
+                    };
+                    request(1);
+                });
+
+        int dateRowY = tightTopBar ? guiTop + 24 : guiTop + 8;
+        int applyW = 50;
+        int applyX = guiLeft + guiW - applyW - 8;
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                applyX, dateRowY, applyW, 14,
+                Component.translatable("gui.futureshops.settlement.apply"),
+                ShopUiUtil.ButtonStyle.PRIMARY, true, () -> request(1));
+
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + guiW / 2 - 46, guiTop + guiH - 18, 16, 14, Component.literal("<"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true,
+                () -> request(PlayerShopClientState.settlementHistoryPage() - 1));
+        ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
+                guiLeft + guiW / 2 + 30, guiTop + guiH - 18, 16, 14, Component.literal(">"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true,
+                () -> request(PlayerShopClientState.settlementHistoryPage() + 1));
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        clickZones.clear();
         ShopUiUtil.renderDimBackdrop(graphics, this.width, this.height);
         graphics.fill(guiLeft, guiTop, guiLeft + guiW, guiTop + guiH, ShopColors.SURFACE_BASE);
         ShopUiUtil.drawSoftOutline(graphics, guiLeft, guiTop, guiW, guiH, ShopColors.BORDER_STRONG, ShopColors.BORDER_SUBTLE);
@@ -129,10 +144,11 @@ public class SettlementHistoryScreen extends Screen implements ShopScreenMarker 
                 int bg = i % 2 == 0 ? ShopColors.SURFACE_RAISED : ShopColors.SURFACE_OVERLAY;
                 graphics.fill(guiLeft + 8, rowY, guiLeft + guiW - 8, rowY + 16, bg);
 
-                // Item 12: Show item icon + quantity when available
+                // Item 12: Show item icon + quantity when available (NBT-aware: tagged
+                // variants like enchanted books / TacZ guns render their real icon)
                 int textStartX = guiLeft + 10;
                 if (row.itemId() != null && !row.itemId().isBlank()) {
-                    ShopUiUtil.renderItemIcon(graphics, this.font, row.itemId(), guiLeft + 10, rowY);
+                    ShopUiUtil.renderItemIconWithNbt(graphics, this.font, row.itemId(), row.nbtJson(), guiLeft + 10, rowY);
                     textStartX = guiLeft + 28;
                 }
 
@@ -144,11 +160,12 @@ public class SettlementHistoryScreen extends Screen implements ShopScreenMarker 
                 };
                 String left = Component.translatable(typeKey).getString();
                 String amount = ShopUiUtil.formatMinorUnits(row.amountMinor());
-                String ts = TS_FORMAT.format(Instant.ofEpochSecond(row.timestampEpochSeconds()));
+                DateTimeFormatter timestampFormat = ClientConfig.use12HourTime() ? TS_FORMAT_12 : TS_FORMAT_24;
+                String ts = timestampFormat.format(Instant.ofEpochSecond(row.timestampEpochSeconds()));
                 // Item 12: Include item quantity in the row text
-                String qtyStr = row.quantity() > 0 ? " x" + row.quantity() : "";
+                String qtyStr = row.quantity() > 0 ? Component.translatable("gui.futureshops.settlement.qty_suffix", row.quantity()).getString() : "";
                 String itemName = (row.itemId() != null && !row.itemId().isBlank())
-                        ? ShopUiUtil.getItemDisplayName(row.itemId()) : "";
+                        ? ShopUiUtil.getItemDisplayNameWithNbt(row.itemId(), row.nbtJson()) : "";
 
                 // Column layout — previously rendered as a single "type • amount • item • ts"
                 // string. Long type labels like "MONEY_AND_BARTER" plus long mod item names
@@ -179,6 +196,8 @@ public class SettlementHistoryScreen extends Screen implements ShopScreenMarker 
                 guiTop + guiH - 14,
                 ShopColors.TEXT_SECONDARY);
 
+        renderButtons(graphics, mouseX, mouseY);
+
         super.render(graphics, mouseX, mouseY, partialTick);
 
         // Item 12: Tooltip on hover over item icons in settlement history rows
@@ -189,11 +208,19 @@ public class SettlementHistoryScreen extends Screen implements ShopScreenMarker 
                 int rowY = y + i * 18;
                 int iconX = guiLeft + 10;
                 if (mouseX >= iconX && mouseX < iconX + 16 && mouseY >= rowY && mouseY < rowY + 16) {
-                    ShopUiUtil.renderItemTooltip(graphics, this.font, row.itemId(), "", mouseX, mouseY);
+                    ShopUiUtil.renderItemTooltip(graphics, this.font, row.itemId(), row.nbtJson(), mouseX, mouseY);
                     break;
                 }
             }
         }
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (ShopUiUtil.dispatchClicks(clickZones, mouseX, mouseY)) {
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     private Component filterLabel() {
