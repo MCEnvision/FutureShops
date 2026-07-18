@@ -8,7 +8,8 @@ public record CancelAuctionCommand(
     long expectedRevision,
     UUID actorId,
     UUID terminalTransactionId,
-    long receivedAtMillis
+    long receivedAtMillis,
+    boolean forced
 ) {
     public CancelAuctionCommand {
         requireId(requestId, "request");
@@ -18,6 +19,14 @@ public record CancelAuctionCommand(
         if (expectedRevision < 0L || receivedAtMillis < 0L) {
             throw new IllegalArgumentException("Auction cancellation command values are invalid.");
         }
+    }
+
+    public CancelAuctionCommand(UUID requestId, UUID listingId,
+                                long expectedRevision, UUID actorId,
+                                UUID terminalTransactionId,
+                                long receivedAtMillis) {
+        this(requestId, listingId, expectedRevision, actorId,
+                terminalTransactionId, receivedAtMillis, false);
     }
 
     private static void requireId(UUID id, String label) {

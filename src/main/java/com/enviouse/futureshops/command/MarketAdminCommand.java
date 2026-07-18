@@ -31,6 +31,7 @@ import com.enviouse.futureshops.server.market.bazaar.BazaarOrderState;
 import com.enviouse.futureshops.server.market.bazaar.BazaarProduct;
 import com.enviouse.futureshops.server.market.bazaar.BazaarProductStatus;
 import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarCreateEscrowIntent;
+import com.enviouse.futureshops.server.market.MarketPermissions;
 import com.enviouse.futureshops.server.market.control.MarketControlActor;
 import com.enviouse.futureshops.server.market.control.MarketControlCommitResult;
 import com.enviouse.futureshops.server.market.control.MarketControlModule;
@@ -89,15 +90,6 @@ import java.util.concurrent.ConcurrentHashMap;
  *       value operations settle out) and {@code enable} / {@code resume} both map to ENABLED.
  *       CANCEL_AND_REFUND requires a composite cancellation plan the runtime refuses to take
  *       standalone, so it is deliberately not command-reachable here.</li>
- *   <li><b>admin auction cancel actor</b> — {@link AuctionHouseBook#cancel} is seller-only
- *       (NOT_SELLER otherwise) and there is no separate moderation-cancel book command. The
- *       admin cancel therefore issues the book command with {@code actorId = listing.sellerId()}
- *       and records the real administrator identity + written reason in the
- *       {@link EscrowAdministrativeRecord} audit store under the SAME deterministic request id
- *       that keys the escrow commit, so the two records are joinable. The book's own safety
- *       rails still apply: a listing with a standing bid (or cancel-before-bid disabled by
- *       rules) is rejected with CANCELLATION_DENIED — there is no forced cancel-with-bid-refund
- *       path outside a composite CANCEL_AND_REFUND plan.</li>
  * </ul>
  */
 public final class MarketAdminCommand {
@@ -178,7 +170,8 @@ public final class MarketAdminCommand {
 
     private static LiteralArgumentBuilder<CommandSourceStack> tree(String literal) {
         return Commands.literal(literal)
-                .requires(src -> src.hasPermission(2))
+                .requires(src -> src.hasPermission(2)
+                        && MarketPermissions.canAdmin(src))
 
                 .then(Commands.literal("status")
                         .executes(ctx -> status(ctx.getSource())))
@@ -200,11 +193,13 @@ public final class MarketAdminCommand {
                         .executes(ctx -> recovery(ctx.getSource())))
 
                 .then(Commands.literal("sweep")
-                        .requires(src -> src.hasPermission(3))
+                        .requires(src -> src.hasPermission(3)
+                                && MarketPermissions.canEscrowAdmin(src))
                         .executes(ctx -> sweep(ctx.getSource())))
 
                 .then(Commands.literal("auction")
-                        .requires(src -> src.hasPermission(4))
+                        .requires(src -> src.hasPermission(4)
+                                && MarketPermissions.canAuctionAdmin(src))
                         .then(Commands.literal("cancel")
                                 .then(Commands.argument("listingId", UuidArgument.uuid())
                                         .suggests(SUGGEST_OPEN_AUCTIONS)
@@ -216,7 +211,8 @@ public final class MarketAdminCommand {
                                                                 ctx, "reason")))))))
 
                 .then(Commands.literal("bazaar")
-                        .requires(src -> src.hasPermission(3))
+                        .requires(src -> src.hasPermission(3)
+                                && MarketPermissions.canBazaarAdmin(src))
                         .then(Commands.literal("product")
                                 .then(Commands.argument("productId", StringArgumentType.word())
                                         .suggests(SUGGEST_BAZAAR_PRODUCTS)
@@ -230,7 +226,8 @@ public final class MarketAdminCommand {
 
     private static LiteralArgumentBuilder<CommandSourceStack> controlNode(String verb) {
         return Commands.literal(verb)
-                .requires(src -> src.hasPermission(3))
+                .requires(src -> src.hasPermission(3)
+                        && MarketPermissions.canEscrowAdmin(src))
                 .then(Commands.argument("module", StringArgumentType.word())
                         .suggests(SUGGEST_MODULES)
                         .then(Commands.argument("reason", StringArgumentType.greedyString())
@@ -594,7 +591,8 @@ public final class MarketAdminCommand {
         // command runs as the seller while the administrator is recorded in the audit store.
         CancelAuctionCommand command = new CancelAuctionCommand(requestId, listingId,
                 listing.revision(), listing.sellerId(),
-                Logic.cancelTerminalTransactionId(requestId), nowMillis);
+                Logic.cancelTerminalTransactionId(requestId), nowMillis,
+                true);
         AuctionHouseSnapshot snapshot = runtime.auctionHouseSnapshot();
         AuctionOperationResult preview = new AuctionHouseBook(snapshot).cancel(command);
         if (!preview.applied()) {

@@ -336,6 +336,8 @@ public final class AuctionHouseConfig {
                 "Maximum auction duration must not be less than the minimum duration.");
             durationPresetsMinutes = ConfigValidation.requirePositiveList(
                 durationPresetsMinutes, "Auction duration presets");
+            ConfigValidation.require(durationPresetsMinutes.size() <= 8,
+                "Auction duration presets must contain no more than eight choices.");
             ConfigValidation.require(durationPresetsMinutes.stream().allMatch(
                     duration -> duration >= minimumDurationMinutes && duration <= maximumDurationMinutes),
                 "Auction duration presets must remain inside the configured duration range.");

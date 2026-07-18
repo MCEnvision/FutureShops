@@ -111,6 +111,7 @@ public final class MarketModuleAccessPolicy {
                 snapshot.view(), snapshot.pageIndex(),
                 snapshot.pageSize(), snapshot.totalResults(),
                 snapshot.pageCount(), snapshot.publicRevision(),
+                snapshot.profileRevision(), snapshot.profileReplayEpoch(),
                 snapshot.serverTimeMillis(),
                 snapshot.unreadNotifications(),
                 snapshot.aggregatePrimaryMinor(),

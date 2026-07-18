@@ -1331,6 +1331,7 @@
   "gui.futureshops.market.action.busy": "Please wait — a market request is still in flight.",
   "gui.futureshops.market.action.payment.title": "Pay from",
   "gui.futureshops.market.action.payment.detail": "Amount: %s",
+  "gui.futureshops.market.action.payment.auction_listing_fee": "Choose how to pay the listing fee",
   "gui.futureshops.market.action.payment.wallet": "Wallet",
   "gui.futureshops.market.action.payment.physical": "Inventory Cash",
   "gui.futureshops.market.action.payment.physical_unavailable": "Inventory Cash unavailable",
@@ -1386,6 +1387,18 @@
   "gui.futureshops.market.action.status.timeout_retry": "No response yet — Retry resends the same request (it will not run twice), ✕ gives up and refreshes.",
   "gui.futureshops.market.action.status.items_missing": "The required items are no longer available.",
   "gui.futureshops.market.action.status.items_missing.fingerprint": "The selected slot's item changed before the server processed it — reselect the item and try again.",
-  "gui.futureshops.market.action.status.payment_source_denied": "That payment source is not accepted here — pay from your wallet instead.",
-  "gui.futureshops.market.action.status.generic": "The action failed (%s)."
+  "gui.futureshops.market.action.status.payment_source_denied": "That payment source is not accepted here — choose an available source.",
+  "gui.futureshops.market.action.status.generic": "The action failed (%s).",
+  "gui.futureshops.market.profile.watch": "Watch Listing",
+  "gui.futureshops.market.profile.unwatch": "Stop Watching",
+  "gui.futureshops.market.profile.favorite": "Add Favorite",
+  "gui.futureshops.market.profile.unfavorite": "Remove Favorite",
+  "gui.futureshops.market.profile.status.success": "Market profile updated.",
+  "gui.futureshops.market.profile.status.no_change": "That market profile choice is already current.",
+  "gui.futureshops.market.profile.status.stale": "Your market profile changed elsewhere — the view has been refreshed.",
+  "gui.futureshops.market.profile.status.permission_denied": "You do not have permission to change this market profile.",
+  "gui.futureshops.market.profile.status.limit_reached": "That market profile list is full.",
+  "gui.futureshops.market.profile.status.target_not_found": "That listing or product is no longer available.",
+  "gui.futureshops.market.profile.status.rate_limited": "Market profile changes are arriving too quickly — wait a moment.",
+  "gui.futureshops.market.profile.status.failed": "The market profile change could not be applied."
 }

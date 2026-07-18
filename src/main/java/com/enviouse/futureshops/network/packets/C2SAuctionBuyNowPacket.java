@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.network.packets;
 
 import com.enviouse.futureshops.server.escrow.runtime.AuctionActionService;
+import com.enviouse.futureshops.money.PaymentSource;
 import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
@@ -19,7 +20,8 @@ public record C2SAuctionBuyNowPacket(
         UUID requestId,
         UUID routeNonce,
         UUID listingId,
-        long expectedRevision
+        long expectedRevision,
+        String paymentSource
 ) {
     private static final UUID ZERO = new UUID(0L, 0L);
 
@@ -27,11 +29,15 @@ public record C2SAuctionBuyNowPacket(
         Objects.requireNonNull(requestId, "requestId");
         Objects.requireNonNull(routeNonce, "routeNonce");
         Objects.requireNonNull(listingId, "listingId");
+        paymentSource = Objects.requireNonNull(paymentSource, "paymentSource").strip();
         if (requestId.equals(ZERO) || listingId.equals(ZERO)) {
             throw new IllegalArgumentException("Auction buy-now identifiers are required");
         }
         if (expectedRevision < 0L) {
             throw new IllegalArgumentException("Auction buy-now revision must not be negative");
+        }
+        if (PaymentSource.fromWire(paymentSource).isEmpty()) {
+            throw new IllegalArgumentException("Auction payment source is invalid");
         }
     }
 
@@ -40,12 +46,13 @@ public record C2SAuctionBuyNowPacket(
         buffer.writeUUID(packet.routeNonce());
         buffer.writeUUID(packet.listingId());
         buffer.writeVarLong(packet.expectedRevision());
+        buffer.writeUtf(packet.paymentSource(), 16);
     }
 
     public static C2SAuctionBuyNowPacket decode(FriendlyByteBuf buffer) {
         try {
             return new C2SAuctionBuyNowPacket(buffer.readUUID(), buffer.readUUID(),
-                    buffer.readUUID(), buffer.readVarLong());
+                    buffer.readUUID(), buffer.readVarLong(), buffer.readUtf(16));
         } catch (RuntimeException exception) {
             throw new DecoderException("Auction buy-now request is invalid", exception);
         }

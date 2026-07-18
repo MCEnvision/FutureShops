@@ -333,7 +333,7 @@ class MarketProfileMutationProcessorTest {
                 retired, NOW, restored, ALL_TARGETS,
                 access(MarketModule.BAZAAR, true, true));
 
-        assertEquals(MarketProfileMutationResultCode.REPLAY_UNAVAILABLE,
+        assertEquals(MarketProfileMutationResultCode.STALE_REPLAY_EPOCH,
                 result.resultCode());
         assertFalse(restored.snapshot(player).favoriteProducts()
                 .contains(PRODUCT));

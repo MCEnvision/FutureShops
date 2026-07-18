@@ -72,6 +72,13 @@ valid settings snapshot stays active and the server log reports the rejected fie
 	# Player-driven transactions never can, regardless of this setting.
 	allow_negative = false
 
+[permissions]
+	# Vanilla operator fallback when no permission plugin changes the market nodes.
+	# 0 keeps ordinary browsing and trading open to every player.
+	market_use_op_level = 0
+	# Vanilla operator fallback for market administration nodes.
+	market_admin_op_level = 2
+
 [currency]
 	# Physical item layer used by /withdraw, /deposit, and the ATM.
 	# "futureshops" (protected, default), "apocalypsenow" (preset), or "custom".
@@ -246,9 +253,8 @@ and checkpoints these settings govern live in `<world>/futureshops/escrow/` — 
 	maximum_held_value_minor = 100000000000
 	minimum_duration_minutes = 5
 	maximum_duration_minutes = 10080
-	# Validated against the duration range. Note: as of this build the create wizard
-	# offers its own fixed choices (1h / 6h / 12h / 24h / 48h) and the server enforces
-	# the minimum/maximum bounds; this preset list is not yet read by the client editor.
+	# One to eight unique choices, validated against the duration range and sent to the
+	# create wizard. Reloading changes the editor choices for new listings only.
 	duration_presets_minutes = [60, 360, 1440, 4320, 10080]
 	# Sellers may cancel an active auction only before its first accepted bid.
 	allow_seller_cancel_before_bid = true
@@ -282,11 +288,10 @@ and checkpoints these settings govern live in `<world>/futureshops/escrow/` — 
 
 [payment]
 	allow_wallet = true
-	# Inventory currency for fees, bids, and purchases. NOTE: in this release Auction
-	# House money movement is wallet-only — the escrow layer has no physical funding
-	# path yet, so a physical payment request is answered PAYMENT_SOURCE_DENIED even
-	# when this is true. Setting it false is honored today; true takes effect when the
-	# physical funding bridge ships.
+	# Allow inventory currency for listing fees, bid increases, and Buy Now purchases.
+	# Cash is deposited into the wallet through escrow before the auction mutation runs.
+	# Protected FutureShops bills use mint validation and spent-mint tracking. Foreign
+	# currency uses request deduplication but has no FutureShops duplication protection.
 	allow_physical = true
 	# "wallet", "physical", or "prompt".
 	default_source = "wallet"
@@ -392,10 +397,10 @@ Global market rules only — individual products are defined in
 
 [payment]
 	allow_wallet = true
-	# Same situation as the Auction House: Bazaar buy orders are wallet-only in this
-	# release. A physical payment request is answered PAYMENT_SOURCE_DENIED until the
-	# physical funding bridge ships; physical money is never merely "checked" and
-	# left accessible.
+	# Allow inventory currency for Bazaar buy orders and instant buys. The exact requested
+	# value is deposited through escrow before order custody is created. Protected bills
+	# retain mint protection; foreign provider items remain outside FutureShops supply
+	# protection. Sell orders always escrow the exact configured product items instead.
 	allow_physical = true
 	default_source = "wallet"
 	physical_remainder_policy = "wallet_claim"

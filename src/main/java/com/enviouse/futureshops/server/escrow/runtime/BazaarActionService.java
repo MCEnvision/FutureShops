@@ -22,6 +22,7 @@ import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryExecutio
 import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryMutationIntent;
 import com.enviouse.futureshops.server.escrow.item.runtime.ServerPlayerItemInventoryAccess;
 import com.enviouse.futureshops.server.market.MarketModuleAccessPolicy;
+import com.enviouse.futureshops.server.market.MarketPermissions;
 import com.enviouse.futureshops.server.market.bazaar.BazaarLifecycleCommand;
 import com.enviouse.futureshops.server.market.bazaar.BazaarMutation;
 import com.enviouse.futureshops.server.market.bazaar.BazaarOperationResult;
@@ -50,11 +51,13 @@ import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarEscrowLifecycl
 import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarEscrowLifecycleState;
 import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarEscrowPaymentSource;
 import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarEscrowWalletSnapshot;
+import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarPhysicalFundingEvidence;
 import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarSellItemCustody;
 import com.enviouse.futureshops.server.market.control.MarketControlModule;
 import com.enviouse.futureshops.server.market.control.MarketControlSavedData;
 import com.enviouse.futureshops.server.market.control.MarketModuleControl;
 import com.enviouse.futureshops.server.security.ServerRequestRateLimiter;
+import net.minecraft.nbt.TagParser;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -84,14 +87,6 @@ import java.util.UUID;
  * embedded in the single durable commit. Idempotency layers: stored book request receipt →
  * lifecycle create intents → WAL coordinator replay; the pre-checks here just short-circuit
  * replays into their original responses (plan §1: at most one economic result per request UUID).
- *
- * <p>Bazaar buy money is WALLET-only in this release. {@code payment.allow_physical} is honored
- * as denied: {@link BazaarBuyFundingEvidence} requires physical funding that already credited the
- * reserve into the wallet ledger, and no bazaar-shaped bridge over
- * {@link EscrowCashDepositService} exists yet.
- * TODO(bazaar-physical): consume inventory cash into escrow at placement (plan §6) by depositing
- * exactly the reserve through {@link EscrowCashDepositService} with a deterministic funding
- * request id, then building {@code BazaarPhysicalFundingEvidence} from the deposit settlement.
  *
  * <p>Lives in {@code server.escrow.runtime} deliberately: wallet reads use the package-private
  * ledger accessor and item custody runs through the exact-item runtime the same way
@@ -158,6 +153,13 @@ public final class BazaarActionService {
                         shapeDenial);
                 return;
             }
+            if (!MarketPermissions.canBazaarOrder(player,
+                    type == BazaarOrderType.INSTANT)) {
+                respond(player, requestId, "ORDER", "PERMISSION_DENIED",
+                        null, 0L, 0L, type == BazaarOrderType.INSTANT
+                                ? "bazaar.instant" : "bazaar.order");
+                return;
+            }
             BazaarEscrowPaymentSource paymentSource = BazaarEscrowPaymentSource.WALLET;
             if (side == BazaarOrderSide.BUY) {
                 paymentSource = parsePaymentSource(packet.paymentSource());
@@ -166,14 +168,14 @@ public final class BazaarActionService {
                             "payment_source");
                     return;
                 }
-                if (paymentSource == BazaarEscrowPaymentSource.INVENTORY_CASH) {
-                    // Honored as denied until the physical funding bridge exists — never merely
-                    // "checked" (plan §6 forbids leaving checked physical money accessible).
+                if (paymentSource == BazaarEscrowPaymentSource.INVENTORY_CASH
+                        && !settings.payment().allowPhysical()) {
                     respond(player, requestId, "ORDER", "PAYMENT_SOURCE_DENIED", null, 0L, 0L,
                             "physical");
                     return;
                 }
-                if (!settings.payment().allowWallet()) {
+                if (paymentSource == BazaarEscrowPaymentSource.WALLET
+                        && !settings.payment().allowWallet()) {
                     respond(player, requestId, "ORDER", "PAYMENT_SOURCE_DENIED", null, 0L, 0L,
                             "wallet");
                     return;
@@ -224,7 +226,7 @@ public final class BazaarActionService {
                 return;
             }
             if (side == BazaarOrderSide.BUY) {
-                buyOrder(player, runtime, command);
+                buyOrder(player, runtime, command, paymentSource);
             } else {
                 sellOrder(player, runtime, command);
             }
@@ -246,19 +248,10 @@ public final class BazaarActionService {
      * fill-or-kill lifecycle test is the spec for that path).
      */
     private static void buyOrder(ServerPlayer player, EscrowRuntimeService runtime,
-                                 CreateBazaarOrderCommand command) {
+                                 CreateBazaarOrderCommand command,
+                                 BazaarEscrowPaymentSource paymentSource) {
         UUID requestId = command.requestId();
         long configRevision = command.rules().configRevision();
-        BazaarProduct buyProduct = runtime.bazaarProduct(command.productId()).orElse(null);
-        if (buyProduct != null && !buyProduct.exactIdentity().isEmpty()) {
-            // Symmetric with the sell-side exact-identity gate: while such products cannot be
-            // SOLD (no reversible template), accepting BUY orders would lock buyer reserves
-            // against a permanently empty sell side — deny both sides until template-SNBT
-            // product definitions land.
-            respond(player, requestId, "ORDER", "INVALID_REQUEST", null, 0L, configRevision,
-                    "exact_identity");
-            return;
-        }
         long reserve;
         try {
             reserve = BazaarCreateEscrowIntent.initialReserve(command);
@@ -266,6 +259,23 @@ public final class BazaarActionService {
             respond(player, requestId, "ORDER", "ARITHMETIC_OVERFLOW", null, 0L,
                     configRevision, "");
             return;
+        }
+        Optional<BazaarPhysicalFundingEvidence> physicalFunding = Optional.empty();
+        if (paymentSource == BazaarEscrowPaymentSource.INVENTORY_CASH) {
+            MarketPhysicalFundingService.FundingResult result =
+                    MarketPhysicalFundingService.fund(player, requestId,
+                            "bazaar", reserve);
+            if (!result.funded()) {
+                respondPhysicalFundingFailure(player, requestId, "ORDER",
+                        configRevision, result);
+                return;
+            }
+            physicalFunding = Optional.of(new BazaarPhysicalFundingEvidence(
+                    result.depositRequestId(),
+                    result.depositTransactionId().orElseThrow(),
+                    result.currencySignature(), result.depositedMinor(),
+                    result.walletCreditMinor(), result.overflowClaimMinor(),
+                    result.resultingWalletMinor()));
         }
         long walletMinor;
         long configurationGeneration;
@@ -283,10 +293,10 @@ public final class BazaarActionService {
         BazaarBuyFundingEvidence funding = new BazaarBuyFundingEvidence(requestId,
                 command.orderId(), command.ownerId(),
                 command.moneyHoldAccountId().orElseThrow(),
-                BazaarEscrowPaymentSource.WALLET,
+                paymentSource,
                 new BazaarEscrowWalletSnapshot(command.ownerId(), walletMinor,
                         configurationGeneration),
-                Optional.empty(), currencyId());
+                physicalFunding, currencyId());
         Instant now = Instant.ofEpochMilli(command.createdAtMillis());
         BazaarCreateEscrowIntent intent = BazaarEscrowLifecyclePlanner.prepareBuy(command,
                 funding, now);
@@ -329,15 +339,6 @@ public final class BazaarActionService {
                     configRevision, "");
             return;
         }
-        if (!product.exactIdentity().isEmpty()) {
-            // TODO(bazaar-exact-products): BazaarSellItemCustody validates exactIdentity as a
-            // sha256 of the canonical one-count template, which cannot be reversed into the
-            // extraction template this path needs. Exact-identity products stay sell-disabled
-            // until the product definition carries the template SNBT.
-            respond(player, requestId, "ORDER", "INVALID_REQUEST", null, 0L, configRevision,
-                    "exact_identity");
-            return;
-        }
         Item item = registryItem(product.registryId());
         if (item == null) {
             respond(player, requestId, "ORDER", "PRODUCT_UNAVAILABLE", null, 0L,
@@ -356,6 +357,16 @@ public final class BazaarActionService {
         // carry NBT and are excluded by exact matching (plan §9: commodity default accepts
         // tagless and undamaged stacks only).
         ItemStack template = new ItemStack(item, 1);
+        if (!product.exactIdentity().isEmpty()) {
+            try {
+                template.setTag(TagParser.parseTag(
+                        product.exactIdentity()));
+            } catch (Exception exception) {
+                respond(player, requestId, "ORDER", "PRODUCT_UNAVAILABLE",
+                        null, 0L, configRevision, "exact_identity");
+                return;
+            }
+        }
         ServerPlayerItemInventoryAccess access = new ServerPlayerItemInventoryAccess(player);
         List<ItemInventoryBatchEntry> entries = List.of(ItemInventoryBatchEntry.extract(
                 derived("bazaar.entry.", requestId), ItemInputMatcher.exact(template),
@@ -717,6 +728,25 @@ public final class BazaarActionService {
                                           BazaarOperationResult result, long configRevision) {
         respond(player, requestId, action, result.status().name(), null,
                 result.observedRevision(), configRevision, result.orderId().toString());
+    }
+
+    private static void respondPhysicalFundingFailure(
+            ServerPlayer player, UUID requestId, String action, long configRevision,
+            MarketPhysicalFundingService.FundingResult result) {
+        String status = switch (result.status()) {
+            case INSUFFICIENT_CASH, WALLET_DEBT -> "INSUFFICIENT_FUNDS";
+            case RATE_LIMITED -> "RATE_LIMITED";
+            case CONFIG_CHANGED -> "STALE_CONFIG";
+            case RECOVERY_REQUIRED, REQUEST_CONFLICT -> "RECOVERY_REQUIRED";
+            case UNAVAILABLE -> "ESCROW_UNAVAILABLE";
+            case INVALID_AMOUNT, INVALID_CASH, WALLET_CAPACITY ->
+                    "PAYMENT_SOURCE_DENIED";
+            case FUNDED -> throw new IllegalArgumentException(
+                    "Funded result is not a failure");
+        };
+        respond(player, requestId, action, status,
+                result.depositTransactionId().orElse(null), 0L, configRevision,
+                result.status().name().toLowerCase(Locale.ROOT));
     }
 
     static void respond(ServerPlayer player, UUID requestId, String action, String status,

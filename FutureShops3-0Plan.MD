@@ -1,6 +1,6 @@
 # FutureShops 3.0 Plan
 
-Status. Approved for implementation.
+Status. Implementation complete on the beta phase branch and pending approval.
 
 This document is the implementation contract for FutureShops 3.0. It covers the shared escrow foundation, migration of all existing value moving features, the Auction House, the Bazaar, the shared market interface, configuration, recovery, abuse controls, testing, and release sequencing.
 
@@ -402,7 +402,7 @@ Sources.
 - Wallet balance.
 - Inventory cash using the active provider.
 - Optional automatic priority policy.
-- Optional mixed wallet and physical payment in a later phase.
+- Configurable wallet or physical payment with an explicit per-purchase choice.
 
 The confirmation displays.
 
@@ -1052,3 +1052,17 @@ Branch. envy slash markets hardening.
 - Shop is blurple, Bazaar green, and Auction House red with theme overrides.
 
 These defaults maximize safety while retaining server and client customization. FutureShops does not claim control over foreign currency supply or arbitrary third party storage behavior that it cannot technically enforce.
+
+## 20. Completion record
+
+The implementation covers the escrow foundation, migrated shop and currency flows, shared market
+shell, independently configurable Auction House and Bazaar modules, wallet and inventory cash
+funding, protected and foreign currency handling, claims, administrative recovery, permissions,
+module lifecycle controls, analytics, alerts, API events, migrations, backup guidance, and bounded
+performance tests described above.
+
+Release verification includes the complete automated regression suite, packet round trips,
+durability and replay fixtures, corruption and recovery drills, module disable and re enable tests,
+exact item identity tests, administrative cancellation with standing bid refunds, and restore
+soaks with 2000 auctions and 10000 Bazaar orders. The supported platform and integration boundaries
+are documented in [docs/compatibility-matrix.md](docs/compatibility-matrix.md).

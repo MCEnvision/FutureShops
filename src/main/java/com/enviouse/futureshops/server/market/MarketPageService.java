@@ -50,6 +50,11 @@ public final class MarketPageService {
         MinecraftServer server = Objects.requireNonNull(
                 player.getServer(), "server");
         MarketPageQuery query = packet.toQuery(now);
+        if (!"claims".equals(query.view())
+                && !MarketPermissions.canUse(player, module)) {
+            send(player, "PERMISSION_DENIED", query, null);
+            return;
+        }
         EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
         MarketModuleAccessPolicy.PageAccess access =
                 MarketModuleAccessPolicy.pageAccess(module,

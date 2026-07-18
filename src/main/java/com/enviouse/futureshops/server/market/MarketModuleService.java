@@ -50,6 +50,10 @@ public final class MarketModuleService {
         boolean configured = module == MarketModule.BAZAAR
                 ? Config.bazaarEnabled() : Config.auctionHouseEnabled();
         String view = normalizeView(module, requestedView);
+        if (!"claims".equals(view)
+                && !MarketPermissions.canUse(player, module)) {
+            view = "claims";
+        }
         String displayName;
         String accent;
         if (module == MarketModule.BAZAAR) {

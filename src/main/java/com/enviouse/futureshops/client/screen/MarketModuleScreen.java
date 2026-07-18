@@ -35,6 +35,7 @@ import com.enviouse.futureshops.network.packets.C2SBazaarOrderPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenMarketModulePacket;
 import com.enviouse.futureshops.network.packets.C2SCloseMarketSessionPacket;
 import com.enviouse.futureshops.network.packets.C2SMarketPageQueryPacket;
+import com.enviouse.futureshops.network.packets.C2SMarketProfileMutationPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenShopPacket;
 import com.enviouse.futureshops.network.packets.S2CMarketActionResponsePacket;
 import com.enviouse.futureshops.network.packets.S2COpenMarketModulePacket;
@@ -44,6 +45,11 @@ import com.enviouse.futureshops.server.market.auction.AuctionListingType;
 import com.enviouse.futureshops.server.market.bazaar.BazaarOrderSide;
 import com.enviouse.futureshops.server.market.bazaar.BazaarOrderType;
 import com.enviouse.futureshops.server.market.bazaar.BazaarTimeInForce;
+import com.enviouse.futureshops.server.market.profile.MarketProfileMutation;
+import com.enviouse.futureshops.server.market.profile.MarketProfileMutationCommand;
+import com.enviouse.futureshops.server.market.profile.MarketProfileMutationResult;
+import com.enviouse.futureshops.server.market.profile.MarketProfileMutationResultCode;
+import com.enviouse.futureshops.server.market.profile.MarketProfileSavedData;
 import com.enviouse.futureshops.server.market.query.MarketPageCard;
 import com.enviouse.futureshops.server.market.query.MarketPageCardKind;
 import com.enviouse.futureshops.server.market.query.MarketPageSnapshot;
@@ -75,11 +81,6 @@ public final class MarketModuleScreen extends Screen
     private static final long ARMED_CONFIRM_WINDOW_MILLIS = 4_000L;
     private static final long ACTION_STATUS_VISIBLE_MILLIS = 8_000L;
     private static final int PLAYER_MAIN_INVENTORY_SLOTS = 36;
-    /** Duration presets offered by the create wizard (server clamps to config, plan §8). */
-    private static final long[] CREATE_DURATION_SECONDS =
-            {3_600L, 21_600L, 43_200L, 86_400L, 172_800L};
-    private static final String[] CREATE_DURATION_KEYS =
-            {"h1", "h6", "h12", "h24", "h48"};
     private static final long DEFAULT_CREATE_DURATION_SECONDS = 86_400L;
 
     private final S2COpenMarketModulePacket packet;
@@ -154,6 +155,8 @@ public final class MarketModuleScreen extends Screen
      */
     private static DetailRefresh pendingDetailRefresh;
     private static final long DETAIL_REFRESH_WINDOW_MILLIS = 15_000L;
+    private static long profileRevision;
+    private static long profileReplayEpoch;
     private String armedConfirmKey = "";
     private long armedConfirmAtMillis;
     private boolean bidEditorOpen;
@@ -172,8 +175,11 @@ public final class MarketModuleScreen extends Screen
     private String createSelectedFingerprint = "";
     private AuctionListingType createType = AuctionListingType.TIMED_AUCTION;
     private long createDurationSeconds = DEFAULT_CREATE_DURATION_SECONDS;
+    private List<Long> createDurationPresets = List.of(
+            3_600L, 21_600L, 86_400L, 259_200L, 604_800L);
     private EditBox createStartBidBox;
     private EditBox createBuyoutBox;
+    private boolean profileMutationPending;
 
     public MarketModuleScreen(
             S2COpenMarketModulePacket packet,
@@ -393,6 +399,8 @@ public final class MarketModuleScreen extends Screen
         pageResult = response.resultCode();
         if ("OK".equals(pageResult)) {
             page = incoming;
+            profileRevision = incoming.profileRevision();
+            profileReplayEpoch = incoming.profileReplayEpoch();
             requestedPage = incoming.pageIndex();
             unreadNotifications = incoming.unreadNotifications();
             synchronizeFocusedCard();
@@ -475,6 +483,12 @@ public final class MarketModuleScreen extends Screen
         boolean previouslyOpen = canOpenView(packet.view());
         capabilities = java.util.Objects.requireNonNull(
                 snapshot, "snapshot");
+        createDurationPresets = snapshot.auctionDurationPresetSeconds();
+        if (createDurationSeconds != 0L
+                && !createDurationPresets.contains(
+                createDurationSeconds)) {
+            createDurationSeconds = defaultCreateDurationSeconds();
+        }
         capabilitiesByModule = capabilities.byModule();
         if (layout != null) {
             theme = MarketThemeResolver.resolve(module,
@@ -494,6 +508,41 @@ public final class MarketModuleScreen extends Screen
         requestCapabilities();
         if (!isDetailView()) {
             sendPageQuery();
+        }
+    }
+
+    public void applyProfileMutationResult(
+            MarketProfileMutationResult result
+    ) {
+        if (result.module() != module
+                || !result.routeNonce().equals(packet.routeNonce())) {
+            return;
+        }
+        profileMutationPending = false;
+        profileRevision = result.profileRevision();
+        profileReplayEpoch = result.replayEpoch();
+        unreadNotifications = result.unreadNotificationCount();
+        MarketProfileMutationResultCode code = result.resultCode();
+        boolean success = code == MarketProfileMutationResultCode.SUCCESS
+                || code == MarketProfileMutationResultCode.NO_CHANGE;
+        String status = switch (code) {
+            case SUCCESS -> "success";
+            case NO_CHANGE -> "no_change";
+            case STALE_PROFILE, STALE_REPLAY_EPOCH -> "stale";
+            case PERMISSION_DENIED -> "permission_denied";
+            case LIMIT_REACHED -> "limit_reached";
+            case TARGET_NOT_FOUND -> "target_not_found";
+            case RATE_LIMITED -> "rate_limited";
+            default -> "failed";
+        };
+        showActionStatus(Component.translatable(
+                "gui.futureshops.market.profile.status." + status),
+                success);
+        if (success || code == MarketProfileMutationResultCode.STALE_PROFILE
+                || code
+                == MarketProfileMutationResultCode.STALE_REPLAY_EPOCH) {
+            refreshAfterAction(detailSelection == null
+                    ? "" : detailSelection.identity());
         }
     }
 
@@ -1457,12 +1506,12 @@ public final class MarketModuleScreen extends Screen
         if (module == MarketModule.AUCTION_HOUSE
                 && card.kind() == MarketPageCardKind.AUCTION
                 && auctionDetailHasActions(card)) {
-            return bidEditorOpen ? 64 : 42;
+            return bidEditorOpen ? 84 : 62;
         }
         if (module == MarketModule.BAZAAR
                 && card.kind() == MarketPageCardKind.BAZAAR_PRODUCT
                 && bazaarDetailHasActions(card)) {
-            return 82;
+            return 102;
         }
         return 0;
     }
@@ -1518,16 +1567,8 @@ public final class MarketModuleScreen extends Screen
     }
 
     private boolean auctionDetailHasActions(MarketPageCard card) {
-        if (!"ACTIVE".equals(card.state())
-                || parseUuid(card.identity()) == null) {
-            return false;
-        }
-        boolean own = viewerOwns(card);
-        if (!own) {
-            return auctionAcceptsBids(card) || auctionHasBuyNow(card);
-        }
-        return "mine".equals(detailSelection.sourceView())
-                && card.quantity() == 0L;
+        return "ACTIVE".equals(card.state())
+                && parseUuid(card.identity()) != null;
     }
 
     private boolean bazaarDetailHasActions(MarketPageCard card) {
@@ -1548,6 +1589,16 @@ public final class MarketModuleScreen extends Screen
         int rowHeight = 16;
         int y = panel.bottom() - padding - rowHeight + 2;
         int x = panel.x() + padding;
+        int profileY = y - (bidEditorOpen ? 40 : 20);
+        String watchLabel = Component.translatable(card.watched()
+                ? "gui.futureshops.market.profile.unwatch"
+                : "gui.futureshops.market.profile.watch").getString();
+        button(graphics, mouseX, mouseY,
+                new MarketRectangle(x, profileY,
+                        Math.max(76, font.width(watchLabel) + 14),
+                        rowHeight), watchLabel,
+                !profileMutationPending,
+                () -> submitAuctionWatch(card));
         if (!own && acceptsBids) {
             // Retry host for auction_bid: when the send timed out this control turns
             // into [Retry][✕] even while the editor is closed, so the resend of the
@@ -1648,6 +1699,15 @@ public final class MarketModuleScreen extends Screen
         int limitY = panel.bottom() - padding - 16 + 2;
         int instantY = limitY - 20;
         int quantityY = instantY - 20;
+        int profileY = quantityY - 20;
+        String favoriteLabel = Component.translatable(card.watched()
+                ? "gui.futureshops.market.profile.unfavorite"
+                : "gui.futureshops.market.profile.favorite").getString();
+        button(graphics, mouseX, mouseY,
+                new MarketRectangle(x, profileY,
+                        Math.max(82, font.width(favoriteLabel) + 14),
+                        16), favoriteLabel, !profileMutationPending,
+                () -> submitBazaarFavorite(card));
         String quantityLabel = Component.translatable(
                 "gui.futureshops.market.action.quantity").getString();
         graphics.drawString(font, quantityLabel, x, quantityY + 4,
@@ -1733,6 +1793,41 @@ public final class MarketModuleScreen extends Screen
         }
     }
 
+    private void submitAuctionWatch(MarketPageCard card) {
+        UUID listingId = parseUuid(card.identity());
+        if (listingId == null || profileMutationPending) {
+            return;
+        }
+        submitProfileMutation(new MarketProfileMutation.AuctionWatch(
+                listingId, !card.watched()));
+    }
+
+    private void submitBazaarFavorite(MarketPageCard card) {
+        String productId = bazaarProductId(card.identity());
+        if (productId == null || card.revision() <= 0L
+                || profileMutationPending) {
+            return;
+        }
+        submitProfileMutation(new MarketProfileMutation.BazaarFavorite(
+                new MarketProfileSavedData.ProductKey(productId,
+                        card.revision()), !card.watched()));
+    }
+
+    private void submitProfileMutation(MarketProfileMutation mutation) {
+        MarketProfileMutationCommand command =
+                new MarketProfileMutationCommand(UUID.randomUUID(),
+                        packet.routeNonce(), module, packet.view(),
+                        profileRevision, profileReplayEpoch, mutation);
+        if (ShopClientPacketHandler.submitMarketProfileMutation(
+                new C2SMarketProfileMutationPacket(command))) {
+            profileMutationPending = true;
+        } else {
+            showActionStatus(Component.translatable(
+                    "gui.futureshops.market.profile.status.failed"),
+                    false);
+        }
+    }
+
     private void adjustBidAmount(MarketPageCard card, long sign) {
         if (bidAmountBox == null) {
             return;
@@ -1812,10 +1907,13 @@ public final class MarketModuleScreen extends Screen
                     false);
             return;
         }
-        sendMarketAction("auction_bid", card.identity(),
-                requestId -> new C2SAuctionBidPacket(requestId,
-                        packet.routeNonce(), listingId,
-                        card.revision(), amountMinor));
+        requirePaymentSource(paymentAmountDetail(amountMinor, 1),
+                source -> sendMarketAction("auction_bid", card.identity(),
+                        requestId -> new C2SAuctionBidPacket(requestId,
+                                packet.routeNonce(), listingId,
+                                card.revision(), amountMinor, source.wire()))
+                        .ifPresent(requestId ->
+                                trackPaymentSource(requestId, source)));
     }
 
     private void sendAuctionBuyNow(MarketPageCard card) {
@@ -1823,10 +1921,15 @@ public final class MarketModuleScreen extends Screen
         if (listingId == null) {
             return;
         }
-        sendMarketAction("auction_buy_now", card.identity(),
-                requestId -> new C2SAuctionBuyNowPacket(requestId,
-                        packet.routeNonce(), listingId,
-                        card.revision()));
+        long priceMinor = auctionAcceptsBids(card)
+                ? card.tertiaryMinor() : card.primaryMinor();
+        requirePaymentSource(paymentAmountDetail(priceMinor, 1),
+                source -> sendMarketAction("auction_buy_now", card.identity(),
+                        requestId -> new C2SAuctionBuyNowPacket(requestId,
+                                packet.routeNonce(), listingId,
+                                card.revision(), source.wire()))
+                        .ifPresent(requestId ->
+                                trackPaymentSource(requestId, source)));
     }
 
     private void sendAuctionCancel(MarketPageCard card) {
@@ -2003,8 +2106,7 @@ public final class MarketModuleScreen extends Screen
      * session asks Wallet vs Inventory Cash. The choice only becomes the remembered session
      * default once a request that used it returns APPLIED (see
      * {@link #applyActionResponse}) — a source the server denied is filtered out here, so
-     * the prompt reopens instead of silently re-sending the denied source. Auction bids and
-     * buy-now never pass through here — auction escrow is wallet-only in this release.
+     * The prompt reopens after the server denies a source.
      */
     private void requirePaymentSource(
             Component detail,
@@ -2125,7 +2227,7 @@ public final class MarketModuleScreen extends Screen
         createSelectedSlot = -1;
         createSelectedFingerprint = "";
         createType = AuctionListingType.TIMED_AUCTION;
-        createDurationSeconds = DEFAULT_CREATE_DURATION_SECONDS;
+        createDurationSeconds = defaultCreateDurationSeconds();
         createStartBidBox = ensureOverlayBox(createStartBidBox, true, 20);
         createStartBidBox.setValue("");
         createBuyoutBox = ensureOverlayBox(createBuyoutBox, true, 20);
@@ -2294,20 +2396,21 @@ public final class MarketModuleScreen extends Screen
             }
             durationX += 26;
         }
-        for (int index = 0; index < CREATE_DURATION_SECONDS.length;
+        int presetWidth = Math.max(20, Math.min(36,
+                Math.max(1, content.right() - padding - durationX)
+                        / createDurationPresets.size() - 4));
+        for (int index = 0; index < createDurationPresets.size();
              index++) {
-            long seconds = CREATE_DURATION_SECONDS[index];
-            int presetX = durationX + index * 28;
+            long seconds = createDurationPresets.get(index);
+            int presetX = durationX + index * (presetWidth + 4);
             button(graphics, mouseX, mouseY,
-                    new MarketRectangle(presetX, y, 24, 14),
-                    Component.translatable(
-                            "gui.futureshops.market.action.create.duration."
-                                    + CREATE_DURATION_KEYS[index])
-                            .getString(),
+                    new MarketRectangle(presetX, y, presetWidth, 14),
+                    formatDuration(seconds),
                     createDurationSeconds != seconds,
                     () -> createDurationSeconds = seconds);
             if (createDurationSeconds == seconds) {
-                graphics.fill(presetX, y + 14, presetX + 24, y + 16,
+                graphics.fill(presetX, y + 14,
+                        presetX + presetWidth, y + 16,
                         theme.accent());
             }
         }
@@ -2351,7 +2454,7 @@ public final class MarketModuleScreen extends Screen
         createType = type;
         if (type != AuctionListingType.BUY_NOW
                 && createDurationSeconds == 0L) {
-            createDurationSeconds = DEFAULT_CREATE_DURATION_SECONDS;
+            createDurationSeconds = defaultCreateDurationSeconds();
         }
     }
 
@@ -2364,6 +2467,26 @@ public final class MarketModuleScreen extends Screen
         return Component.translatable(
                 "gui.futureshops.market.action.create.type." + suffix)
                 .getString();
+    }
+
+    private long defaultCreateDurationSeconds() {
+        return createDurationPresets.contains(
+                DEFAULT_CREATE_DURATION_SECONDS)
+                ? DEFAULT_CREATE_DURATION_SECONDS
+                : createDurationPresets.get(0);
+    }
+
+    private static String formatDuration(long seconds) {
+        if (seconds % 86_400L == 0L) {
+            return seconds / 86_400L + "d";
+        }
+        if (seconds % 3_600L == 0L) {
+            return seconds / 3_600L + "h";
+        }
+        if (seconds % 60L == 0L) {
+            return seconds / 60L + "m";
+        }
+        return seconds + "s";
     }
 
     private void submitCreateListing() {
@@ -2410,7 +2533,7 @@ public final class MarketModuleScreen extends Screen
         long durationSeconds = createType == AuctionListingType.BUY_NOW
                 ? createDurationSeconds
                 : createDurationSeconds > 0L ? createDurationSeconds
-                : DEFAULT_CREATE_DURATION_SECONDS;
+                : defaultCreateDurationSeconds();
         int slot = createSelectedSlot;
         String listingType = createType.name();
         long startMinor = startingBidMinor;
@@ -2418,11 +2541,15 @@ public final class MarketModuleScreen extends Screen
         int quantity = stack.getCount();
         // Selection-time fingerprint, NOT recomputed here — see selectCreateSlot.
         String fingerprint = createSelectedFingerprint;
-        sendMarketAction("auction_create", "",
-                requestId -> new C2SAuctionCreatePacket(requestId,
-                        packet.routeNonce(), slot, listingType,
-                        startMinor, buyout, durationSeconds, quantity,
-                        fingerprint));
+        requirePaymentSource(Component.translatable(
+                        "gui.futureshops.market.action.payment.auction_listing_fee"),
+                source -> sendMarketAction("auction_create", "",
+                        requestId -> new C2SAuctionCreatePacket(requestId,
+                                packet.routeNonce(), slot, listingType,
+                                startMinor, buyout, durationSeconds, quantity,
+                                fingerprint, source.wire()))
+                        .ifPresent(requestId ->
+                                trackPaymentSource(requestId, source)));
     }
 
     // ── Action-surface plumbing ─────────────────────────────────────
@@ -3631,6 +3758,8 @@ public final class MarketModuleScreen extends Screen
         DENIED_PAYMENT_SOURCES.clear();
         pendingDetailRefresh = null;
         actionStatus = null;
+        profileRevision = 0L;
+        profileReplayEpoch = 0L;
     }
 
     @Override

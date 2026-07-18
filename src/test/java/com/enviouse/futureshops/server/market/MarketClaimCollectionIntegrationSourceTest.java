@@ -28,7 +28,7 @@ class MarketClaimCollectionIntegrationSourceTest {
         assertEquals(62, count(source.substring(0, response),
                 "CHANNEL.messageBuilder"));
         assertTrue(source.contains(
-                "public static final String PROTOCOL_VERSION = \"45\""));
+                "public static final String PROTOCOL_VERSION = \"46\""));
 
         String c2s = read(
                 "src/main/java/com/enviouse/futureshops/network/packets/C2SMarketClaimCollectionPacket.java");

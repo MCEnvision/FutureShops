@@ -19,7 +19,7 @@ import java.util.UUID;
 
 public final class MarketProfileSavedData extends SavedData {
     public static final String DATA_NAME = "futureshops_market_profiles";
-    public static final int CURRENT_VERSION = 2;
+    public static final int CURRENT_VERSION = 3;
     public static final int MAX_PROFILES = 100000;
     public static final int MAX_WATCHED_AUCTIONS = 256;
     public static final int MAX_FAVORITE_PRODUCTS = 256;
@@ -29,11 +29,11 @@ public final class MarketProfileSavedData extends SavedData {
     public static final int MAX_MUTATION_RECEIPTS = 512;
     public static final int MAX_MUTATION_TOMBSTONES = 512;
 
-    private static final int MUTATION_REPLAY_FILTER_VERSION = 1;
-    private static final int MUTATION_REPLAY_FILTER_BITS = 32768;
-    private static final int MUTATION_REPLAY_FILTER_WORDS =
-            MUTATION_REPLAY_FILTER_BITS / Long.SIZE;
-    private static final int MUTATION_REPLAY_FILTER_HASHES = 5;
+    private static final int LEGACY_REPLAY_FILTER_VERSION = 1;
+    private static final int LEGACY_REPLAY_FILTER_BITS = 32768;
+    private static final int LEGACY_REPLAY_FILTER_WORDS =
+            LEGACY_REPLAY_FILTER_BITS / Long.SIZE;
+    private static final int LEGACY_REPLAY_FILTER_HASHES = 5;
 
     private static final UUID ZERO = new UUID(0L, 0L);
 
@@ -357,6 +357,7 @@ public final class MarketProfileSavedData extends SavedData {
             throw new IllegalStateException(
                     "Market profile request identity was retired");
         }
+        ensureMutationReceiptCapacity(profile);
         profile.mutationReceipts.put(value.requestId(), value);
         while (profile.mutationReceipts.size()
                 > MAX_MUTATION_RECEIPTS) {
@@ -388,9 +389,13 @@ public final class MarketProfileSavedData extends SavedData {
                     ? RetiredMutationRequest.EXACT
                     : RetiredMutationRequest.CONFLICT;
         }
-        return replayFilterContains(profile, request)
-                ? RetiredMutationRequest.UNKNOWN
-                : RetiredMutationRequest.NONE;
+        return RetiredMutationRequest.NONE;
+    }
+
+    public synchronized Snapshot prepareMutationReceipt(UUID playerId) {
+        MutableProfile profile = profile(playerId);
+        ensureMutationReceiptCapacity(profile);
+        return profile.snapshot();
     }
 
     private MutableProfile profile(UUID playerId) {
@@ -474,14 +479,7 @@ public final class MarketProfileSavedData extends SavedData {
             tombstones.add(value);
         }
         tag.put("mutationTombstones", tombstones);
-        tag.putInt("mutationReplayFilterVersion",
-                MUTATION_REPLAY_FILTER_VERSION);
-        tag.putInt("mutationReplayFilterBits",
-                MUTATION_REPLAY_FILTER_BITS);
-        tag.putInt("mutationReplayFilterHashes",
-                MUTATION_REPLAY_FILTER_HASHES);
-        tag.putLongArray("mutationReplayFilter",
-                profile.mutationReplayFilter);
+        tag.putLong("mutationReplayEpoch", profile.mutationReplayEpoch);
         return tag;
     }
 
@@ -502,13 +500,17 @@ public final class MarketProfileSavedData extends SavedData {
             requireType(tag, "mutationTombstones", Tag.TAG_LIST);
             requireCompoundList(tag.get("mutationTombstones"),
                     "mutationTombstones");
-            requireType(tag, "mutationReplayFilter",
-                    Tag.TAG_LONG_ARRAY);
-            requireType(tag, "mutationReplayFilterVersion",
-                    Tag.TAG_INT);
-            requireType(tag, "mutationReplayFilterBits", Tag.TAG_INT);
-            requireType(tag, "mutationReplayFilterHashes",
-                    Tag.TAG_INT);
+            if (version == 2) {
+                requireType(tag, "mutationReplayFilter",
+                        Tag.TAG_LONG_ARRAY);
+                requireType(tag, "mutationReplayFilterVersion",
+                        Tag.TAG_INT);
+                requireType(tag, "mutationReplayFilterBits", Tag.TAG_INT);
+                requireType(tag, "mutationReplayFilterHashes",
+                        Tag.TAG_INT);
+            } else {
+                requireType(tag, "mutationReplayEpoch", Tag.TAG_LONG);
+            }
         }
         MutableProfile profile = new MutableProfile();
         if (version >= 2) {
@@ -517,6 +519,12 @@ public final class MarketProfileSavedData extends SavedData {
             if (profile.revision < 0L) {
                 throw new IllegalStateException(
                         "Market profile revision is invalid");
+            }
+            profile.mutationReplayEpoch = version == 2 ? 1L
+                    : tag.getLong("mutationReplayEpoch");
+            if (profile.mutationReplayEpoch < 0L) {
+                throw new IllegalStateException(
+                        "Market profile replay epoch is invalid");
             }
         }
         ListTag auctions = tag.getList(
@@ -575,7 +583,8 @@ public final class MarketProfileSavedData extends SavedData {
             }
             for (int index = 0; index < receipts.size(); index++) {
                 MarketProfileMutationReceipt receipt =
-                        readMutationReceipt(receipts.getCompound(index));
+                        readMutationReceipt(receipts.getCompound(index),
+                                version);
                 if (!receipt.ownerId().equals(playerId)) {
                     throw new IllegalStateException(
                             "Market profile receipt owner is invalid");
@@ -610,28 +619,20 @@ public final class MarketProfileSavedData extends SavedData {
                             "Market profile tombstone is duplicated");
                 }
             }
-            long[] replayFilter = tag.getLongArray(
-                    "mutationReplayFilter");
-            if (tag.getInt("mutationReplayFilterVersion")
-                    != MUTATION_REPLAY_FILTER_VERSION
-                    || tag.getInt("mutationReplayFilterBits")
-                    != MUTATION_REPLAY_FILTER_BITS
-                    || tag.getInt("mutationReplayFilterHashes")
-                    != MUTATION_REPLAY_FILTER_HASHES) {
-                throw new IllegalStateException(
-                        "Market profile replay filter metadata is invalid");
-            }
-            if (replayFilter.length != 0
-                    && replayFilter.length
-                    != MUTATION_REPLAY_FILTER_WORDS) {
-                throw new IllegalStateException(
-                        "Market profile replay filter is invalid");
-            }
-            profile.mutationReplayFilter = replayFilter;
-            for (UUID requestId : profile.mutationTombstones.keySet()) {
-                if (!replayFilterContains(profile, requestId)) {
+            if (version == 2) {
+                long[] replayFilter = tag.getLongArray(
+                        "mutationReplayFilter");
+                if (tag.getInt("mutationReplayFilterVersion")
+                        != LEGACY_REPLAY_FILTER_VERSION
+                        || tag.getInt("mutationReplayFilterBits")
+                        != LEGACY_REPLAY_FILTER_BITS
+                        || tag.getInt("mutationReplayFilterHashes")
+                        != LEGACY_REPLAY_FILTER_HASHES
+                        || replayFilter.length != 0
+                        && replayFilter.length
+                        != LEGACY_REPLAY_FILTER_WORDS) {
                     throw new IllegalStateException(
-                            "Market profile replay filter is incomplete");
+                            "Market profile replay filter is invalid");
                 }
             }
         }
@@ -645,69 +646,23 @@ public final class MarketProfileSavedData extends SavedData {
     ) {
         requireUuid(requestId, "requestId");
         String value = requireFingerprint(fingerprint);
-        replayFilterAdd(profile, requestId);
         String existing = profile.mutationTombstones.putIfAbsent(
                 requestId, value);
         if (existing != null && !existing.equals(value)) {
             throw new IllegalStateException(
                     "Market profile tombstone conflicts");
         }
-        while (profile.mutationTombstones.size()
-                > MAX_MUTATION_TOMBSTONES) {
-            UUID eldest = profile.mutationTombstones.keySet()
-                    .iterator().next();
-            profile.mutationTombstones.remove(eldest);
-        }
     }
 
-    private static void replayFilterAdd(
-            MutableProfile profile,
-            UUID requestId
-    ) {
-        if (profile.mutationReplayFilter.length == 0) {
-            profile.mutationReplayFilter =
-                    new long[MUTATION_REPLAY_FILTER_WORDS];
+    private static void ensureMutationReceiptCapacity(
+            MutableProfile profile) {
+        if (profile.mutationReceipts.size() >= MAX_MUTATION_RECEIPTS
+                && profile.mutationTombstones.size()
+                >= MAX_MUTATION_TOMBSTONES) {
+            profile.mutationReplayEpoch = Math.incrementExact(
+                    profile.mutationReplayEpoch);
+            profile.mutationTombstones.clear();
         }
-        for (int bit : replayFilterBits(requestId)) {
-            profile.mutationReplayFilter[bit / Long.SIZE]
-                    |= 1L << bit % Long.SIZE;
-        }
-    }
-
-    private static boolean replayFilterContains(
-            MutableProfile profile,
-            UUID requestId
-    ) {
-        if (profile.mutationReplayFilter.length == 0) {
-            return false;
-        }
-        for (int bit : replayFilterBits(requestId)) {
-            if ((profile.mutationReplayFilter[bit / Long.SIZE]
-                    & 1L << bit % Long.SIZE) == 0L) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static int[] replayFilterBits(UUID requestId) {
-        UUID request = requireUuid(requestId, "requestId");
-        long first = mix64(request.getMostSignificantBits()
-                ^ 0x6a09e667f3bcc909L);
-        long step = mix64(request.getLeastSignificantBits()
-                ^ 0xbb67ae8584caa73bL) | 1L;
-        int[] bits = new int[MUTATION_REPLAY_FILTER_HASHES];
-        for (int index = 0; index < bits.length; index++) {
-            bits[index] = (int) ((first + step * index)
-                    & (MUTATION_REPLAY_FILTER_BITS - 1));
-        }
-        return bits;
-    }
-
-    private static long mix64(long value) {
-        value = (value ^ value >>> 30) * 0xbf58476d1ce4e5b9L;
-        value = (value ^ value >>> 27) * 0x94d049bb133111ebL;
-        return value ^ value >>> 31;
     }
 
     private static String requireFingerprint(String fingerprint) {
@@ -733,6 +688,7 @@ public final class MarketProfileSavedData extends SavedData {
         tag.putString("type", result.type().name());
         tag.putString("result", result.resultCode().name());
         tag.putLong("revision", result.profileRevision());
+        tag.putLong("replayEpoch", result.replayEpoch());
         tag.putInt("watched", result.watchedAuctionCount());
         tag.putInt("favorites", result.favoriteProductCount());
         tag.putInt("alerts", result.priceAlertCount());
@@ -744,7 +700,8 @@ public final class MarketProfileSavedData extends SavedData {
     }
 
     private static MarketProfileMutationReceipt readMutationReceipt(
-            CompoundTag tag
+            CompoundTag tag,
+            int version
     ) {
         if (!tag.hasUUID("owner") || !tag.hasUUID("request")
                 || !tag.hasUUID("route")) {
@@ -766,6 +723,9 @@ public final class MarketProfileSavedData extends SavedData {
                 Map.entry("changed", Tag.TAG_BYTE)).entrySet()) {
             requireType(tag, field.getKey(), field.getValue());
         }
+        if (version >= 3) {
+            requireType(tag, "replayEpoch", Tag.TAG_LONG);
+        }
         try {
             MarketProfileMutationResult result =
                     new MarketProfileMutationResult(
@@ -781,6 +741,7 @@ public final class MarketProfileSavedData extends SavedData {
                             MarketProfileMutationResultCode.valueOf(
                                     tag.getString("result")),
                             tag.getLong("revision"),
+                            version >= 3 ? tag.getLong("replayEpoch") : 0L,
                             tag.getInt("watched"),
                             tag.getInt("favorites"),
                             tag.getInt("alerts"),
@@ -1074,7 +1035,8 @@ public final class MarketProfileSavedData extends SavedData {
             List<ProductKey> recentProducts,
             List<PriceAlert> priceAlerts,
             List<Notification> notifications,
-            long revision
+            long revision,
+            long replayEpoch
     ) {
         public Snapshot {
             watchedAuctions = List.copyOf(watchedAuctions);
@@ -1082,7 +1044,7 @@ public final class MarketProfileSavedData extends SavedData {
             recentProducts = List.copyOf(recentProducts);
             priceAlerts = List.copyOf(priceAlerts);
             notifications = List.copyOf(notifications);
-            if (revision < 0L) {
+            if (revision < 0L || replayEpoch < 0L) {
                 throw new IllegalArgumentException(
                         "Market profile revision is invalid");
             }
@@ -1096,12 +1058,24 @@ public final class MarketProfileSavedData extends SavedData {
                 List<Notification> notifications
         ) {
             this(watchedAuctions, favoriteProducts, recentProducts,
-                    priceAlerts, notifications, 0L);
+                    priceAlerts, notifications, 0L, 0L);
+        }
+
+        public Snapshot(
+                List<UUID> watchedAuctions,
+                List<ProductKey> favoriteProducts,
+                List<ProductKey> recentProducts,
+                List<PriceAlert> priceAlerts,
+                List<Notification> notifications,
+                long revision
+        ) {
+            this(watchedAuctions, favoriteProducts, recentProducts,
+                    priceAlerts, notifications, revision, 0L);
         }
 
         public static Snapshot empty() {
             return new Snapshot(List.of(), List.of(), List.of(),
-                    List.of(), List.of(), 0L);
+                    List.of(), List.of(), 0L, 0L);
         }
 
         public int unreadNotifications() {
@@ -1147,8 +1121,7 @@ public final class MarketProfileSavedData extends SavedData {
     public enum RetiredMutationRequest {
         NONE,
         EXACT,
-        CONFLICT,
-        UNKNOWN
+        CONFLICT
     }
 
     private static final class MutableProfile {
@@ -1165,14 +1138,14 @@ public final class MarketProfileSavedData extends SavedData {
                 mutationReceipts = new LinkedHashMap<>();
         private final LinkedHashMap<UUID, String> mutationTombstones =
                 new LinkedHashMap<>();
-        private long[] mutationReplayFilter = new long[0];
+        private long mutationReplayEpoch;
         private long revision;
 
         private Snapshot snapshot() {
             return new Snapshot(new ArrayList<>(watchedAuctions),
                     new ArrayList<>(favoriteProducts), recentProducts,
                     new ArrayList<>(priceAlerts.values()),
-                    notifications, revision);
+                    notifications, revision, mutationReplayEpoch);
         }
     }
 }

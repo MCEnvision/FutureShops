@@ -19,6 +19,7 @@ public record MarketProfileMutationCommand(
         MarketModule module,
         String view,
         long expectedProfileRevision,
+        long expectedReplayEpoch,
         MarketProfileMutation mutation
 ) {
     private static final UUID ZERO = new UUID(0L, 0L);
@@ -31,6 +32,7 @@ public record MarketProfileMutationCommand(
         mutation = Objects.requireNonNull(mutation, "mutation");
         if (module == MarketModule.SHOP
                 || expectedProfileRevision < 0L
+                || expectedReplayEpoch < 0L
                 || mutation.type()
                 == MarketProfileMutationType.AUCTION_WATCH
                 && module != MarketModule.AUCTION_HOUSE
@@ -47,6 +49,14 @@ public record MarketProfileMutationCommand(
         }
     }
 
+    public MarketProfileMutationCommand(UUID requestId, UUID routeNonce,
+                                        MarketModule module, String view,
+                                        long expectedProfileRevision,
+                                        MarketProfileMutation mutation) {
+        this(requestId, routeNonce, module, view,
+                expectedProfileRevision, 0L, mutation);
+    }
+
     public String fingerprint() {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -56,6 +66,7 @@ public record MarketProfileMutationCommand(
                 writeText(output, module.id());
                 writeText(output, view);
                 output.writeLong(expectedProfileRevision);
+                output.writeLong(expectedReplayEpoch);
                 writeText(output, mutation.type().name());
                 writeMutation(output, mutation);
             }

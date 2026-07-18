@@ -38,17 +38,19 @@ disappears from navigation unless you still have claims in it, in which case it 
 
 ## Payment sources
 
-Wallet balance is the default payment source for both markets, and in this release it is the only
-one that works there. The payment picker ("Pay from: Wallet / Inventory Cash") exists in the
-shared shell, but market operations answer physical payment with *"That payment source is not
-accepted here — pay from your wallet instead."*
+Every money action asks for **Wallet** or **Inventory Cash** when the server allows both. The
+successful choice can be remembered for the current market session. The server still validates
+the selected source and the live module policy on every request.
 
-Why: a bid or a buy order can live for days. Escrow therefore has to *consume* physical money into
-custody at placement — it can never merely check your pockets and leave the cash spendable. The
-funding bridge that turns physical bills into escrowed value for long-lived contracts is not in
-this release, so markets are wallet-funded for now. Shop purchases, `/deposit`, `/withdraw`, and
-the ATM continue to support physical currency as before; deposit cash first if your wealth is in
-bills.
+Inventory Cash is consumed through the same escrow deposit path used by `/deposit` before the
+listing fee, bid increase, Buy Now purchase, or Bazaar buy reserve is committed. A long-lived bid
+or order therefore never leaves spendable cash in the player's inventory. The deposit must fund
+the requested amount exactly; any value that cannot enter the wallet remains a claim and the
+market action fails safely instead of receiving partial funding.
+
+Built-in `futureshops:money` keeps mint checksum and spent-mint protection. A foreign mod's
+currency is spawned and accepted as an ordinary item and cannot receive FutureShops duplication
+protection, although request IDs, escrow journaling, and replay protection still apply.
 
 ## Auction House
 
@@ -59,8 +61,9 @@ Run `/ah create` or press **Create Listing** in the footer.
 1. Pick an item from your main inventory (armor and offhand slots are not listable).
 2. Choose the listing type: **Buy Now** (fixed price), **Timed Auction**, or **Auction with
    Buyout** (timed, with an optional instant-buy price).
-3. Enter the price (and buyout, if any) and pick a duration. The wizard offers 1h / 6h / 12h /
-   24h / 48h; the server enforces the configured minimum and maximum duration.
+3. Enter the price (and buyout, if any) and pick a duration. The wizard uses the server's
+   `listings.duration_presets_minutes` choices and the server enforces the configured minimum and
+   maximum duration.
 4. Review the listing fee shown by the wizard and submit.
 
 The server re-validates everything, then escrow takes custody of the exact item — full NBT
@@ -196,9 +199,10 @@ The §13 administrative surface. The command tree stays registered while modules
 | `bazaar product <id> <active\|halted\|retired>` | 3 | Product lifecycle mutation |
 | `auction cancel <listingId> <reason…>` | 4 | Forced listing cancel — two-step confirm (re-run within 30s), written reason, immutable audit record, idempotent request id |
 
-Every mutation records a bounded reason; the forced auction cancel routes through the same durable
-escrow path as a player cancel and returns the item to the seller as claims. Bid-bearing listings
-cannot be force-cancelled in this release (the book refuses; the armed message warns first).
+Every mutation records a bounded reason. A forced auction cancel routes through the same durable
+escrow path as settlement, returns the item to the seller as a claim, and converts any standing
+bid hold into a money claim for the bidder. Replaying the same administrative request is
+idempotent and cannot refund twice.
 
 Players reach their claims from the Claims tab, the header counter, `/ah claims`, `/bz claims`, or
 the dedicated `/claims` (aliases `/claimall`, `/escrow`) command, which opens the claims view
@@ -206,16 +210,18 @@ directly — collection itself always runs inside a route-validated market sessi
 
 ### Permissions
 
-Market commands are intentionally open: `/ah` and `/bz` (like `/shop`, `/balance`, `/pay`) require
-no permission level, so every player can trade and — critically — collect claims. `/marketadmin`
-uses vanilla permission levels 2 (read-only), 3 (module control), and 4 (forced value operations):
+The common config supplies vanilla operator fallbacks. The default
+`permissions.market_use_op_level = 0` keeps trading open, while
+`permissions.market_admin_op_level = 2` protects administration. Forge permission plugins can
+override these registered Boolean nodes:
 
-```
-# Console: grant a moderator the admin commands (vanilla op level covers hasPermission(2))
-/op ChiefModerator
-```
+- `futureshops.auction.use`, `futureshops.auction.create`, `futureshops.auction.bid`,
+  `futureshops.auction.buy`, `futureshops.auction.claim`, `futureshops.auction.admin`
+- `futureshops.bazaar.use`, `futureshops.bazaar.order`, `futureshops.bazaar.instant`,
+  `futureshops.bazaar.claim`, `futureshops.bazaar.admin`
+- `futureshops.escrow.claim`, `futureshops.escrow.admin`
 
-Permission-mod integration with dedicated nodes (auction use/create/bid, bazaar use/order,
-escrow claim/admin) remains a follow-up; in this build, command access is vanilla permission
-levels only. Two guarantees hold regardless of permissions: revoking a player's access blocks new
-actions but never confiscates their claims, and disabling a module never blocks ownership claims.
+Claim nodes default to allowed and claim collection is never permission-gated. Revoking browse or
+trade access blocks new actions but never confiscates custody, refunds, cancellations, or claims.
+Without a permission plugin, `/marketadmin` retains its vanilla level ladder: level 2 for reads,
+level 3 for module controls, and level 4 for forced value operations.

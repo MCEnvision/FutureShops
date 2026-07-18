@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.network.packets;
 
 import com.enviouse.futureshops.server.escrow.runtime.AuctionActionService;
+import com.enviouse.futureshops.money.PaymentSource;
 import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
@@ -14,9 +15,7 @@ import java.util.function.Supplier;
  * Create an auction listing from an exact player-inventory slot (plan §8 listing creation: the
  * server re-checks slot content, restrictions, limits, and fee before escrow holds the item; the
  * listing becomes visible only after custody is durable). {@code buyoutMinor == 0} means no
- * buyout; {@code durationSeconds == 0} is only valid for pure BUY_NOW listings. The listing fee
- * is wallet-funded (auction escrow is wallet-only in this release; the payment-source prompt
- * applies server policy).
+ * A zero buyout means no buyout. A zero duration is only valid for fixed price listings.
  */
 public record C2SAuctionCreatePacket(
         UUID requestId,
@@ -27,7 +26,8 @@ public record C2SAuctionCreatePacket(
         long buyoutMinor,
         long durationSeconds,
         int quantity,
-        String itemFingerprint
+        String itemFingerprint,
+        String paymentSource
 ) {
     private static final UUID ZERO = new UUID(0L, 0L);
     /** Survival inventory slots only (0-40 covers main + hotbar + offhand + armor is excluded server-side). */
@@ -43,6 +43,7 @@ public record C2SAuctionCreatePacket(
         listingType = Objects.requireNonNull(listingType, "listingType").strip();
         itemFingerprint = Objects.requireNonNull(itemFingerprint, "itemFingerprint")
                 .strip().toLowerCase(java.util.Locale.ROOT);
+        paymentSource = Objects.requireNonNull(paymentSource, "paymentSource").strip();
         if (requestId.equals(ZERO)) {
             throw new IllegalArgumentException("Auction create requestId is required");
         }
@@ -67,6 +68,9 @@ public record C2SAuctionCreatePacket(
         if (quantity < 1 || quantity > MAX_QUANTITY) {
             throw new IllegalArgumentException("Auction create quantity is out of bounds");
         }
+        if (PaymentSource.fromWire(paymentSource).isEmpty()) {
+            throw new IllegalArgumentException("Auction payment source is invalid");
+        }
     }
 
     public static void encode(C2SAuctionCreatePacket packet, FriendlyByteBuf buffer) {
@@ -79,6 +83,7 @@ public record C2SAuctionCreatePacket(
         buffer.writeVarLong(packet.durationSeconds());
         buffer.writeVarInt(packet.quantity());
         buffer.writeUtf(packet.itemFingerprint(), FINGERPRINT_LENGTH);
+        buffer.writeUtf(packet.paymentSource(), 16);
     }
 
     public static C2SAuctionCreatePacket decode(FriendlyByteBuf buffer) {
@@ -86,7 +91,7 @@ public record C2SAuctionCreatePacket(
             return new C2SAuctionCreatePacket(buffer.readUUID(), buffer.readUUID(),
                     buffer.readVarInt(), buffer.readUtf(32), buffer.readVarLong(),
                     buffer.readVarLong(), buffer.readVarLong(), buffer.readVarInt(),
-                    buffer.readUtf(FINGERPRINT_LENGTH));
+                    buffer.readUtf(FINGERPRINT_LENGTH), buffer.readUtf(16));
         } catch (RuntimeException exception) {
             throw new DecoderException("Auction create request is invalid", exception);
         }

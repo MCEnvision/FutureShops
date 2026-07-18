@@ -66,6 +66,8 @@ public final class AuctionEscrowConservationValidator {
                 validateItemReturn(requestId, listing,
                         listing.sellerId(), custody, claims,
                         expectedClaims);
+                validateRefund(requestId, result, claims, expected,
+                        expectedClaims);
             }
             case EXPIRE -> {
                 if (listing.sale().isPresent()) {

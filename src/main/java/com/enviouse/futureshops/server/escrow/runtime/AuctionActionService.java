@@ -4,6 +4,7 @@ import com.enviouse.futureshops.Config;
 import com.enviouse.futureshops.config.AuctionHouseConfig;
 import com.enviouse.futureshops.money.CurrencyManager;
 import com.enviouse.futureshops.money.ItemStackSnapshotCodec;
+import com.enviouse.futureshops.money.PaymentSource;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SAuctionBidPacket;
 import com.enviouse.futureshops.network.packets.C2SAuctionBuyNowPacket;
@@ -23,6 +24,7 @@ import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryExecutio
 import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryMutationIntent;
 import com.enviouse.futureshops.server.escrow.item.runtime.ServerPlayerItemInventoryAccess;
 import com.enviouse.futureshops.server.market.MarketModuleAccessPolicy;
+import com.enviouse.futureshops.server.market.MarketPermissions;
 import com.enviouse.futureshops.server.market.auction.AuctionBuyNowCommand;
 import com.enviouse.futureshops.server.market.auction.AuctionHouseBook;
 import com.enviouse.futureshops.server.market.auction.AuctionHouseSnapshot;
@@ -73,8 +75,7 @@ import java.util.UUID;
  * {@link EscrowRuntimeService#commitAuctionEscrowLifecycle}; this service never mutates value
  * directly. Idempotency is enforced in four layers (stored escrow commit, book request receipt,
  * lifecycle repository, WAL coordinator) — the pre-checks here just short-circuit replays into
- * their original responses. Auction money is WALLET-only in this release (the escrow layer has no
- * physical funding path for bids; {@code payment.allow_physical} is honored as denied).
+ * their original responses.
  *
  * <p>Lives in {@code server.escrow.runtime} deliberately: item custody runs through the
  * package-private exact-item runtime the same way {@link ServerShopSellService} does.
@@ -173,8 +174,20 @@ public final class AuctionActionService {
                 respond(player, requestId, "CREATE", "RATE_LIMITED", null, 0L, "");
                 return;
             }
+            if (!MarketPermissions.canAuctionCreate(player)) {
+                respond(player, requestId, "CREATE", "PERMISSION_DENIED",
+                        null, 0L, "auction.create");
+                return;
+            }
 
             AuctionHouseConfig.Settings settings = AuctionHouseConfig.settings();
+            PaymentSource paymentSource = PaymentSource.fromWire(
+                    packet.paymentSource()).orElse(null);
+            if (!paymentSourceAllowed(settings.payment(), paymentSource)) {
+                respond(player, requestId, "CREATE", "PAYMENT_SOURCE_DENIED",
+                        null, 0L, normalizedSource(packet.paymentSource()));
+                return;
+            }
             AuctionListingType type = parseType(packet.listingType());
             if (type == null || !typeAllowed(settings.listings(), type)) {
                 respond(player, requestId, "CREATE", "TYPE_DISABLED", null, 0L, "");
@@ -285,6 +298,12 @@ public final class AuctionActionService {
                     type, type == AuctionListingType.BUY_NOW ? 0L : packet.startingBidMinor(),
                     packet.buyoutMinor(), rules(settings), nowMillis, deadlineMillis);
 
+            if (paymentSource == PaymentSource.PHYSICAL
+                    && settings.fees().listingFeeMinor() > 0L
+                    && !fundPhysical(player, requestId, "auction.create",
+                    settings.fees().listingFeeMinor(), "CREATE", 0L)) {
+                return;
+            }
             AuctionEscrowWalletSnapshot sellerWallet = walletSnapshot(runtime, player.getUUID());
             if (settings.fees().listingFeeMinor() > 0L) {
                 try {
@@ -388,6 +407,19 @@ public final class AuctionActionService {
                 respond(player, requestId, "BID", "RATE_LIMITED", null, 0L, "");
                 return;
             }
+            if (!MarketPermissions.canAuctionBid(player)) {
+                respond(player, requestId, "BID", "PERMISSION_DENIED",
+                        null, 0L, "auction.bid");
+                return;
+            }
+            AuctionHouseConfig.Settings settings = AuctionHouseConfig.settings();
+            PaymentSource paymentSource = PaymentSource.fromWire(
+                    packet.paymentSource()).orElse(null);
+            if (!paymentSourceAllowed(settings.payment(), paymentSource)) {
+                respond(player, requestId, "BID", "PAYMENT_SOURCE_DENIED",
+                        null, 0L, normalizedSource(packet.paymentSource()));
+                return;
+            }
             AuctionListing listing = runtime.auctionHouseListing(packet.listingId())
                     .orElse(null);
             if (listing == null) {
@@ -411,6 +443,11 @@ public final class AuctionActionService {
             AuctionOperationResult preview = new AuctionHouseBook(snapshot).bid(command);
             if (!preview.applied()) {
                 respondFromResult(player, requestId, "BID", preview);
+                return;
+            }
+            if (paymentSource == PaymentSource.PHYSICAL
+                    && !fundPhysical(player, requestId, "auction.bid",
+                    heldDelta, "BID", listing.revision())) {
                 return;
             }
             AuctionEscrowWalletSnapshot wallet = walletSnapshot(runtime, player.getUUID());
@@ -461,6 +498,19 @@ public final class AuctionActionService {
                 respond(player, requestId, "BUY_NOW", "RATE_LIMITED", null, 0L, "");
                 return;
             }
+            if (!MarketPermissions.canAuctionBuy(player)) {
+                respond(player, requestId, "BUY_NOW", "PERMISSION_DENIED",
+                        null, 0L, "auction.buy");
+                return;
+            }
+            AuctionHouseConfig.Settings settings = AuctionHouseConfig.settings();
+            PaymentSource paymentSource = PaymentSource.fromWire(
+                    packet.paymentSource()).orElse(null);
+            if (!paymentSourceAllowed(settings.payment(), paymentSource)) {
+                respond(player, requestId, "BUY_NOW", "PAYMENT_SOURCE_DENIED",
+                        null, 0L, normalizedSource(packet.paymentSource()));
+                return;
+            }
             AuctionListing listing = runtime.auctionHouseListing(packet.listingId())
                     .orElse(null);
             if (listing == null) {
@@ -489,6 +539,11 @@ public final class AuctionActionService {
             AuctionOperationResult preview = new AuctionHouseBook(snapshot).buyNow(command);
             if (!preview.applied()) {
                 respondFromResult(player, requestId, "BUY_NOW", preview);
+                return;
+            }
+            if (paymentSource == PaymentSource.PHYSICAL
+                    && !fundPhysical(player, requestId, "auction.buy_now",
+                    heldDelta, "BUY_NOW", listing.revision())) {
                 return;
             }
             AuctionEscrowWalletSnapshot buyerWallet = walletSnapshot(runtime, player.getUUID());
@@ -699,6 +754,42 @@ public final class AuctionActionService {
                                           AuctionOperationResult result) {
         respond(player, requestId, action, result.status().name(), null,
                 result.observedRevision(), result.listingId().toString());
+    }
+
+    private static boolean fundPhysical(ServerPlayer player, UUID requestId,
+                                        String domain, long amountMinor,
+                                        String action, long revision) {
+        MarketPhysicalFundingService.FundingResult result =
+                MarketPhysicalFundingService.fund(player, requestId,
+                        domain, amountMinor);
+        if (result.funded()) {
+            return true;
+        }
+        String status = switch (result.status()) {
+            case INSUFFICIENT_CASH, WALLET_DEBT -> "INSUFFICIENT_FUNDS";
+            case RATE_LIMITED -> "RATE_LIMITED";
+            case CONFIG_CHANGED -> "STALE_CONFIG";
+            case RECOVERY_REQUIRED, REQUEST_CONFLICT -> "RECOVERY_REQUIRED";
+            case UNAVAILABLE -> "ESCROW_UNAVAILABLE";
+            case INVALID_AMOUNT, INVALID_CASH, WALLET_CAPACITY ->
+                    "PAYMENT_SOURCE_DENIED";
+            case FUNDED -> throw new IllegalArgumentException(
+                    "Funded result is not a failure");
+        };
+        respond(player, requestId, action, status,
+                result.depositTransactionId().orElse(null), revision,
+                result.status().name().toLowerCase(Locale.ROOT));
+        return false;
+    }
+
+    private static boolean paymentSourceAllowed(
+            AuctionHouseConfig.PaymentRules rules, PaymentSource source) {
+        return source == PaymentSource.WALLET && rules.allowWallet()
+                || source == PaymentSource.PHYSICAL && rules.allowPhysical();
+    }
+
+    private static String normalizedSource(String source) {
+        return source == null ? "" : source.strip().toLowerCase(Locale.ROOT);
     }
 
     /** API events (plan §18 Phase 6) — post-commit only, never inside the escrow path. */

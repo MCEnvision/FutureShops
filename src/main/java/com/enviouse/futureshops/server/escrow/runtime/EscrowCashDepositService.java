@@ -297,12 +297,13 @@ public final class EscrowCashDepositService {
             long currentBalanceMinorUnits,
             long configuredLimitMinorUnits
     ) {
-        if (currentBalanceMinorUnits < 0L
-                || configuredLimitMinorUnits < currentBalanceMinorUnits) {
+        if (configuredLimitMinorUnits < 0L
+                || !claimOnly && (currentBalanceMinorUnits < 0L
+                || configuredLimitMinorUnits < currentBalanceMinorUnits)) {
             throw new IllegalArgumentException(
                     "Cash deposit wallet limit is invalid");
         }
-        return claimOnly ? currentBalanceMinorUnits
+        return claimOnly ? 0L
                 : configuredLimitMinorUnits;
     }
 

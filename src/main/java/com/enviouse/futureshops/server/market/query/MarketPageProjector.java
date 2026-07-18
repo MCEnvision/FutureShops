@@ -78,6 +78,7 @@ public final class MarketPageProjector {
                 query.routeNonce(), query.module(), query.view(),
                 query.pageIndex(), query.pageSize(), total, pages,
                 snapshot.nextAcceptedSequence(),
+                profile.revision(), profile.replayEpoch(),
                 query.serverTimeMillis(), profile.unreadNotifications(),
                 sumPrimary(cards), sumQuantity(cards), categories, cards);
     }
@@ -171,7 +172,8 @@ public final class MarketPageProjector {
         return new MarketPageSnapshot(query.requestId(),
                 query.routeNonce(), query.module(), query.view(),
                 query.pageIndex(), query.pageSize(), total, pages,
-                snapshot.nextSequence(), query.serverTimeMillis(),
+                snapshot.nextSequence(), profile.revision(),
+                profile.replayEpoch(), query.serverTimeMillis(),
                 profile.unreadNotifications(), sumPrimary(cards),
                 sumQuantity(cards), categories, cards);
     }
@@ -532,7 +534,8 @@ public final class MarketPageProjector {
                 query.routeNonce(), query.module(), query.view(),
                 query.pageIndex(), query.pageSize(),
                 claims.totalResults(), claims.pageCount(),
-                publicRevision, query.serverTimeMillis(),
+                publicRevision, profile.revision(),
+                profile.replayEpoch(), query.serverTimeMillis(),
                 profile.unreadNotifications(), sumPrimary(cards),
                 sumQuantity(cards), categories, cards);
     }

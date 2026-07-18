@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.network.packets;
 
 import com.enviouse.futureshops.server.escrow.runtime.AuctionActionService;
+import com.enviouse.futureshops.money.PaymentSource;
 import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
@@ -22,7 +23,8 @@ public record C2SAuctionBidPacket(
         UUID routeNonce,
         UUID listingId,
         long expectedRevision,
-        long amountMinor
+        long amountMinor,
+        String paymentSource
 ) {
     private static final UUID ZERO = new UUID(0L, 0L);
 
@@ -30,6 +32,7 @@ public record C2SAuctionBidPacket(
         Objects.requireNonNull(requestId, "requestId");
         Objects.requireNonNull(routeNonce, "routeNonce");
         Objects.requireNonNull(listingId, "listingId");
+        paymentSource = Objects.requireNonNull(paymentSource, "paymentSource").strip();
         if (requestId.equals(ZERO) || listingId.equals(ZERO)) {
             throw new IllegalArgumentException("Auction bid identifiers are required");
         }
@@ -39,6 +42,9 @@ public record C2SAuctionBidPacket(
         if (amountMinor <= 0L || amountMinor > C2SAuctionCreatePacket.MAX_MINOR) {
             throw new IllegalArgumentException("Auction bid amount is out of bounds");
         }
+        if (PaymentSource.fromWire(paymentSource).isEmpty()) {
+            throw new IllegalArgumentException("Auction payment source is invalid");
+        }
     }
 
     public static void encode(C2SAuctionBidPacket packet, FriendlyByteBuf buffer) {
@@ -47,12 +53,14 @@ public record C2SAuctionBidPacket(
         buffer.writeUUID(packet.listingId());
         buffer.writeVarLong(packet.expectedRevision());
         buffer.writeVarLong(packet.amountMinor());
+        buffer.writeUtf(packet.paymentSource(), 16);
     }
 
     public static C2SAuctionBidPacket decode(FriendlyByteBuf buffer) {
         try {
             return new C2SAuctionBidPacket(buffer.readUUID(), buffer.readUUID(),
-                    buffer.readUUID(), buffer.readVarLong(), buffer.readVarLong());
+                    buffer.readUUID(), buffer.readVarLong(), buffer.readVarLong(),
+                    buffer.readUtf(16));
         } catch (RuntimeException exception) {
             throw new DecoderException("Auction bid request is invalid", exception);
         }

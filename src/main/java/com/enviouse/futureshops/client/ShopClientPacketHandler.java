@@ -510,6 +510,9 @@ public final class ShopClientPacketHandler {
                     .ACCEPT) {
                 return;
             }
+            if (minecraft.screen instanceof MarketModuleScreen market) {
+                market.applyProfileMutationResult(packet.result());
+            }
         });
     }
 

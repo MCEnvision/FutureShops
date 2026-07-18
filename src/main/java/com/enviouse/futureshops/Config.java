@@ -49,6 +49,14 @@ public class Config {
         .comment("Maximum allowed balance in minor units")
         .defineInRange("economy.max_balance_minor_units", 99999999999L, 0L, Long.MAX_VALUE);
 
+    private static final ForgeConfigSpec.IntValue PERMISSIONS_MARKET_USE_OP_LEVEL = BUILDER
+        .comment("Operator fallback level for market browsing and trading when no permission plugin overrides FutureShops nodes.")
+        .defineInRange("permissions.market_use_op_level", 0, 0, 4);
+
+    private static final ForgeConfigSpec.IntValue PERMISSIONS_MARKET_ADMIN_OP_LEVEL = BUILDER
+        .comment("Operator fallback level for FutureShops market administration nodes.")
+        .defineInRange("permissions.market_admin_op_level", 2, 0, 4);
+
     private static final ForgeConfigSpec.BooleanValue ECONOMY_ALLOW_NEGATIVE = BUILDER
         .comment(
             "Whether admins may push a player's balance below zero via /shopadmin bal remove.",
@@ -185,6 +193,8 @@ public class Config {
     public static long economyStartingBalanceMinorUnits;
     public static long economyMaxBalanceMinorUnits;
     public static boolean economyAllowNegative;
+    public static int permissionsMarketUseOpLevel = 0;
+    public static int permissionsMarketAdminOpLevel = 2;
 
     public static String currencyProvider;
     public static List<? extends String> currencyItems;
@@ -258,6 +268,10 @@ public class Config {
                     economyStartingBalanceMinorUnits = ECONOMY_STARTING_BALANCE_MINOR_UNITS.get();
                     economyMaxBalanceMinorUnits = ECONOMY_MAX_BALANCE_MINOR_UNITS.get();
                     economyAllowNegative = ECONOMY_ALLOW_NEGATIVE.get();
+                    permissionsMarketUseOpLevel =
+                            PERMISSIONS_MARKET_USE_OP_LEVEL.get();
+                    permissionsMarketAdminOpLevel =
+                            PERMISSIONS_MARKET_ADMIN_OP_LEVEL.get();
 
                     currencyProvider = CURRENCY_PROVIDER.get();
                     currencyItems = CURRENCY_ITEMS.get();

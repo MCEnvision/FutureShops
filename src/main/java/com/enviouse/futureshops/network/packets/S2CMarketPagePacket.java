@@ -42,6 +42,8 @@ public record S2CMarketPagePacket(
         buffer.writeVarInt(page.totalResults());
         buffer.writeVarInt(page.pageCount());
         buffer.writeLong(page.publicRevision());
+        buffer.writeLong(page.profileRevision());
+        buffer.writeLong(page.profileReplayEpoch());
         buffer.writeLong(page.serverTimeMillis());
         buffer.writeVarInt(page.unreadNotifications());
         buffer.writeLong(page.aggregatePrimaryMinor());
@@ -69,6 +71,8 @@ public record S2CMarketPagePacket(
             int totalResults = buffer.readVarInt();
             int pageCount = buffer.readVarInt();
             long publicRevision = buffer.readLong();
+            long profileRevision = buffer.readLong();
+            long profileReplayEpoch = buffer.readLong();
             long serverTime = buffer.readLong();
             int unread = buffer.readVarInt();
             long aggregatePrimary = buffer.readLong();
@@ -86,7 +90,8 @@ public record S2CMarketPagePacket(
             return new S2CMarketPagePacket(resultCode,
                     new MarketPageSnapshot(requestId, routeNonce, module,
                             view, pageIndex, pageSize, totalResults,
-                            pageCount, publicRevision, serverTime, unread,
+                            pageCount, publicRevision, profileRevision,
+                            profileReplayEpoch, serverTime, unread,
                             aggregatePrimary, aggregateQuantity,
                             categories, cards));
         } catch (RuntimeException exception) {

@@ -59,6 +59,10 @@ public record S2CMarketCapabilitiesPacket(
         buffer.writeUtf(snapshot.currencyName(),
                 MAXIMUM_CURRENCY_NAME_LENGTH);
         buffer.writeVarInt(snapshot.currencyDecimals());
+        buffer.writeVarInt(snapshot.auctionDurationPresetSeconds().size());
+        for (long seconds : snapshot.auctionDurationPresetSeconds()) {
+            buffer.writeVarLong(seconds);
+        }
     }
 
     public static S2CMarketCapabilitiesPacket decode(
@@ -87,13 +91,23 @@ public record S2CMarketCapabilitiesPacket(
             String currencyName = buffer.readUtf(
                     MAXIMUM_CURRENCY_NAME_LENGTH);
             int currencyDecimals = buffer.readVarInt();
+            int durationCount = buffer.readVarInt();
+            if (durationCount <= 0 || durationCount > 8) {
+                throw new IllegalArgumentException(
+                        "Auction duration preset count is invalid");
+            }
+            List<Long> durationPresets = new ArrayList<>(durationCount);
+            for (int index = 0; index < durationCount; index++) {
+                durationPresets.add(buffer.readVarLong());
+            }
             S2CMarketCapabilitiesPacket result =
                     new S2CMarketCapabilitiesPacket(
                             new MarketCapabilitiesSnapshot(requestId,
                                     revision, showNavigation,
                                     defaultModule, walletBalance,
                                     walletBalanceKnown, currencyName,
-                                    currencyDecimals, modules));
+                                    currencyDecimals, durationPresets,
+                                    modules));
             requireFullyRead(buffer);
             return result;
         } catch (RuntimeException exception) {

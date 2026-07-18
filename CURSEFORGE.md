@@ -62,15 +62,23 @@ An emerald-themed commodity market with a real order book.
 ### 🧭 One Shared Market Shell
 Shop (blurple), Bazaar (green), and Auction House (red) share one polished interface — header, search, category rail, balance pill, claims counter — with a module switcher, per-module themes, colorblind modes, high contrast, and reduced motion. Each market can be enabled or disabled independently; disabling **freezes** a market (claims and cancellations stay available — nothing is ever deleted).
 
+### 🏧 ATM and Flexible Payments
+Open `/atm` to build a withdrawal from the exact bill denominations you want, or let Auto choose
+the combination. Shop purchases, auction fees, bids, Buy Now, and Bazaar buys can ask whether to
+use your wallet or cash in your inventory. Built-in FutureShops bills keep full mint protection;
+currency from another mod remains compatible but carries a clear warning that FutureShops cannot
+protect that mod's item supply from duplication.
+
 ### ⚠️ Updating to 3.0
-- 🔌 **Network protocol is now 45** — the server and **all** clients must update to 3.0 together; mixed versions cannot connect
+- 🔌 **Network protocol is now 46** — the server and **all** clients must update to 3.0 together; mixed versions cannot connect
 - 💾 **Back up your world first** — 3.0 performs a one-way migration of balances, mint records, and pending settlements into escrow (see `docs/backup-restore.md` in the repo)
 - ⚙️ New config files generate on first launch: `futureshops-escrow.toml`, `futureshops-auction-house.toml`, `futureshops-bazaar.toml`, and `futureshops-client.toml` (see `docs/config-3.0-examples.md`)
 
 ### 🎯 First-Release Scope (honest edition)
 - 🖥️ **Single server, single world** — cross-server markets would need an external database and are out of scope
 - 🎒 **Listings come from your inventory** — auction and Bazaar items are listed from player inventory into a FutureShops vault; listing straight out of linked/RS storage comes once those adapters provide transaction receipts
-- 👛 **Markets are wallet-funded for now** — bids and orders can live for days, so physical cash must be *consumed* into escrow rather than merely checked; until that bridge ships, pay markets from your wallet (shops, ATM, and `/deposit` still take physical cash as always)
+- 👛 **Wallet or inventory cash** — long-lived bids and orders consume selected inventory cash into escrow before the market action, so the same bills can never remain spendable after funding
+- ⚠️ **Foreign currency boundary** — custom and preset currency items work with the ATM and escrow request protection, but only `futureshops:money` has FutureShops mint checksums and spent-mint duplication protection
 
 ---
 

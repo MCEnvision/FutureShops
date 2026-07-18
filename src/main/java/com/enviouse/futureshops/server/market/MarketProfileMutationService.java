@@ -14,6 +14,8 @@ import com.enviouse.futureshops.server.market.control.MarketControlSavedData;
 import com.enviouse.futureshops.server.market.control.MarketModuleControl;
 import com.enviouse.futureshops.server.market.profile.MarketProfileMutationProcessor;
 import com.enviouse.futureshops.server.market.profile.MarketProfileMutationResult;
+import com.enviouse.futureshops.server.market.profile.MarketProfileMutationResultCode;
+import com.enviouse.futureshops.server.market.profile.MarketProfileMutationType;
 import com.enviouse.futureshops.server.market.profile.MarketProfileSavedData;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -39,6 +41,18 @@ public final class MarketProfileMutationService {
         MinecraftServer server = Objects.requireNonNull(
                 player.getServer(), "server");
         MarketModule module = packet.command().module();
+        if (packet.command().mutation().type()
+                != MarketProfileMutationType.NOTIFICATIONS_READ
+                && !MarketPermissions.canUse(player, module)) {
+            MarketProfileMutationResult result =
+                    MarketProfileMutationResult.from(packet.command(),
+                            MarketProfileMutationResultCode.PERMISSION_DENIED,
+                            MarketProfileSavedData.get(server).snapshot(
+                                    player.getUUID()), 0, false);
+            ShopPackets.sendToPlayer(player,
+                    new S2CMarketProfileMutationPacket(result));
+            return;
+        }
         EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
         MarketProfileMutationProcessor.AccessState access =
                 new MarketProfileMutationProcessor.AccessState(

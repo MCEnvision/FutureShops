@@ -108,9 +108,8 @@ public final class ShopPackets {
     // Protocol 42 adds correlated paged market data.
     // Protocol 43 adds correlated player shop settlements and buybacks.
     // Protocol 44 adds market capability synchronization.
-    // Protocol 45 adds the Auction House + Bazaar mutation packet groups (create / bid / buy-now /
-    //     cancel, order / cancel) and the shared market action response.
-    public static final String PROTOCOL_VERSION = "45";
+    // Protocol 46 adds auction payment source fields.
+    public static final String PROTOCOL_VERSION = "46";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))
@@ -522,7 +521,7 @@ public final class ShopPackets {
             .consumerMainThread(S2CMarketClaimCollectionPacket::handle)
             .add();
 
-        // ── Protocol 45: Auction House + Bazaar mutations (plan §12 packet groups) ──
+        // Protocol 46 market mutations.
         // Appended in stable order; registered regardless of module state so disabled
         // modules can still be configured/inspected before enabling.
         CHANNEL.messageBuilder(C2SAuctionCreatePacket.class,
