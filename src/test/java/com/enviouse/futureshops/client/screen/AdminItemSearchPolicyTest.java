@@ -24,6 +24,25 @@ class AdminItemSearchPolicyTest {
     }
 
     @Test
+    void displayNameSearchSupportsCommonModAliases() {
+        assertTrue(AdminItemSearchPolicy.matches(
+                "ae2:certus_quartz_crystal", "certus quartz",
+                "Applied Energistics 2", "@Applied"));
+        assertTrue(AdminItemSearchPolicy.matches(
+                "mcwdoors:oak_barn_door", "oak barn door",
+                "Macaw's Doors", "@Macaw"));
+        assertTrue(AdminItemSearchPolicy.matches(
+                "ae2:certus_quartz_crystal", "certus quartz",
+                "Applied Energistics 2", "@AppliedEnergistics"));
+        assertFalse(AdminItemSearchPolicy.matches(
+                "ae2:certus_quartz_crystal", "certus quartz",
+                "Applied Energistics 2", "@Mekanism"));
+        assertFalse(AdminItemSearchPolicy.matches(
+                "ae2:certus_quartz_crystal", "certus quartz",
+                "Applied Energistics 2", "@-"));
+    }
+
+    @Test
     void plainSearchStillMatchesIdsAndDisplayNames() {
         assertTrue(AdminItemSearchPolicy.matches(ID, SEARCH_TEXT, "diamond"));
         assertTrue(AdminItemSearchPolicy.matches(ID, SEARCH_TEXT, "MINECRAFT"));

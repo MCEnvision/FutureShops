@@ -12,6 +12,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
+import net.minecraftforge.fml.ModList;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
@@ -35,7 +36,11 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
     private static final int CELL = 24;
     private static final int CELL_GAP = 4;
 
-    private record PickerEntry(String id, String searchText) {
+    private record PickerEntry(
+            String id,
+            String searchText,
+            String modDisplayName
+    ) {
     }
 
     private final Screen parent;
@@ -277,7 +282,14 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
             }
             String id = key.toString();
             String name = item.getDescription().getString();
-            out.add(new PickerEntry(id, (id + ' ' + name).toLowerCase(Locale.ROOT)));
+            String modName = ModList.get()
+                    .getModContainerById(key.getNamespace())
+                    .map(container -> container.getModInfo()
+                            .getDisplayName())
+                    .orElse(key.getNamespace());
+            out.add(new PickerEntry(id,
+                    (id + ' ' + name + ' ' + modName)
+                            .toLowerCase(Locale.ROOT), modName));
         }
         out.sort(Comparator.comparing(PickerEntry::id));
         allEntries = out;
@@ -286,7 +298,8 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
     private void recomputeFiltered() {
         filteredEntries = allEntries.stream()
                 .filter(entry -> AdminItemSearchPolicy.matches(
-                        entry.id(), entry.searchText(), searchQuery))
+                        entry.id(), entry.searchText(),
+                        entry.modDisplayName(), searchQuery))
                 .toList();
     }
 

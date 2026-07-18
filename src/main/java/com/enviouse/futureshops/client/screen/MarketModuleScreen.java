@@ -24,6 +24,7 @@ import com.enviouse.futureshops.client.market.MarketThemeColors;
 import com.enviouse.futureshops.client.market.MarketThemeResolver;
 import com.enviouse.futureshops.client.market.MarketViewport;
 import com.enviouse.futureshops.client.market.MarketActionFeedback;
+import com.enviouse.futureshops.client.market.MarketBackNavigationPolicy;
 import com.enviouse.futureshops.client.market.MarketPendingActionTracker;
 import com.enviouse.futureshops.client.market.MarketPriceChartModel;
 import com.enviouse.futureshops.command.EconomyCommandUtil;
@@ -616,6 +617,10 @@ public final class MarketModuleScreen extends Screen
         super.render(graphics, mouseX, mouseY, partialTick);
         boolean modalOpen = createWizardOpen
                 || paymentPromptAction != null;
+        if (!modalOpen) {
+            ShopUiUtil.renderShellHeaderTooltip(graphics, font,
+                    shellHeaderHit, mouseX, mouseY);
+        }
         if (!modalOpen && !pendingTextTooltip.isEmpty()) {
             graphics.renderTooltip(font, pendingTextTooltip,
                     Optional.empty(), pendingTooltipX, pendingTooltipY);
@@ -746,15 +751,20 @@ public final class MarketModuleScreen extends Screen
             return;
         }
         String viewName = viewLabel(packet.view());
-        graphics.fill(breadcrumb.x(), breadcrumb.y(), breadcrumb.right(),
-                breadcrumb.bottom(), SURFACE_RAISED);
-        graphics.drawString(font, font.plainSubstrByWidth(
-                currentDisplayName() + "  >  " + viewName,
+        int backWidth = showBackButton() ? 66 : 0;
+        ShopUiUtil.renderBreadcrumb(graphics, font,
+                breadcrumb.x() + layout.padding(),
+                breadcrumb.y() + Math.max(0,
+                        (breadcrumb.height() - 8) / 2),
                 Math.max(1, breadcrumb.width()
-                        - layout.padding() * 2
-                        - (showBackButton() ? 66 : 0))),
-                breadcrumb.x() + layout.padding(), breadcrumb.y() + 4,
-                theme.textMuted(), false);
+                        - layout.padding() * 2 - backWidth),
+                new String[]{
+                        Component.translatable(
+                                "gui.futureshops.shell.brand_sub")
+                                .getString(),
+                        currentDisplayName(),
+                        viewName
+                }, "");
         if (showBackButton()) {
             MarketRectangle back = new MarketRectangle(
                     breadcrumb.right() - 60, breadcrumb.y() + 1,
@@ -968,6 +978,18 @@ public final class MarketModuleScreen extends Screen
                     toolbar.y() + Math.max(5,
                             (toolbar.height() - 8) / 2), color, false);
             contentStart += font.width(status) + 10;
+        }
+        if (showBazaarRegistrationButton() && toolbar.width() >= 650) {
+            MarketRectangle addHeld = new MarketRectangle(
+                    contentStart, toolbar.y() + 4, 104,
+                    Math.max(14, toolbar.height() - 8));
+            accentActionButton(graphics, mouseX, mouseY, addHeld,
+                    "+ " + Component.translatable(
+                            "gui.futureshops.market.action.register.button")
+                            .getString(), true, ShopColors.ACCENT_GOLD,
+                    "bazaar_register", "", true,
+                    this::sendBazaarRegistration);
+            contentStart = addHeld.right() + 8;
         }
         long claims = openClaimCount(module);
         if (claims > 0L) {
@@ -2892,7 +2914,7 @@ public final class MarketModuleScreen extends Screen
         if (!createWizardOpen) {
             return;
         }
-        MarketRectangle content = layout.content();
+        MarketRectangle content = createWizardWorkspace();
         if (content.width() < 40 || content.height() < 40) {
             return;
         }
@@ -3072,6 +3094,16 @@ public final class MarketModuleScreen extends Screen
                         .getString(),
                 true, ShopColors.STATUS_SUCCESS, "auction_create", "", true,
                 this::submitCreateListing);
+    }
+
+    private MarketRectangle createWizardWorkspace() {
+        MarketRectangle rail = layout.categoryRail();
+        MarketRectangle tabs = layout.secondaryTabs();
+        MarketRectangle content = layout.content();
+        int left = rail.width() > 0 ? rail.x() : tabs.x();
+        return new MarketRectangle(left, tabs.y(),
+                Math.max(1, content.right() - left),
+                Math.max(1, content.bottom() - tabs.y()));
     }
 
     /**
@@ -3786,8 +3818,7 @@ public final class MarketModuleScreen extends Screen
                     MarketModule.AUCTION_HOUSE,
                     packet.auctionHouseEnabled());
         } else {
-            String hint = Component.translatable(
-                    "gui.futureshops.market.footer").getString();
+            String hint = marketFooterHint();
             graphics.drawString(font,
                     font.plainSubstrByWidth(hint, Math.max(8,
                             footer.width() - layout.padding() * 2
@@ -3821,6 +3852,22 @@ public final class MarketModuleScreen extends Screen
                     true, false, "bazaar_register", "", true,
                     this::sendBazaarRegistration);
         }
+    }
+
+    private String marketFooterHint() {
+        if (module != MarketModule.BAZAAR || capabilities == null) {
+            return Component.translatable(
+                    "gui.futureshops.market.footer").getString();
+        }
+        if (!capabilities.bazaarPlayerCatalog()) {
+            return Component.translatable(
+                    "gui.futureshops.market.footer.bazaar_admin")
+                    .getString();
+        }
+        String key = "products".equals(packet.view())
+                ? "gui.futureshops.market.footer.bazaar_players_products"
+                : "gui.futureshops.market.footer.bazaar_players_other";
+        return Component.translatable(key).getString();
     }
 
     private boolean showBazaarRegistrationButton() {
@@ -4272,8 +4319,8 @@ public final class MarketModuleScreen extends Screen
     }
 
     private boolean showBackButton() {
-        return navigation.historyDepth() > 0
-                || !packet.view().equals(module.rootView());
+        return MarketBackNavigationPolicy.show(module, packet.view(),
+                navigation.historyDepth());
     }
 
     private String activeRailView() {

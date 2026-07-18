@@ -22,9 +22,13 @@ class CommunityBugRegressionTest {
     @Test
     void playerShopDetailHasBackAndCloseWithDifferentDestinations() throws Exception {
         String source = read("src/main/java/com/enviouse/futureshops/client/screen/PlayerStorefrontScreen.java");
+        String block = read("src/main/java/com/enviouse/futureshops/client/screen/PlayerShopBlockScreen.java");
         assertTrue(source.contains("gui.futureshops.player_shop_block.visitor.back"));
         assertTrue(source.contains("returnToParent();"));
         assertTrue(source.contains("this.minecraft.setScreen(null);"));
+        assertTrue(block.contains("renderBackButton(graphics);"));
+        assertTrue(block.contains("if (parent == null)"));
+        assertTrue(block.contains("this::closeCompletely"));
     }
 
     @Test
@@ -59,6 +63,9 @@ class CommunityBugRegressionTest {
         assertTrue(editor.contains("setIngredientCount"));
         assertTrue(editor.contains("ShopUiUtil.renderStepper"));
         assertTrue(picker.contains("LinkedHashSet<String> selectedIds"));
+        String language = read("src/main/resources/assets/futureshops/lang/en_us.json");
+        assertTrue(language.contains(
+                "\"gui.futureshops.barter_editor.hold_label\": \"Held Item:\""));
     }
 
     @Test
@@ -69,6 +76,36 @@ class CommunityBugRegressionTest {
                 "minecraft:diamond", "minecraft:diamond diamond", "@mine"));
         assertFalse(AdminItemSearchPolicy.matches(
                 "minecraft:diamond", "minecraft:diamond diamond", "@create"));
+        assertTrue(AdminItemSearchPolicy.matches(
+                "ae2:certus_quartz_crystal", "certus quartz",
+                "Applied Energistics 2", "@Applied"));
+        assertTrue(AdminItemSearchPolicy.matches(
+                "mcwdoors:oak_barn_door", "oak barn door",
+                "Macaw's Doors", "@Macaw"));
+    }
+
+    @Test
+    void sharedHeaderAndMarketChromeStayDiscoverable() throws Exception {
+        String ui = read("src/main/java/com/enviouse/futureshops/client/screen/ShopUiUtil.java");
+        String market = read("src/main/java/com/enviouse/futureshops/client/screen/MarketModuleScreen.java");
+        String language = read("src/main/resources/assets/futureshops/lang/en_us.json");
+        assertTrue(ui.contains("renderPlayerFace(g, playerUuid"));
+        assertTrue(ui.contains("renderShellHeaderTooltip"));
+        assertTrue(language.contains("Marketplace Profile"));
+        assertTrue(market.contains("MarketBackNavigationPolicy.show"));
+        assertTrue(market.contains("ShopUiUtil.renderBreadcrumb"));
+        assertTrue(market.contains("createWizardWorkspace"));
+    }
+
+    @Test
+    void atmDepositGuidanceWrapsAndBazaarExplainsCatalogControl()
+            throws Exception {
+        String atm = read("src/main/java/com/enviouse/futureshops/client/screen/AtmScreen.java");
+        String language = read("src/main/resources/assets/futureshops/lang/en_us.json");
+        assertTrue(atm.contains("drawWrappedDepositText"));
+        assertTrue(atm.contains("this.font.split"));
+        assertTrue(language.contains("Admin catalog mode"));
+        assertTrue(language.contains("Player catalog mode"));
     }
 
     @Test

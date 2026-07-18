@@ -817,16 +817,19 @@ public final class ShopUiUtil {
         renderCoinAmount(g, font, b[0] + 4, b[1] + (b[3] - 8) / 2,
                 font.plainSubstrByWidth(balance, b[2] - 12), ShopColors.TEXT_STRONG);
 
-        // profile pill (player-color square + initial + name)
+        // profile pill
         int[] p = hit.profileRect();
         renderNocturnePanel(g, p[0], p[1], p[2], p[3], ShopColors.SURFACE_RAISED,
                 hit.hitProfile(mouseX, mouseY) ? ShopColors.BORDER_GLOW : ShopColors.BORDER_MUTED);
-        int sw = 10, swX = p[0] + 4, swY = p[1] + (p[3] - sw) / 2;
-        g.fill(swX, swY, swX + sw, swY + sw, playerColor(playerUuid));
-        drawBorder(g, swX, swY, sw, sw, withAlpha(0xFFFFFFFF, 0x30));
-        String initial = (playerName == null || playerName.isEmpty())
-                ? "" : playerName.substring(0, 1).toUpperCase(java.util.Locale.ROOT);
-        if (!initial.isEmpty()) g.drawCenteredString(font, initial, swX + sw / 2, swY + 1, 0xFFFFFFFF);
+        int sw = 12, swX = p[0] + 4, swY = p[1] + (p[3] - sw) / 2;
+        if (playerUuid != null) {
+            renderPlayerFace(g, playerUuid, playerName, swX, swY, sw);
+        } else {
+            g.fill(swX, swY, swX + sw, swY + sw,
+                    playerColor(playerUuid));
+            drawBorder(g, swX, swY, sw, sw,
+                    withAlpha(0xFFFFFFFF, 0x30));
+        }
         if (!compact) {
             String nm = font.plainSubstrByWidth(playerName == null ? "" : playerName, p[2] - sw - 12);
             g.drawString(font, nm, swX + sw + 4, p[1] + (p[3] - 8) / 2, ShopColors.NEUTRAL_200, false);
@@ -840,6 +843,27 @@ public final class ShopUiUtil {
         g.drawCenteredString(font, "✕", c[0] + c[2] / 2, c[1] + (c[3] - 8) / 2,
                 closeHover ? ShopColors.TEXT_STRONG : ShopColors.TEXT_MUTED);
         return hit;
+    }
+
+    public static void renderShellHeaderTooltip(
+            GuiGraphics graphics,
+            Font font,
+            HeaderHit hit,
+            int mouseX,
+            int mouseY
+    ) {
+        if (hit == null) {
+            return;
+        }
+        if (hit.hitProfile(mouseX, mouseY)) {
+            graphics.renderTooltip(font, Component.translatable(
+                    "gui.futureshops.shell.profile_tooltip"),
+                    mouseX, mouseY);
+        } else if (hit.hitBalance(mouseX, mouseY)) {
+            graphics.renderTooltip(font, Component.translatable(
+                    "gui.futureshops.shell.transactions_tooltip"),
+                    mouseX, mouseY);
+        }
     }
 
     private static boolean effectiveShellCompact(Font font, int width,

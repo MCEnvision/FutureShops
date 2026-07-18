@@ -252,6 +252,7 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
         renderHeader(graphics);
         renderCloseButton(graphics);
+        renderBackButton(graphics);
 
         boolean owner = PlayerShopClientState.owner();
         hideAllEditBoxes();
@@ -466,6 +467,17 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     private void renderCloseButton(GuiGraphics g) {
         btn(g, guiLeft + guiW - 24, guiTop + 6, 18, 14, Component.literal("✕"),
                 ShopUiUtil.ButtonStyle.SECONDARY, true, null, null, null, this::closeCompletely);
+    }
+
+    private void renderBackButton(GuiGraphics g) {
+        if (parent == null) {
+            return;
+        }
+        btn(g, guiLeft + guiW - 72, guiTop + 6, 44, 14,
+                Component.translatable(
+                        "gui.futureshops.player_shop_block.visitor.back"),
+                ShopUiUtil.ButtonStyle.SECONDARY, true, null, null, null,
+                this::onClose);
     }
 
     private void renderOwnerTabBar(GuiGraphics g) {
@@ -1019,12 +1031,6 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
     // ══════════════════════════ Visitor action bar ══════════════════════════
 
     private void renderVisitorActionBar(GuiGraphics g) {
-        if (parent != null) {
-            btn(g, guiLeft + guiW - 24 - 48, guiTop + 6, 44, 14,
-                    Component.translatable("gui.futureshops.player_shop_block.visitor.back"),
-                    ShopUiUtil.ButtonStyle.SECONDARY, true, null, null, null, this::onClose);
-        }
-
         int y = guiTop + guiH - 18;
         int h = 14;
         int gap = 4;

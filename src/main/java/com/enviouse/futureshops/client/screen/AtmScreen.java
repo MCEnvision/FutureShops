@@ -466,26 +466,47 @@ public final class AtmScreen extends Screen implements ShopScreenMarker {
                         Component.translatable(
                                 depositSourceKey(depositSource))),
                 x + 8, y + 5, ShopColors.TEXT_STRONG, false);
-        String exact = Component.translatable(
-                depositSourceExactKey(depositSource)).getString();
-        graphics.drawString(this.font,
-                this.font.plainSubstrByWidth(exact, w - 16),
-                x + 8, y + 18, ShopColors.TEXT_MUTED, false);
-        String protection = Component.translatable(data.protectedMinting()
-                ? "gui.futureshops.atm.deposit_protected"
-                : "gui.futureshops.atm.deposit_foreign").getString();
-        graphics.drawString(this.font,
-                this.font.plainSubstrByWidth(protection, w - 16),
-                x + 8, y + 31, accent, false);
+        int textY = drawWrappedDepositText(graphics,
+                Component.translatable(
+                        depositSourceExactKey(depositSource)),
+                x + 8, y + 18, w - 16, ShopColors.TEXT_MUTED,
+                y + h - 6, 3);
+        textY += 2;
+        textY = drawWrappedDepositText(graphics,
+                Component.translatable(data.protectedMinting()
+                        ? "gui.futureshops.atm.deposit_protected"
+                        : "gui.futureshops.atm.deposit_foreign"),
+                x + 8, textY, w - 16, accent,
+                y + h - 6, 3);
         if (this.minecraft != null && this.minecraft.player != null
                 && this.minecraft.player.getAbilities().instabuild) {
-            String creative = Component.translatable(
-                    "gui.futureshops.atm.deposit_creative_blocked")
-                    .getString();
-            graphics.drawString(this.font,
-                    this.font.plainSubstrByWidth(creative, w - 16),
-                    x + 8, y + 44, ShopColors.STATUS_DANGER, false);
+            drawWrappedDepositText(graphics, Component.translatable(
+                            "gui.futureshops.atm.deposit_creative_blocked"),
+                    x + 8, textY + 2, w - 16,
+                    ShopColors.STATUS_DANGER, y + h - 6, 3);
         }
+    }
+
+    private int drawWrappedDepositText(
+            GuiGraphics graphics,
+            Component text,
+            int x,
+            int y,
+            int width,
+            int color,
+            int bottom,
+            int maximumLines
+    ) {
+        int drawn = 0;
+        for (var line : this.font.split(text, Math.max(1, width))) {
+            if (drawn >= maximumLines || y + 8 > bottom) {
+                break;
+            }
+            graphics.drawString(this.font, line, x, y, color, false);
+            y += 10;
+            drawn++;
+        }
+        return y;
     }
 
     private void renderFooter(GuiGraphics graphics, int mouseX, int mouseY) {

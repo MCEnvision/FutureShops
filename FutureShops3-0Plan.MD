@@ -1112,3 +1112,15 @@ price history is drawn with gold, green, and red movement segments. When recorde
 available, the chart is explicitly labeled as a bid ladder and displays only the current bid, next
 bid, and buyout. Market prices and fees use a configurable currency symbol, with the dollar sign as
 the default, and gold price text across cards, details, payment prompts, and creation fees.
+
+The community navigation and presentation followup keeps parent navigation visible on both owner
+and visitor player shop block screens while the close control still closes the complete interface.
+The shared marketplace header uses the player skin for the compact profile control and identifies
+Marketplace Profile and Transaction History on hover. Bazaar and Auction House breadcrumbs use the
+same Marketplace path formatting as the Server Shop, and Back appears only on detail routes instead
+of replaying ordinary local tab history. Auction creation owns a complete market workspace so
+underlying department and toolbar surfaces do not show through it. ATM deposit safety guidance wraps
+inside the available panel. The Bazaar footer identifies admin JSON catalog control or player catalog
+control and explains where Add Held Item is available. Admin item tag search matches both registry
+namespaces and normalized Forge mod display names, including aliases such as Applied Energistics and
+Macaw mod families.

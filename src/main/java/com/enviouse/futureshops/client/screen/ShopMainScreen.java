@@ -599,6 +599,10 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         super.render(graphics, mouseX, mouseY, partialTick);
 
         boolean overlayOpen = confirmModal != null || promptField != null;
+        if (!overlayOpen) {
+            ShopUiUtil.renderShellHeaderTooltip(graphics, this.font,
+                    headerHit, mouseX, mouseY);
+        }
         if (tooltipItemId != null && !overlayOpen) {
             ShopUiUtil.renderItemTooltip(graphics, this.font, tooltipItemId,
                     tooltipNbtJson != null ? tooltipNbtJson : "", tooltipMouseX, tooltipMouseY);
