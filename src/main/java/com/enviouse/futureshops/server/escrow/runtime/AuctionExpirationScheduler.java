@@ -55,6 +55,17 @@ public final class AuctionExpirationScheduler {
         TICKS.set(0);
     }
 
+    /** Runs one sweep immediately (admin `/marketadmin sweep` / tests). Server thread only. */
+    public static void trigger(MinecraftServer server) {
+        java.util.Objects.requireNonNull(server, "server");
+        if (!server.isSameThread()) {
+            throw new IllegalStateException(
+                    "Auction expiration requires the server thread");
+        }
+        TICKS.set(0);
+        sweep(server);
+    }
+
     static void sweep(MinecraftServer server) {
         EscrowRuntimeService runtime = AuctionActionService.readyRuntime();
         if (runtime == null || server == null) {
@@ -205,6 +216,7 @@ public final class AuctionExpirationScheduler {
             }
             runtime.commitAuctionEscrowLifecycle(new AuctionEscrowLifecycleEvent.Commit(
                     Optional.empty(), commit));
+            AuctionActionService.postListingEvent(soldPending ? "SETTLE" : "EXPIRE", commit);
             return true;
         } catch (RuntimeException exception) {
             LOGGER.error("Auction {} expiration failed; will retry next sweep",

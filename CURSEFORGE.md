@@ -28,6 +28,52 @@
 
 ---
 
+## 🆕 What's New in 3.0 — The Markets Update
+
+> **Three markets. One interface. Zero lost items.**
+> 3.0 rebuilds the entire economy on top of a crash-safe escrow core, then adds two brand-new ways to trade.
+
+### 🛡️ Escrow-Protected Economy
+Every coin and every item that changes hands now moves through **durable escrow** — a write-ahead journal, verified checkpoints, and a double-entry money ledger.
+
+- 💥 **Crash-proof trades** — the server can crash mid-purchase and nobody loses a thing; recovery finishes the trade or returns everything
+- 📬 **Claims / Lost and Found** — full inventory? Maxed wallet? Logged off? Your money and items wait for you as claims that **never expire**
+- 🔁 **No double-charges** — every request is idempotent; retries and duplicate packets can't charge you twice
+- 🧾 **Journaled admin actions** — balance changes are audited, confirmed, and reversible the right way
+
+### 🔨 Auction House (`/ah`)
+A crimson-themed, full-featured auction floor.
+
+- ⏱️ **Timed auctions, Buy Now, and auctions with buyout**
+- 🔔 **Outbid notifications** with instant escrow refunds
+- 🛡️ **Anti-sniping** — last-second bids extend the clock
+- 👁️ **Watchlist, My Auctions, My Bids, History** tabs
+- 🧊 Exact-NBT custody — the enchanted sword you list is *exactly* the one the winner gets
+
+### 📈 Bazaar (`/bz`)
+An emerald-themed commodity market with a real order book.
+
+- ⚡ **Instant buy / instant sell** with slippage protection
+- 📊 **Limit orders** with price-time priority matching and partial fills
+- 💹 **Spread, volume, trends, and price history** per product
+- 🧮 **Maker/taker fees in basis points**, price bands, and circuit breakers
+- 🎛️ Server-defined product catalog — commodities by default, explicit NBT variants when you want them
+
+### 🧭 One Shared Market Shell
+Shop (blurple), Bazaar (green), and Auction House (red) share one polished interface — header, search, category rail, balance pill, claims counter — with a module switcher, per-module themes, colorblind modes, high contrast, and reduced motion. Each market can be enabled or disabled independently; disabling **freezes** a market (claims and cancellations stay available — nothing is ever deleted).
+
+### ⚠️ Updating to 3.0
+- 🔌 **Network protocol is now 45** — the server and **all** clients must update to 3.0 together; mixed versions cannot connect
+- 💾 **Back up your world first** — 3.0 performs a one-way migration of balances, mint records, and pending settlements into escrow (see `docs/backup-restore.md` in the repo)
+- ⚙️ New config files generate on first launch: `futureshops-escrow.toml`, `futureshops-auction-house.toml`, `futureshops-bazaar.toml`, and `futureshops-client.toml` (see `docs/config-3.0-examples.md`)
+
+### 🎯 First-Release Scope (honest edition)
+- 🖥️ **Single server, single world** — cross-server markets would need an external database and are out of scope
+- 🎒 **Listings come from your inventory** — auction and Bazaar items are listed from player inventory into a FutureShops vault; listing straight out of linked/RS storage comes once those adapters provide transaction receipts
+- 👛 **Markets are wallet-funded for now** — bids and orders can live for days, so physical cash must be *consumed* into escrow rather than merely checked; until that bridge ships, pay markets from your wallet (shops, ATM, and `/deposit` still take physical cash as always)
+
+---
+
 ## ✨ Feature Highlights
 
 ### 🛒 Server Shop (`/shop`)

@@ -352,7 +352,7 @@ public final class AuctionActionService {
                     runtime.auctionHouseSnapshot(), intent, executed.receipt().orElseThrow());
             runtime.commitAuctionEscrowLifecycle(new AuctionEscrowLifecycleEvent.Commit(
                     Optional.of(intent.complete()), commit));
-            respondFromCommit(player, requestId, "CREATE", commit);
+            respondFromCommit(player, requestId, "CREATE", commit, true);
         } catch (RuntimeException exception) {
             LOGGER.error("Auction create failed for {}", player.getGameProfile().getName(),
                     exception);
@@ -425,7 +425,7 @@ public final class AuctionActionService {
                     wallet, currencyId(), Instant.ofEpochMilli(nowMillis));
             runtime.commitAuctionEscrowLifecycle(new AuctionEscrowLifecycleEvent.Commit(
                     Optional.empty(), commit));
-            respondFromCommit(player, requestId, "BID", commit);
+            respondFromCommit(player, requestId, "BID", commit, true);
         } catch (RuntimeException exception) {
             LOGGER.error("Auction bid failed for {}", player.getGameProfile().getName(),
                     exception);
@@ -506,7 +506,7 @@ public final class AuctionActionService {
                     Instant.ofEpochMilli(nowMillis));
             runtime.commitAuctionEscrowLifecycle(new AuctionEscrowLifecycleEvent.Commit(
                     Optional.empty(), commit));
-            respondFromCommit(player, requestId, "BUY_NOW", commit);
+            respondFromCommit(player, requestId, "BUY_NOW", commit, true);
         } catch (RuntimeException exception) {
             LOGGER.error("Auction buy-now failed for {}", player.getGameProfile().getName(),
                     exception);
@@ -565,7 +565,7 @@ public final class AuctionActionService {
                     custody, currencyId(), Instant.ofEpochMilli(nowMillis));
             runtime.commitAuctionEscrowLifecycle(new AuctionEscrowLifecycleEvent.Commit(
                     Optional.empty(), commit));
-            respondFromCommit(player, requestId, "CANCEL", commit);
+            respondFromCommit(player, requestId, "CANCEL", commit, true);
         } catch (RuntimeException exception) {
             LOGGER.error("Auction cancel failed for {}", player.getGameProfile().getName(),
                     exception);
@@ -678,6 +678,14 @@ public final class AuctionActionService {
 
     private static void respondFromCommit(ServerPlayer player, UUID requestId, String action,
                                           AuctionEscrowCommit commit) {
+        respondFromCommit(player, requestId, action, commit, false);
+    }
+
+    private static void respondFromCommit(ServerPlayer player, UUID requestId, String action,
+                                          AuctionEscrowCommit commit, boolean fresh) {
+        if (fresh) {
+            postListingEvent(action, commit);
+        }
         long revision = commit.bookMutations().get(commit.bookMutations().size() - 1)
                 .requestReceipt().result().listing()
                 .map(AuctionListing::revision).orElse(0L);
@@ -691,6 +699,35 @@ public final class AuctionActionService {
                                           AuctionOperationResult result) {
         respond(player, requestId, action, result.status().name(), null,
                 result.observedRevision(), result.listingId().toString());
+    }
+
+    /** API events (plan §18 Phase 6) — post-commit only, never inside the escrow path. */
+    static void postListingEvent(String action, AuctionEscrowCommit commit) {
+        try {
+            var type = switch (action) {
+                case "CREATE" -> com.enviouse.futureshops.event.MarketListingEvent.Type.CREATED;
+                case "BID" -> com.enviouse.futureshops.event.MarketListingEvent.Type.BID;
+                case "BUY_NOW" -> com.enviouse.futureshops.event.MarketListingEvent.Type.SOLD;
+                case "CANCEL" -> com.enviouse.futureshops.event.MarketListingEvent.Type.CANCELLED;
+                case "EXPIRE" -> com.enviouse.futureshops.event.MarketListingEvent.Type.EXPIRED;
+                case "SETTLE" -> com.enviouse.futureshops.event.MarketListingEvent.Type.SETTLED;
+                default -> null;
+            };
+            if (type == null) {
+                return;
+            }
+            AuctionListing listing = commit.finalListing();
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                    new com.enviouse.futureshops.event.MarketListingEvent(type,
+                            commit.listingId(), listing.sellerId(),
+                            listing.highestBid().map(standing -> standing.bidderId()),
+                            listing.highestBid().map(standing -> standing.amountMinor())
+                                    .orElse(listing.buyoutMinor()),
+                            listing.revision()));
+        } catch (RuntimeException exception) {
+            LOGGER.error("Auction listing event listeners failed for {}",
+                    commit.listingId(), exception);
+        }
     }
 
     static void respond(ServerPlayer player, UUID requestId, String action, String status,

@@ -228,6 +228,11 @@ public final class BazaarActionService {
             } else {
                 sellOrder(player, runtime, command);
             }
+            // API events (plan §18 Phase 6), post-commit only: the stored receipt exists iff the
+            // durable commit happened, and the replay short-circuit above means this original
+            // processing is the only path that reaches here — listeners can never run inside the
+            // escrow path or observe the same fill twice.
+            postFillEvents(runtime, requestId);
         } catch (RuntimeException exception) {
             LOGGER.error("Bazaar order failed for {}", player.getGameProfile().getName(),
                     exception);
@@ -744,6 +749,23 @@ public final class BazaarActionService {
     static boolean routeInvalid(ServerPlayer player, UUID routeNonce) {
         return !com.enviouse.futureshops.server.market.MarketModuleService
                 .routeValid(player.getUUID(), routeNonce);
+    }
+
+    private static void postFillEvents(EscrowRuntimeService runtime, UUID requestId) {
+        try {
+            runtime.bazaarReceipt(requestId)
+                    .map(receipt -> receipt.result())
+                    .filter(result -> result.durablyApplied())
+                    .ifPresent(result -> result.fills().forEach(fill ->
+                            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                                    new com.enviouse.futureshops.event.BazaarFillEvent(
+                                            fill.fillId(), fill.productId(),
+                                            fill.productVersion(), fill.quantity(),
+                                            fill.priceMinor(), fill.buyOrderId(),
+                                            fill.sellOrderId()))));
+        } catch (RuntimeException exception) {
+            LOGGER.error("Bazaar fill event listeners failed for {}", requestId, exception);
+        }
     }
 
     static boolean rateLimited(UUID playerId, String action) {
