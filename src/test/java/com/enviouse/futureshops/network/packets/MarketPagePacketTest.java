@@ -3,6 +3,7 @@ package com.enviouse.futureshops.network.packets;
 import com.enviouse.futureshops.client.market.MarketModule;
 import com.enviouse.futureshops.server.market.query.MarketPageCard;
 import com.enviouse.futureshops.server.market.query.MarketPageCardKind;
+import com.enviouse.futureshops.server.market.query.MarketCardInsights;
 import com.enviouse.futureshops.server.market.query.MarketPageSnapshot;
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.FriendlyByteBuf;
@@ -44,11 +45,18 @@ class MarketPagePacketTest {
     void pageRoundTripPreservesBoundedCards() {
         UUID request = UUID.randomUUID();
         UUID route = UUID.randomUUID();
+        UUID owner = UUID.randomUUID();
+        UUID participant = UUID.randomUUID();
         MarketPageCard card = new MarketPageCard(
                 MarketPageCardKind.BAZAAR_PRODUCT, "iron@1",
-                Optional.empty(), "minecraft:iron_ingot", 1,
+                Optional.of(owner), "minecraft:iron_ingot", 1,
                 "iron", "metals", "ACTIVE", 1L, 100L, 90L,
-                12L, 0L, true, true, true);
+                12L, 0L, true, true, true, 0L,
+                new MarketCardInsights("MarketMaker",
+                        Optional.of(participant), "TopBuyer", "BUYER",
+                        "{id:\"minecraft:iron_ingot\",Count:1b}",
+                        true, 4L, 7L, 2L, 18L, 64L, 95L,
+                        List.of(90L, 94L, 100L)));
         S2CMarketPagePacket packet = new S2CMarketPagePacket("OK",
                 new MarketPageSnapshot(request, route,
                         MarketModule.BAZAAR, "products", 0, 28,

@@ -22,7 +22,7 @@ and shop transaction system.
 | Module disable and re-enable | Freeze, drain, and cancel-and-refund controls | Data is preserved. Claims and owner cancellation routes remain available according to the selected lifecycle policy. |
 | Backup and restore | Whole-world consistent snapshots | Back up world data, the escrow journal directory, player data, and config together. Mixed-generation restores fail closed. Follow [backup-restore.md](backup-restore.md). |
 | Legacy data | Versioned migration readers | Supported older FutureShops data is migrated once with durable markers. Newer, corrupt, or unverifiable custody data fails closed instead of being guessed. |
-| Client presentation | Wide, medium, and narrow shared market layouts | Shop uses blurple, Bazaar green, and Auction House red by default. GUI density, scale, accessibility, theme, time format, and market accents are configurable. |
+| Client presentation | Wide, medium, and narrow shared market layouts | Server Shop, Player Shops, Bazaar, and Auction House use the same Nocturne shell and unified accent. GUI density, scale, accessibility, global theme, and time format remain configurable. |
 
 ## Permission nodes
 

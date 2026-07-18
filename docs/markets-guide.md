@@ -1,8 +1,9 @@
 # Auction House and Bazaar guide
 
-FutureShops 3.0 adds two markets alongside the Shop: the **Auction House** (player-to-player
-auctions, red theme) and the **Bazaar** (commodity order book, green theme). All three share one
-market interface — header, search, category rail, balance pill, claims counter — and every value
+FutureShops 3.0 adds two markets alongside the Shop: the **Auction House** for player-to-player
+auctions and the **Bazaar** commodity order book. Server Shop, Player Shops, Bazaar, and Auction
+House use the exact same Nocturne header, navigation tabs, blurple palette, search, balance, profile,
+and close controls. Every value
 movement in both markets runs through escrow: money and items are held durably before anything
 changes hands, and anything that cannot be delivered becomes a claim instead of disappearing.
 
@@ -31,10 +32,18 @@ Server owners: module toggles and rules live in the config files documented in
 | `/bz claims` | Claims |
 | `/bz history` | History |
 
-You can also switch between Shop, Bazaar, and Auction House with the module chips in the shared
-market header (shown when the server enables `modules.show_module_navigation`). A disabled module
+You can also switch between Server Shop, Player Shops, Bazaar, and Auction House with the same tabs
+shown by `/shop` when the server enables `modules.show_module_navigation`. A disabled module
 disappears from navigation unless you still have claims in it, in which case it appears as
 **Claims only**.
+
+Auction cards and details use the seller display name and skin head. Hover the identity to see the
+exact UUID and bidder or buyer context. Hover an item to see its complete vanilla tooltip rebuilt
+from the escrowed stack, including enchantments and other NBT. Auction details include the current
+top bidder or completed buyer, live listing count, sales this hour, daily units, average price, and
+a bounded recent price graph. Bazaar products expose live buy and sell order counts, hourly trades,
+daily units, average price, and recent price history. Product pages represent the whole order book,
+so they show liquidity rather than pretending that one player is the seller.
 
 ## Payment sources
 

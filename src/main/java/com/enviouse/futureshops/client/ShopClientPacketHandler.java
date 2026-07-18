@@ -685,6 +685,9 @@ public final class ShopClientPacketHandler {
                     : (current instanceof BalTopOverviewScreen || current instanceof FranchiseManagementScreen)
                             ? new ShopMainScreen()
                     : current;
+            if (current instanceof MarketModuleScreen market) {
+                market.prepareNavigationHandoff();
+            }
             mc.setScreen(new BalanceOverviewScreen(
                 parent,
                 packet.playerUuid(),

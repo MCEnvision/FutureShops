@@ -39,7 +39,7 @@ public final class BazaarConfig {
 
     private static final ForgeConfigSpec.ConfigValue<String> BRANDING_ACCENT_COLOR = BUILDER
         .comment("Bazaar accent color as RRGGBB or AARRGGBB hexadecimal.")
-        .define("branding.accent_color", "#48B978", ConfigValidation::isHexColor);
+        .define("branding.accent_color", "#9184D9", ConfigValidation::isHexColor);
 
     private static final ForgeConfigSpec.ConfigValue<String> LIFECYCLE_DISABLE_MODE = BUILDER
         .comment("Behavior when the module is disabled. Allowed values are freeze, drain, and cancel_and_refund.")

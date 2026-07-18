@@ -4,6 +4,7 @@ import com.enviouse.futureshops.client.ShopClientPacketHandler;
 import com.enviouse.futureshops.client.market.MarketModule;
 import com.enviouse.futureshops.server.market.query.MarketPageCard;
 import com.enviouse.futureshops.server.market.query.MarketPageCardKind;
+import com.enviouse.futureshops.server.market.query.MarketCardInsights;
 import com.enviouse.futureshops.server.market.query.MarketPageSnapshot;
 import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.FriendlyByteBuf;
@@ -133,6 +134,25 @@ public record S2CMarketPagePacket(
         buffer.writeBoolean(card.primaryAction());
         buffer.writeBoolean(card.secondaryAction());
         buffer.writeLong(card.tertiaryMinor());
+        MarketCardInsights insights = card.insights();
+        buffer.writeUtf(insights.ownerName(), 64);
+        buffer.writeBoolean(insights.participantId().isPresent());
+        insights.participantId().ifPresent(buffer::writeUUID);
+        buffer.writeUtf(insights.participantName(), 64);
+        buffer.writeUtf(insights.participantRole(), 32);
+        buffer.writeUtf(insights.itemStackSnbt(),
+                MarketCardInsights.MAXIMUM_STACK_SNBT);
+        buffer.writeBoolean(insights.itemHasData());
+        buffer.writeLong(insights.activeListings());
+        buffer.writeLong(insights.activeBuyOrders());
+        buffer.writeLong(insights.tradesLastHour());
+        buffer.writeLong(insights.tradesLastDay());
+        buffer.writeLong(insights.unitsLastDay());
+        buffer.writeLong(insights.averagePriceMinor());
+        buffer.writeVarInt(insights.priceHistoryMinor().size());
+        for (long point : insights.priceHistoryMinor()) {
+            buffer.writeLong(point);
+        }
     }
 
     private static MarketPageCard readCard(FriendlyByteBuf buffer) {
@@ -141,14 +161,49 @@ public record S2CMarketPagePacket(
         String identity = buffer.readUtf(192);
         Optional<UUID> owner = buffer.readBoolean()
                 ? Optional.of(buffer.readUUID()) : Optional.empty();
+        String registryId = buffer.readUtf(256);
+        int itemCount = buffer.readVarInt();
+        String title = buffer.readUtf(256);
+        String category = buffer.readUtf(128);
+        String state = buffer.readUtf(64);
+        long revision = buffer.readLong();
+        long primary = buffer.readLong();
+        long secondary = buffer.readLong();
+        long quantity = buffer.readLong();
+        long remaining = buffer.readLong();
+        boolean watched = buffer.readBoolean();
+        boolean primaryAction = buffer.readBoolean();
+        boolean secondaryAction = buffer.readBoolean();
+        long tertiary = buffer.readLong();
+        String ownerName = buffer.readUtf(64);
+        Optional<UUID> participant = buffer.readBoolean()
+                ? Optional.of(buffer.readUUID()) : Optional.empty();
+        String participantName = buffer.readUtf(64);
+        String participantRole = buffer.readUtf(32);
+        String itemStackSnbt = buffer.readUtf(
+                MarketCardInsights.MAXIMUM_STACK_SNBT);
+        boolean itemHasData = buffer.readBoolean();
+        long activeListings = buffer.readLong();
+        long activeBuyOrders = buffer.readLong();
+        long tradesLastHour = buffer.readLong();
+        long tradesLastDay = buffer.readLong();
+        long unitsLastDay = buffer.readLong();
+        long averagePrice = buffer.readLong();
+        int pointCount = boundedCount(buffer.readVarInt(),
+                MarketCardInsights.MAXIMUM_PRICE_POINTS);
+        List<Long> history = new ArrayList<>(pointCount);
+        for (int index = 0; index < pointCount; index++) {
+            history.add(buffer.readLong());
+        }
         return new MarketPageCard(kind, identity, owner,
-                buffer.readUtf(256), buffer.readVarInt(),
-                buffer.readUtf(256), buffer.readUtf(128),
-                buffer.readUtf(64), buffer.readLong(),
-                buffer.readLong(), buffer.readLong(),
-                buffer.readLong(), buffer.readLong(),
-                buffer.readBoolean(), buffer.readBoolean(),
-                buffer.readBoolean(), buffer.readLong());
+                registryId, itemCount, title, category, state, revision,
+                primary, secondary, quantity, remaining, watched,
+                primaryAction, secondaryAction, tertiary,
+                new MarketCardInsights(ownerName, participant,
+                        participantName, participantRole, itemStackSnbt,
+                        itemHasData, activeListings, activeBuyOrders,
+                        tradesLastHour, tradesLastDay, unitsLastDay,
+                        averagePrice, history));
     }
 
     private static int boundedCount(int value, int maximum) {

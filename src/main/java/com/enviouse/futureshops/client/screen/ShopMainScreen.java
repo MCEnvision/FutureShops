@@ -130,7 +130,12 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
     private int[] editToggleRect;
 
     public ShopMainScreen() {
+        this(false);
+    }
+
+    public ShopMainScreen(boolean playerShops) {
         super(Component.translatable("gui.futureshops.shop.title"));
+        nearbyMode = playerShops;
     }
 
     // ═══════════════════════════════════════════════════════════════════════

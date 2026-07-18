@@ -125,6 +125,8 @@ public final class MarketPageProjector {
                 .filter(value -> !value.isEmpty())
                 .distinct().sorted().limit(256).toList();
         List<MarketPageCard> cards;
+        Map<BazaarProductVersionKey, BazaarProduct> productVersions =
+                productVersions(snapshot);
         int total;
         int pages;
         if ("products".equals(query.view())
@@ -150,7 +152,8 @@ public final class MarketPageProjector {
             PageSlice<BazaarFill> slice = slice(fills, query);
             Map<UUID, BazaarOrder> orders = orders(snapshot);
             cards = slice.values().stream().map(value ->
-                    bazaarFillCard(value, orders, playerId)).toList();
+                    bazaarFillCard(value, orders, productVersions,
+                            playerId)).toList();
             total = slice.total();
             pages = slice.pages();
         } else if ("portfolio".equals(query.view())) {
@@ -164,8 +167,8 @@ public final class MarketPageProjector {
             List<BazaarOrder> selected = ownedOrders(query, playerId,
                     snapshot);
             PageSlice<BazaarOrder> slice = slice(selected, query);
-            cards = slice.values().stream().map(
-                    MarketPageProjector::bazaarOrderCard).toList();
+            cards = slice.values().stream().map(value ->
+                    bazaarOrderCard(value, productVersions)).toList();
             total = slice.total();
             pages = slice.pages();
         }
@@ -363,7 +366,7 @@ public final class MarketPageProjector {
         long ask = summary.bestAskMinor().orElse(0L);
         long bid = summary.bestBidMinor().orElse(0L);
         return new MarketPageCard(MarketPageCardKind.BAZAAR_PRODUCT,
-                productIdentity(card.product()), Optional.of(viewerId),
+                productIdentity(card.product()), Optional.empty(),
                 card.registryId(), card.lotSize(),
                 card.product().productId(), card.categoryId(),
                 card.status().name(), card.product().version(), ask, bid,
@@ -394,10 +397,18 @@ public final class MarketPageProjector {
                 .toList();
     }
 
-    private static MarketPageCard bazaarOrderCard(BazaarOrder order) {
+    private static MarketPageCard bazaarOrderCard(
+            BazaarOrder order,
+            Map<BazaarProductVersionKey, BazaarProduct> products
+    ) {
+        BazaarProduct product = products.get(new BazaarProductVersionKey(
+                order.productId(), order.productVersion()));
         return new MarketPageCard(MarketPageCardKind.BAZAAR_ORDER,
                 order.orderId().toString(), Optional.of(order.ownerId()),
-                "", 0, order.productId(), "", order.state().name(),
+                product == null ? "" : product.registryId(),
+                product == null ? 0 : product.lotSize(), order.productId(),
+                product == null ? "" : product.categoryId(),
+                order.state().name(),
                 order.revision(), order.limitPriceMinor(),
                 order.reservedMoneyMinor(), order.remainingQuantity(),
                 order.expiresAtMillis() == 0L ? 0L
@@ -430,13 +441,18 @@ public final class MarketPageProjector {
     private static MarketPageCard bazaarFillCard(
             BazaarFill fill,
             Map<UUID, BazaarOrder> orders,
+            Map<BazaarProductVersionKey, BazaarProduct> products,
             UUID playerId
     ) {
         BazaarOrder buy = orders.get(fill.buyOrderId());
         boolean buyer = owned(buy, playerId);
+        BazaarProduct product = products.get(new BazaarProductVersionKey(
+                fill.productId(), fill.productVersion()));
         return new MarketPageCard(MarketPageCardKind.BAZAAR_FILL,
-                fill.fillId().toString(), Optional.of(playerId), "", 0,
-                fill.productId(), buyer ? "buy" : "sell", "FILLED",
+                fill.fillId().toString(), Optional.of(playerId),
+                product == null ? "" : product.registryId(),
+                product == null ? 0 : product.lotSize(), fill.productId(),
+                buyer ? "buy" : "sell", "FILLED",
                 fill.sequence(), fill.priceMinor(), fill.grossMinor(),
                 fill.quantity(), 0L, false, false, false);
     }

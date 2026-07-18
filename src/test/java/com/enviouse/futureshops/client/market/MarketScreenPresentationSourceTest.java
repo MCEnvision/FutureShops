@@ -10,14 +10,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MarketScreenPresentationSourceTest {
     @Test
-    void marketHeaderReservesBrandAndMeasuredTabSpace() throws Exception {
+    void marketHeaderUsesTheExactSharedShopShell() throws Exception {
         String source = screen();
-        assertTrue(source.contains("int brandWidth = Math.max(92"));
-        assertTrue(source.contains("font.width(moduleLabel(target, true)"));
         assertTrue(source.contains(
-                "tabX + tabsWidth <= headerControls.search().x() - 6"));
+                "ShopUiUtil.renderShellHeader(graphics, font"));
         assertTrue(source.contains(
-                "showNavigation() && !headerModuleTabsVisible"));
+                "ShopUiUtil.headerLayout(font"));
+        assertTrue(source.contains("marketTabLabels()"));
+        assertTrue(source.contains(
+                "MarketThemeResolver.resolve(MarketModule.SHOP"));
+        assertTrue(source.contains("activeMarketTab()"));
+        assertTrue(source.contains("openShopTab(true)"));
+        assertTrue(source.contains("openShopTab(false)"));
     }
 
     @Test
@@ -32,6 +36,9 @@ class MarketScreenPresentationSourceTest {
                 "gui.futureshops.market.detail.hero_meta"));
         assertTrue(source.contains(
                 "gui.futureshops.market.detail.item_section"));
+        assertTrue(source.contains(
+                "gui.futureshops.market.detail.activity_section"));
+        assertTrue(source.contains("renderPriceSparkline"));
         assertTrue(source.contains(
                 "gui.futureshops.market.empty.player_catalog_hint"));
     }

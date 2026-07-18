@@ -26,11 +26,7 @@ public final class MarketLayoutEngine {
             default -> throw new IllegalArgumentException("Unknown market density.");
         };
         int padding = Math.min(desiredPadding, Math.max(0, (width - 1) / 2));
-        int desiredHeaderHeight = switch (mode) {
-            case WIDE -> 38;
-            case MEDIUM -> 34;
-            case NARROW -> 52;
-        };
+        int desiredHeaderHeight = height < 300 ? 30 : 36;
         int desiredBreadcrumbHeight = height < 220 ? 0 : 16;
         int desiredFooterHeight = height < 205 ? 22 : 28;
         int desiredToolbarHeight = mode == MarketLayoutMode.NARROW ? 38 : 24;

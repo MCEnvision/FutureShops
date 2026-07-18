@@ -3,6 +3,8 @@ package com.enviouse.futureshops.client.screen;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.enviouse.futureshops.client.ShopClientState;
 import com.enviouse.futureshops.client.ShopColors;
+import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.minecraft.MinecraftProfileTexture;
 import com.enviouse.futureshops.data.CatalogBarterIngredient;
 import com.enviouse.futureshops.data.CatalogBarterRecipe;
 import net.minecraft.client.Minecraft;
@@ -23,6 +25,9 @@ import net.minecraftforge.registries.ForgeRegistries;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 public final class ShopUiUtil {
     private ShopUiUtil() {
@@ -718,6 +723,7 @@ public final class ShopUiUtil {
      */
     public static HeaderHit headerLayout(Font font, int x, int y, int width, int headerH,
                                          String[] tabLabels, String balance, String playerName, boolean compact) {
+        compact = effectiveShellCompact(font, width, tabLabels, compact);
         int pad = PAD_LG;
         int ctrlH = 16;
         int ctrlY = y + (headerH - ctrlH) / 2;
@@ -764,6 +770,7 @@ public final class ShopUiUtil {
                                               String[] tabLabels, int activeIdx, String balance,
                                               String playerName, UUID playerUuid, boolean compact,
                                               int mouseX, int mouseY) {
+        compact = effectiveShellCompact(font, width, tabLabels, compact);
         HeaderHit hit = headerLayout(font, x, y, width, headerH, tabLabels, balance, playerName, compact);
         int ctrlY = hit.searchRect()[1];
         int ctrlH = hit.searchRect()[3];
@@ -833,6 +840,23 @@ public final class ShopUiUtil {
         g.drawCenteredString(font, "✕", c[0] + c[2] / 2, c[1] + (c[3] - 8) / 2,
                 closeHover ? ShopColors.TEXT_STRONG : ShopColors.TEXT_MUTED);
         return hit;
+    }
+
+    private static boolean effectiveShellCompact(Font font, int width,
+                                                 String[] tabLabels,
+                                                 boolean requested) {
+        if (requested) {
+            return true;
+        }
+        int wordmark = Math.max(font.width(shellBrand().getString()),
+                font.width(shellBrandSub().getString()));
+        int tabs = 0;
+        for (String label : tabLabels) {
+            tabs += font.width(label) + 20;
+        }
+        int minimum = PAD_LG * 2 + 18 + 7 + wordmark + 14 + tabs
+                + 12 + 46 + 8 + 74 + 8 + 100 + 8 + 16;
+        return minimum > width;
     }
 
     /**
@@ -933,14 +957,34 @@ public final class ShopUiUtil {
         return new int[]{ draw, truncated ? 1 : 0 };
     }
 
-    public static void renderPlayerFace(GuiGraphics graphics, UUID playerUuid, int x, int y, int size) {
+    private static final ConcurrentMap<UUID, ResourceLocation>
+            PLAYER_SKIN_CACHE = new ConcurrentHashMap<>();
+    private static final Set<UUID> PLAYER_SKIN_REQUESTS =
+            ConcurrentHashMap.newKeySet();
+
+    public static void renderPlayerFace(GuiGraphics graphics,
+                                        UUID playerUuid,
+                                        int x, int y, int size) {
+        renderPlayerFace(graphics, playerUuid, "", x, y, size);
+    }
+
+    public static void renderPlayerFace(GuiGraphics graphics,
+                                        UUID playerUuid,
+                                        String playerName,
+                                        int x, int y, int size) {
         Minecraft minecraft = Minecraft.getInstance();
-        ResourceLocation skin = DefaultPlayerSkin.getDefaultSkin(playerUuid);
+        ResourceLocation skin = PLAYER_SKIN_CACHE.getOrDefault(playerUuid,
+                DefaultPlayerSkin.getDefaultSkin(playerUuid));
         if (minecraft.getConnection() != null) {
             PlayerInfo info = minecraft.getConnection().getPlayerInfo(playerUuid);
             if (info != null) {
                 skin = info.getSkinLocation();
+                PLAYER_SKIN_CACHE.put(playerUuid, skin);
             }
+        }
+        if (!PLAYER_SKIN_CACHE.containsKey(playerUuid)
+                && PLAYER_SKIN_REQUESTS.add(playerUuid)) {
+            requestPlayerSkin(playerUuid, playerName);
         }
         RenderSystem.enableBlend();
         // Face layer (8,8)-(16,16) in the 64x64 skin texture
@@ -949,6 +993,33 @@ public final class ShopUiUtil {
         graphics.blit(skin, x, y, size, size, 40.0f, 8.0f, 8, 8, 64, 64);
         RenderSystem.disableBlend();
         drawBorder(graphics, x, y, size, size, ShopColors.BORDER_DEFAULT);
+    }
+
+    private static void requestPlayerSkin(UUID playerUuid,
+                                          String playerName) {
+        try {
+            GameProfile profile = new GameProfile(playerUuid,
+                    playerName == null ? "" : playerName);
+            net.minecraft.world.level.block.entity.SkullBlockEntity
+                    .updateGameprofile(profile, filled -> {
+                        if (filled == null) {
+                            return;
+                        }
+                        Minecraft minecraft = Minecraft.getInstance();
+                        minecraft.execute(() -> minecraft.getSkinManager()
+                                .registerSkins(filled, (type, location,
+                                        texture) -> {
+                                    if (type
+                                            == MinecraftProfileTexture.Type.SKIN
+                                            && location != null) {
+                                        PLAYER_SKIN_CACHE.put(playerUuid,
+                                                location);
+                                    }
+                                }, false));
+                    });
+        } catch (Throwable throwable) {
+            PLAYER_SKIN_REQUESTS.remove(playerUuid);
+        }
     }
 
     /**

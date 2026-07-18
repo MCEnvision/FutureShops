@@ -229,8 +229,8 @@ and checkpoints these settings govern live in `<world>/futureshops/escrow/` — 
 ```toml
 [branding]
 	display_name = "Auction House"
-	# RRGGBB or AARRGGBB hexadecimal.
-	accent_color = "#D85B68"
+	# RRGGBB or AARRGGBB metadata. The client applies one global marketplace theme.
+	accent_color = "#9184D9"
 
 [lifecycle]
 	# Behavior when modules.auction_house_enabled is false:
@@ -334,7 +334,8 @@ bazaar_control = "admin"
 
 [branding]
 	display_name = "Bazaar"
-	accent_color = "#48B978"
+	# The unified default matches Server Shop and Auction House.
+	accent_color = "#9184D9"
 
 [lifecycle]
 	# "freeze" (default), "drain", or "cancel_and_refund" when modules.bazaar_enabled
@@ -445,7 +446,8 @@ Client-only presentation. Accessibility settings always win over server branding
 	debounce_millis = 180
 
 [theme]
-	# "server" (use each module's server accent), "nocturne", "emerald", or "crimson".
+	# Applies one theme to Server Shop, Player Shops, Bazaar, and Auction House.
+	# "server" and "nocturne" use blurple. "emerald" and "crimson" recolor the whole marketplace.
 	preset = "server"
 	custom_accent_enabled = false
 	custom_accent = "#9184D9"

@@ -21,7 +21,8 @@ public record MarketPageCard(
         boolean watched,
         boolean primaryAction,
         boolean secondaryAction,
-        long tertiaryMinor
+        long tertiaryMinor,
+        MarketCardInsights insights
 ) {
     public MarketPageCard {
         kind = Objects.requireNonNull(kind, "kind");
@@ -31,6 +32,7 @@ public record MarketPageCard(
         title = text(title, 256, false);
         category = text(category, 128, true);
         state = text(state, 64, false);
+        insights = Objects.requireNonNull(insights, "insights");
         if (ownerId.filter(value -> value.equals(
                 new UUID(0L, 0L))).isPresent()
                 || itemCount < 0 || revision < 0L || primaryMinor < 0L
@@ -54,7 +56,24 @@ public record MarketPageCard(
                           boolean primaryAction, boolean secondaryAction) {
         this(kind, identity, ownerId, registryId, itemCount, title, category, state, revision,
                 primaryMinor, secondaryMinor, quantity, remainingMillis, watched, primaryAction,
-                secondaryAction, 0L);
+                secondaryAction, 0L, MarketCardInsights.empty());
+    }
+
+    public MarketPageCard(MarketPageCardKind kind, String identity, Optional<UUID> ownerId,
+                          String registryId, int itemCount, String title, String category,
+                          String state, long revision, long primaryMinor, long secondaryMinor,
+                          long quantity, long remainingMillis, boolean watched,
+                          boolean primaryAction, boolean secondaryAction, long tertiaryMinor) {
+        this(kind, identity, ownerId, registryId, itemCount, title, category, state, revision,
+                primaryMinor, secondaryMinor, quantity, remainingMillis, watched, primaryAction,
+                secondaryAction, tertiaryMinor, MarketCardInsights.empty());
+    }
+
+    public MarketPageCard withInsights(MarketCardInsights value) {
+        return new MarketPageCard(kind, identity, ownerId, registryId,
+                itemCount, title, category, state, revision, primaryMinor,
+                secondaryMinor, quantity, remainingMillis, watched,
+                primaryAction, secondaryAction, tertiaryMinor, value);
     }
 
     private static String text(

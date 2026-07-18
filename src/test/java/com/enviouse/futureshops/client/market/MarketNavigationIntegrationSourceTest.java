@@ -24,6 +24,9 @@ class MarketNavigationIntegrationSourceTest {
         assertTrue(source.contains("MARKET_PREFERENCES.reset()"));
         assertTrue(source.contains(
             "new C2SCloseMarketSessionPacket("));
+        assertTrue(source.contains(
+                "current instanceof MarketModuleScreen market"));
+        assertTrue(source.contains("market.prepareNavigationHandoff()"));
     }
 
     @Test
@@ -57,10 +60,11 @@ class MarketNavigationIntegrationSourceTest {
         assertTrue(source.contains("MarketCompactPager.nextOffset("));
         assertTrue(source.contains("handleCategoryDrawerKey(keyCode)"));
         assertTrue(source.contains("cycleLocalView(hasShiftDown())"));
-        assertTrue(source.contains("headerControls.balance()"));
-        assertTrue(source.contains("headerControls.profile()"));
-        assertTrue(source.contains("headerControls.notifications()"));
-        assertTrue(source.contains("headerControls.claims()"));
+        assertTrue(source.contains("shellHeaderHit.hitBalance("));
+        assertTrue(source.contains("shellHeaderHit.hitProfile("));
+        assertTrue(source.contains("ShopUiUtil.renderShellHeader("));
+        assertTrue(source.contains("navigationHandoff = false"));
+        assertTrue(source.contains("claimBadge(target)"));
         assertTrue(source.contains("font.plainSubstrByWidth(label"));
         assertTrue(source.contains(
                 "gui.futureshops.market.view."));

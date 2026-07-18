@@ -47,8 +47,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class ProtocolVersionConstantTest {
 
     @Test
-    void protocolVersionIs47() {
-        assertEquals("47", ShopPackets.PROTOCOL_VERSION,
-                "PROTOCOL_VERSION must be 47 because Bazaar catalog registration and market capabilities changed the wire contract");
+    void protocolVersionIs48() {
+        assertEquals("48", ShopPackets.PROTOCOL_VERSION,
+                "PROTOCOL_VERSION must be 48 because market identity and insight cards changed the wire contract");
     }
 }

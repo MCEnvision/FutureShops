@@ -155,7 +155,7 @@ public final class MarketModuleAccessPolicy {
                 card.revision(), card.primaryMinor(),
                 card.secondaryMinor(), card.quantity(),
                 card.remainingMillis(), card.watched(), primary,
-                secondary);
+                secondary, card.tertiaryMinor(), card.insights());
     }
 
     private static MarketModuleStatus effectiveStatus(

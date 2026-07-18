@@ -110,7 +110,7 @@ public final class ShopPackets {
     // Protocol 43 adds correlated player shop settlements and buybacks.
     // Protocol 44 adds market capability synchronization.
     // Protocol 47 adds Bazaar player product registration and market fee capabilities.
-    public static final String PROTOCOL_VERSION = "47";
+    public static final String PROTOCOL_VERSION = "48";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))

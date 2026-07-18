@@ -513,7 +513,10 @@ Commands include the short and long Auction House commands plus create, mine, bi
 
 ### Screens
 
-The Auction House uses the red themed shared shell.
+The Auction House uses the exact shared Nocturne shell used by `/shop`. Server Shop, Player Shops,
+Bazaar, and Auction House remain in one stable top navigation row with the same blurple palette,
+logo, wordmark, search, balance, profile, and close controls. A client theme override recolors the
+whole marketplace consistently instead of assigning a different color to each module.
 
 Tabs.
 
@@ -526,7 +529,12 @@ Tabs.
 
 Categories and saved filters live in the left rail. Sorting includes ending soon, newest, lowest price, highest current bid, most bids, seller, price range, enchantment, exact variant, mod ID, and category.
 
-Listing cards show exact item, seller, buy now or current bid, minimum next bid, bid count, remaining time, watched state, and listing status.
+Listing cards show the exact item, seller name and skin head, buy now or current bid, minimum next
+bid, bid count, remaining time, watched state, listing status, live listing count, and recent market
+activity. Hovering the item shows the complete vanilla tooltip from the escrowed item snapshot,
+including enchantments, lore, damage, custom names, and other NBT. Hovering a seller shows their
+UUID and transaction participant context. Details show the top bidder or buyer, hourly and daily
+activity, average price, units sold, and a bounded recent price graph.
 
 The footer shows Create Listing, active listing count, active bid holds, outbid notifications, and claim count.
 
@@ -625,7 +633,9 @@ Commands include the short and long Bazaar commands plus orders and claims route
 
 ### Screens
 
-The Bazaar uses the green themed shared shell.
+The Bazaar uses the same exact shared Nocturne shell and stable top navigation as `/shop` and the
+Auction House. A theme choice applies to the entire marketplace so switching modules never changes
+the navigation language or visual identity.
 
 Tabs.
 
@@ -636,7 +646,10 @@ Tabs.
 - Claims.
 - History.
 
-Product cards show item, instant buy, instant sell, spread, recent volume, trend, and market status.
+Product cards show item, instant buy, instant sell, spread, recent volume, trend, market status,
+live buy and sell order counts, hourly trades, daily units, average price, and recent price history.
+Player owned order and fill views resolve display names instead of exposing UUIDs as labels. UUIDs
+remain available in identity tooltips for administrators and players who need exact diagnostics.
 
 Product detail shows identity, order books, recent trades, quantity presets, price, total, fees, slippage, availability, payment source, average execution estimate, worst allowed execution, and claimable fills.
 
@@ -1049,7 +1062,8 @@ Branch. envy slash markets hardening.
 - Bazaar executes at maker price.
 - Claims do not expire automatically.
 - Initial release is single server.
-- Shop is blurple, Bazaar green, and Auction House red with theme overrides.
+- Shop, Player Shops, Bazaar, and Auction House share one blurple Nocturne schema. Optional client
+  theme and accessibility overrides recolor the entire marketplace consistently.
 
 These defaults maximize safety while retaining server and client customization. FutureShops does not claim control over foreign currency supply or arbitrary third party storage behavior that it cannot technically enforce.
 
@@ -1075,7 +1089,8 @@ history.
 
 Auction listing creation now presents the exact server listing fee before payment selection and
 reconciles the result against the durable escrow commit before showing a recovery warning. The
-shared market shell reserves measured space for its brand and centered module tabs, falls back to
-footer navigation when tabs do not fit, renders Bazaar in green and Auction House in red themed
-surfaces, contains empty states inside the content region, and uses responsive detail panels for
-item name, mod, registry identity, seller, price, timing, state, and actions.
+shared market shell now calls the exact `/shop` header renderer for its logo, wordmark, Server Shop,
+Player Shops, Bazaar and Auction House tabs, search, balance, profile, and close controls. All market
+surfaces use one Nocturne theme, contain empty states inside the content region, and use responsive
+detail panels for exact item data, seller identity and skin, bidder or buyer status, price, timing,
+state, live supply, hourly activity, daily volume, average price, recent price graphs, and actions.
