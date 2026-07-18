@@ -50,8 +50,9 @@ public record S2CMarketPagePacket(
         buffer.writeLong(page.aggregatePrimaryMinor());
         buffer.writeLong(page.aggregateQuantity());
         buffer.writeVarInt(page.categories().size());
-        for (String category : page.categories()) {
-            buffer.writeUtf(category, 128);
+        for (int index = 0; index < page.categories().size(); index++) {
+            buffer.writeUtf(page.categories().get(index), 128);
+            buffer.writeVarInt(page.categoryCounts().get(index));
         }
         buffer.writeVarInt(page.cards().size());
         for (MarketPageCard card : page.cards()) {
@@ -80,8 +81,11 @@ public record S2CMarketPagePacket(
             long aggregateQuantity = buffer.readLong();
             int categoryCount = boundedCount(buffer.readVarInt(), 256);
             List<String> categories = new ArrayList<>(categoryCount);
+            List<Integer> categoryCounts = new ArrayList<>(categoryCount);
             for (int index = 0; index < categoryCount; index++) {
                 categories.add(buffer.readUtf(128));
+                categoryCounts.add(boundedCount(buffer.readVarInt(),
+                        Integer.MAX_VALUE));
             }
             int cardCount = boundedCount(buffer.readVarInt(), pageSize);
             List<MarketPageCard> cards = new ArrayList<>(cardCount);
@@ -94,7 +98,7 @@ public record S2CMarketPagePacket(
                             pageCount, publicRevision, profileRevision,
                             profileReplayEpoch, serverTime, unread,
                             aggregatePrimary, aggregateQuantity,
-                            categories, cards));
+                            categories, categoryCounts, cards));
         } catch (RuntimeException exception) {
             throw new DecoderException(
                     "Market page response is invalid", exception);

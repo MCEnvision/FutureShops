@@ -61,7 +61,7 @@ class MarketPagePacketTest {
                 new MarketPageSnapshot(request, route,
                         MarketModule.BAZAAR, "products", 0, 28,
                         1, 1, 4L, 1000L, 2, 100L, 12L,
-                        List.of("metals"), List.of(card)));
+                        List.of("metals"), List.of(17), List.of(card)));
         FriendlyByteBuf buffer = buffer();
         S2CMarketPagePacket.encode(packet, buffer);
 

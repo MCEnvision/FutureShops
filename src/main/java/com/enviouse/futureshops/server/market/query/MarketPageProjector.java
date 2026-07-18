@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -51,10 +52,7 @@ public final class MarketPageProjector {
         Objects.requireNonNull(profile, "profile");
         claims = ownedClaims(playerId, claims, "auction.");
         Set<UUID> watched = Set.copyOf(profile.watchedAuctions());
-        List<String> categories = snapshot.listings().values().stream()
-                .map(value -> value.itemLot().categoryId())
-                .filter(value -> !value.isEmpty())
-                .distinct().sorted().limit(256).toList();
+        CategoryIndex categoryIndex = auctionCategories(snapshot);
         List<MarketPageCard> cards;
         int total;
         int pages;
@@ -80,7 +78,8 @@ public final class MarketPageProjector {
                 snapshot.nextAcceptedSequence(),
                 profile.revision(), profile.replayEpoch(),
                 query.serverTimeMillis(), profile.unreadNotifications(),
-                sumPrimary(cards), sumQuantity(cards), categories, cards);
+                sumPrimary(cards), sumQuantity(cards),
+                categoryIndex.categories(), categoryIndex.counts(), cards);
     }
 
     public static MarketPageSnapshot auction(
@@ -93,13 +92,10 @@ public final class MarketPageProjector {
         requireModule(query, "auction_house");
         Objects.requireNonNull(snapshot, "snapshot");
         Objects.requireNonNull(profile, "profile");
-        List<String> categories = snapshot.listings().values().stream()
-                .map(value -> value.itemLot().categoryId())
-                .filter(value -> !value.isEmpty())
-                .distinct().sorted().limit(256).toList();
+        CategoryIndex categoryIndex = auctionCategories(snapshot);
         return claimPage(query, playerId, profile, claims,
                 "auction.", snapshot.nextAcceptedSequence(),
-                categories);
+                categoryIndex);
     }
 
     public static MarketPageSnapshot bazaar(
@@ -120,10 +116,7 @@ public final class MarketPageProjector {
             watched.add(new BazaarProductVersionKey(
                     key.productId(), key.version()));
         }
-        List<String> categories = latestProducts(snapshot).values()
-                .stream().map(BazaarProduct::categoryId)
-                .filter(value -> !value.isEmpty())
-                .distinct().sorted().limit(256).toList();
+        CategoryIndex categoryIndex = bazaarCategories(snapshot);
         List<MarketPageCard> cards;
         Map<BazaarProductVersionKey, BazaarProduct> productVersions =
                 productVersions(snapshot);
@@ -178,7 +171,8 @@ public final class MarketPageProjector {
                 snapshot.nextSequence(), profile.revision(),
                 profile.replayEpoch(), query.serverTimeMillis(),
                 profile.unreadNotifications(), sumPrimary(cards),
-                sumQuantity(cards), categories, cards);
+                sumQuantity(cards), categoryIndex.categories(),
+                categoryIndex.counts(), cards);
     }
 
     public static MarketPageSnapshot bazaar(
@@ -191,12 +185,9 @@ public final class MarketPageProjector {
         requireModule(query, "bazaar");
         Objects.requireNonNull(snapshot, "snapshot");
         Objects.requireNonNull(profile, "profile");
-        List<String> categories = latestProducts(snapshot).values()
-                .stream().map(BazaarProduct::categoryId)
-                .filter(value -> !value.isEmpty())
-                .distinct().sorted().limit(256).toList();
+        CategoryIndex categoryIndex = bazaarCategories(snapshot);
         return claimPage(query, playerId, profile, claims,
-                "bazaar.", snapshot.nextSequence(), categories);
+                "bazaar.", snapshot.nextSequence(), categoryIndex);
     }
 
     private static List<AuctionListing> auctionListings(
@@ -532,7 +523,7 @@ public final class MarketPageProjector {
             OpenClaimPage page,
             String sourcePrefix,
             long publicRevision,
-            List<String> categories
+            CategoryIndex categoryIndex
     ) {
         UUID ownerId = Objects.requireNonNull(playerId, "playerId");
         OpenClaimPage claims = Objects.requireNonNull(page, "claims");
@@ -553,7 +544,45 @@ public final class MarketPageProjector {
                 publicRevision, profile.revision(),
                 profile.replayEpoch(), query.serverTimeMillis(),
                 profile.unreadNotifications(), sumPrimary(cards),
-                sumQuantity(cards), categories, cards);
+                sumQuantity(cards), categoryIndex.categories(),
+                categoryIndex.counts(), cards);
+    }
+
+    private static CategoryIndex auctionCategories(
+            AuctionHouseSnapshot snapshot
+    ) {
+        Map<String, Integer> counts = new TreeMap<>();
+        for (AuctionListing listing : snapshot.listings().values()) {
+            String category = listing.itemLot().categoryId();
+            if (listing.state() == AuctionListingState.ACTIVE
+                    && !category.isEmpty()) {
+                counts.merge(category, 1, Integer::sum);
+            }
+        }
+        return categoryIndex(counts);
+    }
+
+    private static CategoryIndex bazaarCategories(
+            BazaarOrderBookSnapshot snapshot
+    ) {
+        Map<String, Integer> counts = new TreeMap<>();
+        for (BazaarProduct product : latestProducts(snapshot).values()) {
+            String category = product.categoryId();
+            if (product.status() != BazaarProductStatus.RETIRED
+                    && !category.isEmpty()) {
+                counts.merge(category, 1, Integer::sum);
+            }
+        }
+        return categoryIndex(counts);
+    }
+
+    private static CategoryIndex categoryIndex(
+            Map<String, Integer> counts
+    ) {
+        List<String> categories = counts.keySet().stream()
+                .limit(256).toList();
+        return new CategoryIndex(categories, categories.stream()
+                .map(counts::get).toList());
     }
 
     private static List<EscrowClaim> ownedClaims(
@@ -586,6 +615,12 @@ public final class MarketPageProjector {
             }
         }
         return latest;
+    }
+
+    private record CategoryIndex(
+            List<String> categories,
+            List<Integer> counts
+    ) {
     }
 
     private static Map<BazaarProductVersionKey, BazaarProduct>

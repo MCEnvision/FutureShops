@@ -23,7 +23,7 @@ class MarketCapabilityIntegrationSourceTest {
         assertTrue(request > settlement);
         assertTrue(response > request);
         assertTrue(source.contains(
-                "public static final String PROTOCOL_VERSION = \"48\""));
+                "public static final String PROTOCOL_VERSION = \"49\""));
     }
 
     @Test

@@ -1094,3 +1094,12 @@ Player Shops, Bazaar and Auction House tabs, search, balance, profile, and close
 surfaces use one Nocturne theme, contain empty states inside the content region, and use responsive
 detail panels for exact item data, seller identity and skin, bidder or buyer status, price, timing,
 state, live supply, hourly activity, daily volume, average price, recent price graphs, and actions.
+
+The market body now mirrors the Server Shop structure as well as its header. Bazaar and Auction
+House routes use the shared segmented control for their local views and the shared Departments
+panel for All and category rows, including market wide category counts and the same selection,
+hover, scrolling, spacing, and accent treatment. Routine escrow ready banners are intentionally
+hidden. Escrow remains mandatory, while a temporary readiness or recovery failure produces a
+deduplicated chat warning and an explicit Retry control that resubmits only the safe read request
+or invites the player to repeat an economic action only after the server confirms that nothing
+changed.

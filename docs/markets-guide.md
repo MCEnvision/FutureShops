@@ -37,6 +37,13 @@ shown by `/shop` when the server enables `modules.show_module_navigation`. A dis
 disappears from navigation unless you still have claims in it, in which case it appears as
 **Claims only**.
 
+Bazaar and Auction House use the same body structure as Server Shop. Market routes appear in the
+segmented control above the results, while the left Departments panel contains All and the
+available categories with market-wide counts. Long department lists scroll under the mouse.
+Routine readiness is not advertised in the interface. If market recovery temporarily blocks a
+request, FutureShops warns in chat and presents Retry without bypassing escrow or creating a new
+economic request.
+
 Auction cards and details use the seller display name and skin head. Hover the identity to see the
 exact UUID and bidder or buyer context. Hover an item to see its complete vanilla tooltip rebuilt
 from the escrowed stack, including enchantments and other NBT. Auction details include the current

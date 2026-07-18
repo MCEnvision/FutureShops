@@ -240,7 +240,7 @@ public final class MarketPageEnricher {
                 page.profileRevision(), page.profileReplayEpoch(),
                 page.serverTimeMillis(), page.unreadNotifications(),
                 page.aggregatePrimaryMinor(), page.aggregateQuantity(),
-                page.categories(), cards);
+                page.categories(), page.categoryCounts(), cards);
     }
 
     private static Optional<UUID> parseId(String value) {

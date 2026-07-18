@@ -116,7 +116,7 @@ public final class MarketModuleAccessPolicy {
                 snapshot.unreadNotifications(),
                 snapshot.aggregatePrimaryMinor(),
                 snapshot.aggregateQuantity(), snapshot.categories(),
-                cards);
+                snapshot.categoryCounts(), cards);
     }
 
     public static String preferredView(
