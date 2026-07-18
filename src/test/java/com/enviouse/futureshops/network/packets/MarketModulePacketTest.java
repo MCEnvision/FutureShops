@@ -28,6 +28,18 @@ class MarketModulePacketTest {
     }
 
     @Test
+    void blankMarketViewsFallBackToModuleRoots() {
+        for (MarketModule module : new MarketModule[]{
+                MarketModule.BAZAAR, MarketModule.AUCTION_HOUSE}) {
+            C2SOpenMarketModulePacket packet =
+                    new C2SOpenMarketModulePacket(UUID.randomUUID(),
+                            module.id(), "  ");
+
+            assertEquals(module.rootView(), packet.view());
+        }
+    }
+
+    @Test
     void marketOpenPacketsValidateModuleIdentityAndBranding() {
         UUID requestId = UUID.fromString(
                 "10000000-0000-0000-0000-000000000001");
