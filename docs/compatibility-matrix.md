@@ -7,6 +7,7 @@ and shop transaction system.
 | --- | --- | --- |
 | Minecraft and loader | Minecraft 1.20.1 with the repository Forge toolchain | Client and server must run the same FutureShops build. Protocol 46 rejects mismatched market packets. |
 | Dedicated and integrated servers | Yes | Escrow, claims, auctions, Bazaar orders, physical cash, and recovery use server-owned data. |
+| Windows world saves | Yes | Checkpoint and journal files are forced before atomic moves. Windows does not expose directory fsync through Java, so the unavailable directory barrier uses an explicit best-effort fallback and logs one warning instead of crashing world startup. |
 | Built-in physical currency | `currency.provider = "futureshops"` | Mint IDs, checksums, reservations, spent-mint tracking, replay protection, and replacement-mint refunds are enforced. |
 | Apocalypse Now currency | `currency.provider = "apocalypsenow"` | Currency items can be deposited and dispensed, but their supply is not protected by FutureShops mint controls. Verify the installed mod item IDs before production. |
 | Other mod currency | `currency.provider = "custom"` | Up to 32 configured dispense denominations plus accept-only items. Requests remain journaled and idempotent, but copied items, recipes, loot, and source-mod bugs are outside FutureShops duplication protection. |
