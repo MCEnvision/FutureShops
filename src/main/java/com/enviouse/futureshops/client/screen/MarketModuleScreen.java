@@ -22,15 +22,30 @@ import com.enviouse.futureshops.client.market.MarketRoute;
 import com.enviouse.futureshops.client.market.MarketTheme;
 import com.enviouse.futureshops.client.market.MarketThemeResolver;
 import com.enviouse.futureshops.client.market.MarketViewport;
+import com.enviouse.futureshops.client.market.MarketActionFeedback;
+import com.enviouse.futureshops.client.market.MarketPendingActionTracker;
+import com.enviouse.futureshops.command.EconomyCommandUtil;
 import com.enviouse.futureshops.network.ShopPackets;
+import com.enviouse.futureshops.network.packets.C2SAuctionBidPacket;
+import com.enviouse.futureshops.network.packets.C2SAuctionBuyNowPacket;
+import com.enviouse.futureshops.network.packets.C2SAuctionCancelPacket;
+import com.enviouse.futureshops.network.packets.C2SAuctionCreatePacket;
+import com.enviouse.futureshops.network.packets.C2SBazaarCancelPacket;
+import com.enviouse.futureshops.network.packets.C2SBazaarOrderPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenMarketModulePacket;
 import com.enviouse.futureshops.network.packets.C2SCloseMarketSessionPacket;
 import com.enviouse.futureshops.network.packets.C2SMarketPageQueryPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenShopPacket;
+import com.enviouse.futureshops.network.packets.S2CMarketActionResponsePacket;
 import com.enviouse.futureshops.network.packets.S2COpenMarketModulePacket;
 import com.enviouse.futureshops.network.packets.S2CMarketPagePacket;
 import com.enviouse.futureshops.money.PaymentSource;
+import com.enviouse.futureshops.server.market.auction.AuctionListingType;
+import com.enviouse.futureshops.server.market.bazaar.BazaarOrderSide;
+import com.enviouse.futureshops.server.market.bazaar.BazaarOrderType;
+import com.enviouse.futureshops.server.market.bazaar.BazaarTimeInForce;
 import com.enviouse.futureshops.server.market.query.MarketPageCard;
+import com.enviouse.futureshops.server.market.query.MarketPageCardKind;
 import com.enviouse.futureshops.server.market.query.MarketPageSnapshot;
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
@@ -57,6 +72,15 @@ public final class MarketModuleScreen extends Screen
     private static final int BORDER = 0xFF3B3E50;
     private static final int BACKDROP = 0xC0080910;
     private static final int MAXIMUM_HIT_TARGETS = 128;
+    private static final long ARMED_CONFIRM_WINDOW_MILLIS = 4_000L;
+    private static final long ACTION_STATUS_VISIBLE_MILLIS = 8_000L;
+    private static final int PLAYER_MAIN_INVENTORY_SLOTS = 36;
+    /** Duration presets offered by the create wizard (server clamps to config, plan §8). */
+    private static final long[] CREATE_DURATION_SECONDS =
+            {3_600L, 21_600L, 43_200L, 86_400L, 172_800L};
+    private static final String[] CREATE_DURATION_KEYS =
+            {"h1", "h6", "h12", "h24", "h48"};
+    private static final long DEFAULT_CREATE_DURATION_SECONDS = 86_400L;
 
     private final S2COpenMarketModulePacket packet;
     private final MarketModule module;
@@ -91,6 +115,65 @@ public final class MarketModuleScreen extends Screen
     private boolean explicitClose;
     private boolean closeSent;
     private boolean navigationHandoff;
+    /**
+     * Shared across screen instances on purpose: navigation replaces the screen object, but a
+     * request that is still unanswered (including TIMED_OUT awaiting an explicit retry or
+     * give-up) must keep blocking fresh sends for its family+subject wherever the user goes in
+     * the market session — a new request UUID for the same intent would be a second economic
+     * mutation. Cleared when the market session truly closes ({@link #closeNavigation}): the
+     * server session (and with it the per-request replay state) dies there too.
+     */
+    private static final MarketPendingActionTracker PENDING_ACTIONS =
+            new MarketPendingActionTracker();
+    /**
+     * Payment source each in-flight request was sent with. A source is only remembered on the
+     * session ({@link #rememberPaymentSource}) once a request that used it comes back APPLIED —
+     * never at prompt time — so a denied choice can never become the silent default.
+     */
+    private static final java.util.LinkedHashMap<UUID, PaymentSource>
+            PENDING_PAYMENT_SOURCES = new java.util.LinkedHashMap<>();
+    private static final int MAXIMUM_TRACKED_PAYMENT_SOURCES = 32;
+    /**
+     * Sources the server answered PAYMENT_SOURCE_DENIED for during this market session. A
+     * denied source is filtered out of the remembered-source fast path (so the prompt reopens
+     * on the next money action) and its prompt button renders disabled with an
+     * "unavailable" label. Market-session scope: cleared in {@link #closeNavigation}.
+     */
+    private static final java.util.EnumSet<PaymentSource>
+            DENIED_PAYMENT_SOURCES =
+            java.util.EnumSet.noneOf(PaymentSource.class);
+    /** Static so the status strip survives the screen handoff a detail refresh performs. */
+    private static Component actionStatus;
+    private static boolean actionStatusSuccess;
+    private static long actionStatusAtMillis;
+    /**
+     * One-shot marker for the detail-refresh round trip (see {@link #refreshAfterAction}): the
+     * server only serves list pages to a session whose view IS that list, so a detail screen
+     * refreshes by navigating back to its source list and re-opening the matching card from
+     * the fresh page. This survives the intermediate screen swap.
+     */
+    private static DetailRefresh pendingDetailRefresh;
+    private static final long DETAIL_REFRESH_WINDOW_MILLIS = 15_000L;
+    private String armedConfirmKey = "";
+    private long armedConfirmAtMillis;
+    private boolean bidEditorOpen;
+    private EditBox bidAmountBox;
+    private EditBox bazaarQuantityBox;
+    private EditBox bazaarLimitPriceBox;
+    private java.util.function.Consumer<PaymentSource> paymentPromptAction;
+    private Component paymentPromptDetail;
+    private boolean createWizardOpen;
+    private int createSelectedSlot = -1;
+    /**
+     * SHA-256 identity of the stack captured when the player CLICKED the slot (plan §8 step
+     * 7) — deliberately not recomputed at send time, so the server rejects the create when
+     * the slot's live content changed between selection and processing.
+     */
+    private String createSelectedFingerprint = "";
+    private AuctionListingType createType = AuctionListingType.TIMED_AUCTION;
+    private long createDurationSeconds = DEFAULT_CREATE_DURATION_SECONDS;
+    private EditBox createStartBidBox;
+    private EditBox createBuyoutBox;
 
     public MarketModuleScreen(
             S2COpenMarketModulePacket packet,
@@ -174,11 +257,122 @@ public final class MarketModuleScreen extends Screen
         if (search != null) {
             search.tick();
         }
+        for (EditBox box : activeOverlayBoxes()) {
+            box.tick();
+        }
+        if (!PENDING_ACTIONS.expire(Util.getMillis(),
+                MarketPendingActionTracker.DEFAULT_TIMEOUT_MILLIS)
+                .isEmpty()) {
+            // The entry stays tracked (double-spend guard): the button surface now offers
+            // an explicit same-request Retry and a give-up ✕ instead of a fresh send.
+            showActionStatus(MarketActionFeedback.timeoutMessage(), false);
+        }
         if (!observedSearch.equals(sentSearch)
                 && Util.getMillis() - searchChangedAtMillis
                 >= ClientConfig.settings().search().debounceMillis()) {
             sendPageQuery();
         }
+    }
+
+    /**
+     * Main-thread entry for {@code S2CMarketActionResponsePacket} (plan §12). Clears the
+     * matching pending request, localizes the result, and — for both success and the
+     * stale-revision family — refreshes capabilities and the current page so revisions and
+     * cards match the server again (plan §15: stale interfaces refresh rather than execute).
+     * On a detail route the refresh goes through {@link #refreshAfterAction}: back to the
+     * source list, then re-open the matching card from the fresh page, because the server
+     * only answers page queries for the session's own view.
+     */
+    public void applyActionResponse(S2CMarketActionResponsePacket response) {
+        Optional<MarketPendingActionTracker.PendingAction> pending =
+                PENDING_ACTIONS.complete(response.requestId());
+        String actionKey = pending
+                .map(MarketPendingActionTracker.PendingAction::actionKey)
+                .orElseGet(() -> MarketActionFeedback.actionKey(
+                        response.moduleId(), response.action()));
+        String subjectId = pending
+                .map(MarketPendingActionTracker.PendingAction::subjectId)
+                .orElse("");
+        PaymentSource usedSource =
+                PENDING_PAYMENT_SOURCES.remove(response.requestId());
+        armedConfirmKey = "";
+        if (response.applied()) {
+            if (usedSource != null) {
+                // The only moment a payment source becomes the remembered session
+                // default: a request that actually used it was APPLIED.
+                rememberPaymentSource(usedSource);
+            }
+            showActionStatus(
+                    MarketActionFeedback.successMessage(actionKey), true);
+            if ("auction_bid".equals(actionKey)) {
+                bidEditorOpen = false;
+            }
+            if ("auction_create".equals(actionKey)) {
+                closeCreateWizard();
+            }
+            refreshAfterAction(subjectId);
+            return;
+        }
+        if ("PAYMENT_SOURCE_DENIED".equals(response.status())) {
+            if (usedSource != null) {
+                // Never offer this source silently again this session; the prompt
+                // reopens on the next money action with it disabled.
+                DENIED_PAYMENT_SOURCES.add(usedSource);
+            }
+            showActionStatus(
+                    MarketActionFeedback.failureMessage(response), false);
+            return;
+        }
+        if (MarketActionFeedback.stale(response.status())) {
+            showActionStatus(
+                    MarketActionFeedback.staleMessage(response.status()),
+                    false);
+            refreshAfterAction(subjectId);
+            return;
+        }
+        showActionStatus(
+                MarketActionFeedback.failureMessage(response), false);
+    }
+
+    /**
+     * Post-action refresh (plan §15). On list routes this is a straight capabilities+page
+     * reload. On a detail route the shown card is a click-time snapshot and the server serves
+     * pages only for the session's own view — so when the answered action concerned the shown
+     * card (tracked subject matches), refresh by navigating back to the source list and
+     * re-opening the matching card from the fresh page ({@link #reopenRefreshedDetail}); the
+     * remembered detail card is replaced with live revision/prices on the way. Responses the
+     * tracker no longer knows (duplicate of an already-handled reply, or arriving after an
+     * explicit give-up) fall through to the plain refresh — no extra route round trip.
+     */
+    private void refreshAfterAction(String subjectId) {
+        if (isDetailView() && detailSelection != null
+                && navigation.isOpen() && navigation.historyDepth() > 0
+                && !subjectId.isEmpty()
+                && sameDetailEntity(subjectId,
+                detailSelection.identity())) {
+            pendingDetailRefresh = new DetailRefresh(module,
+                    detailSelection.identity(), Util.getMillis());
+            navigateBack();
+            return;
+        }
+        refreshMarketState();
+    }
+
+    /**
+     * Whether two card identities name the same market entity. Bazaar identities embed the
+     * product version ({@code productId@version}), which bumps on every rule change — the
+     * entity is the product, so compare the id part only.
+     */
+    private boolean sameDetailEntity(String left, String right) {
+        if (left.equals(right)) {
+            return true;
+        }
+        if (module == MarketModule.BAZAAR) {
+            String leftProduct = bazaarProductId(left);
+            return leftProduct != null
+                    && leftProduct.equals(bazaarProductId(right));
+        }
+        return false;
     }
 
     public void applyPage(S2CMarketPagePacket response) {
@@ -209,7 +403,70 @@ public final class MarketModuleScreen extends Screen
                 sendPageQuery();
             }
             synchronizeCategoryDrawer();
+            synchronizeRememberedDetailSelections(incoming);
+            DetailRefresh refresh = consumeDetailRefresh();
+            if (refresh != null) {
+                reopenRefreshedDetail(refresh, incoming);
+            }
         }
+    }
+
+    /**
+     * Every arriving list page overwrites matching remembered detail cards, so a detail route
+     * entered (or re-entered) afterwards renders live revision/prices instead of the
+     * click-time snapshot it was remembered with.
+     */
+    private void synchronizeRememberedDetailSelections(
+            MarketPageSnapshot incoming
+    ) {
+        if (!navigation.isOpen()) {
+            return;
+        }
+        for (MarketPageCard card : incoming.cards()) {
+            if (navigation.detailSelection(module, card.identity())
+                    .isPresent()) {
+                navigation.rememberDetail(card);
+            }
+        }
+    }
+
+    private DetailRefresh consumeDetailRefresh() {
+        DetailRefresh refresh = pendingDetailRefresh;
+        if (refresh == null) {
+            return null;
+        }
+        if (refresh.module() != module
+                || Util.getMillis() - refresh.armedAtMillis()
+                > DETAIL_REFRESH_WINDOW_MILLIS) {
+            pendingDetailRefresh = null;
+            return null;
+        }
+        pendingDetailRefresh = null;
+        return refresh;
+    }
+
+    /**
+     * Completion of the detail-refresh round trip: the fresh source-list page arrived — re-open
+     * the detail card that matches the refreshed entity (updating the remembered card on the
+     * way through {@code openDetail}). When no card matches, the entity is gone from this view:
+     * show the module's not-found status and stay on the list.
+     */
+    private void reopenRefreshedDetail(
+            DetailRefresh refresh,
+            MarketPageSnapshot incoming
+    ) {
+        List<MarketPageCard> cards = incoming.cards();
+        for (int index = 0; index < cards.size(); index++) {
+            MarketPageCard card = cards.get(index);
+            if (sameDetailEntity(refresh.identity(), card.identity())) {
+                openDetail(index, card);
+                return;
+            }
+        }
+        showActionStatus(Component.translatable(
+                "gui.futureshops.market.action.status."
+                        + (module == MarketModule.BAZAAR
+                        ? "product_missing" : "not_found")), false);
     }
 
     public void applyCapabilities(
@@ -261,6 +518,9 @@ public final class MarketModuleScreen extends Screen
         renderContent(graphics, mouseX, mouseY);
         renderCategoryDrawer(graphics, mouseX, mouseY);
         renderFooter(graphics, mouseX, mouseY);
+        renderCreateWizard(graphics, mouseX, mouseY);
+        renderActionStatus(graphics);
+        renderPaymentPrompt(graphics, mouseX, mouseY);
         super.render(graphics, mouseX, mouseY, partialTick);
     }
 
@@ -796,7 +1056,7 @@ public final class MarketModuleScreen extends Screen
             return;
         }
         if (isDetailView()) {
-            renderDetail(graphics, content);
+            renderDetail(graphics, content, mouseX, mouseY);
             return;
         }
         if (page == null) {
@@ -1038,12 +1298,51 @@ public final class MarketModuleScreen extends Screen
             }
             int cardIndex = index;
             registerHit(card, () -> openDetail(cardIndex, data));
+            renderOrderCancelButton(graphics, card, data, mouseX,
+                    mouseY);
         }
+    }
+
+    /**
+     * Own-order cards on the Bazaar order views carry an inline armed-confirm [Cancel]
+     * (plan §9: cancelling returns only unfilled value as claims). Registered after the card
+     * hit so the button wins the click.
+     */
+    private void renderOrderCancelButton(
+            GuiGraphics graphics,
+            MarketRectangle card,
+            MarketPageCard data,
+            int mouseX,
+            int mouseY
+    ) {
+        if (module != MarketModule.BAZAAR
+                || data.kind() != MarketPageCardKind.BAZAAR_ORDER
+                || !orderCancellable(data.state())
+                || !viewerOwns(data)
+                || parseUuid(data.identity()) == null
+                || card.width() < 96 || card.height() < 40) {
+            return;
+        }
+        String armKey = "bazaar_cancel:" + data.identity();
+        String label = armed(armKey)
+                ? Component.translatable(
+                "gui.futureshops.market.action.order.cancel_confirm")
+                .getString()
+                : Component.translatable(
+                "gui.futureshops.market.action.order.cancel")
+                .getString();
+        MarketRectangle cancel = new MarketRectangle(
+                card.right() - 52, card.bottom() - 18, 46, 14);
+        actionButton(graphics, mouseX, mouseY, cancel, label, true,
+                true, "bazaar_cancel", data.identity(), true,
+                () -> armOrRun(armKey, () -> sendBazaarCancel(data)));
     }
 
     private void renderDetail(
             GuiGraphics graphics,
-            MarketRectangle content
+            MarketRectangle content,
+            int mouseX,
+            int mouseY
     ) {
         if (content.width() < 4 || content.height() < 4) {
             return;
@@ -1079,46 +1378,53 @@ public final class MarketModuleScreen extends Screen
                 x, y + 4, theme.textStrong(), false);
         x = panel.x() + padding;
         y += 28;
-        y = detailRow(graphics, panel, x, y,
+        MarketRectangle info = new MarketRectangle(panel.x(), panel.y(),
+                panel.width(), Math.max(60, panel.height()
+                - detailActionReservedHeight(data)));
+        y = detailRow(graphics, info, x, y,
                 "gui.futureshops.market.detail.state", data.state());
         if (!data.category().isEmpty()) {
-            y = detailRow(graphics, panel, x, y,
+            y = detailRow(graphics, info, x, y,
                     "gui.futureshops.market.detail.category",
                     data.category());
         }
         if (!data.registryId().isEmpty()) {
-            y = detailRow(graphics, panel, x, y,
+            y = detailRow(graphics, info, x, y,
                     "gui.futureshops.market.detail.item",
                     data.registryId());
         }
         if (data.quantity() > 0L) {
-            y = detailRow(graphics, panel, x, y,
+            y = detailRow(graphics, info, x, y,
                     "gui.futureshops.market.detail.quantity",
                     Long.toString(data.quantity()));
         }
         if (data.primaryMinor() > 0L) {
-            y = detailRow(graphics, panel, x, y,
+            y = detailRow(graphics, info, x, y,
                     "gui.futureshops.market.detail.primary",
                     ShopUiUtil.formatMinorUnits(data.primaryMinor()));
         }
         if (data.secondaryMinor() > 0L) {
-            y = detailRow(graphics, panel, x, y,
+            y = detailRow(graphics, info, x, y,
                     "gui.futureshops.market.detail.secondary",
                     ShopUiUtil.formatMinorUnits(data.secondaryMinor()));
         }
-        if (data.remainingMillis() > 0L) {
-            y = detailRow(graphics, panel, x, y,
+        if (data.remainingMillis() > 0L
+                && data.remainingMillis() != Long.MAX_VALUE) {
+            y = detailRow(graphics, info, x, y,
                     "gui.futureshops.market.detail.remaining",
                     durationLabel(data.remainingMillis()));
         }
-        detailRow(graphics, panel, x, y,
+        detailRow(graphics, info, x, y,
                 "gui.futureshops.market.detail.identity",
                 data.identity());
-        graphics.drawString(font,
-                Component.translatable(
-                        "gui.futureshops.market.detail.read_only"),
-                panel.x() + padding, panel.bottom() - padding - 8,
-                theme.textMuted(), false);
+        if (!renderDetailActions(graphics, panel, padding,
+                mouseX, mouseY)) {
+            graphics.drawString(font,
+                    Component.translatable(
+                            "gui.futureshops.market.detail.read_only"),
+                    panel.x() + padding, panel.bottom() - padding - 8,
+                    theme.textMuted(), false);
+        }
     }
 
     private int detailRow(
@@ -1142,6 +1448,1272 @@ public final class MarketModuleScreen extends Screen
                                 - layout.padding())),
                 valueX, y, theme.textStrong(), false);
         return y + 13;
+    }
+
+    // ── Action surface (plan §8/§9/§12) ─────────────────────────────
+
+    /** Bottom strip height reserved on the detail panel for the action rows. */
+    private int detailActionReservedHeight(MarketPageCard card) {
+        if (module == MarketModule.AUCTION_HOUSE
+                && card.kind() == MarketPageCardKind.AUCTION
+                && auctionDetailHasActions(card)) {
+            return bidEditorOpen ? 64 : 42;
+        }
+        if (module == MarketModule.BAZAAR
+                && card.kind() == MarketPageCardKind.BAZAAR_PRODUCT
+                && bazaarDetailHasActions(card)) {
+            return 82;
+        }
+        return 0;
+    }
+
+    private boolean renderDetailActions(
+            GuiGraphics graphics,
+            MarketRectangle panel,
+            int padding,
+            int mouseX,
+            int mouseY
+    ) {
+        if (detailSelection == null || createWizardOpen) {
+            return false;
+        }
+        MarketPageCard card = detailSelection.card();
+        if (module == MarketModule.AUCTION_HOUSE
+                && card.kind() == MarketPageCardKind.AUCTION
+                && auctionDetailHasActions(card)) {
+            renderAuctionDetailActions(graphics, panel, padding, card,
+                    mouseX, mouseY);
+            return true;
+        }
+        if (module == MarketModule.BAZAAR
+                && card.kind() == MarketPageCardKind.BAZAAR_PRODUCT
+                && bazaarDetailHasActions(card)) {
+            renderBazaarProductActions(graphics, panel, padding, card,
+                    mouseX, mouseY);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Auction listings only accept bids while the projector reports a finite deadline —
+     * pure BUY_NOW lots carry {@code Long.MAX_VALUE} remaining time on the wire, which is
+     * the only type signal the page card exposes.
+     */
+    private static boolean auctionAcceptsBids(MarketPageCard card) {
+        return card.remainingMillis() != Long.MAX_VALUE;
+    }
+
+    private boolean viewerOwns(MarketPageCard card) {
+        return minecraft != null && minecraft.player != null
+                && card.ownerId()
+                .filter(minecraft.player.getUUID()::equals)
+                .isPresent();
+    }
+
+    /** Buy-now is offered on pure BUY_NOW lots AND on bidding lots whose card carries a buyout. */
+    private static boolean auctionHasBuyNow(MarketPageCard card) {
+        return !auctionAcceptsBids(card) ? card.primaryMinor() > 0L
+                : card.tertiaryMinor() > 0L;
+    }
+
+    private boolean auctionDetailHasActions(MarketPageCard card) {
+        if (!"ACTIVE".equals(card.state())
+                || parseUuid(card.identity()) == null) {
+            return false;
+        }
+        boolean own = viewerOwns(card);
+        if (!own) {
+            return auctionAcceptsBids(card) || auctionHasBuyNow(card);
+        }
+        return "mine".equals(detailSelection.sourceView())
+                && card.quantity() == 0L;
+    }
+
+    private boolean bazaarDetailHasActions(MarketPageCard card) {
+        return "ACTIVE".equals(card.state())
+                && bazaarProductId(card.identity()) != null;
+    }
+
+    private void renderAuctionDetailActions(
+            GuiGraphics graphics,
+            MarketRectangle panel,
+            int padding,
+            MarketPageCard card,
+            int mouseX,
+            int mouseY
+    ) {
+        boolean own = viewerOwns(card);
+        boolean acceptsBids = auctionAcceptsBids(card);
+        int rowHeight = 16;
+        int y = panel.bottom() - padding - rowHeight + 2;
+        int x = panel.x() + padding;
+        if (!own && acceptsBids) {
+            // Retry host for auction_bid: when the send timed out this control turns
+            // into [Retry][✕] even while the editor is closed, so the resend of the
+            // original request stays reachable.
+            actionButton(graphics, mouseX, mouseY,
+                    new MarketRectangle(x, y, 78, rowHeight),
+                    Component.translatable(
+                            "gui.futureshops.market.action.bid.button")
+                            .getString(),
+                    true, false, "auction_bid", card.identity(), true,
+                    () -> toggleBidEditor(card));
+            x += 84;
+        }
+        if (!own && auctionHasBuyNow(card)) {
+            actionButton(graphics, mouseX, mouseY,
+                    new MarketRectangle(x, y, 78, rowHeight),
+                    Component.translatable(
+                            "gui.futureshops.market.action.buy_now.button")
+                            .getString(),
+                    true, false, "auction_buy_now", card.identity(),
+                    true, () -> sendAuctionBuyNow(card));
+            x += 84;
+        }
+        if (own && "mine".equals(detailSelection.sourceView())
+                && card.quantity() == 0L) {
+            String armKey = "auction_cancel:" + card.identity();
+            String label = armed(armKey)
+                    ? Component.translatable(
+                    "gui.futureshops.market.action.confirm_again")
+                    .getString()
+                    : Component.translatable(
+                    "gui.futureshops.market.action.cancel.button")
+                    .getString();
+            int width = Math.max(90, font.width(label) + 14);
+            actionButton(graphics, mouseX, mouseY,
+                    new MarketRectangle(panel.right() - padding - width,
+                            y, width, rowHeight),
+                    label, true, true, "auction_cancel",
+                    card.identity(), true,
+                    () -> armOrRun(armKey,
+                            () -> sendAuctionCancel(card)));
+        }
+        if (bidEditorOpen && !own && acceptsBids) {
+            renderBidEditorRow(graphics, panel, padding, card,
+                    y - rowHeight - 6, mouseX, mouseY);
+        }
+    }
+
+    private void renderBidEditorRow(
+            GuiGraphics graphics,
+            MarketRectangle panel,
+            int padding,
+            MarketPageCard card,
+            int y,
+            int mouseX,
+            int mouseY
+    ) {
+        int x = panel.x() + padding;
+        bidAmountBox = ensureOverlayBox(bidAmountBox, true, 20);
+        button(graphics, mouseX, mouseY,
+                new MarketRectangle(x, y, 16, 16), "−", true,
+                () -> adjustBidAmount(card, -1L));
+        positionBox(bidAmountBox, x + 20, y + 1, 72);
+        bidAmountBox.render(graphics, mouseX, mouseY, 0.0F);
+        button(graphics, mouseX, mouseY,
+                new MarketRectangle(x + 96, y, 16, 16), "+", true,
+                () -> adjustBidAmount(card, 1L));
+        // Not a retry host — the always-visible bid toggle button hosts the retry pair.
+        actionButton(graphics, mouseX, mouseY,
+                new MarketRectangle(x + 118, y, 62, 16),
+                Component.translatable(
+                        "gui.futureshops.market.action.bid.confirm")
+                        .getString(),
+                true, false, "auction_bid", card.identity(), false,
+                () -> sendAuctionBid(card));
+        String minimum = Component.translatable(
+                "gui.futureshops.market.action.bid.minimum",
+                ShopUiUtil.formatMinorUnits(card.secondaryMinor()))
+                .getString();
+        graphics.drawString(font,
+                font.plainSubstrByWidth(minimum,
+                        Math.max(8, panel.right() - padding - x - 186)),
+                x + 186, y + 4, theme.textMuted(), false);
+    }
+
+    private void renderBazaarProductActions(
+            GuiGraphics graphics,
+            MarketRectangle panel,
+            int padding,
+            MarketPageCard card,
+            int mouseX,
+            int mouseY
+    ) {
+        String identity = card.identity();
+        long ask = card.primaryMinor();
+        long bid = card.secondaryMinor();
+        int x = panel.x() + padding;
+        int limitY = panel.bottom() - padding - 16 + 2;
+        int instantY = limitY - 20;
+        int quantityY = instantY - 20;
+        String quantityLabel = Component.translatable(
+                "gui.futureshops.market.action.quantity").getString();
+        graphics.drawString(font, quantityLabel, x, quantityY + 4,
+                theme.textMuted(), false);
+        int quantityX = x + Math.min(76, font.width(quantityLabel) + 8);
+        bazaarQuantityBox = ensureOverlayBox(bazaarQuantityBox, false, 7);
+        if (bazaarQuantityBox.getValue().isEmpty()) {
+            bazaarQuantityBox.setValue("1");
+        }
+        button(graphics, mouseX, mouseY,
+                new MarketRectangle(quantityX, quantityY, 16, 16), "−",
+                true, () -> adjustBazaarQuantity(-1));
+        positionBox(bazaarQuantityBox, quantityX + 20, quantityY + 1, 48);
+        bazaarQuantityBox.render(graphics, mouseX, mouseY, 0.0F);
+        button(graphics, mouseX, mouseY,
+                new MarketRectangle(quantityX + 72, quantityY, 16, 16),
+                "+", true, () -> adjustBazaarQuantity(1));
+        int quantity = parseBazaarQuantity();
+        if (quantity > 0 && ask > 0L) {
+            try {
+                String total = Component.translatable(
+                        "gui.futureshops.market.action.total",
+                        ShopUiUtil.formatMinorUnits(Math.multiplyExact(
+                                ask, (long) quantity))).getString();
+                graphics.drawString(font,
+                        font.plainSubstrByWidth(total, Math.max(8,
+                                panel.right() - padding - quantityX - 96)),
+                        quantityX + 96, quantityY + 4,
+                        theme.textMuted(), false);
+            } catch (ArithmeticException ignored) {
+                // Total would overflow — the server rejects it anyway.
+            }
+        }
+        // All four order buttons share the bazaar_order family+subject; only the first one
+        // hosts the timed-out [Retry][✕] pair (the retry resends whatever the original
+        // order was), the siblings just render the shared busy state.
+        actionButton(graphics, mouseX, mouseY,
+                new MarketRectangle(x, instantY, 82, 16),
+                Component.translatable(
+                        "gui.futureshops.market.action.instant_buy")
+                        .getString(),
+                ask > 0L, false, "bazaar_order", identity, true,
+                () -> submitBazaarInstant(card, BazaarOrderSide.BUY, ask));
+        actionButton(graphics, mouseX, mouseY,
+                new MarketRectangle(x + 88, instantY, 82, 16),
+                Component.translatable(
+                        "gui.futureshops.market.action.instant_sell")
+                        .getString(),
+                bid > 0L, false, "bazaar_order", identity, false,
+                () -> submitBazaarInstant(card, BazaarOrderSide.SELL, bid));
+        String limitLabel = Component.translatable(
+                "gui.futureshops.market.action.limit_price").getString();
+        graphics.drawString(font, limitLabel, x, limitY + 4,
+                theme.textMuted(), false);
+        int limitX = x + Math.min(76, font.width(limitLabel) + 8);
+        bazaarLimitPriceBox = ensureOverlayBox(
+                bazaarLimitPriceBox, true, 20);
+        positionBox(bazaarLimitPriceBox, limitX, limitY + 1, 62);
+        bazaarLimitPriceBox.render(graphics, mouseX, mouseY, 0.0F);
+        actionButton(graphics, mouseX, mouseY,
+                new MarketRectangle(limitX + 68, limitY, 66, 16),
+                Component.translatable(
+                        "gui.futureshops.market.action.limit_buy")
+                        .getString(),
+                true, false, "bazaar_order", identity, false,
+                () -> submitBazaarLimit(card, BazaarOrderSide.BUY));
+        actionButton(graphics, mouseX, mouseY,
+                new MarketRectangle(limitX + 140, limitY, 66, 16),
+                Component.translatable(
+                        "gui.futureshops.market.action.limit_sell")
+                        .getString(),
+                true, false, "bazaar_order", identity, false,
+                () -> submitBazaarLimit(card, BazaarOrderSide.SELL));
+    }
+
+    private void toggleBidEditor(MarketPageCard card) {
+        bidEditorOpen = !bidEditorOpen;
+        if (bidEditorOpen) {
+            bidAmountBox = ensureOverlayBox(bidAmountBox, true, 20);
+            bidAmountBox.setValue(EconomyCommandUtil.formatMinorUnits(
+                    card.secondaryMinor(),
+                    ShopClientState.getCurrencyDecimals()));
+        }
+    }
+
+    private void adjustBidAmount(MarketPageCard card, long sign) {
+        if (bidAmountBox == null) {
+            return;
+        }
+        long step = card.secondaryMinor() - card.primaryMinor();
+        if (step <= 0L) {
+            step = wholeCurrencyUnitMinor();
+        }
+        long current = parseMoneyBox(bidAmountBox);
+        if (current < 0L) {
+            current = card.secondaryMinor();
+        }
+        long next = Math.max(card.secondaryMinor(),
+                Math.min(C2SAuctionCreatePacket.MAX_MINOR,
+                        current + sign * step));
+        bidAmountBox.setValue(EconomyCommandUtil.formatMinorUnits(
+                next, ShopClientState.getCurrencyDecimals()));
+    }
+
+    private static long wholeCurrencyUnitMinor() {
+        long unit = 1L;
+        for (int index = 0;
+             index < ShopClientState.getCurrencyDecimals(); index++) {
+            unit = Math.multiplyExact(unit, 10L);
+        }
+        return unit;
+    }
+
+    private void adjustBazaarQuantity(int sign) {
+        if (bazaarQuantityBox == null) {
+            return;
+        }
+        int step = hasShiftDown() ? 16 : 1;
+        int current = parseBazaarQuantity();
+        if (current < 1) {
+            current = 1;
+        }
+        int next = Math.max(1,
+                Math.min(C2SBazaarOrderPacket.MAX_QUANTITY,
+                        current + sign * step));
+        bazaarQuantityBox.setValue(Integer.toString(next));
+    }
+
+    private int parseBazaarQuantity() {
+        if (bazaarQuantityBox == null) {
+            return -1;
+        }
+        try {
+            int value = Integer.parseInt(
+                    bazaarQuantityBox.getValue().trim());
+            return value >= 1 && value <= C2SBazaarOrderPacket.MAX_QUANTITY
+                    ? value : -1;
+        } catch (NumberFormatException ignored) {
+            return -1;
+        }
+    }
+
+    private static long parseMoneyBox(EditBox box) {
+        if (box == null) {
+            return -1L;
+        }
+        try {
+            return EconomyCommandUtil.parseAmountToMinorUnits(
+                    box.getValue(),
+                    ShopClientState.getCurrencyDecimals());
+        } catch (IllegalArgumentException ignored) {
+            return -1L;
+        }
+    }
+
+    private void sendAuctionBid(MarketPageCard card) {
+        UUID listingId = parseUuid(card.identity());
+        long amountMinor = parseMoneyBox(bidAmountBox);
+        if (listingId == null || amountMinor <= 0L) {
+            showActionStatus(Component.translatable(
+                    "gui.futureshops.market.action.invalid_amount"),
+                    false);
+            return;
+        }
+        sendMarketAction("auction_bid", card.identity(),
+                requestId -> new C2SAuctionBidPacket(requestId,
+                        packet.routeNonce(), listingId,
+                        card.revision(), amountMinor));
+    }
+
+    private void sendAuctionBuyNow(MarketPageCard card) {
+        UUID listingId = parseUuid(card.identity());
+        if (listingId == null) {
+            return;
+        }
+        sendMarketAction("auction_buy_now", card.identity(),
+                requestId -> new C2SAuctionBuyNowPacket(requestId,
+                        packet.routeNonce(), listingId,
+                        card.revision()));
+    }
+
+    private void sendAuctionCancel(MarketPageCard card) {
+        UUID listingId = parseUuid(card.identity());
+        if (listingId == null) {
+            return;
+        }
+        sendMarketAction("auction_cancel", card.identity(),
+                requestId -> new C2SAuctionCancelPacket(requestId,
+                        packet.routeNonce(), listingId,
+                        card.revision()));
+    }
+
+    private void sendBazaarCancel(MarketPageCard card) {
+        UUID orderId = parseUuid(card.identity());
+        if (orderId == null) {
+            return;
+        }
+        sendMarketAction("bazaar_cancel", card.identity(),
+                requestId -> new C2SBazaarCancelPacket(requestId,
+                        packet.routeNonce(), orderId, card.revision()));
+    }
+
+    /**
+     * Instant orders use IMMEDIATE_OR_CANCEL with the currently displayed book price as the
+     * worst allowed execution price — the plan §9 slippage bound: the player never pays more
+     * (or receives less) per unit than the price shown when the button was pressed.
+     */
+    private void submitBazaarInstant(
+            MarketPageCard card,
+            BazaarOrderSide side,
+            long boundMinor
+    ) {
+        int quantity = parseBazaarQuantity();
+        if (quantity < 1) {
+            showActionStatus(Component.translatable(
+                    "gui.futureshops.market.action.invalid_quantity"),
+                    false);
+            return;
+        }
+        if (side == BazaarOrderSide.BUY) {
+            requirePaymentSource(paymentAmountDetail(boundMinor, quantity),
+                    source -> sendBazaarOrder(card, side,
+                            BazaarOrderType.INSTANT,
+                            BazaarTimeInForce.IMMEDIATE_OR_CANCEL,
+                            boundMinor, quantity, source));
+            return;
+        }
+        sendBazaarOrder(card, side, BazaarOrderType.INSTANT,
+                BazaarTimeInForce.IMMEDIATE_OR_CANCEL, boundMinor,
+                quantity, PaymentSource.WALLET);
+    }
+
+    private void submitBazaarLimit(
+            MarketPageCard card,
+            BazaarOrderSide side
+    ) {
+        int quantity = parseBazaarQuantity();
+        if (quantity < 1) {
+            showActionStatus(Component.translatable(
+                    "gui.futureshops.market.action.invalid_quantity"),
+                    false);
+            return;
+        }
+        long priceMinor = parseMoneyBox(bazaarLimitPriceBox);
+        if (priceMinor <= 0L) {
+            showActionStatus(Component.translatable(
+                    "gui.futureshops.market.action.invalid_amount"),
+                    false);
+            return;
+        }
+        if (side == BazaarOrderSide.BUY) {
+            requirePaymentSource(paymentAmountDetail(priceMinor, quantity),
+                    source -> sendBazaarOrder(card, side,
+                            BazaarOrderType.LIMIT,
+                            BazaarTimeInForce.GOOD_UNTIL_CANCELLED,
+                            priceMinor, quantity, source));
+            return;
+        }
+        sendBazaarOrder(card, side, BazaarOrderType.LIMIT,
+                BazaarTimeInForce.GOOD_UNTIL_CANCELLED, priceMinor,
+                quantity, PaymentSource.WALLET);
+    }
+
+    private Component paymentAmountDetail(long priceMinor, int quantity) {
+        try {
+            return Component.translatable(
+                    "gui.futureshops.market.action.payment.detail",
+                    ShopUiUtil.formatMinorUnits(Math.multiplyExact(
+                            priceMinor, (long) quantity)));
+        } catch (ArithmeticException ignored) {
+            return Component.translatable(
+                    "gui.futureshops.market.action.payment.detail",
+                    ShopUiUtil.formatMinorUnits(priceMinor));
+        }
+    }
+
+    private void sendBazaarOrder(
+            MarketPageCard card,
+            BazaarOrderSide side,
+            BazaarOrderType type,
+            BazaarTimeInForce timeInForce,
+            long priceMinor,
+            int quantity,
+            PaymentSource source
+    ) {
+        String productId = bazaarProductId(card.identity());
+        long version = bazaarProductVersion(card.identity());
+        if (productId == null || version < 0L) {
+            showActionStatus(Component.translatable(
+                    "gui.futureshops.market.action.invalid_input"),
+                    false);
+            return;
+        }
+        sendMarketAction("bazaar_order", card.identity(),
+                requestId -> new C2SBazaarOrderPacket(requestId,
+                        packet.routeNonce(), productId, version,
+                        side.name(), type.name(), timeInForce.name(),
+                        priceMinor, quantity, 0L, source.wire()))
+                .ifPresent(requestId ->
+                        trackPaymentSource(requestId, source));
+    }
+
+    /** Associates a sent request with the payment source it used (finding: promote on APPLIED). */
+    private static void trackPaymentSource(
+            UUID requestId,
+            PaymentSource source
+    ) {
+        PENDING_PAYMENT_SOURCES.put(requestId, source);
+        while (PENDING_PAYMENT_SOURCES.size()
+                > MAXIMUM_TRACKED_PAYMENT_SOURCES) {
+            PENDING_PAYMENT_SOURCES.remove(
+                    PENDING_PAYMENT_SOURCES.keySet().iterator().next());
+        }
+    }
+
+    /**
+     * Shared send path for every market mutation (plan §12): fresh request UUID, the screen's
+     * route nonce inside the factory-built packet, pending registration for the busy state,
+     * and a local status line instead of a crash when client-side validation rejects input.
+     * The built packet is kept on the pending entry as a resend closure so a timed-out request
+     * can be retried with the SAME request UUID (the server replays the stored result) instead
+     * of minting a second, economically distinct request. Returns the request UUID on send.
+     */
+    private Optional<UUID> sendMarketAction(
+            String actionKey,
+            String subjectId,
+            java.util.function.Function<UUID, Object> factory
+    ) {
+        UUID requestId = UUID.randomUUID();
+        final Object message;
+        try {
+            message = factory.apply(requestId);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            showActionStatus(Component.translatable(
+                    "gui.futureshops.market.action.invalid_input"),
+                    false);
+            return Optional.empty();
+        }
+        Runnable resend =
+                () -> ShopPackets.CHANNEL.sendToServer(message);
+        if (!PENDING_ACTIONS.begin(requestId, actionKey, subjectId,
+                Util.getMillis(), resend)) {
+            showActionStatus(Component.translatable(
+                    "gui.futureshops.market.action.busy"), false);
+            return Optional.empty();
+        }
+        resend.run();
+        return Optional.of(requestId);
+    }
+
+    /**
+     * Plan §6 payment-source gate for money-committing Bazaar buys: the first commitment per
+     * session asks Wallet vs Inventory Cash. The choice only becomes the remembered session
+     * default once a request that used it returns APPLIED (see
+     * {@link #applyActionResponse}) — a source the server denied is filtered out here, so
+     * the prompt reopens instead of silently re-sending the denied source. Auction bids and
+     * buy-now never pass through here — auction escrow is wallet-only in this release.
+     */
+    private void requirePaymentSource(
+            Component detail,
+            java.util.function.Consumer<PaymentSource> action
+    ) {
+        Optional<PaymentSource> remembered = rememberedPaymentSource()
+                .filter(source ->
+                        !DENIED_PAYMENT_SOURCES.contains(source));
+        if (remembered.isPresent()) {
+            action.accept(remembered.orElseThrow());
+            return;
+        }
+        paymentPromptAction = action;
+        paymentPromptDetail = detail;
+    }
+
+    private void closePaymentPrompt() {
+        paymentPromptAction = null;
+        paymentPromptDetail = null;
+    }
+
+    private void choosePaymentSource(PaymentSource source) {
+        if (DENIED_PAYMENT_SOURCES.contains(source)) {
+            return;
+        }
+        java.util.function.Consumer<PaymentSource> action =
+                paymentPromptAction;
+        closePaymentPrompt();
+        if (action != null) {
+            // Deliberately NOT remembered here — only an APPLIED response promotes the
+            // source to the session default.
+            action.accept(source);
+        }
+    }
+
+    private void renderPaymentPrompt(
+            GuiGraphics graphics,
+            int mouseX,
+            int mouseY
+    ) {
+        if (paymentPromptAction == null) {
+            return;
+        }
+        MarketRectangle window = layout.window();
+        registerHit(window, this::closePaymentPrompt);
+        int width = Math.min(236, Math.max(120, window.width() - 8));
+        int height = Math.min(92, Math.max(60, window.height() - 8));
+        MarketRectangle panel = new MarketRectangle(
+                window.x() + (window.width() - width) / 2,
+                window.y() + (window.height() - height) / 2,
+                width, height);
+        graphics.fill(panel.x(), panel.y(), panel.right(),
+                panel.bottom(), SURFACE_RAISED);
+        border(graphics, panel, theme.activeBorder());
+        graphics.fill(panel.x(), panel.y(), panel.right(),
+                panel.y() + 2, theme.accent());
+        registerHit(panel, () -> {
+        });
+        graphics.drawString(font,
+                font.plainSubstrByWidth(Component.translatable(
+                        "gui.futureshops.market.action.payment.title")
+                        .getString(), panel.width() - 30),
+                panel.x() + 8, panel.y() + 7, theme.textStrong(), false);
+        button(graphics, mouseX, mouseY,
+                new MarketRectangle(panel.right() - 18, panel.y() + 4,
+                        14, 12), "✕", true, this::closePaymentPrompt);
+        int y = panel.y() + 22;
+        if (paymentPromptDetail != null) {
+            graphics.drawString(font,
+                    font.plainSubstrByWidth(
+                            paymentPromptDetail.getString(),
+                            panel.width() - 16),
+                    panel.x() + 8, y, theme.textMuted(), false);
+            y += 12;
+        }
+        if (ShopClientState.isCurrentBalanceKnown()) {
+            graphics.drawString(font,
+                    font.plainSubstrByWidth(Component.translatable(
+                            "gui.futureshops.market.action.payment.balance",
+                            ShopUiUtil.formatMinorUnits(ShopClientState
+                                    .getCurrentBalanceMinorUnits()))
+                            .getString(), panel.width() - 16),
+                    panel.x() + 8, y, theme.textMuted(), false);
+        }
+        int buttonY = panel.bottom() - 22;
+        int buttonWidth = (panel.width() - 24) / 2;
+        button(graphics, mouseX, mouseY,
+                new MarketRectangle(panel.x() + 8, buttonY,
+                        buttonWidth, 16),
+                Component.translatable(
+                        "gui.futureshops.market.action.payment.wallet")
+                        .getString(), true,
+                () -> choosePaymentSource(PaymentSource.WALLET));
+        boolean physicalDenied = DENIED_PAYMENT_SOURCES.contains(
+                PaymentSource.PHYSICAL);
+        button(graphics, mouseX, mouseY,
+                new MarketRectangle(panel.x() + 16 + buttonWidth,
+                        buttonY, buttonWidth, 16),
+                Component.translatable(physicalDenied
+                        ? "gui.futureshops.market.action.payment.physical_unavailable"
+                        : "gui.futureshops.market.action.payment.physical")
+                        .getString(), !physicalDenied,
+                () -> choosePaymentSource(PaymentSource.PHYSICAL));
+    }
+
+    // ── Create-listing wizard (plan §8 listing creation) ────────────
+
+    private boolean showCreateListingButton() {
+        return module == MarketModule.AUCTION_HOUSE
+                && ("browse".equals(packet.view())
+                || "mine".equals(packet.view()))
+                && canOpenView(packet.view())
+                && minecraft != null && minecraft.player != null;
+    }
+
+    private void openCreateWizard() {
+        createWizardOpen = true;
+        createSelectedSlot = -1;
+        createSelectedFingerprint = "";
+        createType = AuctionListingType.TIMED_AUCTION;
+        createDurationSeconds = DEFAULT_CREATE_DURATION_SECONDS;
+        createStartBidBox = ensureOverlayBox(createStartBidBox, true, 20);
+        createStartBidBox.setValue("");
+        createBuyoutBox = ensureOverlayBox(createBuyoutBox, true, 20);
+        createBuyoutBox.setValue("");
+        bidEditorOpen = false;
+        closePaymentPrompt();
+    }
+
+    private void closeCreateWizard() {
+        createWizardOpen = false;
+        createSelectedSlot = -1;
+        createSelectedFingerprint = "";
+    }
+
+    private void renderCreateWizard(
+            GuiGraphics graphics,
+            int mouseX,
+            int mouseY
+    ) {
+        if (!createWizardOpen) {
+            return;
+        }
+        MarketRectangle content = layout.content();
+        if (content.width() < 40 || content.height() < 40) {
+            return;
+        }
+        registerHit(content, () -> {
+        });
+        graphics.fill(content.x(), content.y(), content.right(),
+                content.bottom(), SURFACE);
+        border(graphics, content, theme.activeBorder());
+        graphics.fill(content.x(), content.y(), content.right(),
+                content.y() + 2, theme.accent());
+        int padding = Math.max(6, layout.padding());
+        int x = content.x() + padding;
+        int y = content.y() + padding + 2;
+        graphics.drawString(font,
+                font.plainSubstrByWidth(Component.translatable(
+                        "gui.futureshops.market.action.create.title")
+                        .getString(), content.width() - padding * 2 - 20),
+                x, y, theme.textStrong(), false);
+        button(graphics, mouseX, mouseY,
+                new MarketRectangle(content.right() - padding - 14,
+                        content.y() + 4, 14, 12), "✕", true,
+                this::closeCreateWizard);
+        y += 12;
+        int cell = content.width() >= 176 + padding * 2 ? 18 : 16;
+        int gridWidth = cell * 9;
+        var player = minecraft == null ? null : minecraft.player;
+        if (player != null) {
+            graphics.drawString(font,
+                    font.plainSubstrByWidth(Component.translatable(
+                            "gui.futureshops.market.action.create.select_item")
+                            .getString(), content.width() - padding * 2),
+                    x, y, theme.textMuted(), false);
+            y += 11;
+            for (int slot = 0; slot < PLAYER_MAIN_INVENTORY_SLOTS;
+                 slot++) {
+                int column = slot % 9;
+                int row = slot / 9;
+                MarketRectangle cellRect = new MarketRectangle(
+                        x + column * cell, y + row * cell,
+                        cell - 1, cell - 1);
+                boolean selected = createSelectedSlot == slot;
+                graphics.fill(cellRect.x(), cellRect.y(),
+                        cellRect.right(), cellRect.bottom(),
+                        selected ? theme.selectedSurface()
+                                : SURFACE_RAISED);
+                if (selected) {
+                    border(graphics, cellRect, theme.accent());
+                }
+                ItemStack stack =
+                        player.getInventory().items.get(slot);
+                if (!stack.isEmpty()) {
+                    graphics.renderItem(stack, cellRect.x() + 1,
+                            cellRect.y() + 1);
+                    graphics.renderItemDecorations(font, stack,
+                            cellRect.x() + 1, cellRect.y() + 1);
+                    int slotIndex = slot;
+                    registerHit(cellRect,
+                            () -> selectCreateSlot(slotIndex));
+                }
+            }
+            y += cell * 4 + 4;
+            ItemStack selectedStack = createSelectedSlot >= 0
+                    && createSelectedSlot < PLAYER_MAIN_INVENTORY_SLOTS
+                    ? player.getInventory().items.get(createSelectedSlot)
+                    : ItemStack.EMPTY;
+            String selectedText = selectedStack.isEmpty()
+                    ? Component.translatable(
+                    "gui.futureshops.market.action.create.none_selected")
+                    .getString()
+                    : Component.translatable(
+                    "gui.futureshops.market.action.create.selected",
+                    selectedStack.getHoverName().getString(),
+                    selectedStack.getCount()).getString();
+            graphics.drawString(font,
+                    font.plainSubstrByWidth(selectedText,
+                            content.width() - padding * 2),
+                    x, y, selectedStack.isEmpty()
+                            ? theme.semanticWarning()
+                            : theme.textStrong(), false);
+            y += 13;
+        }
+        int formWidth = Math.max(gridWidth,
+                content.width() - padding * 2);
+        int typeWidth = Math.max(40, (formWidth - 8) / 3);
+        AuctionListingType[] types = AuctionListingType.values();
+        for (int index = 0; index < types.length; index++) {
+            AuctionListingType type = types[index];
+            AuctionListingType target = type;
+            button(graphics, mouseX, mouseY,
+                    new MarketRectangle(x + index * (typeWidth + 4), y,
+                            typeWidth, 14),
+                    listingTypeLabel(type),
+                    createType != type,
+                    () -> selectCreateType(target));
+            if (createType == type) {
+                graphics.fill(x + index * (typeWidth + 4),
+                        y + 14, x + index * (typeWidth + 4) + typeWidth,
+                        y + 16, theme.accent());
+            }
+        }
+        y += 20;
+        createStartBidBox = ensureOverlayBox(createStartBidBox, true, 20);
+        createBuyoutBox = ensureOverlayBox(createBuyoutBox, true, 20);
+        if (createType != AuctionListingType.BUY_NOW) {
+            String label = Component.translatable(
+                    "gui.futureshops.market.action.create.start_bid")
+                    .getString();
+            graphics.drawString(font, label, x, y + 4,
+                    theme.textMuted(), false);
+            positionBox(createStartBidBox,
+                    x + Math.min(96, font.width(label) + 8), y + 1, 64);
+            createStartBidBox.render(graphics, mouseX, mouseY, 0.0F);
+            y += 18;
+        }
+        if (createType != AuctionListingType.TIMED_AUCTION) {
+            String label = Component.translatable(
+                    "gui.futureshops.market.action.create.buyout")
+                    .getString();
+            graphics.drawString(font, label, x, y + 4,
+                    theme.textMuted(), false);
+            positionBox(createBuyoutBox,
+                    x + Math.min(96, font.width(label) + 8), y + 1, 64);
+            createBuyoutBox.render(graphics, mouseX, mouseY, 0.0F);
+            y += 18;
+        }
+        String durationLabel = Component.translatable(
+                "gui.futureshops.market.action.create.duration")
+                .getString();
+        graphics.drawString(font, durationLabel, x, y + 4,
+                theme.textMuted(), false);
+        int durationX = x + Math.min(96, font.width(durationLabel) + 8);
+        if (createType == AuctionListingType.BUY_NOW) {
+            button(graphics, mouseX, mouseY,
+                    new MarketRectangle(durationX, y, 22, 14),
+                    Component.translatable(
+                            "gui.futureshops.market.action.create.duration.none")
+                            .getString(),
+                    createDurationSeconds != 0L,
+                    () -> createDurationSeconds = 0L);
+            if (createDurationSeconds == 0L) {
+                graphics.fill(durationX, y + 14, durationX + 22,
+                        y + 16, theme.accent());
+            }
+            durationX += 26;
+        }
+        for (int index = 0; index < CREATE_DURATION_SECONDS.length;
+             index++) {
+            long seconds = CREATE_DURATION_SECONDS[index];
+            int presetX = durationX + index * 28;
+            button(graphics, mouseX, mouseY,
+                    new MarketRectangle(presetX, y, 24, 14),
+                    Component.translatable(
+                            "gui.futureshops.market.action.create.duration."
+                                    + CREATE_DURATION_KEYS[index])
+                            .getString(),
+                    createDurationSeconds != seconds,
+                    () -> createDurationSeconds = seconds);
+            if (createDurationSeconds == seconds) {
+                graphics.fill(presetX, y + 14, presetX + 24, y + 16,
+                        theme.accent());
+            }
+        }
+        y += 20;
+        graphics.drawString(font,
+                font.plainSubstrByWidth(Component.translatable(
+                        "gui.futureshops.market.action.create.fee_notice")
+                        .getString(), content.width() - padding * 2),
+                x, y, theme.textMuted(), false);
+        actionButton(graphics, mouseX, mouseY,
+                new MarketRectangle(content.right() - padding - 88,
+                        content.bottom() - padding - 16, 88, 16),
+                Component.translatable(
+                        "gui.futureshops.market.action.create.submit")
+                        .getString(),
+                true, false, "auction_create", "", true,
+                this::submitCreateListing);
+    }
+
+    /**
+     * Slot selection for the create wizard captures the stack fingerprint AT CLICK TIME
+     * (plan §8 step 7): the send site reuses this value untouched, so a slot whose content
+     * shifts before submit is rejected server-side instead of listing the wrong item.
+     */
+    private void selectCreateSlot(int slot) {
+        var player = minecraft == null ? null : minecraft.player;
+        if (player == null || slot < 0
+                || slot >= PLAYER_MAIN_INVENTORY_SLOTS) {
+            return;
+        }
+        ItemStack stack = player.getInventory().items.get(slot);
+        if (stack.isEmpty()) {
+            return;
+        }
+        createSelectedSlot = slot;
+        createSelectedFingerprint =
+                C2SAuctionCreatePacket.fingerprintOf(stack);
+    }
+
+    private void selectCreateType(AuctionListingType type) {
+        createType = type;
+        if (type != AuctionListingType.BUY_NOW
+                && createDurationSeconds == 0L) {
+            createDurationSeconds = DEFAULT_CREATE_DURATION_SECONDS;
+        }
+    }
+
+    private static String listingTypeLabel(AuctionListingType type) {
+        String suffix = switch (type) {
+            case BUY_NOW -> "buy_now";
+            case TIMED_AUCTION -> "timed_auction";
+            case AUCTION_WITH_BUYOUT -> "auction_with_buyout";
+        };
+        return Component.translatable(
+                "gui.futureshops.market.action.create.type." + suffix)
+                .getString();
+    }
+
+    private void submitCreateListing() {
+        var player = minecraft == null ? null : minecraft.player;
+        if (player == null) {
+            return;
+        }
+        if (createSelectedSlot < 0
+                || createSelectedSlot >= PLAYER_MAIN_INVENTORY_SLOTS
+                || createSelectedFingerprint.isEmpty()) {
+            showActionStatus(Component.translatable(
+                    "gui.futureshops.market.action.create.invalid_item"),
+                    false);
+            return;
+        }
+        ItemStack stack =
+                player.getInventory().items.get(createSelectedSlot);
+        if (stack.isEmpty()) {
+            showActionStatus(Component.translatable(
+                    "gui.futureshops.market.action.create.invalid_item"),
+                    false);
+            return;
+        }
+        long startingBidMinor = 0L;
+        if (createType != AuctionListingType.BUY_NOW) {
+            startingBidMinor = parseMoneyBox(createStartBidBox);
+            if (startingBidMinor <= 0L) {
+                showActionStatus(Component.translatable(
+                        "gui.futureshops.market.action.create.invalid_price"),
+                        false);
+                return;
+            }
+        }
+        long buyoutMinor = 0L;
+        if (createType != AuctionListingType.TIMED_AUCTION) {
+            buyoutMinor = parseMoneyBox(createBuyoutBox);
+            if (buyoutMinor <= 0L) {
+                showActionStatus(Component.translatable(
+                        "gui.futureshops.market.action.create.invalid_price"),
+                        false);
+                return;
+            }
+        }
+        long durationSeconds = createType == AuctionListingType.BUY_NOW
+                ? createDurationSeconds
+                : createDurationSeconds > 0L ? createDurationSeconds
+                : DEFAULT_CREATE_DURATION_SECONDS;
+        int slot = createSelectedSlot;
+        String listingType = createType.name();
+        long startMinor = startingBidMinor;
+        long buyout = buyoutMinor;
+        int quantity = stack.getCount();
+        // Selection-time fingerprint, NOT recomputed here — see selectCreateSlot.
+        String fingerprint = createSelectedFingerprint;
+        sendMarketAction("auction_create", "",
+                requestId -> new C2SAuctionCreatePacket(requestId,
+                        packet.routeNonce(), slot, listingType,
+                        startMinor, buyout, durationSeconds, quantity,
+                        fingerprint));
+    }
+
+    // ── Action-surface plumbing ─────────────────────────────────────
+
+    private void showActionStatus(Component message, boolean success) {
+        actionStatus = message;
+        actionStatusSuccess = success;
+        actionStatusAtMillis = Util.getMillis();
+    }
+
+    private void renderActionStatus(GuiGraphics graphics) {
+        if (actionStatus == null || Util.getMillis()
+                - actionStatusAtMillis > ACTION_STATUS_VISIBLE_MILLIS) {
+            return;
+        }
+        MarketRectangle content = layout.content();
+        if (content.width() < 24 || content.height() < 24) {
+            return;
+        }
+        MarketRectangle strip = new MarketRectangle(content.x(),
+                content.bottom() - 14, content.width(), 14);
+        graphics.fill(strip.x(), strip.y(), strip.right(),
+                strip.bottom(), SURFACE_RAISED);
+        graphics.fill(strip.x(), strip.y(), strip.right(),
+                strip.y() + 1, BORDER);
+        graphics.drawString(font,
+                font.plainSubstrByWidth(actionStatus.getString(),
+                        Math.max(8, strip.width() - 12)),
+                strip.x() + 6, strip.y() + 3,
+                actionStatusSuccess ? theme.semanticSuccess()
+                        : theme.semanticDanger(), false);
+    }
+
+    private boolean armed(String key) {
+        return key.equals(armedConfirmKey)
+                && Util.getMillis() - armedConfirmAtMillis
+                <= ARMED_CONFIRM_WINDOW_MILLIS;
+    }
+
+    /** Destructive actions require a second click on the same control within the window. */
+    private void armOrRun(String key, Runnable action) {
+        if (armed(key)) {
+            armedConfirmKey = "";
+            action.run();
+            return;
+        }
+        armedConfirmKey = key;
+        armedConfirmAtMillis = Util.getMillis();
+    }
+
+    private static String busyLabel(String label, boolean busy) {
+        return busy ? label + "…" : label;
+    }
+
+    /**
+     * Action-surface control honoring the pending tracker. While the family+subject request
+     * is in flight the control renders disabled with a busy label; once it TIMES OUT, the
+     * retry-host control turns into an explicit [Retry] that resends the SAME request UUID
+     * (the server replays the stored result idempotently) plus a ✕ give-up affordance that
+     * abandons the entry together with a fresh refresh. A fresh request UUID for this
+     * family+subject only becomes possible after that explicit give-up — re-enabling the
+     * normal send while the original request may still be executing would let a retry mint
+     * a second, economically distinct request. After a retry the same rules re-apply.
+     */
+    private void actionButton(
+            GuiGraphics graphics,
+            int mouseX,
+            int mouseY,
+            MarketRectangle rectangle,
+            String label,
+            boolean enabled,
+            boolean danger,
+            String actionKey,
+            String subjectId,
+            boolean retryHost,
+            Runnable send
+    ) {
+        Optional<MarketPendingActionTracker.PendingAction> timedOut =
+                retryHost ? PENDING_ACTIONS.timedOut(actionKey, subjectId)
+                        : Optional.empty();
+        if (timedOut.isPresent()) {
+            UUID requestId = timedOut.orElseThrow().requestId();
+            int giveUpWidth = Math.min(16,
+                    Math.max(10, rectangle.width() / 4));
+            MarketRectangle retry = new MarketRectangle(rectangle.x(),
+                    rectangle.y(),
+                    Math.max(1, rectangle.width() - giveUpWidth - 2),
+                    rectangle.height());
+            MarketRectangle giveUp = new MarketRectangle(
+                    rectangle.right() - giveUpWidth, rectangle.y(),
+                    giveUpWidth, rectangle.height());
+            button(graphics, mouseX, mouseY, retry,
+                    Component.translatable(
+                            "gui.futureshops.market.action.retry")
+                            .getString(), true,
+                    () -> retryPendingAction(requestId));
+            dangerButton(graphics, mouseX, mouseY, giveUp, "✕", true,
+                    () -> giveUpPendingAction(requestId));
+            return;
+        }
+        boolean busy = PENDING_ACTIONS.busy(actionKey, subjectId);
+        String rendered = busyLabel(label, busy);
+        if (danger) {
+            dangerButton(graphics, mouseX, mouseY, rectangle, rendered,
+                    enabled && !busy, send);
+        } else {
+            button(graphics, mouseX, mouseY, rectangle, rendered,
+                    enabled && !busy, send);
+        }
+    }
+
+    /** Resends the ORIGINAL timed-out request — same UUID, fresh timeout window. */
+    private void retryPendingAction(UUID requestId) {
+        PENDING_ACTIONS.retry(requestId, Util.getMillis())
+                .ifPresent(resend -> {
+                    showActionStatus(Component.translatable(
+                            "gui.futureshops.market.action.retry_sent"),
+                            true);
+                    resend.run();
+                });
+    }
+
+    /**
+     * Explicit give-up on a timed-out request: forgets the entry (fresh sends for its
+     * family+subject become possible again) ONLY together with a fresh refresh, because the
+     * abandoned request may have been applied server-side and only fresh state shows what
+     * actually happened. On a detail route the refresh runs through the back-and-reopen
+     * round trip like every other detail refresh.
+     */
+    private void giveUpPendingAction(UUID requestId) {
+        if (!PENDING_ACTIONS.abandon(requestId)) {
+            return;
+        }
+        PENDING_PAYMENT_SOURCES.remove(requestId);
+        showActionStatus(Component.translatable(
+                "gui.futureshops.market.action.gave_up"), false);
+        if (isDetailView() && detailSelection != null
+                && navigation.isOpen()
+                && navigation.historyDepth() > 0) {
+            pendingDetailRefresh = new DetailRefresh(module,
+                    detailSelection.identity(), Util.getMillis());
+            navigateBack();
+            return;
+        }
+        refreshMarketState();
+    }
+
+    private void dangerButton(GuiGraphics graphics, int mouseX,
+                              int mouseY, MarketRectangle rectangle,
+                              String label, boolean enabled,
+                              Runnable action) {
+        boolean hover = enabled && rectangle.contains(mouseX, mouseY);
+        graphics.fill(rectangle.x(), rectangle.y(), rectangle.right(),
+                rectangle.bottom(), hover ? theme.selectedSurface()
+                        : SURFACE_RAISED);
+        border(graphics, rectangle, enabled
+                ? theme.semanticDanger() : BORDER);
+        graphics.drawCenteredString(font,
+                font.plainSubstrByWidth(label,
+                        Math.max(1, rectangle.width() - 4)),
+                rectangle.x() + rectangle.width() / 2,
+                rectangle.y() + Math.max(3,
+                        (rectangle.height() - 8) / 2),
+                enabled ? theme.semanticDanger() : theme.textMuted());
+        if (enabled) {
+            registerHit(rectangle, action);
+        }
+    }
+
+    private EditBox ensureOverlayBox(
+            EditBox existing,
+            boolean decimal,
+            int maxLength
+    ) {
+        if (existing != null) {
+            return existing;
+        }
+        EditBox box = new EditBox(font, 0, 0, 50, 14, Component.empty());
+        box.setMaxLength(maxLength);
+        box.setFilter(decimal
+                ? MarketModuleScreen::isDecimalText
+                : MarketModuleScreen::isIntegerText);
+        return box;
+    }
+
+    private static boolean isDecimalText(String value) {
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if ((character < '0' || character > '9')
+                    && character != '.') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isIntegerText(String value) {
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (character < '0' || character > '9') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static void positionBox(EditBox box, int x, int y,
+                                    int width) {
+        box.setX(x);
+        box.setY(y);
+        box.setWidth(width);
+    }
+
+    /** The overlay edit boxes that are live for the current route + overlay state. */
+    private List<EditBox> activeOverlayBoxes() {
+        List<EditBox> boxes = new ArrayList<>(4);
+        if (paymentPromptAction != null) {
+            return boxes;
+        }
+        if (createWizardOpen) {
+            if (createStartBidBox != null
+                    && createType != AuctionListingType.BUY_NOW) {
+                boxes.add(createStartBidBox);
+            }
+            if (createBuyoutBox != null
+                    && createType != AuctionListingType.TIMED_AUCTION) {
+                boxes.add(createBuyoutBox);
+            }
+            return boxes;
+        }
+        if (isDetailView() && detailSelection != null) {
+            MarketPageCard card = detailSelection.card();
+            if (module == MarketModule.AUCTION_HOUSE
+                    && card.kind() == MarketPageCardKind.AUCTION
+                    && bidEditorOpen && bidAmountBox != null) {
+                boxes.add(bidAmountBox);
+            }
+            if (module == MarketModule.BAZAAR
+                    && card.kind() == MarketPageCardKind.BAZAAR_PRODUCT
+                    && bazaarDetailHasActions(card)) {
+                if (bazaarQuantityBox != null) {
+                    boxes.add(bazaarQuantityBox);
+                }
+                if (bazaarLimitPriceBox != null) {
+                    boxes.add(bazaarLimitPriceBox);
+                }
+            }
+        }
+        return boxes;
+    }
+
+    private EditBox focusedOverlayBox() {
+        for (EditBox box : activeOverlayBoxes()) {
+            if (box.isFocused()) {
+                return box;
+            }
+        }
+        return null;
+    }
+
+    private static UUID parseUuid(String value) {
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    /** Bazaar card identities are {@code productId@version} (see MarketPageProjector). */
+    private static String bazaarProductId(String identity) {
+        int separator = identity.lastIndexOf('@');
+        if (separator <= 0 || separator >= identity.length() - 1) {
+            return null;
+        }
+        return identity.substring(0, separator);
+    }
+
+    private static long bazaarProductVersion(String identity) {
+        int separator = identity.lastIndexOf('@');
+        if (separator <= 0 || separator >= identity.length() - 1) {
+            return -1L;
+        }
+        try {
+            return Long.parseLong(identity.substring(separator + 1));
+        } catch (NumberFormatException ignored) {
+            return -1L;
+        }
+    }
+
+    private static boolean orderCancellable(String state) {
+        return "OPEN".equals(state) || "PARTIALLY_FILLED".equals(state);
     }
 
     private void renderLoading(GuiGraphics graphics,
@@ -1289,10 +2861,15 @@ public final class MarketModuleScreen extends Screen
                 footer.bottom(), SURFACE_RAISED);
         graphics.fill(footer.x(), footer.y(), footer.right(),
                 footer.y() + 1, BORDER);
+        boolean showCreate = showCreateListingButton();
+        int createWidth = showCreate
+                ? Math.min(96, Math.max(56, footer.width() / 5)) : 0;
         if (showNavigation() && layout.categoryDrawer()) {
             int gap = 4;
+            int reserved = createWidth > 0 ? createWidth + gap : 0;
             int buttonWidth = Math.max(54,
-                    (footer.width() - layout.padding() * 2 - gap * 2) / 3);
+                    (footer.width() - layout.padding() * 2 - gap * 2
+                            - reserved) / 3);
             int x = footer.x() + layout.padding();
             renderFooterModuleButton(graphics, mouseX, mouseY, x,
                     footer.y() + 4, buttonWidth, MarketModule.SHOP, true);
@@ -1306,10 +2883,28 @@ public final class MarketModuleScreen extends Screen
                     MarketModule.AUCTION_HOUSE,
                     packet.auctionHouseEnabled());
         } else {
+            String hint = Component.translatable(
+                    "gui.futureshops.market.footer").getString();
             graphics.drawString(font,
-                    Component.translatable("gui.futureshops.market.footer"),
+                    font.plainSubstrByWidth(hint, Math.max(8,
+                            footer.width() - layout.padding() * 2
+                                    - createWidth - 8)),
                     footer.x() + layout.padding(), footer.y() + 8,
                     theme.textMuted(), false);
+        }
+        if (showCreate) {
+            MarketRectangle create = new MarketRectangle(
+                    footer.right() - layout.padding() - createWidth,
+                    footer.y() + 4, createWidth,
+                    Math.max(14, footer.height() - 8));
+            // Retry host only while the wizard is closed — otherwise the wizard's own
+            // submit button hosts the timed-out [Retry][✕] pair.
+            actionButton(graphics, mouseX, mouseY, create,
+                    "+ " + Component.translatable(
+                            "gui.futureshops.market.action.create.button")
+                            .getString(),
+                    !createWizardOpen, false, "auction_create", "",
+                    !createWizardOpen, this::openCreateWizard);
         }
     }
 
@@ -1751,6 +3346,19 @@ public final class MarketModuleScreen extends Screen
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
+            boolean boxConsumed = false;
+            for (EditBox box : activeOverlayBoxes()) {
+                boolean inside = box.mouseClicked(mouseX, mouseY, button);
+                box.setFocused(inside);
+                boxConsumed |= inside;
+            }
+            if (boxConsumed) {
+                if (search != null) {
+                    search.setFocused(false);
+                }
+                setFocused(null);
+                return true;
+            }
             for (int index = hits.size() - 1; index >= 0; index--) {
                 Hit hit = hits.get(index);
                 if (hit.rectangle().contains((int) mouseX, (int) mouseY)) {
@@ -1763,9 +3371,44 @@ public final class MarketModuleScreen extends Screen
     }
 
     @Override
+    public boolean charTyped(char character, int modifiers) {
+        EditBox focused = focusedOverlayBox();
+        if (focused != null && focused.charTyped(character, modifiers)) {
+            return true;
+        }
+        return super.charTyped(character, modifiers);
+    }
+
+    @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        EditBox focusedBox = focusedOverlayBox();
+        if (focusedBox != null) {
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE
+                    || keyCode == GLFW.GLFW_KEY_ENTER
+                    || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+                focusedBox.setFocused(false);
+                return true;
+            }
+            if (focusedBox.keyPressed(keyCode, scanCode, modifiers)
+                    || focusedBox.canConsumeInput()) {
+                return true;
+            }
+        }
         if (keyCode == GLFW.GLFW_KEY_F5) {
             refreshMarketState();
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE
+                && paymentPromptAction != null) {
+            closePaymentPrompt();
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE && createWizardOpen) {
+            closeCreateWizard();
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE && bidEditorOpen) {
+            bidEditorOpen = false;
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_ESCAPE && categoryDrawerOpen) {
@@ -1981,6 +3624,13 @@ public final class MarketModuleScreen extends Screen
             navigation.close();
         }
         ShopClientPacketHandler.releaseMarketNavigation(navigation);
+        // The market session is over: the server session (and its per-request replay
+        // state) dies with it, so the cross-screen action bookkeeping resets too.
+        PENDING_ACTIONS.clear();
+        PENDING_PAYMENT_SOURCES.clear();
+        DENIED_PAYMENT_SOURCES.clear();
+        pendingDetailRefresh = null;
+        actionStatus = null;
     }
 
     @Override
@@ -1989,5 +3639,13 @@ public final class MarketModuleScreen extends Screen
     }
 
     private record Hit(MarketRectangle rectangle, Runnable action) {
+    }
+
+    /** One-shot cross-screen marker for the detail back-and-reopen refresh round trip. */
+    private record DetailRefresh(
+            MarketModule module,
+            String identity,
+            long armedAtMillis
+    ) {
     }
 }

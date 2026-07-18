@@ -72,8 +72,12 @@ class MarketNavigationIntegrationSourceTest {
                 "gui.futureshops.market.all_categories"));
         assertFalse(source.contains("case \"seller\" -> \"Seller\""));
         assertFalse(source.contains("No matching market entries"));
-        assertFalse(source.contains("C2SBazaarOrder"));
-        assertFalse(source.contains("C2SAuctionBid"));
+        // Protocol 45 (plan §8/§9/§12): the shell's action surface sends the auction/bazaar
+        // mutation packets — every send goes through sendMarketAction with a fresh request id
+        // and the current route nonce (the read-only-shell era pinned the opposite here).
+        assertTrue(source.contains("C2SBazaarOrderPacket"));
+        assertTrue(source.contains("C2SAuctionBidPacket"));
+        assertTrue(source.contains("sendMarketAction("));
         assertFalse(source.contains("new MarketRequestGate("));
     }
 

@@ -116,6 +116,20 @@ public final class MarketModuleService {
         return SESSIONS;
     }
 
+    /**
+     * Whether {@code routeNonce} is the player's CURRENT open market route (plan §12: every
+     * mutation carries a session/route nonce; a nonce from a closed or superseded session is
+     * rejected so delayed or forged packets cannot act on a dismissed interface).
+     */
+    public static boolean routeValid(UUID playerId, UUID routeNonce) {
+        if (playerId == null || routeNonce == null) {
+            return false;
+        }
+        return SESSIONS.session(playerId)
+                .filter(session -> session.routeNonce().equals(routeNonce))
+                .isPresent();
+    }
+
     public static void close(UUID playerId) {
         SESSIONS.close(Objects.requireNonNull(playerId, "playerId"));
     }

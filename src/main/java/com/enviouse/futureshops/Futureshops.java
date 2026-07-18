@@ -125,6 +125,24 @@ public class Futureshops {
         DynamicPricingEngine.reset();
         // Initialize stock refresh scheduler (spec §31).
         StockRefreshScheduler.reset();
+        // Market schedulers (auction expiry/settlement; bazaar order expiry) + the bazaar
+        // product catalog (config/futureshops/bazaar/products/*.json → order book lifecycle).
+        com.enviouse.futureshops.server.escrow.runtime.AuctionExpirationScheduler.reset();
+        com.enviouse.futureshops.server.escrow.runtime.BazaarExpirationScheduler.reset();
+        if (escrow.state() == EscrowRuntimeState.READY) {
+            try {
+                // Push the config-derived effective rule snapshot BEFORE the catalog reload so
+                // browse-time config revisions are correct from the first frame (orders also
+                // synchronize lazily, so this is presentation-correctness, not safety).
+                com.enviouse.futureshops.server.escrow.runtime.BazaarActionService
+                        .synchronizeEffectiveRules(escrow);
+                com.enviouse.futureshops.server.market.bazaar.BazaarProductCatalogRuntime
+                        .reload(escrow);
+            } catch (RuntimeException exception) {
+                LOGGER.error("Bazaar product catalog failed to load; bazaar browse stays "
+                        + "empty until reload.", exception);
+            }
+        }
         LOGGER.info("FutureShops server starting.");
     }
 
@@ -147,6 +165,9 @@ public class Futureshops {
         com.enviouse.futureshops.money.CurrencyManager.clear();
         DynamicPricingEngine.reset();
         StockRefreshScheduler.reset();
+        com.enviouse.futureshops.server.escrow.runtime.AuctionExpirationScheduler.reset();
+        com.enviouse.futureshops.server.escrow.runtime.BazaarExpirationScheduler.reset();
+        com.enviouse.futureshops.server.market.bazaar.BazaarProductCatalogRuntime.clear();
         // Wipe in-memory catalog so live stock doesn't leak into the next world (singleplayer).
         ShopCatalog.clear();
         com.enviouse.futureshops.server.shop.ShopConfigClipboard.clearAll();
@@ -163,6 +184,10 @@ public class Futureshops {
             LegacyBalanceMigrationManager.tick(event.getServer());
             DynamicPricingEngine.onServerTick(event.getServer());
             StockRefreshScheduler.onServerTick(event.getServer());
+            com.enviouse.futureshops.server.escrow.runtime.AuctionExpirationScheduler
+                    .onServerTick(event.getServer());
+            com.enviouse.futureshops.server.escrow.runtime.BazaarExpirationScheduler
+                    .onServerTick(event.getServer());
         }
     }
 

@@ -127,6 +127,7 @@ public record S2CMarketPagePacket(
         buffer.writeBoolean(card.watched());
         buffer.writeBoolean(card.primaryAction());
         buffer.writeBoolean(card.secondaryAction());
+        buffer.writeLong(card.tertiaryMinor());
     }
 
     private static MarketPageCard readCard(FriendlyByteBuf buffer) {
@@ -142,7 +143,7 @@ public record S2CMarketPagePacket(
                 buffer.readLong(), buffer.readLong(),
                 buffer.readLong(), buffer.readLong(),
                 buffer.readBoolean(), buffer.readBoolean(),
-                buffer.readBoolean());
+                buffer.readBoolean(), buffer.readLong());
     }
 
     private static int boundedCount(int value, int maximum) {

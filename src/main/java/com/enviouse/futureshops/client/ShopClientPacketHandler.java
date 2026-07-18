@@ -48,6 +48,7 @@ import com.enviouse.futureshops.network.packets.S2CFranchiseDataPacket;
 import com.enviouse.futureshops.network.packets.S2CHistoryResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CInventorySyncPacket;
 import com.enviouse.futureshops.network.packets.S2CLocalShopsPacket;
+import com.enviouse.futureshops.network.packets.S2CMarketActionResponsePacket;
 import com.enviouse.futureshops.network.packets.S2COpenMarketModulePacket;
 import com.enviouse.futureshops.network.packets.S2CMarketPagePacket;
 import com.enviouse.futureshops.network.packets.S2CMarketCapabilitiesPacket;
@@ -425,6 +426,25 @@ public final class ShopClientPacketHandler {
         minecraft.execute(() -> {
             if (minecraft.screen instanceof MarketModuleScreen market) {
                 market.applyPage(packet);
+            }
+        });
+    }
+
+    /**
+     * Result of an Auction House / Bazaar mutation (plan §12). On the main thread the open
+     * market screen clears its pending request, localizes the status, and refreshes the page
+     * on success or on the stale-revision family (plan §15: stale interfaces refresh rather
+     * than execute). Without an open market screen the response is dropped: there is no
+     * market-wide status surface outside the screen, and durable outcomes (claims, wallet
+     * movement, page contents) all arrive through their own packets.
+     */
+    public static void handleMarketActionResponse(
+            S2CMarketActionResponsePacket packet
+    ) {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.execute(() -> {
+            if (minecraft.screen instanceof MarketModuleScreen market) {
+                market.applyActionResponse(packet);
             }
         });
     }

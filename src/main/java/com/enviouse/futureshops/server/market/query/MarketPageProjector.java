@@ -274,7 +274,11 @@ public final class MarketPageProjector {
                 listing.revision(), auctionPrice(listing), minimum,
                 listing.acceptedBidCount(),
                 auctionRemaining(listing, nowMillis), watched,
-                active && !own, own && active);
+                active && !own, own && active,
+                // tertiary = buyout price of a BIDDING listing that also allows buy-now
+                // (AUCTION_WITH_BUYOUT). Pure BUY_NOW keeps its price in primary/secondary and
+                // signals type via the MAX_VALUE remaining sentinel; 0 = no buy-now on a bid lot.
+                listing.type().acceptsBids() ? listing.buyoutMinor() : 0L);
     }
 
     private static long auctionPrice(AuctionListing listing) {

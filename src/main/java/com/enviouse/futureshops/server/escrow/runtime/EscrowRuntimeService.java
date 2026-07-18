@@ -1508,6 +1508,23 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 Objects.requireNonNull(requestId, "requestId")));
     }
 
+    /**
+     * Full auction escrow lifecycle state (create intents + commits). Settlement-side actions
+     * (buy-now, cancel, expire, settle) need the CREATE commit's item custody for the listing
+     * they resolve, which is keyed by the original create requestId — callers scan
+     * {@code commits()} for the CREATE commit whose listing matches.
+     */
+    public synchronized com.enviouse.futureshops.server.market.auction.escrow
+            .AuctionEscrowLifecycleState auctionEscrowLifecycleState() {
+        assertServerThread();
+        if (auctionHouse == null) {
+            throw new EscrowRuntimeException(
+                    "Auction escrow persistence is unavailable",
+                    startupFailure);
+        }
+        return auctionHouse.escrowLifecycleSnapshot();
+    }
+
     public synchronized List<AuctionCreateEscrowIntent>
     pendingAuctionCreateRecovery(int limit) {
         assertServerThread();

@@ -37,8 +37,15 @@ import com.enviouse.futureshops.network.packets.C2SPlayerShopSellPacket;
 import com.enviouse.futureshops.network.packets.C2SSellRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SSetDepartmentPacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyAdminCartPacket;
+import com.enviouse.futureshops.network.packets.C2SAuctionBidPacket;
+import com.enviouse.futureshops.network.packets.C2SAuctionBuyNowPacket;
+import com.enviouse.futureshops.network.packets.C2SAuctionCancelPacket;
+import com.enviouse.futureshops.network.packets.C2SAuctionCreatePacket;
+import com.enviouse.futureshops.network.packets.C2SBazaarCancelPacket;
+import com.enviouse.futureshops.network.packets.C2SBazaarOrderPacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyCartPacket;
 import com.enviouse.futureshops.network.packets.S2CAdminEditAckPacket;
+import com.enviouse.futureshops.network.packets.S2CMarketActionResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CAtmDataPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmResultPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmCollectCashResultPacket;
@@ -101,7 +108,9 @@ public final class ShopPackets {
     // Protocol 42 adds correlated paged market data.
     // Protocol 43 adds correlated player shop settlements and buybacks.
     // Protocol 44 adds market capability synchronization.
-    public static final String PROTOCOL_VERSION = "44";
+    // Protocol 45 adds the Auction House + Bazaar mutation packet groups (create / bid / buy-now /
+    //     cancel, order / cancel) and the shared market action response.
+    public static final String PROTOCOL_VERSION = "45";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))
@@ -511,6 +520,58 @@ public final class ShopPackets {
             .decoder(S2CMarketClaimCollectionPacket::decode)
             .encoder(S2CMarketClaimCollectionPacket::encode)
             .consumerMainThread(S2CMarketClaimCollectionPacket::handle)
+            .add();
+
+        // ── Protocol 45: Auction House + Bazaar mutations (plan §12 packet groups) ──
+        // Appended in stable order; registered regardless of module state so disabled
+        // modules can still be configured/inspected before enabling.
+        CHANNEL.messageBuilder(C2SAuctionCreatePacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SAuctionCreatePacket::decode)
+            .encoder(C2SAuctionCreatePacket::encode)
+            .consumerMainThread(C2SAuctionCreatePacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SAuctionBidPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SAuctionBidPacket::decode)
+            .encoder(C2SAuctionBidPacket::encode)
+            .consumerMainThread(C2SAuctionBidPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SAuctionBuyNowPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SAuctionBuyNowPacket::decode)
+            .encoder(C2SAuctionBuyNowPacket::encode)
+            .consumerMainThread(C2SAuctionBuyNowPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SAuctionCancelPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SAuctionCancelPacket::decode)
+            .encoder(C2SAuctionCancelPacket::encode)
+            .consumerMainThread(C2SAuctionCancelPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SBazaarOrderPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SBazaarOrderPacket::decode)
+            .encoder(C2SBazaarOrderPacket::encode)
+            .consumerMainThread(C2SBazaarOrderPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SBazaarCancelPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SBazaarCancelPacket::decode)
+            .encoder(C2SBazaarCancelPacket::encode)
+            .consumerMainThread(C2SBazaarCancelPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CMarketActionResponsePacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CMarketActionResponsePacket::decode)
+            .encoder(S2CMarketActionResponsePacket::encode)
+            .consumerMainThread(S2CMarketActionResponsePacket::handle)
             .add();
     }
 
