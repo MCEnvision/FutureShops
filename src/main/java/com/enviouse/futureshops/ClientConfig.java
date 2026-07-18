@@ -34,6 +34,10 @@ public final class ClientConfig {
         .comment("Market card size. Allowed values are small, medium, and large.")
         .define("ui.card_size", "medium", value -> isOption(value, CARD_SIZES));
 
+    private static final ForgeConfigSpec.ConfigValue<String> CURRENCY_SYMBOL = BUILDER
+        .comment("Currency symbol shown before market prices. Use an empty value to hide it.")
+        .define("ui.currency_symbol", "$", ClientConfig::isCurrencySymbol);
+
     private static final ForgeConfigSpec.BooleanValue REMEMBER_TAB = BUILDER
         .comment("Remember the last selected tab for each market module.")
         .define("ui.remember_tab", true);
@@ -132,7 +136,7 @@ public final class ClientConfig {
     private static Settings readSettings() {
         return new Settings(
             new Presentation(
-                USE_12_HOUR_TIME.get(), DENSITY.get(), CARD_SIZE.get(), REMEMBER_TAB.get(),
+                USE_12_HOUR_TIME.get(), DENSITY.get(), CARD_SIZE.get(), CURRENCY_SYMBOL.get(), REMEMBER_TAB.get(),
                 REMEMBER_FILTER.get(), REMEMBER_SORT.get(), REMEMBER_PAYMENT_SOURCE.get()),
             new Search(PREDICTIVE_SEARCH.get(), SEARCH_DEBOUNCE_MILLIS.get()),
             new Theme(THEME_PRESET.get(), CUSTOM_ACCENT_ENABLED.get(), CUSTOM_ACCENT.get()),
@@ -165,7 +169,7 @@ public final class ClientConfig {
 
         public static Settings defaults() {
             return new Settings(
-                new Presentation(false, "normal", "medium", true, true, true, true),
+                new Presentation(false, "normal", "medium", "$", true, true, true, true),
                 new Search(true, 180),
                 new Theme("server", false, "#9184D9"),
                 new Accessibility(false, "none", false),
@@ -180,6 +184,7 @@ public final class ClientConfig {
         boolean use12HourTime,
         String density,
         String cardSize,
+        String currencySymbol,
         boolean rememberTab,
         boolean rememberFilter,
         boolean rememberSort,
@@ -188,7 +193,16 @@ public final class ClientConfig {
         public Presentation {
             density = ConfigValidation.requireOption(density, DENSITIES, "Client density");
             cardSize = ConfigValidation.requireOption(cardSize, CARD_SIZES, "Client card size");
+            ConfigValidation.require(isCurrencySymbol(currencySymbol),
+                "Client currency symbol must contain at most four visible characters.");
         }
+    }
+
+    private static boolean isCurrencySymbol(Object value) {
+        if (!(value instanceof String text) || text.length() > 4) {
+            return false;
+        }
+        return text.chars().noneMatch(character -> Character.isISOControl(character));
     }
 
     public record Search(boolean predictive, int debounceMillis) {

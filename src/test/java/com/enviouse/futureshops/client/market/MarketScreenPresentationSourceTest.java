@@ -33,14 +33,36 @@ class MarketScreenPresentationSourceTest {
         assertTrue(detailRoute >= 0);
         assertTrue(emptyCards > detailRoute);
         assertTrue(source.contains(
-                "gui.futureshops.market.detail.hero_meta"));
+                "gui.futureshops.market.detail.hero_subtitle"));
         assertTrue(source.contains(
                 "gui.futureshops.market.detail.item_section"));
         assertTrue(source.contains(
                 "gui.futureshops.market.detail.activity_section"));
-        assertTrue(source.contains("renderPriceSparkline"));
+        assertTrue(source.contains("renderPriceChart"));
+        assertTrue(source.contains("MarketPriceChartModel.create"));
+        assertTrue(source.contains("DETAIL_BLACK"));
+        assertTrue(source.contains("ShopColors.ACCENT_GOLD"));
+        assertTrue(source.contains("ShopColors.STATUS_SUCCESS"));
+        assertTrue(source.contains("ShopColors.STATUS_DANGER"));
         assertTrue(source.contains(
                 "gui.futureshops.market.empty.player_catalog_hint"));
+    }
+
+    @Test
+    void createRouteAlwaysOffersAnAuctionCreationControl()
+            throws Exception {
+        String source = screen();
+        int visibility = source.indexOf(
+                "private boolean showCreateListingButton()");
+        int opener = source.indexOf("private void openCreateWizard()");
+        assertTrue(visibility >= 0);
+        assertTrue(opener > visibility);
+        String condition = source.substring(visibility, opener);
+        assertTrue(condition.contains("\"create\".equals(packet.view())"));
+        assertTrue(source.contains(
+                "gui.futureshops.market.empty.create_title"));
+        assertTrue(source.contains("this::openCreateWizard"));
+        assertTrue(source.contains("accentActionButton"));
     }
 
     @Test

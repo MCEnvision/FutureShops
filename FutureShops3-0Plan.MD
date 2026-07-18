@@ -1103,3 +1103,12 @@ hidden. Escrow remains mandatory, while a temporary readiness or recovery failur
 deduplicated chat warning and an explicit Retry control that resubmits only the safe read request
 or invites the player to repeat an economic action only after the server confirms that nothing
 changed.
+
+The Auction House creation route now exposes Create Listing both in the route content and in the
+footer, so the listing wizard remains discoverable even when the route has no cards. Auction detail
+pages use the available space for exact item condition and data, listing type, bid count, buyout
+distance, abbreviated identity, seller context, live activity, and a black chart surface. Recorded
+price history is drawn with gold, green, and red movement segments. When recorded history is not
+available, the chart is explicitly labeled as a bid ladder and displays only the current bid, next
+bid, and buyout. Market prices and fees use a configurable currency symbol, with the dollar sign as
+the default, and gold price text across cards, details, payment prompts, and creation fees.

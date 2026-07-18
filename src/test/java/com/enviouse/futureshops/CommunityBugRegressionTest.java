@@ -35,6 +35,7 @@ class CommunityBugRegressionTest {
         assertTrue(language.contains("\"gui.futureshops.history.filter.cart_claim\": \"CLAIM\""));
         assertFalse(language.contains("\"gui.futureshops.history.filter.cart_claim\": \"FUNDS\""));
         assertTrue(config.contains("ui.use_12_hour_time"));
+        assertTrue(config.contains("ui.currency_symbol"));
 
         long timestamp = Instant.parse("2026-07-17T13:05:00Z")
                 .getEpochSecond();

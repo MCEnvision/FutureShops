@@ -433,6 +433,8 @@ Client-only presentation. Accessibility settings always win over server branding
 	density = "normal"
 	# "small", "medium", or "large".
 	card_size = "medium"
+	# Currency symbol shown before market prices. Set this to an empty string to hide it.
+	currency_symbol = "$"
 	remember_tab = true
 	remember_filter = true
 	remember_sort = true

@@ -25,6 +25,7 @@ import com.enviouse.futureshops.client.market.MarketThemeResolver;
 import com.enviouse.futureshops.client.market.MarketViewport;
 import com.enviouse.futureshops.client.market.MarketActionFeedback;
 import com.enviouse.futureshops.client.market.MarketPendingActionTracker;
+import com.enviouse.futureshops.client.market.MarketPriceChartModel;
 import com.enviouse.futureshops.command.EconomyCommandUtil;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SAuctionBidPacket;
@@ -83,6 +84,9 @@ public final class MarketModuleScreen extends Screen
     private static final int SURFACE_RAISED = 0xFF232532;
     private static final int SURFACE_HOVER = 0xFF2D3040;
     private static final int BORDER = 0xFF3B3E50;
+    private static final int DETAIL_BLACK = 0xFF0C0E14;
+    private static final int DETAIL_PANEL = 0xFF121520;
+    private static final int DETAIL_GRID = 0xFF272B38;
     private static final int BACKDROP = 0xC0080910;
     private static final int MAXIMUM_HIT_TARGETS = 128;
     private static final long ARMED_CONFIRM_WINDOW_MILLIS = 4_000L;
@@ -1370,13 +1374,15 @@ public final class MarketModuleScreen extends Screen
             graphics.drawString(font, title, textX,
                     card.y() + 10, theme.textStrong(), false);
             String primary = data.primaryMinor() > 0L
-                    ? ShopUiUtil.formatMinorUnits(data.primaryMinor())
+                    ? marketMoney(data.primaryMinor())
                     : data.quantity() > 0L
                     ? Long.toString(data.quantity()) : data.state();
             graphics.drawString(font, primary, textX,
-                    card.y() + 24, theme.callToAction(), false);
+                    card.y() + 24, data.primaryMinor() > 0L
+                            ? ShopColors.ACCENT_GOLD
+                            : theme.callToAction(), false);
             String detail = data.secondaryMinor() > 0L
-                    ? ShopUiUtil.formatMinorUnits(data.secondaryMinor())
+                    ? marketMoney(data.secondaryMinor())
                     : data.state();
             boolean compactIdentity = card.height() < 58
                     && !data.insights().ownerName().isEmpty();
@@ -1384,7 +1390,10 @@ public final class MarketModuleScreen extends Screen
                 graphics.drawString(font,
                         font.plainSubstrByWidth(detail,
                                 Math.max(20, card.right() - textX - 6)),
-                        textX, card.y() + 36, theme.textMuted(), false);
+                        textX, card.y() + 36,
+                        data.secondaryMinor() > 0L
+                                ? ShopColors.ACCENT_GOLD
+                                : theme.textMuted(), false);
             }
             if (data.watched()) {
                 graphics.drawString(font, "*", card.right() - 10,
@@ -1498,7 +1507,7 @@ public final class MarketModuleScreen extends Screen
                 Math.max(1, content.width() - padding * 2),
                 Math.max(1, content.height() - padding * 2));
         graphics.fill(panel.x(), panel.y(), panel.right(), panel.bottom(),
-                moduleSurface());
+                DETAIL_PANEL);
         border(graphics, panel, theme.activeBorder());
         graphics.fill(panel.x(), panel.y(), panel.right(), panel.y() + 3,
                 theme.accent());
@@ -1507,7 +1516,7 @@ public final class MarketModuleScreen extends Screen
                 panel.y() + 5, Math.max(1, panel.width() - 8),
                 Math.min(heroHeight, Math.max(1, panel.height() - 10)));
         graphics.fill(hero.x(), hero.y(), hero.right(), hero.bottom(),
-                theme.selectedSurface());
+                DETAIL_BLACK);
         graphics.fill(hero.x(), hero.y(), hero.x() + 4, hero.bottom(),
                 theme.accent());
         int textX = hero.x() + 14;
@@ -1525,22 +1534,34 @@ public final class MarketModuleScreen extends Screen
             }
             textX += 48;
         }
+        int statusWidth = Math.max(42,
+                font.width(humanizeIdentifier(data.state())) + 14);
+        boolean showStatusChip = hero.width() >= 250;
+        int heroTextRight = showStatusChip
+                ? hero.right() - statusWidth - 16 : hero.right() - 12;
         graphics.drawString(font,
                 font.plainSubstrByWidth(itemDisplayName(data),
-                        Math.max(20, hero.right() - textX - 12)),
+                        Math.max(20, heroTextRight - textX)),
                 textX, hero.y() + 15, theme.textStrong(), false);
         graphics.drawString(font,
                 font.plainSubstrByWidth(data.registryId().isEmpty()
                                 ? data.title() : data.registryId(),
-                        Math.max(20, hero.right() - textX - 12)),
+                        Math.max(20, heroTextRight - textX)),
                 textX, hero.y() + 31, theme.textMuted(), false);
         String heroMeta = Component.translatable(
-                "gui.futureshops.market.detail.hero_meta",
-                modDisplayName(data), data.state()).getString();
+                "gui.futureshops.market.detail.hero_subtitle",
+                modDisplayName(data), data.category().isEmpty()
+                        ? Component.translatable(
+                        "gui.futureshops.market.all").getString()
+                        : prettyCategory(data.category())).getString();
         graphics.drawString(font,
                 font.plainSubstrByWidth(heroMeta,
-                        Math.max(20, hero.right() - textX - 12)),
-                textX, hero.y() + 45, theme.callToAction(), false);
+                        Math.max(20, heroTextRight - textX)),
+                textX, hero.y() + 45, ShopColors.ACCENT_GOLD, false);
+        if (showStatusChip) {
+            renderStatusChip(graphics, hero.right() - statusWidth - 8,
+                    hero.y() + 12, statusWidth, data.state());
+        }
 
         int bodyX = panel.x() + padding;
         int bodyWidth = Math.max(1, panel.width() - padding * 2);
@@ -1549,14 +1570,22 @@ public final class MarketModuleScreen extends Screen
         int statWidth = Math.max(1, (bodyWidth - gap * 2) / 3);
         detailStat(graphics, new MarketRectangle(bodyX, statsY,
                         statWidth, 42), primaryDetailLabel(data),
-                detailMoney(data.primaryMinor()));
+                detailMoney(data.primaryMinor()), ShopColors.ACCENT_GOLD,
+                ShopColors.ACCENT_GOLD);
         detailStat(graphics, new MarketRectangle(bodyX + statWidth + gap,
                         statsY, statWidth, 42), secondaryDetailLabel(data),
-                detailMoney(data.secondaryMinor()));
+                detailMoney(data.secondaryMinor()), ShopColors.ACCENT_GOLD,
+                ShopColors.STATUS_SUCCESS);
+        boolean tertiaryMoney = module == MarketModule.AUCTION_HOUSE
+                && data.tertiaryMinor() > 0L;
         detailStat(graphics, new MarketRectangle(
                         bodyX + (statWidth + gap) * 2, statsY,
                         Math.max(1, bodyWidth - (statWidth + gap) * 2), 42),
-                tertiaryDetailLabel(data), tertiaryDetailValue(data));
+                tertiaryDetailLabel(data), tertiaryDetailValue(data),
+                tertiaryMoney ? ShopColors.ACCENT_GOLD
+                        : theme.textStrong(),
+                tertiaryMoney ? ShopColors.STATUS_DANGER
+                        : theme.accent());
 
         int detailsY = statsY + 42 + gap;
         int detailsBottom = panel.bottom()
@@ -1585,9 +1614,26 @@ public final class MarketModuleScreen extends Screen
                                     data.category().isEmpty()
                                             ? Component.translatable(
                                             "gui.futureshops.market.all").getString()
-                                            : data.category()),
+                                            : prettyCategory(data.category())),
                             new DetailLine("gui.futureshops.market.detail.item_count",
-                                    Integer.toString(data.itemCount()))));
+                                    Integer.toString(data.itemCount())),
+                            new DetailLine("gui.futureshops.market.detail.item_data",
+                                    Component.translatable(
+                                            data.insights().itemHasData()
+                                                    ? "gui.futureshops.market.detail.item_data.exact"
+                                                    : "gui.futureshops.market.detail.item_data.standard")
+                                            .getString()),
+                            new DetailLine("gui.futureshops.market.detail.enchanted",
+                                    Component.translatable(stack.isEnchanted()
+                                            ? "gui.futureshops.market.detail.yes"
+                                            : "gui.futureshops.market.detail.no")
+                                            .getString()),
+                            new DetailLine("gui.futureshops.market.detail.max_stack",
+                                    stack.isEmpty() ? "0"
+                                            : Integer.toString(
+                                            stack.getMaxStackSize())),
+                            new DetailLine("gui.futureshops.market.detail.condition",
+                                    itemCondition(stack))));
             MarketRectangle listingInfo = new MarketRectangle(
                     itemInfo.right() + gap, detailsY,
                     threeColumns ? columnWidth
@@ -1626,8 +1672,10 @@ public final class MarketModuleScreen extends Screen
             int mouseY
     ) {
         graphics.fill(rectangle.x(), rectangle.y(), rectangle.right(),
-                rectangle.bottom(), SURFACE);
+                rectangle.bottom(), DETAIL_BLACK);
         border(graphics, rectangle, BORDER);
+        graphics.fill(rectangle.x(), rectangle.y(), rectangle.right(),
+                rectangle.y() + 2, listingStatusColor(data));
         graphics.drawString(font, Component.translatable(
                         "gui.futureshops.market.detail.listing_section"),
                 rectangle.x() + 8, rectangle.y() + 8,
@@ -1661,12 +1709,29 @@ public final class MarketModuleScreen extends Screen
         }
         y = detailRow(graphics, rectangle, rectangle.x() + 8, y,
                 "gui.futureshops.market.detail.state", data.state());
+        if (module == MarketModule.AUCTION_HOUSE) {
+            y = detailRow(graphics, rectangle, rectangle.x() + 8, y,
+                    "gui.futureshops.market.detail.listing_type",
+                    auctionTypeLabel(data));
+            y = detailRow(graphics, rectangle, rectangle.x() + 8, y,
+                    "gui.futureshops.market.detail.bid_count",
+                    Long.toString(data.quantity()));
+            if (data.tertiaryMinor() > data.primaryMinor()) {
+                y = detailRow(graphics, rectangle, rectangle.x() + 8, y,
+                        "gui.futureshops.market.detail.buyout_gap",
+                        marketMoney(data.tertiaryMinor()
+                                - data.primaryMinor()));
+            }
+        }
         y = detailRow(graphics, rectangle, rectangle.x() + 8, y,
                 "gui.futureshops.market.detail.remaining",
                 detailRemaining(data));
-        detailRow(graphics, rectangle, rectangle.x() + 8, y,
+        y = detailRow(graphics, rectangle, rectangle.x() + 8, y,
                 "gui.futureshops.market.detail.revision",
                 Long.toString(data.revision()));
+        detailRow(graphics, rectangle, rectangle.x() + 8, y,
+                "gui.futureshops.market.detail.listing_id",
+                abbreviatedIdentity(data.identity()));
     }
 
     private void renderActivitySection(
@@ -1675,8 +1740,10 @@ public final class MarketModuleScreen extends Screen
             MarketPageCard data
     ) {
         graphics.fill(rectangle.x(), rectangle.y(), rectangle.right(),
-                rectangle.bottom(), SURFACE);
+                rectangle.bottom(), DETAIL_BLACK);
         border(graphics, rectangle, BORDER);
+        graphics.fill(rectangle.x(), rectangle.y(), rectangle.right(),
+                rectangle.y() + 2, ShopColors.ACCENT_GOLD);
         graphics.drawString(font, Component.translatable(
                         "gui.futureshops.market.detail.activity_section"),
                 rectangle.x() + 8, rectangle.y() + 8,
@@ -1707,8 +1774,7 @@ public final class MarketModuleScreen extends Screen
         y = detailRow(graphics, rectangle, rectangle.x() + 8, y,
                 "gui.futureshops.market.detail.market_pulse",
                 marketPulse(data));
-        renderPriceSparkline(graphics, rectangle, y + 2,
-                data.insights().priceHistoryMinor());
+        renderPriceChart(graphics, rectangle, y + 2, data);
     }
 
     private String marketPulse(MarketPageCard data) {
@@ -1724,43 +1790,101 @@ public final class MarketModuleScreen extends Screen
                 .getString();
     }
 
-    private void renderPriceSparkline(
+    private void renderPriceChart(
             GuiGraphics graphics,
             MarketRectangle rectangle,
             int y,
-            List<Long> values
+            MarketPageCard data
     ) {
-        int bottom = rectangle.bottom() - 8;
-        int height = bottom - y;
-        if (values.size() < 2 || height < 10) {
+        MarketPriceChartModel chart = MarketPriceChartModel.create(
+                data.insights().priceHistoryMinor(), data.primaryMinor(),
+                data.secondaryMinor(), data.tertiaryMinor());
+        int chartBottom = rectangle.bottom() - 9;
+        int chartHeight = chartBottom - y;
+        if (chart.kind() == MarketPriceChartModel.Kind.EMPTY
+                || chartHeight < 38 || rectangle.width() < 80) {
             return;
         }
-        long minimum = values.stream().mapToLong(Long::longValue)
-                .min().orElse(0L);
-        long maximum = values.stream().mapToLong(Long::longValue)
-                .max().orElse(minimum);
         int left = rectangle.x() + 8;
-        int width = Math.max(1, rectangle.width() - 16);
-        graphics.fill(left, bottom, left + width, bottom + 1, BORDER);
-        for (int index = 0; index < values.size(); index++) {
-            int x = left + index * Math.max(1, width - 1)
-                    / Math.max(1, values.size() - 1);
-            long range = Math.max(1L, maximum - minimum);
-            int bar = 2 + (int) Math.min(height - 2,
-                    Math.max(0L, values.get(index) - minimum)
-                            / (double) range * Math.max(1, height - 4));
-            graphics.fill(x, bottom - bar, x + 2, bottom,
-                    theme.accent());
+        int right = rectangle.right() - 8;
+        int titleY = y + 1;
+        int plotTop = y + 15;
+        int plotBottom = chartBottom - 14;
+        if (plotBottom - plotTop < 12) {
+            return;
         }
+        graphics.fill(left, y, right, chartBottom, DETAIL_PANEL);
+        border(graphics, new MarketRectangle(left, y,
+                Math.max(1, right - left), Math.max(1, chartBottom - y)),
+                DETAIL_GRID);
+        String titleKey = chart.kind()
+                == MarketPriceChartModel.Kind.PRICE_HISTORY
+                ? "gui.futureshops.market.detail.chart.price_history"
+                : module == MarketModule.AUCTION_HOUSE
+                ? "gui.futureshops.market.detail.chart.bid_ladder"
+                : "gui.futureshops.market.detail.chart.price_snapshot";
+        graphics.drawString(font, Component.translatable(titleKey),
+                left + 6, titleY + 3, theme.textStrong(), false);
+        for (int index = 0; index <= 3; index++) {
+            int gridY = plotTop + index * (plotBottom - plotTop) / 3;
+            graphics.fill(left + 5, gridY, right - 5, gridY + 1,
+                    DETAIL_GRID);
+        }
+        List<Long> values = chart.values();
+        long minimum = chart.minimum();
+        long range = Math.max(1L, chart.maximum() - minimum);
+        int plotLeft = left + 8;
+        int plotRight = right - 8;
+        int[] pointsX = new int[values.size()];
+        int[] pointsY = new int[values.size()];
+        for (int index = 0; index < values.size(); index++) {
+            pointsX[index] = values.size() == 1
+                    ? (plotLeft + plotRight) / 2
+                    : plotLeft + index * (plotRight - plotLeft)
+                    / (values.size() - 1);
+            pointsY[index] = plotBottom - (int) Math.round(
+                    (values.get(index) - minimum) / (double) range
+                            * Math.max(1, plotBottom - plotTop));
+            int color = chartToneColor(chart.tones().get(index));
+            graphics.fill(pointsX[index] - 1, pointsY[index],
+                    pointsX[index] + 2, plotBottom,
+                    MarketThemeColors.blend(DETAIL_BLACK, color, 42));
+            if (index > 0) {
+                drawChartLine(graphics, pointsX[index - 1],
+                        pointsY[index - 1], pointsX[index], pointsY[index],
+                        color);
+            }
+            graphics.fill(pointsX[index] - 2, pointsY[index] - 2,
+                    pointsX[index] + 3, pointsY[index] + 3, color);
+        }
+        String low = Component.translatable(
+                "gui.futureshops.market.detail.chart.low",
+                marketMoney(chart.minimum())).getString();
+        String high = Component.translatable(
+                "gui.futureshops.market.detail.chart.high",
+                marketMoney(chart.maximum())).getString();
+        String latest = Component.translatable(
+                "gui.futureshops.market.detail.chart.latest",
+                marketMoney(chart.latest())).getString();
+        int footerY = chartBottom - 10;
+        graphics.drawString(font, low, left + 6, footerY,
+                ShopColors.STATUS_DANGER, false);
+        graphics.drawCenteredString(font, latest,
+                left + (right - left) / 2, footerY,
+                ShopColors.ACCENT_GOLD);
+        graphics.drawString(font, high,
+                Math.max(left + 6, right - 6 - font.width(high)), footerY,
+                ShopColors.STATUS_SUCCESS, false);
     }
 
     private void detailStat(GuiGraphics graphics, MarketRectangle rectangle,
-                            String label, String value) {
+                            String label, String value, int valueColor,
+                            int accentColor) {
         graphics.fill(rectangle.x(), rectangle.y(), rectangle.right(),
-                rectangle.bottom(), SURFACE);
+                rectangle.bottom(), DETAIL_BLACK);
         border(graphics, rectangle, BORDER);
         graphics.fill(rectangle.x(), rectangle.y(), rectangle.right(),
-                rectangle.y() + 2, theme.accentDim());
+                rectangle.y() + 2, accentColor);
         graphics.drawString(font,
                 font.plainSubstrByWidth(label,
                         Math.max(1, rectangle.width() - 12)),
@@ -1770,7 +1894,7 @@ public final class MarketModuleScreen extends Screen
                 font.plainSubstrByWidth(value,
                         Math.max(1, rectangle.width() - 12)),
                 rectangle.x() + 6, rectangle.y() + 24,
-                theme.callToAction(), false);
+                valueColor, false);
     }
 
     private void renderDetailSection(GuiGraphics graphics,
@@ -1778,8 +1902,10 @@ public final class MarketModuleScreen extends Screen
                                      String titleKey,
                                      List<DetailLine> lines) {
         graphics.fill(rectangle.x(), rectangle.y(), rectangle.right(),
-                rectangle.bottom(), SURFACE);
+                rectangle.bottom(), DETAIL_BLACK);
         border(graphics, rectangle, BORDER);
+        graphics.fill(rectangle.x(), rectangle.y(), rectangle.right(),
+                rectangle.y() + 2, ShopColors.ACCENT_GOLD);
         graphics.drawString(font, Component.translatable(titleKey),
                 rectangle.x() + 8, rectangle.y() + 8,
                 theme.textStrong(), false);
@@ -1805,6 +1931,112 @@ public final class MarketModuleScreen extends Screen
         return id == null ? Component.translatable(
                 "gui.futureshops.market.detail.unknown").getString()
                 : humanizeIdentifier(id.getNamespace());
+    }
+
+    private void renderStatusChip(
+            GuiGraphics graphics,
+            int x,
+            int y,
+            int width,
+            String state
+    ) {
+        int color = listingStatusColor(state);
+        MarketRectangle chip = new MarketRectangle(x, y, width, 16);
+        graphics.fill(chip.x(), chip.y(), chip.right(), chip.bottom(),
+                MarketThemeColors.blend(DETAIL_BLACK, color, 72));
+        border(graphics, chip, color);
+        graphics.drawCenteredString(font,
+                font.plainSubstrByWidth(humanizeIdentifier(state),
+                        Math.max(1, width - 8)),
+                chip.x() + chip.width() / 2, chip.y() + 4, color);
+    }
+
+    private int listingStatusColor(MarketPageCard data) {
+        return listingStatusColor(data.state());
+    }
+
+    private int listingStatusColor(String state) {
+        return switch (state == null ? "" : state) {
+            case "ACTIVE", "OPEN", "PARTIALLY_FILLED" ->
+                    ShopColors.STATUS_SUCCESS;
+            case "SOLD", "FILLED", "CLAIMED" -> ShopColors.ACCENT_GOLD;
+            case "CANCELLED", "EXPIRED", "ENDED", "FAILED" ->
+                    ShopColors.STATUS_DANGER;
+            default -> theme.accent();
+        };
+    }
+
+    private String auctionTypeLabel(MarketPageCard data) {
+        String key = !auctionAcceptsBids(data)
+                ? "buy_now" : data.tertiaryMinor() > 0L
+                ? "auction_buyout" : "timed_auction";
+        return Component.translatable(
+                "gui.futureshops.market.detail.listing_type." + key)
+                .getString();
+    }
+
+    private static String abbreviatedIdentity(String identity) {
+        if (identity == null || identity.isBlank()) {
+            return "Unknown";
+        }
+        String value = identity.strip();
+        return value.length() <= 12 ? value : value.substring(0, 8) + "…";
+    }
+
+    private String itemCondition(ItemStack stack) {
+        if (stack.isEmpty()) {
+            return Component.translatable(
+                    "gui.futureshops.market.detail.unknown").getString();
+        }
+        if (!stack.isDamageableItem()) {
+            return Component.translatable(
+                    "gui.futureshops.market.detail.condition.undamaged")
+                    .getString();
+        }
+        return Component.translatable(
+                "gui.futureshops.market.detail.condition.durability",
+                Math.max(0, stack.getMaxDamage() - stack.getDamageValue()),
+                stack.getMaxDamage()).getString();
+    }
+
+    private static int chartToneColor(MarketPriceChartModel.Tone tone) {
+        return switch (tone) {
+            case GOLD -> ShopColors.ACCENT_GOLD;
+            case POSITIVE -> ShopColors.STATUS_SUCCESS;
+            case NEGATIVE -> ShopColors.STATUS_DANGER;
+        };
+    }
+
+    private static void drawChartLine(
+            GuiGraphics graphics,
+            int startX,
+            int startY,
+            int endX,
+            int endY,
+            int color
+    ) {
+        int x = startX;
+        int y = startY;
+        int deltaX = Math.abs(endX - startX);
+        int deltaY = Math.abs(endY - startY);
+        int stepX = startX < endX ? 1 : -1;
+        int stepY = startY < endY ? 1 : -1;
+        int error = deltaX - deltaY;
+        while (true) {
+            graphics.fill(x, y, x + 2, y + 2, color);
+            if (x == endX && y == endY) {
+                return;
+            }
+            int doubled = error * 2;
+            if (doubled > -deltaY) {
+                error -= deltaY;
+                x += stepX;
+            }
+            if (doubled < deltaX) {
+                error += deltaX;
+                y += stepY;
+            }
+        }
     }
 
     private static String humanizeIdentifier(String value) {
@@ -1858,9 +2090,14 @@ public final class MarketModuleScreen extends Screen
     }
 
     private String detailMoney(long minor) {
-        return minor > 0L ? ShopUiUtil.formatMinorUnits(minor)
+        return minor > 0L ? marketMoney(minor)
                 : Component.translatable(
                 "gui.futureshops.market.detail.no_orders").getString();
+    }
+
+    private String marketMoney(long minor) {
+        return ClientConfig.settings().presentation().currencySymbol()
+                + ShopUiUtil.formatMinorUnits(minor);
     }
 
     private String detailRemaining(MarketPageCard data) {
@@ -2004,22 +2241,24 @@ public final class MarketModuleScreen extends Screen
             // Retry host for auction_bid: when the send timed out this control turns
             // into [Retry][✕] even while the editor is closed, so the resend of the
             // original request stays reachable.
-            actionButton(graphics, mouseX, mouseY,
+            accentActionButton(graphics, mouseX, mouseY,
                     new MarketRectangle(x, y, 78, rowHeight),
                     Component.translatable(
                             "gui.futureshops.market.action.bid.button")
                             .getString(),
-                    true, false, "auction_bid", card.identity(), true,
+                    true, ShopColors.ACCENT_GOLD, "auction_bid",
+                    card.identity(), true,
                     () -> toggleBidEditor(card));
             x += 84;
         }
         if (!own && auctionHasBuyNow(card)) {
-            actionButton(graphics, mouseX, mouseY,
+            accentActionButton(graphics, mouseX, mouseY,
                     new MarketRectangle(x, y, 78, rowHeight),
                     Component.translatable(
                             "gui.futureshops.market.action.buy_now.button")
                             .getString(),
-                    true, false, "auction_buy_now", card.identity(),
+                    true, ShopColors.STATUS_SUCCESS, "auction_buy_now",
+                    card.identity(),
                     true, () -> sendAuctionBuyNow(card));
             x += 84;
         }
@@ -2068,16 +2307,17 @@ public final class MarketModuleScreen extends Screen
                 new MarketRectangle(x + 96, y, 16, 16), "+", true,
                 () -> adjustBidAmount(card, 1L));
         // Not a retry host — the always-visible bid toggle button hosts the retry pair.
-        actionButton(graphics, mouseX, mouseY,
+        accentActionButton(graphics, mouseX, mouseY,
                 new MarketRectangle(x + 118, y, 62, 16),
                 Component.translatable(
                         "gui.futureshops.market.action.bid.confirm")
                         .getString(),
-                true, false, "auction_bid", card.identity(), false,
+                true, ShopColors.ACCENT_GOLD, "auction_bid",
+                card.identity(), false,
                 () -> sendAuctionBid(card));
         String minimum = Component.translatable(
                 "gui.futureshops.market.action.bid.minimum",
-                ShopUiUtil.formatMinorUnits(card.secondaryMinor()))
+                marketMoney(card.secondaryMinor()))
                 .getString();
         graphics.drawString(font,
                 font.plainSubstrByWidth(minimum,
@@ -2131,7 +2371,7 @@ public final class MarketModuleScreen extends Screen
             try {
                 String total = Component.translatable(
                         "gui.futureshops.market.action.total",
-                        ShopUiUtil.formatMinorUnits(Math.multiplyExact(
+                        marketMoney(Math.multiplyExact(
                                 ask, (long) quantity))).getString();
                 graphics.drawString(font,
                         font.plainSubstrByWidth(total, Math.max(8,
@@ -2419,12 +2659,12 @@ public final class MarketModuleScreen extends Screen
         try {
             return Component.translatable(
                     "gui.futureshops.market.action.payment.detail",
-                    ShopUiUtil.formatMinorUnits(Math.multiplyExact(
+                    marketMoney(Math.multiplyExact(
                             priceMinor, (long) quantity)));
         } catch (ArithmeticException ignored) {
             return Component.translatable(
                     "gui.futureshops.market.action.payment.detail",
-                    ShopUiUtil.formatMinorUnits(priceMinor));
+                    marketMoney(priceMinor));
         }
     }
 
@@ -2587,7 +2827,7 @@ public final class MarketModuleScreen extends Screen
             graphics.drawString(font,
                     font.plainSubstrByWidth(Component.translatable(
                             "gui.futureshops.market.action.payment.balance",
-                            ShopUiUtil.formatMinorUnits(ShopClientState
+                            marketMoney(ShopClientState
                                     .getCurrentBalanceMinorUnits()))
                             .getString(), panel.width() - 16),
                     panel.x() + 8, y, theme.textMuted(), false);
@@ -2618,6 +2858,7 @@ public final class MarketModuleScreen extends Screen
     private boolean showCreateListingButton() {
         return module == MarketModule.AUCTION_HOUSE
                 && ("browse".equals(packet.view())
+                || "create".equals(packet.view())
                 || "mine".equals(packet.view()))
                 && canOpenView(packet.view())
                 && minecraft != null && minecraft.player != null;
@@ -2819,17 +3060,17 @@ public final class MarketModuleScreen extends Screen
         graphics.drawString(font,
                 font.plainSubstrByWidth(Component.translatable(
                         "gui.futureshops.market.action.create.fee_notice_amount",
-                        ShopUiUtil.formatMinorUnits(
+                        marketMoney(
                                 auctionListingFeeMinor()))
                         .getString(), content.width() - padding * 2),
                 x, y, theme.textMuted(), false);
-        actionButton(graphics, mouseX, mouseY,
+        accentActionButton(graphics, mouseX, mouseY,
                 new MarketRectangle(content.right() - padding - 88,
                         content.bottom() - padding - 16, 88, 16),
                 Component.translatable(
                         "gui.futureshops.market.action.create.submit")
                         .getString(),
-                true, false, "auction_create", "", true,
+                true, ShopColors.STATUS_SUCCESS, "auction_create", "", true,
                 this::submitCreateListing);
     }
 
@@ -2946,7 +3187,7 @@ public final class MarketModuleScreen extends Screen
         String fingerprint = createSelectedFingerprint;
         requirePaymentSource(Component.translatable(
                         "gui.futureshops.market.action.payment.auction_listing_fee_amount",
-                        ShopUiUtil.formatMinorUnits(
+                        marketMoney(
                                 auctionListingFeeMinor())),
                 source -> sendMarketAction("auction_create", "",
                         requestId -> new C2SAuctionCreatePacket(requestId,
@@ -3064,6 +3305,47 @@ public final class MarketModuleScreen extends Screen
             button(graphics, mouseX, mouseY, rectangle, rendered,
                     enabled && !busy, send);
         }
+    }
+
+    private void accentActionButton(
+            GuiGraphics graphics,
+            int mouseX,
+            int mouseY,
+            MarketRectangle rectangle,
+            String label,
+            boolean enabled,
+            int accent,
+            String actionKey,
+            String subjectId,
+            boolean retryHost,
+            Runnable send
+    ) {
+        Optional<MarketPendingActionTracker.PendingAction> timedOut =
+                retryHost ? PENDING_ACTIONS.timedOut(actionKey, subjectId)
+                        : Optional.empty();
+        if (timedOut.isPresent()) {
+            UUID requestId = timedOut.orElseThrow().requestId();
+            int giveUpWidth = Math.min(16,
+                    Math.max(10, rectangle.width() / 4));
+            MarketRectangle retry = new MarketRectangle(rectangle.x(),
+                    rectangle.y(),
+                    Math.max(1, rectangle.width() - giveUpWidth - 2),
+                    rectangle.height());
+            MarketRectangle giveUp = new MarketRectangle(
+                    rectangle.right() - giveUpWidth, rectangle.y(),
+                    giveUpWidth, rectangle.height());
+            accentButton(graphics, mouseX, mouseY, retry,
+                    Component.translatable(
+                            "gui.futureshops.market.action.retry")
+                            .getString(), true, accent,
+                    () -> retryPendingAction(requestId));
+            dangerButton(graphics, mouseX, mouseY, giveUp, "✕", true,
+                    () -> giveUpPendingAction(requestId));
+            return;
+        }
+        boolean busy = PENDING_ACTIONS.busy(actionKey, subjectId);
+        accentButton(graphics, mouseX, mouseY, rectangle,
+                busyLabel(label, busy), enabled && !busy, accent, send);
     }
 
     /** Resends the ORIGINAL timed-out request — same UUID, fresh timeout window. */
@@ -3261,13 +3543,15 @@ public final class MarketModuleScreen extends Screen
     private void renderNoResults(GuiGraphics graphics,
                                  MarketRectangle content,
                                  int mouseX, int mouseY) {
+        boolean createRoute = module == MarketModule.AUCTION_HOUSE
+                && "create".equals(packet.view());
         Component detail = Component.translatable(
-                "create".equals(packet.view())
-                        ? "gui.futureshops.market.empty.create"
+                createRoute
+                        ? "gui.futureshops.market.empty.create_title"
                         : "gui.futureshops.market.empty.no_results");
         int panelWidth = Math.min(360,
                 Math.max(120, content.width() - layout.padding() * 4));
-        int panelHeight = Math.min(94,
+        int panelHeight = Math.min(createRoute ? 116 : 94,
                 Math.max(44, content.height() - layout.padding() * 4));
         MarketRectangle empty = new MarketRectangle(
                 content.x() + (content.width() - panelWidth) / 2,
@@ -3282,13 +3566,27 @@ public final class MarketModuleScreen extends Screen
                 empty.x() + empty.width() / 2,
                 empty.y() + 25, theme.textStrong());
         graphics.drawCenteredString(font, Component.translatable(
-                        module == MarketModule.BAZAAR
+                        createRoute
+                                ? "gui.futureshops.market.empty.create_detail"
+                                : module == MarketModule.BAZAAR
                                 && capabilities != null
                                 && capabilities.bazaarPlayerCatalog()
                                 ? "gui.futureshops.market.empty.player_catalog_hint"
                                 : "gui.futureshops.market.empty.filter_hint"),
                 empty.x() + empty.width() / 2,
                 empty.y() + 43, theme.textMuted());
+        if (createRoute && empty.height() >= 78) {
+            int buttonWidth = Math.min(156,
+                    Math.max(86, empty.width() - 32));
+            accentButton(graphics, mouseX, mouseY,
+                    new MarketRectangle(
+                            empty.x() + (empty.width() - buttonWidth) / 2,
+                            empty.y() + 66, buttonWidth, 22),
+                    "+ " + Component.translatable(
+                            "gui.futureshops.market.action.create.button")
+                            .getString(), true, ShopColors.ACCENT_GOLD,
+                    this::openCreateWizard);
+        }
     }
 
     private void renderPageControls(GuiGraphics graphics,
@@ -3504,11 +3802,12 @@ public final class MarketModuleScreen extends Screen
                     Math.max(14, footer.height() - 8));
             // Retry host only while the wizard is closed — otherwise the wizard's own
             // submit button hosts the timed-out [Retry][✕] pair.
-            actionButton(graphics, mouseX, mouseY, create,
+            accentActionButton(graphics, mouseX, mouseY, create,
                     "+ " + Component.translatable(
                             "gui.futureshops.market.action.create.button")
                             .getString(),
-                    !createWizardOpen, false, "auction_create", "",
+                    !createWizardOpen, ShopColors.ACCENT_GOLD,
+                    "auction_create", "",
                     !createWizardOpen, this::openCreateWizard);
         } else if (showRegister) {
             MarketRectangle register = new MarketRectangle(
@@ -3585,6 +3884,35 @@ public final class MarketModuleScreen extends Screen
                         : SURFACE_RAISED);
         border(graphics, rectangle, enabled
                 ? hover ? theme.accent() : BORDER : BORDER);
+        graphics.drawCenteredString(font,
+                font.plainSubstrByWidth(label,
+                        Math.max(1, rectangle.width() - 4)),
+                rectangle.x() + rectangle.width() / 2,
+                rectangle.y() + Math.max(3,
+                        (rectangle.height() - 8) / 2),
+                enabled ? theme.textStrong() : theme.textMuted());
+        if (enabled) {
+            registerHit(rectangle, action);
+        }
+    }
+
+    private void accentButton(
+            GuiGraphics graphics,
+            int mouseX,
+            int mouseY,
+            MarketRectangle rectangle,
+            String label,
+            boolean enabled,
+            int accent,
+            Runnable action
+    ) {
+        boolean hover = enabled && rectangle.contains(mouseX, mouseY);
+        int fill = hover
+                ? MarketThemeColors.blend(DETAIL_BLACK, accent, 116)
+                : MarketThemeColors.blend(DETAIL_BLACK, accent, 72);
+        graphics.fill(rectangle.x(), rectangle.y(), rectangle.right(),
+                rectangle.bottom(), enabled ? fill : SURFACE_RAISED);
+        border(graphics, rectangle, enabled ? accent : BORDER);
         graphics.drawCenteredString(font,
                 font.plainSubstrByWidth(label,
                         Math.max(1, rectangle.width() - 4)),
