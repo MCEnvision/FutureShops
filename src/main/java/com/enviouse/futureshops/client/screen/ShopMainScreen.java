@@ -987,7 +987,8 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
 
         // owner head
         int head = 34;
-        ShopUiUtil.renderPlayerFace(graphics, owner.ownerUuid(), x + 12, y + 12, head);
+        ShopUiUtil.renderPlayerFace(graphics, owner.ownerUuid(), owner.displayName(),
+                x + 12, y + 12, head);
 
         int infoX = x + 12 + head + 12;
         int infoRight = x + w - 12;
@@ -1056,7 +1057,8 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
             ShopUiUtil.renderNocturnePanel(graphics, contentX, y, contentW, cardH,
                     hovered ? ShopColors.SURFACE_OVERLAY : ShopColors.SURFACE_RAISED,
                     hovered ? ShopColors.BORDER_GLOW : ShopColors.BORDER_MUTED);
-            ShopUiUtil.renderPlayerFace(graphics, entry.ownerUuid(), contentX + 6, y + 8, 30);
+            ShopUiUtil.renderPlayerFace(graphics, entry.ownerUuid(), entry.ownerName(),
+                    contentX + 6, y + 8, 30);
             ShopUiUtil.renderScrollingString(graphics, this.font, entry.shopName(),
                     contentX + 42, y + 6, contentW - 100, ShopColors.TEXT_PRIMARY);
             ShopUiUtil.renderScrollingString(graphics, this.font,

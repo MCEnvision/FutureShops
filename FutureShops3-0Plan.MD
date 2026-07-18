@@ -1124,3 +1124,8 @@ inside the available panel. The Bazaar footer identifies admin JSON catalog cont
 control and explains where Add Held Item is available. Admin item tag search matches both registry
 namespaces and normalized Forge mod display names, including aliases such as Applied Energistics and
 Macaw mod families.
+
+The Player Shops skin followup keeps every rendered face bound to the same UUID and player name
+shown by its card or selected shop block. Franchise cards resolve the franchise leader identity so
+the displayed name and head cannot refer to different members, while offline owners retain their
+last known block identity as a fallback.

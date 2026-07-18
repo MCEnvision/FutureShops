@@ -1,15 +1,12 @@
 package com.enviouse.futureshops.client.screen;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.enviouse.futureshops.client.PlayerSkinResolver;
 import com.enviouse.futureshops.client.ShopClientState;
 import com.enviouse.futureshops.client.ShopColors;
-import com.mojang.authlib.GameProfile;
-import com.mojang.authlib.minecraft.MinecraftProfileTexture;
 import com.enviouse.futureshops.data.CatalogBarterIngredient;
 import com.enviouse.futureshops.data.CatalogBarterRecipe;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.PlayerInfo;
-import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.nbt.CompoundTag;
@@ -25,9 +22,6 @@ import net.minecraftforge.registries.ForgeRegistries;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 public final class ShopUiUtil {
     private ShopUiUtil() {
@@ -981,11 +975,6 @@ public final class ShopUiUtil {
         return new int[]{ draw, truncated ? 1 : 0 };
     }
 
-    private static final ConcurrentMap<UUID, ResourceLocation>
-            PLAYER_SKIN_CACHE = new ConcurrentHashMap<>();
-    private static final Set<UUID> PLAYER_SKIN_REQUESTS =
-            ConcurrentHashMap.newKeySet();
-
     public static void renderPlayerFace(GuiGraphics graphics,
                                         UUID playerUuid,
                                         int x, int y, int size) {
@@ -996,19 +985,9 @@ public final class ShopUiUtil {
                                         UUID playerUuid,
                                         String playerName,
                                         int x, int y, int size) {
-        Minecraft minecraft = Minecraft.getInstance();
-        ResourceLocation skin = PLAYER_SKIN_CACHE.getOrDefault(playerUuid,
-                DefaultPlayerSkin.getDefaultSkin(playerUuid));
-        if (minecraft.getConnection() != null) {
-            PlayerInfo info = minecraft.getConnection().getPlayerInfo(playerUuid);
-            if (info != null) {
-                skin = info.getSkinLocation();
-                PLAYER_SKIN_CACHE.put(playerUuid, skin);
-            }
-        }
-        if (!PLAYER_SKIN_CACHE.containsKey(playerUuid)
-                && PLAYER_SKIN_REQUESTS.add(playerUuid)) {
-            requestPlayerSkin(playerUuid, playerName);
+        ResourceLocation skin = PlayerSkinResolver.resolve(playerUuid, playerName);
+        if (skin == null) {
+            return;
         }
         RenderSystem.enableBlend();
         // Face layer (8,8)-(16,16) in the 64x64 skin texture
@@ -1017,33 +996,6 @@ public final class ShopUiUtil {
         graphics.blit(skin, x, y, size, size, 40.0f, 8.0f, 8, 8, 64, 64);
         RenderSystem.disableBlend();
         drawBorder(graphics, x, y, size, size, ShopColors.BORDER_DEFAULT);
-    }
-
-    private static void requestPlayerSkin(UUID playerUuid,
-                                          String playerName) {
-        try {
-            GameProfile profile = new GameProfile(playerUuid,
-                    playerName == null ? "" : playerName);
-            net.minecraft.world.level.block.entity.SkullBlockEntity
-                    .updateGameprofile(profile, filled -> {
-                        if (filled == null) {
-                            return;
-                        }
-                        Minecraft minecraft = Minecraft.getInstance();
-                        minecraft.execute(() -> minecraft.getSkinManager()
-                                .registerSkins(filled, (type, location,
-                                        texture) -> {
-                                    if (type
-                                            == MinecraftProfileTexture.Type.SKIN
-                                            && location != null) {
-                                        PLAYER_SKIN_CACHE.put(playerUuid,
-                                                location);
-                                    }
-                                }, false));
-                    });
-        } catch (Throwable throwable) {
-            PLAYER_SKIN_REQUESTS.remove(playerUuid);
-        }
     }
 
     /**

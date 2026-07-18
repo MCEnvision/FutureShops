@@ -98,6 +98,26 @@ class CommunityBugRegressionTest {
     }
 
     @Test
+    void playerShopHeadsResolveTheDisplayedOwnersSkin() throws Exception {
+        String shop = read("src/main/java/com/enviouse/futureshops/client/screen/ShopMainScreen.java");
+        String block = read("src/main/java/com/enviouse/futureshops/client/screen/PlayerShopBlockScreen.java");
+        String aggregation = read("src/main/java/com/enviouse/futureshops/server/shop/LocalShopAggregator.java");
+        String ui = read("src/main/java/com/enviouse/futureshops/client/screen/ShopUiUtil.java");
+        String renderer = read("src/main/java/com/enviouse/futureshops/client/shop/ShopBlockGeoRenderer.java");
+        String resolver = read("src/main/java/com/enviouse/futureshops/client/PlayerSkinResolver.java");
+        assertTrue(shop.contains("owner.ownerUuid(), owner.displayName()"));
+        assertTrue(shop.contains("entry.ownerUuid(), entry.ownerName()"));
+        assertTrue(block.contains("PlayerShopClientState.ownerName(), hx + 4"));
+        assertTrue(block.contains("PlayerShopClientState.ownerName(), hx + 8"));
+        assertTrue(aggregation.contains("resolveOwnerName(player, groupKey"));
+        assertTrue(aggregation.contains("getPlayer(ownerUuid)"));
+        assertTrue(ui.contains("PlayerSkinResolver.resolve(playerUuid, playerName)"));
+        assertTrue(renderer.contains("PlayerSkinResolver.resolve(ownerUuid, be.getOwnerName())"));
+        assertTrue(resolver.contains("new GameProfile(playerUuid"));
+        assertFalse(resolver.contains("SkullBlockEntity.updateGameprofile"));
+    }
+
+    @Test
     void atmDepositGuidanceWrapsAndBazaarExplainsCatalogControl()
             throws Exception {
         String atm = read("src/main/java/com/enviouse/futureshops/client/screen/AtmScreen.java");

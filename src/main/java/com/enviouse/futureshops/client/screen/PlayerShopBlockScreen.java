@@ -312,7 +312,8 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
 
         if (compact) {
             // Compact header: single row — face + title + link status
-            ShopUiUtil.renderPlayerFace(graphics, PlayerShopClientState.ownerUuid(), hx + 4, hy + 4, hh - 8);
+            ShopUiUtil.renderPlayerFace(graphics, PlayerShopClientState.ownerUuid(),
+                    PlayerShopClientState.ownerName(), hx + 4, hy + 4, hh - 8);
             String title = I18n.get(PlayerShopClientState.owner()
                     ? "gui.futureshops.player_shop_block.header.owner_compact"
                     : "gui.futureshops.player_shop_block.header.visitor_compact");
@@ -349,7 +350,8 @@ public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
                     PlayerShopClientState.linked() ? ShopColors.SUCCESS : ShopColors.ERROR);
         } else {
             // Normal header: face + two-line title + franchise/desc mid | link chip + revenue right
-            ShopUiUtil.renderPlayerFace(graphics, PlayerShopClientState.ownerUuid(), hx + 8, hy + 8, 34);
+            ShopUiUtil.renderPlayerFace(graphics, PlayerShopClientState.ownerUuid(),
+                    PlayerShopClientState.ownerName(), hx + 8, hy + 8, 34);
             String title = I18n.get(PlayerShopClientState.owner()
                     ? "gui.futureshops.player_shop_block.header.owner"
                     : "gui.futureshops.player_shop_block.header.visitor");
