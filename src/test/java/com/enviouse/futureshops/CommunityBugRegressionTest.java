@@ -92,4 +92,15 @@ class CommunityBugRegressionTest {
         assertTrue(language.contains(
                 "Added %s× %s to your cart."));
     }
+
+    @Test
+    void marketHeaderUsesValidEntryViewsAndSearchText() throws Exception {
+        String shop = read("src/main/java/com/enviouse/futureshops/client/screen/ShopMainScreen.java");
+        String market = read("src/main/java/com/enviouse/futureshops/client/screen/MarketModuleScreen.java");
+
+        assertTrue(shop.contains("String view = target.rootView();"));
+        assertFalse(shop.contains("String view = \"\";"));
+        assertTrue(market.contains("String querySearch = normalizedSearch();"));
+        assertTrue(market.contains("return observedSearch.strip();"));
+    }
 }

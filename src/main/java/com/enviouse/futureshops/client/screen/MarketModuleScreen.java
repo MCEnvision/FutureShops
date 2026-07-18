@@ -273,7 +273,7 @@ public final class MarketModuleScreen extends Screen
             // an explicit same-request Retry and a give-up ✕ instead of a fresh send.
             showActionStatus(MarketActionFeedback.timeoutMessage(), false);
         }
-        if (!observedSearch.equals(sentSearch)
+        if (!normalizedSearch().equals(sentSearch)
                 && Util.getMillis() - searchChangedAtMillis
                 >= ClientConfig.settings().search().debounceMillis()) {
             sendPageQuery();
@@ -3185,6 +3185,7 @@ public final class MarketModuleScreen extends Screen
                 || isDetailView() || !canOpenView(packet.view())) {
             return;
         }
+        String querySearch = normalizedSearch();
         UUID requestId = UUID.randomUUID();
         synchronizeRoute();
         navigation.beginResponseRequest(requestId,
@@ -3194,20 +3195,24 @@ public final class MarketModuleScreen extends Screen
                 new C2SMarketPageQueryPacket(requestId,
                         navigation.current().routeNonce(), module.id(),
                         packet.view(),
-                        observedSearch, selectedCategory, selectedSort,
+                        querySearch, selectedCategory, selectedSort,
                         requestedPage,
                         pageSize, OptionalLong.empty(),
                         OptionalLong.empty());
-        sentSearch = observedSearch;
+        sentSearch = querySearch;
         pageResult = "LOADING";
         page = null;
         ShopPackets.CHANNEL.sendToServer(query);
     }
 
+    private String normalizedSearch() {
+        return observedSearch.strip();
+    }
+
     private void synchronizeRoute() {
         MarketRoute current = navigation.current();
         navigation.updateCurrent(new MarketRoute(module, packet.view(),
-                selectedCategory, observedSearch, current.filterId(),
+                selectedCategory, normalizedSearch(), current.filterId(),
                 selectedSort, requestedPage, scrollOffset, selectionId,
                 current.routeNonce()));
     }

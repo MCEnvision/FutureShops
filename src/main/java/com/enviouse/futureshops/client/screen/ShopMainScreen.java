@@ -201,7 +201,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         // session) take the coordinator-less path, which the handler accepts as a new session.
         var coordinator = ShopClientPacketHandler.activeMarketNavigation();
         UUID requestId = UUID.randomUUID();
-        String view = "";
+        String view = target.rootView();
         if (coordinator != null && coordinator.isOpen()) {
             var request = coordinator.beginSwitchModule(requestId, target);
             requestId = request.requestId();
