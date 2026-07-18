@@ -43,6 +43,7 @@ import com.enviouse.futureshops.network.packets.C2SAuctionCancelPacket;
 import com.enviouse.futureshops.network.packets.C2SAuctionCreatePacket;
 import com.enviouse.futureshops.network.packets.C2SBazaarCancelPacket;
 import com.enviouse.futureshops.network.packets.C2SBazaarOrderPacket;
+import com.enviouse.futureshops.network.packets.C2SBazaarRegisterProductPacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyCartPacket;
 import com.enviouse.futureshops.network.packets.S2CAdminEditAckPacket;
 import com.enviouse.futureshops.network.packets.S2CMarketActionResponsePacket;
@@ -108,8 +109,8 @@ public final class ShopPackets {
     // Protocol 42 adds correlated paged market data.
     // Protocol 43 adds correlated player shop settlements and buybacks.
     // Protocol 44 adds market capability synchronization.
-    // Protocol 46 adds auction payment source fields.
-    public static final String PROTOCOL_VERSION = "46";
+    // Protocol 47 adds Bazaar player product registration and market fee capabilities.
+    public static final String PROTOCOL_VERSION = "47";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))
@@ -571,6 +572,13 @@ public final class ShopPackets {
             .decoder(S2CMarketActionResponsePacket::decode)
             .encoder(S2CMarketActionResponsePacket::encode)
             .consumerMainThread(S2CMarketActionResponsePacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SBazaarRegisterProductPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SBazaarRegisterProductPacket::decode)
+            .encoder(C2SBazaarRegisterProductPacket::encode)
+            .consumerMainThread(C2SBazaarRegisterProductPacket::handle)
             .add();
     }
 

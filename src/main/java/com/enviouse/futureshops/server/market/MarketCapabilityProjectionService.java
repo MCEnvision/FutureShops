@@ -87,6 +87,9 @@ public final class MarketCapabilityProjectionService {
                 configuredCurrencyName(),
                 Config.economyCurrencyDecimals,
                 auctionDurationPresetSeconds(),
+                AuctionHouseConfig.settings().fees().listingFeeMinor(),
+                BazaarConfig.catalogControl()
+                        == BazaarConfig.CatalogControl.PLAYERS,
                 new MarketCapabilityProjector.Branding(
                         MarketModule.SHOP.defaultDisplayName(),
                         MarketModule.SHOP.defaultAccent()),
@@ -165,7 +168,7 @@ public final class MarketCapabilityProjectionService {
                         control(projection,
                                 MarketModule.AUCTION_HOUSE),
                         claimCounts.auctionOpenClaims());
-        MarketCapabilitiesSnapshot unversioned = withDurations(
+        MarketCapabilitiesSnapshot unversioned = withMarketOptions(
                 MarketCapabilityProjector.project(
                         projection.requestId(), 0L,
                         projection.showNavigation(),
@@ -179,10 +182,10 @@ public final class MarketCapabilityProjectionService {
                         projection.walletBalanceKnown(),
                         projection.currencyName(),
                         projection.currencyDecimals()),
-                projection.auctionDurationPresetSeconds());
+                projection);
         long revision = revisions.revision(projection.ownerId(),
                 stateFingerprint(unversioned));
-        return withDurations(MarketCapabilityProjector.project(
+        return withMarketOptions(MarketCapabilityProjector.project(
                 projection.requestId(), revision,
                 projection.showNavigation(),
                 projection.defaultModule(),
@@ -195,7 +198,7 @@ public final class MarketCapabilityProjectionService {
                         projection.walletBalanceKnown(),
                         projection.currencyName(),
                         projection.currencyDecimals()),
-                projection.auctionDurationPresetSeconds());
+                projection);
     }
 
     public static void clearRevisionState() {
@@ -238,6 +241,8 @@ public final class MarketCapabilityProjectionService {
                 output.writeBoolean(snapshot.walletBalanceKnown());
                 writeText(output, snapshot.currencyName());
                 output.writeInt(snapshot.currencyDecimals());
+                output.writeLong(snapshot.auctionListingFeeMinor());
+                output.writeBoolean(snapshot.bazaarPlayerCatalog());
                 output.writeInt(snapshot.auctionDurationPresetSeconds().size());
                 for (long seconds : snapshot.auctionDurationPresetSeconds()) {
                     output.writeLong(seconds);
@@ -283,13 +288,17 @@ public final class MarketCapabilityProjectionService {
                 .limit(8).toList();
     }
 
-    private static MarketCapabilitiesSnapshot withDurations(
-            MarketCapabilitiesSnapshot snapshot, List<Long> durations) {
+    private static MarketCapabilitiesSnapshot withMarketOptions(
+            MarketCapabilitiesSnapshot snapshot, Projection projection) {
         return new MarketCapabilitiesSnapshot(snapshot.requestId(),
                 snapshot.revision(), snapshot.showNavigation(),
                 snapshot.defaultModule(), snapshot.walletBalanceMinorUnits(),
                 snapshot.walletBalanceKnown(), snapshot.currencyName(),
-                snapshot.currencyDecimals(), durations, snapshot.modules());
+                snapshot.currencyDecimals(),
+                projection.auctionListingFeeMinor(),
+                projection.bazaarPlayerCatalog(),
+                projection.auctionDurationPresetSeconds(),
+                snapshot.modules());
     }
 
     private static long countOpen(List<EscrowClaim> claims) {
@@ -331,6 +340,8 @@ public final class MarketCapabilityProjectionService {
             String currencyName,
             int currencyDecimals,
             List<Long> auctionDurationPresetSeconds,
+            long auctionListingFeeMinor,
+            boolean bazaarPlayerCatalog,
             MarketCapabilityProjector.Branding shopBranding,
             MarketCapabilityProjector.Branding bazaarBranding,
             MarketCapabilityProjector.Branding auctionHouseBranding,
@@ -363,7 +374,8 @@ public final class MarketCapabilityProjectionService {
                     > MarketCapabilitiesSnapshot
                     .MAXIMUM_CURRENCY_NAME_LENGTH
                     || !currencyName.equals(currencyName.strip())
-                    || currencyDecimals < 0 || currencyDecimals > 6) {
+                    || currencyDecimals < 0 || currencyDecimals > 6
+                    || auctionListingFeeMinor < 0L) {
                 throw new IllegalArgumentException(
                         "Market wallet projection is invalid");
             }
@@ -384,7 +396,8 @@ public final class MarketCapabilityProjectionService {
                     walletBalanceMinorUnits, walletBalanceKnown,
                     currencyName, currencyDecimals,
                     List.of(3_600L, 21_600L, 86_400L, 259_200L,
-                            604_800L), shopBranding, bazaarBranding,
+                            604_800L), 0L, false,
+                    shopBranding, bazaarBranding,
                     auctionHouseBranding, marketControl);
         }
 

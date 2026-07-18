@@ -102,9 +102,12 @@ Auctions run on real time by default and expire on schedule whether or not anyon
 
 ## Bazaar
 
-The Bazaar trades server-defined products, not arbitrary items. By default a product accepts only
-plain, undamaged, untagged stacks; named, damaged, or enchanted variants trade only where the
-server has defined an explicit variant product.
+The Bazaar catalog is controlled by `bazaar_control` in `futureshops-bazaar.toml`. In the default
+`admin` mode it trades only server-defined products, like the curated Hypixel SkyBlock catalog.
+In `players` mode anyone can hold a plain item and use **Add Held Item** on the Products screen;
+products have no per-player quota and remain in the durable shared catalog. In either mode a
+commodity accepts only plain, undamaged, untagged stacks. Named, damaged, or enchanted variants
+require an explicit admin product.
 
 ### Instant buy and instant sell
 
@@ -170,9 +173,11 @@ config reload never silently mass-cancels contracts.
 
 - **Module control** — enable/disable per module in `futureshops-common.toml`; all market rules in
   the per-module TOMLs. Config hot-reloads; rule changes apply to new contracts only.
-- **Bazaar catalog** — product JSON files under `config/futureshops/bazaar/products/`; removing a
-  product retires it (historical orders, fills, and claims are preserved). Product `status` can be
-  set to `halted` to stop matching on one product without retiring it.
+- **Bazaar catalog** — `bazaar_control = "admin"` uses product JSON files under
+  `config/futureshops/bazaar/products/`; `bazaar_control = "players"` exposes Add Held Item and
+  preserves player-added products. Removing an admin product retires it while preserving history,
+  orders, fills, and claims. Product `status` can be set to `halted` to stop matching without
+  retiring it.
 - **Balances** — `/shopadmin bal add|remove|set|check|reset` runs through journaled administrative
   ledger mutations with explicit confirmation, and every action lands in the immutable
   administrative audit store.

@@ -8,6 +8,7 @@ import com.enviouse.futureshops.money.ItemStackSnapshotCodec;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SBazaarCancelPacket;
 import com.enviouse.futureshops.network.packets.C2SBazaarOrderPacket;
+import com.enviouse.futureshops.network.packets.C2SBazaarRegisterProductPacket;
 import com.enviouse.futureshops.network.packets.S2CMarketActionResponsePacket;
 import com.enviouse.futureshops.server.escrow.item.ExactItemClaimPayload;
 import com.enviouse.futureshops.server.escrow.item.ItemInputMatcher;
@@ -34,6 +35,7 @@ import com.enviouse.futureshops.server.market.bazaar.BazaarOrderSide;
 import com.enviouse.futureshops.server.market.bazaar.BazaarOrderType;
 import com.enviouse.futureshops.server.market.bazaar.BazaarIds;
 import com.enviouse.futureshops.server.market.bazaar.BazaarProduct;
+import com.enviouse.futureshops.server.market.bazaar.BazaarProductStatus;
 import com.enviouse.futureshops.server.market.bazaar.BazaarRequestReceipt;
 import com.enviouse.futureshops.server.market.bazaar.BazaarRuleSnapshot;
 import com.enviouse.futureshops.server.market.bazaar.BazaarRuleSnapshotFactory;
@@ -69,10 +71,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -98,6 +103,7 @@ public final class BazaarActionService {
     private static final String MODULE = "bazaar";
     private static final String ACTION_ORDER = "bazaar.order";
     private static final String ACTION_CANCEL = "bazaar.cancel";
+    private static final String ACTION_REGISTER = "bazaar.register";
     private static final int LIMITER_MAX_KEYS = 4096;
     private static final Duration LIMITER_IDLE_RETENTION = Duration.ofMinutes(10);
     private static final long MILLIS_PER_HOUR = 3_600_000L;
@@ -107,6 +113,110 @@ public final class BazaarActionService {
     private static int limiterRatePerSecond;
 
     private BazaarActionService() {
+    }
+
+    public static void registerProduct(
+            ServerPlayer player,
+            C2SBazaarRegisterProductPacket packet
+    ) {
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(packet, "packet");
+        UUID requestId = packet.requestId();
+        EscrowRuntimeService runtime = readyRuntime();
+        if (runtime == null) {
+            respond(player, requestId, "REGISTER", "ESCROW_UNAVAILABLE",
+                    null, 0L, 0L, "");
+            return;
+        }
+        try {
+            BazaarOrderBookSnapshot snapshot = runtime.bazaarSnapshot();
+            if (snapshot.lifecycleReceipts().containsKey(requestId)) {
+                respond(player, requestId, "REGISTER", "APPLIED", null,
+                        snapshot.nextSequence(), configRevision(snapshot), "");
+                return;
+            }
+            if (!actionAllowed(player.getServer())) {
+                respond(player, requestId, "REGISTER", "MODULE_DISABLED",
+                        null, 0L, configRevision(snapshot), "");
+                return;
+            }
+            if (routeInvalid(player, packet.routeNonce())) {
+                respond(player, requestId, "REGISTER", "INVALID_REQUEST",
+                        null, 0L, configRevision(snapshot), "route");
+                return;
+            }
+            if (BazaarConfig.catalogControl()
+                    != BazaarConfig.CatalogControl.PLAYERS) {
+                respond(player, requestId, "REGISTER", "PERMISSION_DENIED",
+                        null, 0L, configRevision(snapshot), "admin_catalog");
+                return;
+            }
+            if (rateLimited(player.getUUID(), ACTION_REGISTER)) {
+                respond(player, requestId, "REGISTER", "RATE_LIMITED",
+                        null, 0L, configRevision(snapshot), "");
+                return;
+            }
+            ItemStack held = player.getMainHandItem();
+            ResourceLocation registryKey = held.isEmpty() ? null
+                    : ForgeRegistries.ITEMS.getKey(held.getItem());
+            if (registryKey == null || held.getItem() == Items.AIR
+                    || held.hasTag() || held.isDamaged()) {
+                respond(player, requestId, "REGISTER", "INVALID_REQUEST",
+                        null, 0L, configRevision(snapshot), "held_item");
+                return;
+            }
+            String registryId = registryKey.toString();
+            BazaarProduct latest = snapshot.products().stream()
+                    .filter(product -> product.registryId().equals(registryId))
+                    .max(java.util.Comparator.comparingLong(
+                            BazaarProduct::version)).orElse(null);
+            if (latest != null
+                    && latest.status() != BazaarProductStatus.RETIRED) {
+                respond(player, requestId, "REGISTER", "APPLIED", null,
+                        latest.version(), configRevision(snapshot),
+                        latest.productId());
+                return;
+            }
+            BazaarConfig.Settings settings = BazaarConfig.settings();
+            String productId = latest == null
+                    ? playerProductId(registryId) : latest.productId();
+            long version = latest == null ? 1L
+                    : Math.addExact(latest.version(), 1L);
+            BazaarProduct product = new BazaarProduct(productId, version,
+                    registryId, "", registryKey.getNamespace(),
+                    settings.productDefaults().lotSize(),
+                    settings.productDefaults().priceTickMinor(),
+                    settings.productDefaults().priceTickMinor(),
+                    settings.orders().maximumNotionalMinor(),
+                    settings.orders().maximumQuantity(),
+                    BazaarProductStatus.ACTIVE);
+            BazaarLifecycleCommand command =
+                    BazaarLifecycleCommand.registerProduct(requestId,
+                            product);
+            BazaarMutation.ApplyResult result = runtime.commitBazaarMutation(
+                    BazaarMutation.lifecycle(snapshot, command));
+            respond(player, requestId, "REGISTER", "APPLIED", null,
+                    product.version(), configRevision(result.snapshot()),
+                    product.productId());
+        } catch (RuntimeException exception) {
+            LOGGER.error("Bazaar product registration failed for {}",
+                    player.getGameProfile().getName(), exception);
+            respond(player, requestId, "REGISTER", "RECOVERY_REQUIRED",
+                    null, 0L, 0L, "");
+        }
+    }
+
+    static String playerProductId(String registryId) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(
+                    Objects.requireNonNull(registryId, "registryId")
+                            .getBytes(StandardCharsets.UTF_8));
+            return "player." + HexFormat.of().formatHex(digest, 0, 20);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(
+                    "Bazaar product identity hash is unavailable",
+                    exception);
+        }
     }
 
     // ═══════════════════════════ ORDER (BUY / SELL / INSTANT) ═══════════════════════════
@@ -806,7 +916,8 @@ public final class BazaarActionService {
                         new ServerRequestRateLimiter.BucketPolicy(rate, rate,
                                 Duration.ofSeconds(1));
                 limiter = new ServerRequestRateLimiter(
-                        Map.of(ACTION_ORDER, policy, ACTION_CANCEL, policy),
+                        Map.of(ACTION_ORDER, policy, ACTION_CANCEL, policy,
+                                ACTION_REGISTER, policy),
                         LIMITER_MAX_KEYS, LIMITER_IDLE_RETENTION, System::nanoTime);
                 limiterRatePerSecond = rate;
             }

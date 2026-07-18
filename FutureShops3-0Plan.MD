@@ -1066,3 +1066,16 @@ durability and replay fixtures, corruption and recovery drills, module disable a
 exact item identity tests, administrative cancellation with standing bid refunds, and restore
 soaks with 2000 auctions and 10000 Bazaar orders. The supported platform and integration boundaries
 are documented in [docs/compatibility-matrix.md](docs/compatibility-matrix.md).
+
+The post release market usability pass adds `bazaar_control` with admin and players modes. Admin
+mode keeps the curated JSON product registry and reconciliation rules. Players mode preserves the
+durable registry and allows tagless, undamaged held items to be registered without a per-player
+catalog quota. Both modes retain escrow, versioning, circuit breakers, request rate limits, and
+history.
+
+Auction listing creation now presents the exact server listing fee before payment selection and
+reconciles the result against the durable escrow commit before showing a recovery warning. The
+shared market shell reserves measured space for its brand and centered module tabs, falls back to
+footer navigation when tabs do not fit, renders Bazaar in green and Auction House in red themed
+surfaces, contains empty states inside the content region, and uses responsive detail panels for
+item name, mod, registry identity, seller, price, timing, state, and actions.

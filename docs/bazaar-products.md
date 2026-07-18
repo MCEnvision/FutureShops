@@ -1,6 +1,24 @@
 # Bazaar product definitions
 
-FutureShops reads Bazaar products from `config/futureshops/bazaar/products/*.json`. The directory is loaded as one atomic catalog. If any file is malformed or unsafe, the complete reload is rejected and the last valid catalog remains active.
+The root `bazaar_control` value in `futureshops-bazaar.toml` selects who controls the product
+catalog.
+
+- `bazaar_control = "admin"` is the default Hypixel style curated mode. Only products in
+  `config/futureshops/bazaar/products/*.json` exist. Removing a definition retires that product
+  while preserving orders, fills, history, custody, and claims.
+- `bazaar_control = "players"` preserves the durable catalog and lets players hold a plain item
+  and press **Add Held Item** on the Products screen. There is no per-player product quota.
+  Product identity is one tagless, undamaged registry item, duplicates are idempotent, and
+  circuit-breaker halts cannot be bypassed by adding the item again. Technical serialization
+  bounds still protect the world save.
+
+Switching from player control back to admin control applies the JSON catalog on the next server
+start. Player-added products missing from that catalog are retired rather than deleted.
+
+In admin control mode FutureShops reads Bazaar products from
+`config/futureshops/bazaar/products/*.json`. The directory is loaded as one atomic catalog. If any
+file is malformed or unsafe, the complete reload is rejected and the last valid catalog remains
+active.
 
 The editor schema is available at [schemas/futureshops-bazaar-product.schema.json](schemas/futureshops-bazaar-product.schema.json).
 

@@ -39,8 +39,10 @@ of setting:
   created. A reload changes the rules for *new* listings and orders only; every live contract
   keeps the exact rules it was accepted under. Nothing you change here retroactively edits an
   active auction or an open Bazaar order.
-- **Restart or migration required** — currency decimals, product identity semantics, and
-  persistent key or journal formats.
+- **Restart or migration required** — currency decimals, product identity semantics,
+  `bazaar_control` catalog reconciliation, and persistent key or journal formats. The control
+  value is enforced immediately for new Add Held Item requests, but switching back to admin mode
+  reconciles the JSON catalog on server start.
 
 If a reloaded file contains an invalid value, the whole reload for that file is rejected: the last
 valid settings snapshot stays active and the server log reports the rejected field, for example
@@ -327,6 +329,9 @@ Global market rules only — individual products are defined in
 `config/futureshops/bazaar/products/*.json` (below).
 
 ```toml
+# "admin" uses the curated JSON catalog. "players" lets players add held commodity items.
+bazaar_control = "admin"
+
 [branding]
 	display_name = "Bazaar"
 	accent_color = "#48B978"

@@ -41,6 +41,21 @@ class BazaarActionServiceDecisionTest {
     }
 
     @Test
+    void catalogControlAndPlayerProductIdentityAreStable() {
+        assertEquals(BazaarConfig.CatalogControl.ADMIN,
+                BazaarConfig.CatalogControl.fromWire("admin"));
+        assertEquals(BazaarConfig.CatalogControl.PLAYERS,
+                BazaarConfig.CatalogControl.fromWire("PLAYERS"));
+        String first = BazaarActionService.playerProductId(
+                "minecraft:spruce_door");
+        assertEquals(first, BazaarActionService.playerProductId(
+                "minecraft:spruce_door"));
+        assertNotEquals(first, BazaarActionService.playerProductId(
+                "minecraft:oak_door"));
+        assertTrue(first.matches("player\\.[0-9a-f]{40}"));
+    }
+
+    @Test
     void factoryMapsEveryConfiguredRuleExactly() {
         BazaarConfig.Settings settings = defaults();
         BazaarRuleSnapshot snapshot = BazaarRuleSnapshotFactory.from(settings, 9L);

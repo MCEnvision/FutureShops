@@ -108,6 +108,18 @@ class MarketCapabilitiesSnapshotTest {
                         "Credits", -1, modules));
     }
 
+    @Test
+    void negativeAuctionListingFeeIsRejected() {
+        List<MarketModuleCapability> modules = List.of(
+                capability(MarketModule.SHOP,
+                        MarketModuleAvailability.ENABLED, 0L));
+        assertThrows(IllegalArgumentException.class, () ->
+                new MarketCapabilitiesSnapshot(UUID.randomUUID(), 1L,
+                        true, MarketModule.SHOP, 0L, true,
+                        "Credits", 2, -1L, true,
+                        List.of(3_600L), modules));
+    }
+
     private static MarketModuleCapability capability(
         MarketModule module,
         MarketModuleAvailability availability,

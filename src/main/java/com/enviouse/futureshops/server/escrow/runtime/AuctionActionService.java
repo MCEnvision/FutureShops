@@ -375,7 +375,20 @@ public final class AuctionActionService {
         } catch (RuntimeException exception) {
             LOGGER.error("Auction create failed for {}", player.getGameProfile().getName(),
                     exception);
-            respond(player, requestId, "CREATE", "RECOVERY_REQUIRED", null, 0L, "");
+            Optional<AuctionEscrowCommit> durable =
+                    runtime.auctionEscrowCommit(requestId);
+            if (durable.isPresent()) {
+                try {
+                    respondFromCommit(player, requestId, "CREATE",
+                            durable.orElseThrow());
+                } catch (RuntimeException responseFailure) {
+                    LOGGER.error("Auction create {} was applied but its response failed",
+                            requestId, responseFailure);
+                }
+                return;
+            }
+            respond(player, requestId, "CREATE", "RECOVERY_REQUIRED",
+                    null, 0L, "");
         }
     }
 

@@ -35,6 +35,33 @@ class MarketCapabilitiesPacketTest {
     }
 
     @Test
+    void feeAndPlayerCatalogCapabilitiesRoundTripExactly() {
+        MarketCapabilitiesSnapshot base = snapshot(UUID.randomUUID());
+        MarketCapabilitiesSnapshot configured =
+                new MarketCapabilitiesSnapshot(base.requestId(),
+                        base.revision(), base.showNavigation(),
+                        base.defaultModule(),
+                        base.walletBalanceMinorUnits(),
+                        base.walletBalanceKnown(), base.currencyName(),
+                        base.currencyDecimals(), 175L, true,
+                        base.auctionDurationPresetSeconds(),
+                        base.modules());
+        S2CMarketCapabilitiesPacket packet =
+                new S2CMarketCapabilitiesPacket(configured);
+        FriendlyByteBuf buffer = buffer();
+
+        S2CMarketCapabilitiesPacket.encode(packet, buffer);
+        S2CMarketCapabilitiesPacket decoded =
+                S2CMarketCapabilitiesPacket.decode(buffer);
+
+        assertEquals(packet, decoded);
+        assertEquals(175L,
+                decoded.snapshot().auctionListingFeeMinor());
+        assertEquals(true,
+                decoded.snapshot().bazaarPlayerCatalog());
+    }
+
+    @Test
     void lifecycleAvailabilityValuesAreAppendOnlyAndRoundTrip() {
         assertEquals(0, MarketModuleAvailability.ENABLED.ordinal());
         assertEquals(1,

@@ -78,6 +78,7 @@ public final class MarketActionFeedback {
         if ("bazaar".equals(moduleId)) {
             return switch (normalized) {
                 case "create", "order" -> "bazaar_order";
+                case "register" -> "bazaar_register";
                 case "cancel" -> "bazaar_cancel";
                 default -> "generic";
             };
@@ -90,6 +91,7 @@ public final class MarketActionFeedback {
             case "auction_create", "auction_bid", "auction_buy_now",
                     "auction_cancel", "bazaar_order", "bazaar_cancel" ->
                     actionKey;
+            case "bazaar_register" -> actionKey;
             default -> "generic";
         };
         return Component.translatable(

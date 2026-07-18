@@ -15,6 +15,8 @@ public record MarketCapabilitiesSnapshot(
     boolean walletBalanceKnown,
     String currencyName,
     int currencyDecimals,
+    long auctionListingFeeMinor,
+    boolean bazaarPlayerCatalog,
     List<Long> auctionDurationPresetSeconds,
     List<MarketModuleCapability> modules
 ) {
@@ -30,7 +32,8 @@ public record MarketCapabilitiesSnapshot(
         Objects.requireNonNull(defaultModule, "defaultModule");
         currencyName = boundedCurrencyName(currencyName);
         if (!walletBalanceKnown && walletBalanceMinorUnits != 0L
-                || currencyDecimals < 0 || currencyDecimals > 6) {
+                || currencyDecimals < 0 || currencyDecimals > 6
+                || auctionListingFeeMinor < 0L) {
             throw new IllegalArgumentException(
                     "Market wallet presentation is invalid.");
         }
@@ -79,10 +82,23 @@ public record MarketCapabilitiesSnapshot(
             MarketModule defaultModule, long walletBalanceMinorUnits,
             boolean walletBalanceKnown, String currencyName,
             int currencyDecimals,
+            List<Long> auctionDurationPresetSeconds,
             List<MarketModuleCapability> modules) {
         this(requestId, revision, showNavigation, defaultModule,
                 walletBalanceMinorUnits, walletBalanceKnown,
-                currencyName, currencyDecimals,
+                currencyName, currencyDecimals, 0L, false,
+                auctionDurationPresetSeconds, modules);
+    }
+
+    public MarketCapabilitiesSnapshot(
+            UUID requestId, long revision, boolean showNavigation,
+            MarketModule defaultModule, long walletBalanceMinorUnits,
+            boolean walletBalanceKnown, String currencyName,
+            int currencyDecimals,
+            List<MarketModuleCapability> modules) {
+        this(requestId, revision, showNavigation, defaultModule,
+                walletBalanceMinorUnits, walletBalanceKnown,
+                currencyName, currencyDecimals, 0L, false,
                 List.of(3_600L, 21_600L, 86_400L, 259_200L,
                         604_800L), modules);
     }
@@ -95,7 +111,7 @@ public record MarketCapabilitiesSnapshot(
         List<MarketModuleCapability> modules
     ) {
         this(requestId, revision, showNavigation, defaultModule,
-            0L, false, "Coins", 2,
+            0L, false, "Coins", 2, 0L, false,
                 List.of(3_600L, 21_600L, 86_400L, 259_200L,
                         604_800L), modules);
     }

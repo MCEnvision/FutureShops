@@ -136,8 +136,13 @@ public class Futureshops {
                 // synchronize lazily, so this is presentation-correctness, not safety).
                 com.enviouse.futureshops.server.escrow.runtime.BazaarActionService
                         .synchronizeEffectiveRules(escrow);
-                com.enviouse.futureshops.server.market.bazaar.BazaarProductCatalogRuntime
-                        .reload(escrow);
+                if (com.enviouse.futureshops.config.BazaarConfig.catalogControl()
+                        == com.enviouse.futureshops.config.BazaarConfig.CatalogControl.ADMIN) {
+                    com.enviouse.futureshops.server.market.bazaar.BazaarProductCatalogRuntime
+                            .reload(escrow);
+                } else {
+                    LOGGER.info("FutureShops Bazaar player catalog mode preserves registered products.");
+                }
             } catch (RuntimeException exception) {
                 LOGGER.error("Bazaar product catalog failed to load; bazaar browse stays "
                         + "empty until reload.", exception);
