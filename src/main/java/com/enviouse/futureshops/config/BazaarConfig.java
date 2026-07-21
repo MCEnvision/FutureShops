@@ -28,7 +28,7 @@ public final class BazaarConfig {
     private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
 
     private static final ForgeConfigSpec.ConfigValue<String> BAZAAR_CONTROL = BUILDER
-        .comment("Controls who can add Bazaar products. Admin uses the product JSON catalog. Players lets players add held items without a catalog size limit.")
+        .comment("Controls who can add Bazaar products. Admin uses the product JSON catalog. Players lets players browse registered items without a catalog size limit.")
         .define("bazaar_control", "admin",
             value -> ConfigValidation.isOption(value, CATALOG_CONTROLS));
 

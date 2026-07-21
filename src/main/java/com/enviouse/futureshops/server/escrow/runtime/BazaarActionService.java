@@ -130,9 +130,15 @@ public final class BazaarActionService {
         }
         try {
             BazaarOrderBookSnapshot snapshot = runtime.bazaarSnapshot();
+            BazaarProduct requestedProduct = latestPlayerProduct(snapshot,
+                    packet.registryItemId());
             if (snapshot.lifecycleReceipts().containsKey(requestId)) {
                 respond(player, requestId, "REGISTER", "APPLIED", null,
-                        snapshot.nextSequence(), configRevision(snapshot), "");
+                        requestedProduct == null ? 0L
+                                : requestedProduct.version(),
+                        configRevision(snapshot),
+                        requestedProduct == null ? ""
+                                : requestedProduct.productId());
                 return;
             }
             if (!actionAllowed(player.getServer())) {
@@ -156,20 +162,18 @@ public final class BazaarActionService {
                         null, 0L, configRevision(snapshot), "");
                 return;
             }
-            ItemStack held = player.getMainHandItem();
-            ResourceLocation registryKey = held.isEmpty() ? null
-                    : ForgeRegistries.ITEMS.getKey(held.getItem());
-            if (registryKey == null || held.getItem() == Items.AIR
-                    || held.hasTag() || held.isDamaged()) {
+            ResourceLocation registryKey = ResourceLocation.tryParse(
+                    packet.registryItemId());
+            Item registryItem = registryKey == null ? null
+                    : ForgeRegistries.ITEMS.getValue(registryKey);
+            if (registryKey == null || registryItem == null
+                    || registryItem == Items.AIR) {
                 respond(player, requestId, "REGISTER", "INVALID_REQUEST",
-                        null, 0L, configRevision(snapshot), "held_item");
+                        null, 0L, configRevision(snapshot), "registry_item");
                 return;
             }
             String registryId = registryKey.toString();
-            BazaarProduct latest = snapshot.products().stream()
-                    .filter(product -> product.registryId().equals(registryId))
-                    .max(java.util.Comparator.comparingLong(
-                            BazaarProduct::version)).orElse(null);
+            BazaarProduct latest = latestPlayerProduct(snapshot, registryId);
             if (latest != null
                     && latest.status() != BazaarProductStatus.RETIRED) {
                 respond(player, requestId, "REGISTER", "APPLIED", null,
@@ -217,6 +221,20 @@ public final class BazaarActionService {
                     "Bazaar product identity hash is unavailable",
                     exception);
         }
+    }
+
+    static BazaarProduct latestPlayerProduct(
+            BazaarOrderBookSnapshot snapshot,
+            String registryId
+    ) {
+        String normalized = Objects.requireNonNull(
+                registryId, "registryId").strip().toLowerCase(Locale.ROOT);
+        return Objects.requireNonNull(snapshot, "snapshot").products()
+                .stream()
+                .filter(product -> product.registryId().equals(normalized)
+                        && product.exactIdentity().isEmpty())
+                .max(java.util.Comparator.comparingLong(
+                        BazaarProduct::version)).orElse(null);
     }
 
     // ═══════════════════════════ ORDER (BUY / SELL / INSTANT) ═══════════════════════════

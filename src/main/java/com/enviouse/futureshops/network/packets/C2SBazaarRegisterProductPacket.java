@@ -12,16 +12,27 @@ import java.util.function.Supplier;
 
 public record C2SBazaarRegisterProductPacket(
         UUID requestId,
-        UUID routeNonce
+        UUID routeNonce,
+        String registryItemId
 ) {
     private static final UUID ZERO = new UUID(0L, 0L);
+    private static final int MAXIMUM_ITEM_ID_LENGTH = 256;
 
     public C2SBazaarRegisterProductPacket {
         Objects.requireNonNull(requestId, "requestId");
         Objects.requireNonNull(routeNonce, "routeNonce");
+        registryItemId = Objects.requireNonNull(
+                registryItemId, "registryItemId").strip();
         if (ZERO.equals(requestId) || ZERO.equals(routeNonce)) {
             throw new IllegalArgumentException(
                     "Bazaar product registration identifiers are required");
+        }
+        if (registryItemId.isEmpty()
+                || registryItemId.length() > MAXIMUM_ITEM_ID_LENGTH
+                || net.minecraft.resources.ResourceLocation.tryParse(
+                registryItemId) == null) {
+            throw new IllegalArgumentException(
+                    "Bazaar product registry item is invalid");
         }
     }
 
@@ -31,6 +42,7 @@ public record C2SBazaarRegisterProductPacket(
     ) {
         buffer.writeUUID(packet.requestId());
         buffer.writeUUID(packet.routeNonce());
+        buffer.writeUtf(packet.registryItemId(), MAXIMUM_ITEM_ID_LENGTH);
     }
 
     public static C2SBazaarRegisterProductPacket decode(
@@ -38,7 +50,8 @@ public record C2SBazaarRegisterProductPacket(
     ) {
         try {
             return new C2SBazaarRegisterProductPacket(
-                    buffer.readUUID(), buffer.readUUID());
+                    buffer.readUUID(), buffer.readUUID(),
+                    buffer.readUtf(MAXIMUM_ITEM_ID_LENGTH));
         } catch (RuntimeException exception) {
             throw new DecoderException(
                     "Bazaar product registration request is invalid",

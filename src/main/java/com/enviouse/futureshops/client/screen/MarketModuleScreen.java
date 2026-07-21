@@ -344,6 +344,19 @@ public final class MarketModuleScreen extends Screen
             if ("auction_create".equals(actionKey)) {
                 closeCreateWizard();
             }
+            if ("bazaar_register".equals(actionKey)
+                    && module == MarketModule.BAZAAR
+                    && !response.detail().isEmpty()
+                    && response.newRevision() > 0L) {
+                pendingDetailRefresh = new DetailRefresh(module,
+                        response.detail() + "@" + response.newRevision(),
+                        Util.getMillis());
+                selectedCategory = "";
+                requestedPage = 0;
+                if (search != null && !subjectId.isEmpty()) {
+                    search.setValue(subjectId);
+                }
+            }
             refreshAfterAction(subjectId);
             return;
         }
@@ -986,9 +999,10 @@ public final class MarketModuleScreen extends Screen
             accentActionButton(graphics, mouseX, mouseY, addHeld,
                     "+ " + Component.translatable(
                             "gui.futureshops.market.action.register.button")
-                            .getString(), true, ShopColors.ACCENT_GOLD,
+                            .getString(), !PENDING_ACTIONS.anyPending(),
+                    ShopColors.ACCENT_GOLD,
                     "bazaar_register", "", true,
-                    this::sendBazaarRegistration);
+                    this::openBazaarItemBrowser);
             contentStart = addHeld.right() + 8;
         }
         long claims = openClaimCount(module);
@@ -3849,8 +3863,9 @@ public final class MarketModuleScreen extends Screen
                     "+ " + Component.translatable(
                             "gui.futureshops.market.action.register.button")
                             .getString(),
-                    true, false, "bazaar_register", "", true,
-                    this::sendBazaarRegistration);
+                    !PENDING_ACTIONS.anyPending(), false,
+                    "bazaar_register", "", true,
+                    this::openBazaarItemBrowser);
         }
     }
 
@@ -3879,10 +3894,30 @@ public final class MarketModuleScreen extends Screen
                 && minecraft != null && minecraft.player != null;
     }
 
-    private void sendBazaarRegistration() {
-        sendMarketAction("bazaar_register", "",
+    private void openBazaarItemBrowser() {
+        if (!showBazaarRegistrationButton() || minecraft == null
+                || PENDING_ACTIONS.anyPending()) {
+            return;
+        }
+        prepareNavigationHandoff();
+        minecraft.setScreen(new BazaarItemBrowserScreen(this));
+    }
+
+    void returnFromBazaarItemBrowser() {
+        if (minecraft != null) {
+            minecraft.setScreen(this);
+        }
+    }
+
+    void selectBazaarRegistryItem(String registryItemId) {
+        returnFromBazaarItemBrowser();
+        sendBazaarRegistration(registryItemId);
+    }
+
+    private void sendBazaarRegistration(String registryItemId) {
+        sendMarketAction("bazaar_register", registryItemId,
                 requestId -> new C2SBazaarRegisterProductPacket(
-                        requestId, packet.routeNonce()));
+                        requestId, packet.routeNonce(), registryItemId));
     }
 
     private long auctionListingFeeMinor() {

@@ -5,6 +5,8 @@ import com.enviouse.futureshops.server.market.bazaar.BazaarExecutionPricePolicy;
 import com.enviouse.futureshops.server.market.bazaar.BazaarOrderBook;
 import com.enviouse.futureshops.server.market.bazaar.BazaarOrderSide;
 import com.enviouse.futureshops.server.market.bazaar.BazaarOrderType;
+import com.enviouse.futureshops.server.market.bazaar.BazaarProduct;
+import com.enviouse.futureshops.server.market.bazaar.BazaarProductStatus;
 import com.enviouse.futureshops.server.market.bazaar.BazaarRuleSnapshot;
 import com.enviouse.futureshops.server.market.bazaar.BazaarRuleSnapshotFactory;
 import com.enviouse.futureshops.server.market.bazaar.BazaarSelfTradePolicy;
@@ -53,6 +55,27 @@ class BazaarActionServiceDecisionTest {
         assertNotEquals(first, BazaarActionService.playerProductId(
                 "minecraft:oak_door"));
         assertTrue(first.matches("player\\.[0-9a-f]{40}"));
+    }
+
+    @Test
+    void latestPlayerProductLookupUsesThePlainRegistryIdentity() {
+        BazaarOrderBook book = new BazaarOrderBook();
+        book.registerProduct(new BazaarProduct("iron", 1L,
+                "minecraft:iron_ingot", "", "minecraft", 1, 1L,
+                1L, 1000L, 100, BazaarProductStatus.RETIRED));
+        book.registerProduct(new BazaarProduct("iron", 2L,
+                "minecraft:iron_ingot", "", "minecraft", 1, 1L,
+                1L, 1000L, 100, BazaarProductStatus.ACTIVE));
+        book.registerProduct(new BazaarProduct("enchanted_iron", 9L,
+                "minecraft:iron_ingot", "{Enchantments:[]}",
+                "minecraft", 1, 1L, 1L, 1000L, 100,
+                BazaarProductStatus.ACTIVE));
+        BazaarProduct latest = BazaarActionService.latestPlayerProduct(
+                book.snapshot(), " MINECRAFT:IRON_INGOT ");
+
+        assertEquals(2L, latest.version());
+        assertNull(BazaarActionService.latestPlayerProduct(
+                book.snapshot(), "minecraft:gold_ingot"));
     }
 
     @Test

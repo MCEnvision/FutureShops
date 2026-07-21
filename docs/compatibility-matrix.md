@@ -5,7 +5,7 @@ and shop transaction system.
 
 | Area | Supported | Behavior and boundary |
 | --- | --- | --- |
-| Minecraft and loader | Minecraft 1.20.1 with the repository Forge toolchain | Client and server must run the same FutureShops build. Protocol 47 rejects mismatched market packets. |
+| Minecraft and loader | Minecraft 1.20.1 with the repository Forge toolchain | Client and server must run compatible FutureShops builds. Protocol 50 rejects peers that do not support registry selected Bazaar products. |
 | Dedicated and integrated servers | Yes | Escrow, claims, auctions, Bazaar orders, physical cash, and recovery use server-owned data. |
 | Windows world saves | Yes | Checkpoint and journal files are forced before atomic moves. Windows does not expose directory fsync through Java, so the unavailable directory barrier uses an explicit best-effort fallback and logs one warning instead of crashing world startup. |
 | Built-in physical currency | `currency.provider = "futureshops"` | Mint IDs, checksums, reservations, spent-mint tracking, replay protection, and replacement-mint refunds are enforced. |
@@ -13,7 +13,7 @@ and shop transaction system.
 | Other mod currency | `currency.provider = "custom"` | Up to 32 configured dispense denominations plus accept-only items. Requests remain journaled and idempotent, but copied items, recipes, loot, and source-mod bugs are outside FutureShops duplication protection. |
 | Wallet and inventory cash funding | Yes | Shop purchases, auction listing fees, bids, Buy Now, and Bazaar buys can prompt for wallet or inventory cash. Cash is consumed through escrow before the economic action. |
 | Forge permission plugins | Forge PermissionAPI Boolean nodes | Dedicated Auction House, Bazaar, and escrow nodes are registered. Vanilla operator levels remain the fallback. Claims are not confiscated when trade access is revoked. |
-| Bazaar item identity | Admin JSON catalog or player-added registry commodities | Admin mode supports plain-item and configured exact NBT identity. Player mode accepts tagless, undamaged held items. Product versions are immutable after escrow use. |
+| Bazaar item identity | Admin JSON catalog or player selected registry commodities | Admin mode supports plain items and configured exact NBT identity. Players mode searches every registered base item and can create a buy market without possession. Every sell remains inventory backed. Product versions are immutable after escrow use. |
 | Auction item identity | Complete serialized stack | NBT, damage, names, enchantments, contents, and supported capability data remain in custody. Unsafe containers and capabilities follow the Auction House restrictions config. |
 | External item storage | Player inventory for release contracts | Direct listing from third-party storage is unsupported until an adapter provides deterministic transaction receipts and exact preimage and postimage reconciliation. |
 | Single-server worlds | Yes | One authoritative server owns the journal and saved data. |

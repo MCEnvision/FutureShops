@@ -3,17 +3,26 @@
 The root `bazaar_control` value in `futureshops-bazaar.toml` selects who controls the product
 catalog.
 
-- `bazaar_control = "admin"` is the default Hypixel style curated mode. Only products in
+1. `bazaar_control = "admin"` is the default Hypixel style curated mode. Only products in
   `config/futureshops/bazaar/products/*.json` exist. Removing a definition retires that product
   while preserving orders, fills, history, custody, and claims.
-- `bazaar_control = "players"` preserves the durable catalog and lets players hold a plain item
-  and press **Add Held Item** on the Products screen. There is no per-player product quota.
-  Product identity is one tagless, undamaged registry item, duplicates are idempotent, and
-  circuit-breaker halts cannot be bypassed by adding the item again. Technical serialization
+2. `bazaar_control = "players"` preserves the durable catalog and exposes **Browse Items** on the
+  Products screen. The browser contains every registered base item from Minecraft and installed
+  mods. It searches localized names, registry identifiers, predictive `@mod` filters, and
+  predictive `#item_tag` filters. There is no per player product quota. Selecting an item creates
+  or reuses its shared market without requiring the player to possess it. Product identity is one
+  tagless, undamaged registry item, duplicates are idempotent, and circuit breaker halts cannot be
+  bypassed by selecting the item again. Technical serialization
   bounds still protect the world save.
 
 Switching from player control back to admin control applies the JSON catalog on the next server
-start. Player-added products missing from that catalog are retired rather than deleted.
+start. Player added products missing from that catalog are retired rather than deleted.
+
+The Players mode browser is a discovery surface, not a client authority. The client sends only the
+selected registry identifier. The server checks that the item is registered and is not air before
+creating a deterministic product identity. A buy order then reserves money in escrow and does not
+need an item. A sell offer still extracts real matching inventory items into exact custody before
+the order becomes active.
 
 In admin control mode FutureShops reads Bazaar products from
 `config/futureshops/bazaar/products/*.json`. The directory is loaded as one atomic catalog. If any

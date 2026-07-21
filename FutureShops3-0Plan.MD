@@ -1083,9 +1083,12 @@ are documented in [docs/compatibility-matrix.md](docs/compatibility-matrix.md).
 
 The post release market usability pass adds `bazaar_control` with admin and players modes. Admin
 mode keeps the curated JSON product registry and reconciliation rules. Players mode preserves the
-durable registry and allows tagless, undamaged held items to be registered without a per-player
-catalog quota. Both modes retain escrow, versioning, circuit breakers, request rate limits, and
-history.
+durable registry and provides a complete registered item browser without a per player catalog
+quota. Search covers localized item names, registry identifiers, predictive mod filters, and
+predictive item tag filters. A player can select an item they do not possess, create or reuse its
+market, and fund a buy order entirely through escrow. Every sell still requires matching inventory
+items to enter custody. Both modes retain escrow, versioning, circuit breakers, request rate limits,
+and history.
 
 Auction listing creation now presents the exact server listing fee before payment selection and
 reconciles the result against the durable escrow commit before showing a recovery warning. The
@@ -1121,7 +1124,7 @@ same Marketplace path formatting as the Server Shop, and Back appears only on de
 of replaying ordinary local tab history. Auction creation owns a complete market workspace so
 underlying department and toolbar surfaces do not show through it. ATM deposit safety guidance wraps
 inside the available panel. The Bazaar footer identifies admin JSON catalog control or player catalog
-control and explains where Add Held Item is available. Admin item tag search matches both registry
+control and explains where Browse Items is available. Admin item tag search matches both registry
 namespaces and normalized Forge mod display names, including aliases such as Applied Energistics and
 Macaw mod families.
 

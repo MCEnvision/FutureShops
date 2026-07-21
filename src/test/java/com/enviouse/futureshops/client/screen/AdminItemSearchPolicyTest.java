@@ -54,4 +54,33 @@ class AdminItemSearchPolicyTest {
         assertTrue(AdminItemSearchPolicy.matches(ID, SEARCH_TEXT, ""));
         assertTrue(AdminItemSearchPolicy.matches(ID, SEARCH_TEXT, "@"));
     }
+
+    @Test
+    void itemTagSearchIsPredictive() {
+        String tags = "forge:ingots forge:ingots/iron minecraft:beacon_payment_items";
+        assertTrue(AdminItemSearchPolicy.matches(
+                "minecraft:iron_ingot", "iron ingot", "Minecraft",
+                tags, "#forge:ing"));
+        assertTrue(AdminItemSearchPolicy.matches(
+                "minecraft:iron_ingot", "iron ingot", "Minecraft",
+                tags, "#beacon_payment"));
+        assertTrue(AdminItemSearchPolicy.matches(
+                "minecraft:iron_ingot", "iron ingot", "Minecraft",
+                tags, "beacon_payment"));
+        assertFalse(AdminItemSearchPolicy.matches(
+                "minecraft:iron_ingot", "iron ingot", "Minecraft",
+                tags, "#logs"));
+    }
+
+    @Test
+    void modTagAndNameFiltersCanBeCombined() {
+        assertTrue(AdminItemSearchPolicy.matches(
+                "examplemod:steel_ingot", "steel ingot",
+                "Example Mod", "forge:ingots forge:ingots/steel",
+                "@example #forge:ing steel"));
+        assertFalse(AdminItemSearchPolicy.matches(
+                "examplemod:steel_ingot", "steel ingot",
+                "Example Mod", "forge:ingots forge:ingots/steel",
+                "@example #forge:gems steel"));
+    }
 }

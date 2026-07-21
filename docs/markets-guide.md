@@ -119,11 +119,36 @@ Auctions run on real time by default and expire on schedule whether or not anyon
 ## Bazaar
 
 The Bazaar catalog is controlled by `bazaar_control` in `futureshops-bazaar.toml`. In the default
-`admin` mode it trades only server-defined products, like the curated Hypixel SkyBlock catalog.
-In `players` mode anyone can hold a plain item and use **Add Held Item** on the Products screen;
-products have no per-player quota and remain in the durable shared catalog. In either mode a
-commodity accepts only plain, undamaged, untagged stacks. Named, damaged, or enchanted variants
-require an explicit admin product.
+`admin` mode it trades only server defined products, like the curated Hypixel SkyBlock catalog.
+In `players` mode the Products screen has a **Browse Items** control. It opens every registered base
+item from Minecraft and installed mods. Players can search by localized item name, registry item
+identifier, predictive mod filter such as `@applied`, or predictive item tag filter such as
+`#forge:ingots`. Selecting an item creates or reuses one durable shared market and opens its trading
+details. There is no per player product quota. The server resolves the registry item itself and
+never requires the player to possess it for a buy order.
+
+In either mode a normal commodity accepts only plain, undamaged, untagged stacks. Named, damaged,
+or enchanted variants require an explicit admin product. Sell offers and instant sells always move
+real matching items from the player inventory into escrow. Buy orders reserve money instead, so a
+player can request an item they have never owned.
+
+### Place a buy order without owning the item
+
+1. Open `/bz` and select **Products**.
+2. In Players mode, select **Browse Items**. In Admin mode, search the products made available by
+   the server administrator.
+3. Search for the item by name or identifier. Use `@mod_name` to filter by a mod, or `#tag_name` to
+   filter by an item tag.
+4. Select the item. Players mode creates or reuses its market and opens the product details.
+5. Set **Quantity** to the total number wanted.
+6. Enter the most you will pay for each unit in **Limit Price**.
+7. Select **Buy Order**, then choose wallet money or inventory cash when prompted.
+
+For example, quantity `100` and limit price `$100.00` means the order can buy up to one hundred iron
+ingots at no more than one hundred coins per ingot. The required maximum value and fee are reserved
+in escrow. Another player can use **Instant Sell** to fill the best available buy orders, or create a
+different **Sell Offer**. Partial fills leave the unfilled remainder open until it completes,
+expires, or is cancelled.
 
 ### Instant buy and instant sell
 
@@ -189,11 +214,11 @@ config reload never silently mass-cancels contracts.
 
 - **Module control** — enable/disable per module in `futureshops-common.toml`; all market rules in
   the per-module TOMLs. Config hot-reloads; rule changes apply to new contracts only.
-- **Bazaar catalog** — `bazaar_control = "admin"` uses product JSON files under
-  `config/futureshops/bazaar/products/`; `bazaar_control = "players"` exposes Add Held Item and
-  preserves player-added products. Removing an admin product retires it while preserving history,
-  orders, fills, and claims. Product `status` can be set to `halted` to stop matching without
-  retiring it.
+**Bazaar catalog.** `bazaar_control = "admin"` uses product JSON files under
+`config/futureshops/bazaar/products/`. `bazaar_control = "players"` exposes Browse Items and
+preserves player selected products. Removing an admin product retires it while preserving history,
+orders, fills, and claims. Product `status` can be set to `halted` to stop matching without
+retiring it.
 - **Balances** — `/shopadmin bal add|remove|set|check|reset` runs through journaled administrative
   ledger mutations with explicit confirmation, and every action lands in the immutable
   administrative audit store.

@@ -72,7 +72,9 @@ class MarketScreenPresentationSourceTest {
         String source = screen();
         assertTrue(source.contains(
                 "showBazaarRegistrationButton() && toolbar.width() >= 650"));
-        assertTrue(source.contains("this::sendBazaarRegistration"));
+        assertTrue(source.contains("this::openBazaarItemBrowser"));
+        assertTrue(source.contains(
+                "new C2SBazaarRegisterProductPacket("));
         String language = Files.readString(Path.of(
                 "src/main/resources/assets/futureshops/lang/en_us.json"));
         assertTrue(language.contains(

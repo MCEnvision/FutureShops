@@ -39,7 +39,8 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
     private record PickerEntry(
             String id,
             String searchText,
-            String modDisplayName
+            String modDisplayName,
+            String tagText
     ) {
     }
 
@@ -287,9 +288,12 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
                     .map(container -> container.getModInfo()
                             .getDisplayName())
                     .orElse(key.getNamespace());
+            String tagText = item.builtInRegistryHolder().tags()
+                    .map(tag -> tag.location().toString())
+                    .collect(java.util.stream.Collectors.joining(" "));
             out.add(new PickerEntry(id,
                     (id + ' ' + name + ' ' + modName)
-                            .toLowerCase(Locale.ROOT), modName));
+                            .toLowerCase(Locale.ROOT), modName, tagText));
         }
         out.sort(Comparator.comparing(PickerEntry::id));
         allEntries = out;
@@ -299,7 +303,8 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
         filteredEntries = allEntries.stream()
                 .filter(entry -> AdminItemSearchPolicy.matches(
                         entry.id(), entry.searchText(),
-                        entry.modDisplayName(), searchQuery))
+                        entry.modDisplayName(), entry.tagText(),
+                        searchQuery))
                 .toList();
     }
 
