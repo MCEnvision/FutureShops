@@ -1129,3 +1129,10 @@ The Player Shops skin followup keeps every rendered face bound to the same UUID 
 shown by its card or selected shop block. Franchise cards resolve the franchise leader identity so
 the displayed name and head cannot refer to different members, while offline owners retain their
 last known block identity as a fallback.
+
+The compatibility warning followup uses the FutureShops network protocol for the multiplayer server
+list instead of requiring identical release labels. Compatible builds therefore remain joinable
+without a false warning. A failed handshake now distinguishes a missing client installation, a
+missing server installation, an older client protocol, an older server protocol, and an unknown
+incompatible protocol. Each case explains the correct recovery action without assuming that the
+client always needs an update.

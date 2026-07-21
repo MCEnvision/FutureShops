@@ -72,6 +72,9 @@ public class Futureshops {
 
         // Register our mod's ForgeConfigSpec so that Forge can create and load the config file for us
         ModLoadingContext context = ModLoadingContext.get();
+        context.registerDisplayTest(ShopPackets.PROTOCOL_VERSION,
+                (remoteProtocol, fromServer) ->
+                        ShopPackets.PROTOCOL_VERSION.equals(remoteProtocol));
         context.registerConfig(ModConfig.Type.COMMON, Config.SPEC, "futureshops-common.toml");
         context.registerConfig(ModConfig.Type.COMMON, EscrowConfig.SPEC, EscrowConfig.FILE_NAME);
         context.registerConfig(ModConfig.Type.COMMON, AuctionHouseConfig.SPEC, AuctionHouseConfig.FILE_NAME);
