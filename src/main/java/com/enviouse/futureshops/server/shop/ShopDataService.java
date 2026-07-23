@@ -69,7 +69,7 @@ public final class ShopDataService {
     public static void sendShopData(ServerPlayer player, String requestedShopId, boolean includeNearbyShops, boolean forceOpen) {
         String shopId = resolveShopId(requestedShopId);
         EconomyProvider provider = BalanceManager.getProvider();
-        long balance = provider.getBalance(player.getUUID());
+        long balance = BalanceManager.getDisplayBalance(player.getUUID());
 
         // Check admin shop toggle
         boolean adminEnabled = player.getServer() != null

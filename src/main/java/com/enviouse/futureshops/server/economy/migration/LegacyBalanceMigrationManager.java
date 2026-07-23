@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.server.economy.migration;
 
 import com.enviouse.futureshops.config.EscrowConfig;
+import com.enviouse.futureshops.server.economy.InternalBalanceSavedData;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeManager;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
 import com.mojang.logging.LogUtils;
@@ -9,6 +10,7 @@ import org.slf4j.Logger;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
 public final class LegacyBalanceMigrationManager {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -71,6 +73,22 @@ public final class LegacyBalanceMigrationManager {
     public static synchronized boolean isFailed() {
         return failure != null || lastResult != null
                 && lastResult.stage() == LegacyBalanceMigrationStage.FAILED;
+    }
+
+    public static synchronized long displayBalance(
+            MinecraftServer server,
+            UUID playerId,
+            long defaultBalance
+    ) {
+        requireActiveServer(server);
+        InternalBalanceSavedData legacy = server.overworld().getDataStorage()
+                .computeIfAbsent(
+                        InternalBalanceSavedData::load,
+                        InternalBalanceSavedData::new,
+                        InternalBalanceSavedData.DATA_NAME);
+        return legacy.findBalance(Objects.requireNonNull(
+                        playerId, "playerId"))
+                .orElse(defaultBalance);
     }
 
     public static synchronized void requireComplete() {

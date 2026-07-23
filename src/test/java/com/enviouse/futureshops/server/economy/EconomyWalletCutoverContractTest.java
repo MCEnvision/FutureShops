@@ -64,6 +64,21 @@ class EconomyWalletCutoverContractTest {
     }
 
     @Test
+    void shopBrowsingUsesReadOnlyBalanceDuringCutover() throws Exception {
+        String provider = read(
+                "src/main/java/com/enviouse/futureshops/server/economy/InternalEconomyProvider.java");
+        String shop = read(
+                "src/main/java/com/enviouse/futureshops/server/shop/ShopDataService.java");
+
+        assertTrue(provider.contains("getDisplayBalance(UUID playerUUID)"));
+        assertTrue(provider.contains(
+                "LegacyBalanceMigrationManager.displayBalance("));
+        assertTrue(provider.contains("EscrowWalletService.storedBalance("));
+        assertTrue(shop.contains(
+                "BalanceManager.getDisplayBalance(player.getUUID())"));
+    }
+
+    @Test
     void transferPostsBothPreEventsBeforeOneWalletCommit() throws Exception {
         String provider = read("src/main/java/com/enviouse/futureshops/server/economy/InternalEconomyProvider.java");
         String guard = read("src/main/java/com/enviouse/futureshops/server/economy/WalletMutationGuard.java");

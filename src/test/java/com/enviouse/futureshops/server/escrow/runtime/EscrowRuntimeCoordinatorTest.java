@@ -42,6 +42,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.nio.file.Files;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -311,11 +312,31 @@ class EscrowRuntimeCoordinatorTest {
     }
 
     @Test
-    void missingJournalWithPersistedCursorFailsClosed() {
+    void missingPristineBootstrapJournalCreatesNewLineage() {
         Path path = temporaryDirectory.resolve("deleted-journal.wal");
+        EscrowRuntimeSavedData cursor = new EscrowRuntimeSavedData();
+        UUID deletedLineageId = UUID.randomUUID();
+        UUID replacementLineageId = UUID.randomUUID();
+        cursor.establishLineage(deletedLineageId, 1L);
+
+        EscrowRuntimeCoordinator coordinator = new EscrowRuntimeCoordinator(
+                path, cursor, (record, mutation) -> {
+                }, () -> false, Clock.systemUTC(), () -> replacementLineageId);
+        assertEquals(EscrowRuntimeState.READY, coordinator.start());
+        assertEquals(Optional.of(replacementLineageId), cursor.journalLineage());
+        assertEquals(1L, cursor.lastAppliedSequence());
+        assertTrue(Files.exists(path));
+        assertTrue(coordinator.failure().isEmpty());
+        coordinator.close();
+    }
+
+    @Test
+    void missingJournalWithAdvancedCursorFailsClosed() {
+        Path path = temporaryDirectory.resolve("deleted-active-journal.wal");
         EscrowRuntimeSavedData cursor = new EscrowRuntimeSavedData();
         UUID lineageId = UUID.randomUUID();
         cursor.establishLineage(lineageId, 1L);
+        cursor.advance(lineageId, 2L);
 
         EscrowRuntimeCoordinator coordinator = new EscrowRuntimeCoordinator(
                 path, cursor, (record, mutation) -> {
@@ -323,6 +344,30 @@ class EscrowRuntimeCoordinatorTest {
         assertEquals(EscrowRuntimeState.MAINTENANCE, coordinator.start());
         assertTrue(coordinator.failure().isPresent());
         coordinator.close();
+    }
+
+    @Test
+    void staleBootstrapCursorAdoptsReplacementBootstrapJournal() {
+        Path path = temporaryDirectory.resolve("replacement-bootstrap.wal");
+        UUID deletedLineageId = UUID.randomUUID();
+        UUID replacementLineageId = UUID.randomUUID();
+        EscrowRuntimeCoordinator replacement = new EscrowRuntimeCoordinator(
+                path, new EscrowRuntimeSavedData(), (record, mutation) -> {
+                }, () -> false, Clock.systemUTC(), () -> replacementLineageId);
+        assertEquals(EscrowRuntimeState.READY, replacement.start());
+        replacement.close();
+
+        EscrowRuntimeSavedData staleCursor = new EscrowRuntimeSavedData();
+        staleCursor.establishLineage(deletedLineageId, 1L);
+        EscrowRuntimeCoordinator recovered = new EscrowRuntimeCoordinator(
+                path, staleCursor, (record, mutation) -> {
+                });
+
+        assertEquals(EscrowRuntimeState.READY, recovered.start());
+        assertEquals(Optional.of(replacementLineageId),
+                staleCursor.journalLineage());
+        assertEquals(1L, staleCursor.lastAppliedSequence());
+        recovered.close();
     }
 
     @Test
