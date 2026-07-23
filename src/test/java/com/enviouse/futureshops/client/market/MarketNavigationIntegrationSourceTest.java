@@ -86,6 +86,20 @@ class MarketNavigationIntegrationSourceTest {
     }
 
     @Test
+    void directMarketTabSwitchesAreRoutedByTheServer()
+            throws Exception {
+        String source = Files.readString(Path.of(
+            "src/main/java/com/enviouse/futureshops/client/screen/MarketModuleScreen.java"));
+
+        assertTrue(source.contains(
+                "if (!navigation.isOpen())"));
+        assertFalse(source.contains(
+                "!moduleOpenable(target, true)"));
+        assertTrue(source.contains(
+                "sendOpen(navigation.beginSwitchModule("));
+    }
+
+    @Test
     void serverAcceptsReadOnlyDetailRoutesThroughTheExistingOpenPacket()
             throws Exception {
         String source = Files.readString(Path.of(

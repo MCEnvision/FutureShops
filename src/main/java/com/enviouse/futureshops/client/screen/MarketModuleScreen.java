@@ -4027,7 +4027,7 @@ public final class MarketModuleScreen extends Screen
     }
 
     private void switchModule(MarketModule target) {
-        if (!navigation.isOpen() || !moduleOpenable(target, true)) {
+        if (!navigation.isOpen()) {
             return;
         }
         if (target == MarketModule.SHOP) {
