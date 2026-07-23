@@ -583,6 +583,7 @@
   "command.futureshops.deposit.money_spent": "This bill has already been deposited and has been destroyed.",
   "command.futureshops.player_only": "Only players can run this command.",
   "command.futureshops.shop.opened": "Opened shop '%s'.",
+  "command.futureshops.shop.open_failed": "The shop could not open. No transaction was started. Ask an administrator to check the server log.",
   "command.futureshops.balance.value": "Balance: %s %s",
   "command.futureshops.balance.other": "%s has %s %s",
   "command.futureshops.withdraw.success": "Withdrew %s %s. New balance: %s",

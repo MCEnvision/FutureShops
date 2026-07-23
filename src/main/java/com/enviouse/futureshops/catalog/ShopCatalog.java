@@ -858,8 +858,9 @@ public final class ShopCatalog {
         }
 
         // Look up stock map and barter targets once, outside the per-item loop.
+        CatalogStockAuthorityMode stockMode = STOCK_AUTHORITY_MODE;
         ConcurrentHashMap<String, Integer> stockMap =
-                STOCK_AUTHORITY_MODE == CatalogStockAuthorityMode.LEGACY
+                stockMode == CatalogStockAuthorityMode.LEGACY
                         ? STOCKS.get(resolvedShopId) : null;
         Set<String> barterTargets = BARTER_TARGETS.getOrDefault(resolvedShopId, Set.of());
 
@@ -879,14 +880,14 @@ public final class ShopCatalog {
                     // resolution key — flag exactly the listing the recipe rewards (legacy
                     // single-variant entries have resolutionKey == itemId, so nothing changes).
                     boolean hasBarterRecipes = barterTargets.contains(item.resolutionKey());
-                    int stock = item.isUnlimited() ? -1
-                            : STOCK_AUTHORITY_MODE
-                            == CatalogStockAuthorityMode.LEGACY
-                            ? (stockMap == null ? item.stock()
+                    int legacyStock = stockMap == null ? item.stock()
                             : stockMap.getOrDefault(
-                            item.resolutionKey(), item.stock()))
-                            : getCurrentStock(
-                            resolvedShopId, item.resolutionKey());
+                            item.resolutionKey(), item.stock());
+                    int stock = resolveDisplayStock(
+                            item, stockMode, legacyStock,
+                            () -> getCurrentStock(
+                                    resolvedShopId,
+                                    item.resolutionKey()));
                     CatalogItem catalogItem = item.toCatalogItem(stock, hasPromo, promoPrice, hasBarterRecipes);
 
                     // Override category from admin assignments if the item has no explicit category.
@@ -909,6 +910,28 @@ public final class ShopCatalog {
                     return catalogItem;
                 })
                 .toList();
+    }
+
+    static int resolveDisplayStock(
+            ItemDef item,
+            CatalogStockAuthorityMode mode,
+            int legacyStock,
+            java.util.function.IntSupplier durableStock
+    ) {
+        if (item.isUnlimited()) {
+            return -1;
+        }
+        if (mode == CatalogStockAuthorityMode.LEGACY) {
+            return legacyStock;
+        }
+        if (mode == CatalogStockAuthorityMode.CUTOVER_FROZEN) {
+            return 0;
+        }
+        try {
+            return durableStock.getAsInt();
+        } catch (IllegalStateException exception) {
+            return 0;
+        }
     }
 
     public static long getEffectiveBuyPrice(String shopId, String itemId) {

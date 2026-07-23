@@ -40,10 +40,12 @@ public final class ShopDataService {
 
         com.enviouse.futureshops.server.market.MarketModuleService.close(
                 player.getUUID());
-        ShopSessionManager.open(player.getUUID(), shopId);
-        // forceOpen=true: this is the deliberate open path (command / shop block use)
-        sendShopData(player, shopId, true, true);
-        InventorySyncService.sendOwnedCounts(player, shopId);
+        ShopSessionManager.openWithRollback(
+                player.getUUID(), shopId, () -> {
+                    // forceOpen=true: this is the deliberate open path (command / shop block use)
+                    sendShopData(player, shopId, true, true);
+                    InventorySyncService.sendOwnedCounts(player, shopId);
+                });
     }
 
     public static void sendShopData(ServerPlayer player, String requestedShopId) {
@@ -135,5 +137,3 @@ public final class ShopDataService {
         }
     }
 }
-
-

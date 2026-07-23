@@ -25,6 +25,8 @@ import com.enviouse.futureshops.server.shop.ForgeCapabilityStorageAdapter;
 import com.enviouse.futureshops.server.shop.StockRefreshScheduler;
 import com.enviouse.futureshops.server.market.MarketModuleService;
 import com.enviouse.futureshops.server.market.MarketCapabilityProjectionService;
+import com.enviouse.futureshops.server.market.bazaar.BazaarProductCatalogRuntime;
+import com.enviouse.futureshops.server.market.bazaar.BazaarRuntimeInitializationGate;
 import com.mojang.logging.LogUtils;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
@@ -51,6 +53,12 @@ public class Futureshops {
     public static final String MODID = "futureshops";
     // Directly reference a slf4j logger
     private static final Logger LOGGER = LogUtils.getLogger();
+    private static final long BAZAAR_INITIALIZATION_RETRY_NANOS =
+            java.util.concurrent.TimeUnit.SECONDS.toNanos(60L);
+    private final BazaarRuntimeInitializationGate
+            bazaarRuntimeInitialization =
+            new BazaarRuntimeInitializationGate();
+    private long nextBazaarInitializationAttemptNanos;
 
     public Futureshops() {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
@@ -105,6 +113,8 @@ public class Futureshops {
     // You can use SubscribeEvent and let the Event Bus discover methods to call
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
+        bazaarRuntimeInitialization.reset();
+        nextBazaarInitializationAttemptNanos = 0L;
         MarketModuleService.clearSessions();
         ServerRequestSecurityManager.initialize(event.getServer());
         EscrowRuntimeService escrow = EscrowRuntimeManager.initialize(event.getServer());
@@ -132,25 +142,10 @@ public class Futureshops {
         // product catalog (config/futureshops/bazaar/products/*.json → order book lifecycle).
         com.enviouse.futureshops.server.escrow.runtime.AuctionExpirationScheduler.reset();
         com.enviouse.futureshops.server.escrow.runtime.BazaarExpirationScheduler.reset();
-        if (escrow.state() == EscrowRuntimeState.READY) {
-            try {
-                // Push the config-derived effective rule snapshot BEFORE the catalog reload so
-                // browse-time config revisions are correct from the first frame (orders also
-                // synchronize lazily, so this is presentation-correctness, not safety).
-                com.enviouse.futureshops.server.escrow.runtime.BazaarActionService
-                        .synchronizeEffectiveRules(escrow);
-                if (com.enviouse.futureshops.config.BazaarConfig.catalogControl()
-                        == com.enviouse.futureshops.config.BazaarConfig.CatalogControl.ADMIN) {
-                    com.enviouse.futureshops.server.market.bazaar.BazaarProductCatalogRuntime
-                            .reload(escrow);
-                } else {
-                    LOGGER.info("FutureShops Bazaar player catalog mode preserves registered products.");
-                }
-            } catch (RuntimeException exception) {
-                LOGGER.error("Bazaar product catalog failed to load; bazaar browse stays "
-                        + "empty until reload.", exception);
-            }
-        }
+        BazaarProductCatalogRuntime.prepareStorage(
+                BazaarConfig.catalogControl()
+                        == BazaarConfig.CatalogControl.ADMIN);
+        initializeBazaarRuntime(escrow);
         LOGGER.info("FutureShops server starting.");
     }
 
@@ -176,6 +171,8 @@ public class Futureshops {
         com.enviouse.futureshops.server.escrow.runtime.AuctionExpirationScheduler.reset();
         com.enviouse.futureshops.server.escrow.runtime.BazaarExpirationScheduler.reset();
         com.enviouse.futureshops.server.market.bazaar.BazaarProductCatalogRuntime.clear();
+        bazaarRuntimeInitialization.reset();
+        nextBazaarInitializationAttemptNanos = 0L;
         // Wipe in-memory catalog so live stock doesn't leak into the next world (singleplayer).
         ShopCatalog.clear();
         com.enviouse.futureshops.server.shop.ShopConfigClipboard.clearAll();
@@ -188,6 +185,8 @@ public class Futureshops {
             if (EscrowRuntimeManager.getOrNull() != null) {
                 EscrowRuntimeManager.tick(event.getServer());
                 CatalogStockRuntime.tick(event.getServer());
+                initializeBazaarRuntime(
+                        EscrowRuntimeManager.getOrNull());
             }
             LegacyBalanceMigrationManager.tick(event.getServer());
             DynamicPricingEngine.onServerTick(event.getServer());
@@ -196,6 +195,40 @@ public class Futureshops {
                     .onServerTick(event.getServer());
             com.enviouse.futureshops.server.escrow.runtime.BazaarExpirationScheduler
                     .onServerTick(event.getServer());
+        }
+    }
+
+    private void initializeBazaarRuntime(
+            EscrowRuntimeService escrow
+    ) {
+        long now = System.nanoTime();
+        if (now < nextBazaarInitializationAttemptNanos) {
+            return;
+        }
+        try {
+            boolean initialized =
+                    bazaarRuntimeInitialization.initializeIfReady(
+                            escrow.isReady(), () -> {
+                                com.enviouse.futureshops.server.escrow.runtime.BazaarActionService
+                                        .synchronizeEffectiveRules(escrow);
+                                if (BazaarConfig.catalogControl()
+                                        == BazaarConfig.CatalogControl.ADMIN) {
+                                    BazaarProductCatalogRuntime.reload(
+                                            escrow);
+                                } else {
+                                    LOGGER.info(
+                                            "FutureShops Bazaar player catalog mode preserves registered products.");
+                                }
+                            });
+            if (initialized) {
+                nextBazaarInitializationAttemptNanos = 0L;
+            }
+        } catch (RuntimeException exception) {
+            nextBazaarInitializationAttemptNanos =
+                    now + BAZAAR_INITIALIZATION_RETRY_NANOS;
+            LOGGER.error(
+                    "Bazaar runtime initialization failed and will retry automatically.",
+                    exception);
         }
     }
 

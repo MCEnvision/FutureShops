@@ -188,45 +188,45 @@ public class Config {
 
     private static volatile ModuleSettings moduleSettings = ModuleSettings.defaults();
 
-    public static String economyCurrencyName;
-    public static int economyCurrencyDecimals;
-    public static long economyStartingBalanceMinorUnits;
-    public static long economyMaxBalanceMinorUnits;
-    public static boolean economyAllowNegative;
+    public static String economyCurrencyName = "Coins";
+    public static int economyCurrencyDecimals = 2;
+    public static long economyStartingBalanceMinorUnits = 100000L;
+    public static long economyMaxBalanceMinorUnits = 99999999999L;
+    public static boolean economyAllowNegative = false;
     public static int permissionsMarketUseOpLevel = 0;
     public static int permissionsMarketAdminOpLevel = 2;
 
-    public static String currencyProvider;
-    public static List<? extends String> currencyItems;
-    public static List<? extends String> currencyAcceptOnlyItems;
+    public static String currencyProvider = "futureshops";
+    public static List<? extends String> currencyItems = List.of();
+    public static List<? extends String> currencyAcceptOnlyItems = List.of();
 
-    public static String moneyChecksumSalt;
-    public static String moneyMintServerId;
-    public static int moneyMaxAgeDays;
+    public static String moneyChecksumSalt = "change-me-before-production";
+    public static String moneyMintServerId = "futureshops-dev";
+    public static int moneyMaxAgeDays = 365;
 
-    public static int playerShopMaxLinkDistanceBlocks;
+    public static int playerShopMaxLinkDistanceBlocks = 8;
 
-    public static int sessionMaxDistanceBlocks;
-    public static boolean sessionCloseOnDamage;
+    public static int sessionMaxDistanceBlocks = 8;
+    public static boolean sessionCloseOnDamage = false;
 
     // Dynamic Pricing
-    public static boolean dynamicPricingEnabled;
-    public static int dynamicPricingRecalcIntervalSec;
-    public static double dynamicPricingMaxIncreasePct;
-    public static double dynamicPricingMaxDecreasePct;
-    public static double dynamicPricingDemandWeight;
-    public static double dynamicPricingSupplyWeight;
-    public static double dynamicPricingDecayRate;
+    public static boolean dynamicPricingEnabled = false;
+    public static int dynamicPricingRecalcIntervalSec = 300;
+    public static double dynamicPricingMaxIncreasePct = 50.0D;
+    public static double dynamicPricingMaxDecreasePct = 30.0D;
+    public static double dynamicPricingDemandWeight = 0.6D;
+    public static double dynamicPricingSupplyWeight = 0.4D;
+    public static double dynamicPricingDecayRate = 0.95D;
 
     // Stock Refresh (spec §31)
-    public static int stockRefreshCheckIntervalSec;
-    public static boolean stockRefreshEnabled;
+    public static int stockRefreshCheckIntervalSec = 60;
+    public static boolean stockRefreshEnabled = true;
 
     // Events (spec §33)
-    public static boolean eventsTransactionEnabled;
+    public static boolean eventsTransactionEnabled = true;
 
     // Local Listings
-    public static int localListingsScanRadiusBlocks;
+    public static int localListingsScanRadiusBlocks = 64;
 
     public static ModuleSettings moduleSettings() {
         return moduleSettings;
