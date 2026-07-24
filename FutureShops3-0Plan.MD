@@ -1,6 +1,6 @@
 # FutureShops 3.0 Plan
 
-Status. Implementation complete on the beta phase branch and pending approval.
+Status. Beta approval is blocked by the ATM deposit recovery and refund access defects documented in Section 20.
 
 This document is the implementation contract for FutureShops 3.0. It covers the shared escrow foundation, migration of all existing value moving features, the Auction House, the Bazaar, the shared market interface, configuration, recovery, abuse controls, testing, and release sequencing.
 
@@ -908,6 +908,10 @@ The following behaviors are checked before escrow work and after every major int
 - ATM planning works for internal and external providers.
 - Internal ATM minting registers protected bills.
 - Foreign ATM minting does not claim internal protection.
+- A retryable ATM deposit recovery can be resumed with the original request identity and never asks the player to create a new economic request.
+- Pending ATM deposit recovery never blocks collection of an already committed cash claim.
+- Closing, reopening, reconnecting, and restarting reconcile ATM recovery from server state without duplicating consumption or credit.
+- Bazaar cancellation reports the exact unfilled refund amount, identifies Claims as its destination, refreshes the claim count, and provides a direct route to collection.
 
 ## 17. Testing strategy
 
@@ -928,6 +932,10 @@ Network tests cover round trips, protocol constant, invalid enums, oversized fie
 Interface tests cover the regression gate, GUI scale 2, 3, and 4, wide and narrow layouts, keyboard use, long translations, both time formats, themes, accessibility, Back, X, Escape, resize, and stale response handling.
 
 Performance tests cover thousands of auctions, tens of thousands of orders, large partial fill counts, claim queues, startup rebuild, recovery, search, pagination, and expiration spikes. Matching, expiry, and recovery use bounded work per tick.
+
+ATM recovery tests inject failures before and after intent persistence, reservation, inventory removal, settlement, evidence cleanup, and recovery enqueue. Each test repeats the original request, reopens the ATM, reconnects, and restarts the server. The assertions prove that bills are consumed at most once, wallet value is credited at most once, exact terminal state is reported, stale evidence is durably removed only when it is proven safe, and unrelated cash claims remain collectible.
+
+Bazaar cancellation tests cover unfilled and partially filled buy orders funded by wallet and Inventory Cash. The response, refreshed claim count, Claims route, exact pending amount, collection, maximum wallet handling, module disable behavior, reconnect, and restart must agree with the durable `BUYER_REFUND_CLAIM`.
 
 ## 18. Implementation phases
 
@@ -1036,6 +1044,7 @@ Branch. envy slash markets hardening.
 - Permission examples.
 - API events.
 - Compatibility matrix.
+- ATM deposit recovery and claim access release blocker from Section 20.
 - Final complete regression pass.
 
 ## 19. Recommended defaults
@@ -1067,7 +1076,75 @@ Branch. envy slash markets hardening.
 
 These defaults maximize safety while retaining server and client customization. FutureShops does not claim control over foreign currency supply or arbitrary third party storage behavior that it cannot technically enforce.
 
-## 20. Completion record
+## 20. Release blocker. ATM deposit recovery and refund access
+
+Issue status. Not fixed.
+
+The reported single player deposit failure is reproducible from the current control flow. The ATM shows `RECOVERY_REQUIRED`, retains the original deposit request, and offers Retry deposit. The retry correctly reuses the same request UUID, but a stored nonterminal transaction or active player evidence is classified as `RECOVERY_REQUIRED` again without a client visible reconciliation result. This can become an endless status loop even though creating a new request is correctly forbidden.
+
+The same screen can display an already committed cash claim while making it unreachable. `AtmScreen` enables Collect cash only while no deposit request is pending and while withdrawal mode is selected. It also prevents switching between Deposit and Withdrawal while that request is pending. A retryable deposit recovery can therefore disable Collect cash and prevent the player from entering the mode that would enable it. Back remains available, but reopening restores the static client tracker, so leaving the screen does not resolve the dead end.
+
+The recovery enqueue path contains a confirmed false success result. `ProtectedCashRedemptionWorkflow.enqueueIntentRecovery` catches a runtime failure from the runtime queue and returns `true`. `ForeignCashDepositWorkflow.enqueueIntentRecovery` has the same behavior. Their callers interpret `true` as successfully queued recovery, so a failed enqueue can leave live evidence attached to the player while no recovery work was accepted. Future deposits then detect that evidence and return `RECOVERY_REQUIRED`.
+
+Bazaar cancellation is a related discoverability problem, not the same claim type as the ATM screenshot. Canceling an unfilled or partially filled buy order releases the remaining hold into a durable `BUYER_REFUND_CLAIM`. `BazaarEscrowLifecyclePlanner` stores it as a pending `ClaimKind.MONEY` claim labeled `Bazaar buyer refund`. This is a Claims balance, not an ATM physical cash claim, including when Inventory Cash first funded the order under the current refund policy. The current success text says that remaining value returns through Claims, but it does not report the exact amount, open Claims, or guarantee that the refreshed claim badge makes the refund obvious. The screenshot's Collect cash count represents a separate cash claim and must not be presented as proof that the Bazaar refund is available there.
+
+### 20.1 Server recovery contract
+
+1. Preserve the original deposit request UUID and deterministic recovery transaction UUID. Retry, screen reopen, reconnect, and restart must inspect or resume that exact transaction. They must never create a replacement economic request.
+2. Replace the boolean recovery enqueue result with an explicit result such as `QUEUED`, `NO_DURABLE_EVIDENCE`, or `FAILED`. A thrown enqueue operation can never be reported as queued.
+3. Apply the same result contract to protected FutureShops bills and foreign currency deposits.
+4. Distinguish a safe orphaned intent from evidence recorded after reservation or inventory mutation. An intent may be discarded only when the exact evidence matches, no reservation or transaction exists, and the live inventory still matches the recorded state before mutation.
+5. Make safe orphan cleanup durable. Remove only the matching evidence and force the player data save before reporting that the recovery block is gone.
+6. Never discard evidence after a reservation, physical removal, settlement decision, or ambiguous failure. Queue exact recovery or enter explicit manual review.
+7. Make a recovery check actively inspect, enqueue, or resume the exact transaction before responding. Repeated checks must converge on a terminal result or an actionable manual review state instead of returning an undifferentiated recovery result forever.
+8. Expose explicit server authoritative states for completed credit, refunded value, cash claim ready, recovery pending, manual review, and request conflict. Every terminal result includes the credited or returned amount and its destination.
+9. Include active ATM recovery identity and state in the ATM data snapshot. Opening the ATM or reconnecting must adopt server state and clear stale client tracking after the server proves a terminal result.
+10. Keep new deposits blocked while earlier evidence is genuinely nonterminal, but do not block unrelated claim collection, navigation, inspection, or administrative recovery.
+11. Add an administrator inspection path keyed by the full recovery transaction UUID. It reports the request, player, currency provider, evidence stage, reservation, inventory mutation, settlement, claim, last recovery attempt, and safe next action without exposing unrelated player data.
+
+### 20.2 ATM interface requirements
+
+1. Replace Retry deposit with Check recovery or Resume recovery while the server owns a nonterminal recovery. The action reuses the original request and explains that it cannot charge or consume again.
+2. Keep Deposit and Withdrawal navigation usable while recovery is pending. Disable only actions that would create a conflicting ATM value mutation.
+3. Keep Collect cash available whenever a committed cash claim can be delivered and no cash collection request is already awaiting a response. Deposit recovery state alone cannot disable it.
+4. When returned cash is ready, make Collect returned cash the primary recovery action and show the exact amount and claim count.
+5. Wrap recovery messages inside the available panel. Show the full recovery handle and provide a copy action so the player can give an administrator an exact identifier.
+6. On open, reopen, reconnect, and server restart, reconcile the local tracker against the server snapshot before enabling Deposit, Retry, or Check recovery.
+7. After a terminal result, clear the pending tracker, refresh balance and claims, preserve a concise receipt, and return normal controls without requiring logout.
+
+### 20.3 Bazaar refund requirements
+
+1. A successful buy order cancellation response reports the exact unfilled refund amount and says that it is pending in Claims.
+2. The client immediately refreshes capabilities, open claim count, and the Claims page after the durable cancel commit.
+3. The success notice provides a direct View refund action. It must remain available when Bazaar is frozen or disabled because claims and cancellation are resolution actions.
+4. The Claims row identifies `Bazaar buyer refund`, the order, the amount, the original payment source, and whether collection credited the wallet or left a remainder because of the maximum balance.
+5. Wallet funded and Inventory Cash funded orders use the configured refund policy consistently. The interface must not imply that a money claim is collectible from the ATM as physical cash.
+6. Partial fill cancellation reports only the remaining reserve. Filled quantity, fees, price improvement, and earlier claims remain separate and conserve exactly.
+
+### 20.4 Required verification matrix
+
+- Normal protected bill deposit in single player and on a dedicated server.
+- Normal foreign currency deposit with every supported provider.
+- Failure before and after intent persistence, reservation, inventory removal, settlement persistence, settlement commit, and evidence cleanup.
+- Recovery queue rejection and thrown recovery enqueue for protected and foreign deposits.
+- Safe orphan cleanup followed by an immediate player save and restart.
+- Ambiguous post mutation evidence entering recovery or manual review without evidence deletion.
+- Same request replay before and after every recovery state transition.
+- Close and reopen, logout and reconnect, client restart, and server restart.
+- Full inventory, maximum wallet, partial wallet capacity, and a cash claim ready during deposit recovery.
+- Recovery started from Deposit mode and Withdrawal mode at every supported GUI scale.
+- Corrupt, mismatched, and unknown evidence with a complete administrator recovery handle.
+- Two rapid retry packets, delayed duplicate responses, packet loss, and request conflict.
+- No double bill consumption, no double wallet credit, no duplicate claim, and no silent value loss.
+- Bazaar cancel before any fill, after a partial fill, after full fill, and concurrent with a fill boundary.
+- Bazaar refunds funded by wallet and Inventory Cash, collected normally and at maximum wallet balance.
+- Bazaar disabled after order placement with cancellation and Claims still available.
+
+The 3.0 beta cannot be approved while the reported recovery banner can remain stuck, a committed cash claim can be inaccessible, a recovery enqueue failure can be reported as success, or a Bazaar cancellation refund lacks a verifiable collection path. Completion requires source fixes, automated coverage for the matrix above, dedicated server and client smoke tests, multiplayer reconnect and restart drills, and updated operator recovery documentation.
+
+## 21. Completion record
+
+The record below describes the implemented 3.0 scope before the newly confirmed Section 20 blocker. It does not waive that blocker or mark the current beta ready for approval.
 
 The implementation covers the escrow foundation, migrated shop and currency flows, shared market
 shell, independently configurable Auction House and Bazaar modules, wallet and inventory cash

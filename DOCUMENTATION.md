@@ -4,7 +4,7 @@
 
 FutureShops is a Forge 1.20.1 mod that owns a server authoritative economy, shop catalogs, player shop blocks, physical currency, an escrow protected Auction House, and a Bazaar order book.
 
-The 3.0 implementation is in beta pending owner approval. The [FutureShops 3.0 plan](FutureShops3-0Plan.MD) remains the source of truth for unfinished 3.0 requirements. The [FutureShops 3.1 advanced trade offers plan](FutureShops3-1TradeOffersPlan.MD) is the source of truth for the planned expansion. Current code and tests establish implemented behavior. Focused operator documentation is available in:
+The 3.0 implementation is in beta. Approval is blocked by the ATM deposit recovery and refund access defects in [Section 20 of the FutureShops 3.0 plan](FutureShops3-0Plan.MD#20-release-blocker-atm-deposit-recovery-and-refund-access). That plan remains the source of truth for unfinished 3.0 requirements. The [FutureShops 3.1 advanced trade offers plan](FutureShops3-1TradeOffersPlan.MD) is the source of truth for the planned expansion. Current code and tests establish implemented behavior. Focused operator documentation is available in:
 
 * [Auction House and Bazaar guide](docs/markets-guide.md)
 * [Configuration examples](docs/config-3.0-examples.md)

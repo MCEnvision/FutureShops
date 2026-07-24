@@ -4,7 +4,7 @@ FutureShops is a Minecraft Forge economy and marketplace mod for server shops, p
 
 ## Status
 
-The 3.0 markets implementation is in beta pending owner approval. Active phase branches are test builds. Use matching FutureShops builds on the client and server.
+The 3.0 markets implementation is in beta. Approval is blocked by the ATM deposit recovery and refund access defects in [Section 20 of the 3.0 plan](FutureShops3-0Plan.MD#20-release-blocker-atm-deposit-recovery-and-refund-access). Active phase branches are test builds. Use matching FutureShops builds on the client and server.
 
 Supported runtime:
 
