@@ -4,7 +4,7 @@
 
 FutureShops is a Forge 1.20.1 mod that owns a server authoritative economy, shop catalogs, player shop blocks, physical currency, an escrow protected Auction House, and a Bazaar order book.
 
-The 3.0 implementation is in beta. Approval is blocked by the ATM deposit recovery and refund access defects in [Section 20 of the FutureShops 3.0 plan](FutureShops3-0Plan.MD#20-release-blocker-atm-deposit-recovery-and-refund-access). That plan remains the source of truth for unfinished 3.0 requirements. The [FutureShops 3.1 advanced trade offers plan](FutureShops3-1TradeOffersPlan.MD) is the source of truth for the planned expansion. Current code and tests establish implemented behavior. Focused operator documentation is available in:
+The 3.0 implementation is in beta. The ATM deposit recovery and Bazaar refund access blocker in [Section 20 of the FutureShops 3.0 plan](FutureShops3-0Plan.MD#20-release-blocker-atm-deposit-recovery-and-refund-access) is implemented on the active phase branch. The automated suite, build, headless client startup, and dedicated server startup pass. Live multiplayer, reconnect, restart, and recovery fault acceptance remains required before release approval. The [FutureShops 3.1 advanced trade offers plan](FutureShops3-1TradeOffersPlan.MD) is the source of truth for the planned expansion. Current code and tests establish implemented behavior. Focused operator documentation is available in:
 
 * [Auction House and Bazaar guide](docs/markets-guide.md)
 * [Configuration examples](docs/config-3.0-examples.md)
@@ -29,7 +29,7 @@ The 3.0 implementation is in beta. Approval is blocked by the ATM deposit recove
 | mclib | 20 |
 | JUnit Jupiter | 5.10.2 |
 | JUnit Platform | 1.10.2 |
-| Network protocol | 51 |
+| Network protocol | 52 |
 
 The repository uses one Gradle module named `futureshops`. Java sources use UTF 8. Runtime and data generation launches are defined in `build.gradle`.
 
@@ -95,6 +95,8 @@ Forge registers blocks, items, menus, packets, commands, configurations, and eve
 During recovery, value mutations fail closed. Claims remain the safety route. Screens may render read only information, but no client snapshot can authorize a mutation.
 
 Market capability requests project current server configuration, runtime readiness, module control status, claim counts, branding, currency metadata, and a display balance. The client uses the snapshot to present availability. During recovery, screens retry capability requests. A correlated response with a newer server revision is accepted even if another retry is already outstanding, which prevents a slow response from leaving the client stuck on the recovery snapshot. Equal revision conflicts and older revisions still fail closed. Navigation remains server authoritative because a capability response can become stale immediately after it is sent. The server resolves an attempted route to the requested view, a safe fallback, or claims.
+
+ATM data protocol 52 also projects an optional deposit recovery summary containing the original request UUID, deterministic transaction UUID, amount, and one of `RECOVERY_PENDING`, `MANUAL_REVIEW`, `COMPLETED`, or `REFUNDED`. The client adopts server pending state, blocks retries during manual review, and clears matching local recovery state only after the server proves a terminal result or no active recovery. A recovery check sends only that request and transaction pair. It cannot submit a currency source or amount and therefore cannot create or consume a second deposit. Retryable or blocked deposit recovery does not disable ATM tab navigation or committed cash claim collection. A refunded terminal response reports the exact value and `ORIGINAL_INVENTORY` destination.
 
 If escrow remains in recovery or maintenance, run `/marketadmin status` and inspect `run/logs/latest.log` or the dedicated server log. Do not delete journal, checkpoint, ledger, claim, or custody files.
 
@@ -175,7 +177,7 @@ Exact defaults, examples, validation behavior, and reload boundaries are documen
 
 Player entry points include `/shop`, `/playershops`, `/ah`, `/bz`, `/claims`, `/balance`, `/pay`, `/baltop`, `/atm`, `/deposit`, and `/withdraw`.
 
-Administrative entry points include `/shopadmin` and `/marketadmin`. `/marketadmin status` reports module control state, escrow runtime state, open contract counts, and pending recovery. Mutating administrative operations require the configured operator level or Forge permission node, a bounded reason where configured, confirmation where configured, and an audit record.
+Administrative entry points include `/shopadmin` and `/marketadmin`. `/marketadmin status` reports module control state, escrow runtime state, open contract counts, and pending recovery. `/marketadmin inspect <transactionId>` is a read only escrow inspection for the complete recovery handle. It reports operation and state, request identity, participants, currency provider, durable evidence phase, value, claims, retry schedule, last error, and the safe next action. Mutating administrative operations require the configured operator level or Forge permission node, a bounded reason where configured, confirmation where configured, and an audit record.
 
 Auction House permission nodes use the `futureshops.auction` prefix. Bazaar nodes use `futureshops.bazaar`. Escrow nodes use `futureshops.escrow`. Claims remain available when ordinary trading permission is revoked.
 
@@ -227,6 +229,12 @@ Check the server log for checkpoint, journal, migration, catalog, or market cont
 ### Marketplace profile does not open
 
 Check the server log for an exception while reading the balance dashboard. Profile presentation must use the safe display balance path and must not require a live mutation provider during startup recovery.
+
+### ATM deposit recovery remains pending
+
+Use **Check recovery** with the original server supplied identity. Do not start another deposit and do not remove player data, escrow files, claims, journals, or checkpoints. Withdrawal and Deposit tabs remain navigable, and a committed physical cash claim remains collectible while the deposit recovery is retryable.
+
+Use **Copy** to obtain the full transaction UUID, then run `/marketadmin inspect <transactionId>`. `AUTOMATIC_RECOVERY` means the exact transaction remains eligible for bounded recovery. `ADMIN_REVIEW` means an operator must inspect the reported evidence and last error before any administrative action. `NO_ACTION` means the transaction is terminal. A `REFUNDED` deposit returned value through its durable cancellation path. Bazaar buyer order refunds are money claims in the market Claims view, not ATM physical cash claims.
 
 ### Client launch fails before a window appears
 

@@ -165,10 +165,14 @@ public final class DepositCommand {
                     EconomyCommandUtil.warning(Component.translatable(
                             "command.futureshops.deposit.rate_limited",
                             result.retryAfterSeconds())));
-            case ESCROW_UNAVAILABLE, RECOVERY_REQUIRED ->
+            case ESCROW_UNAVAILABLE, RECOVERY_REQUIRED,
+                    RECOVERY_PENDING, MANUAL_REVIEW ->
                     player.sendSystemMessage(EconomyCommandUtil.warning(
                             Component.translatable(
                                     "command.futureshops.deposit.recovery_required")));
+            case REFUNDED -> player.sendSystemMessage(
+                    EconomyCommandUtil.warning(Component.translatable(
+                            "command.futureshops.deposit.cancelled")));
             case SUCCESS -> throw new IllegalStateException(
                     "Successful cash deposit was handled earlier");
         }

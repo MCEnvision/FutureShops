@@ -6,6 +6,7 @@ import com.enviouse.futureshops.network.packets.C2SAdminShopEditPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmWithdrawPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmCollectCashPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
+import com.enviouse.futureshops.network.packets.C2SAtmDepositRecoveryPacket;
 import com.enviouse.futureshops.network.packets.C2SBarterRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SCloseMarketSessionPacket;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
@@ -111,8 +112,8 @@ public final class ShopPackets {
     // Protocol 44 adds market capability synchronization.
     // Protocol 47 adds Bazaar player product registration and market fee capabilities.
     // Protocol 49 adds market department counts.
-    // protocol 51 synchronizes escrow readiness in market capabilities.
-    public static final String PROTOCOL_VERSION = "51";
+    // protocol 52 synchronizes atm deposit recovery.
+    public static final String PROTOCOL_VERSION = "52";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))
@@ -581,6 +582,13 @@ public final class ShopPackets {
             .decoder(C2SBazaarRegisterProductPacket::decode)
             .encoder(C2SBazaarRegisterProductPacket::encode)
             .consumerMainThread(C2SBazaarRegisterProductPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SAtmDepositRecoveryPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SAtmDepositRecoveryPacket::decode)
+            .encoder(C2SAtmDepositRecoveryPacket::encode)
+            .consumerMainThread(C2SAtmDepositRecoveryPacket::handle)
             .add();
     }
 

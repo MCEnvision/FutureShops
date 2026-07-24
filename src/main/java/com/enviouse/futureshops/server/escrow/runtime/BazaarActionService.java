@@ -40,6 +40,8 @@ import com.enviouse.futureshops.server.market.bazaar.BazaarRequestReceipt;
 import com.enviouse.futureshops.server.market.bazaar.BazaarRuleSnapshot;
 import com.enviouse.futureshops.server.market.bazaar.BazaarRuleSnapshotFactory;
 import com.enviouse.futureshops.server.market.bazaar.BazaarSavedData;
+import com.enviouse.futureshops.server.market.bazaar.BazaarEscrowSettlement;
+import com.enviouse.futureshops.server.market.bazaar.BazaarSettlementKind;
 import com.enviouse.futureshops.server.market.bazaar.BazaarTimeInForce;
 import com.enviouse.futureshops.server.market.bazaar.CancelBazaarOrderCommand;
 import com.enviouse.futureshops.server.market.bazaar.CreateBazaarOrderCommand;
@@ -848,8 +850,17 @@ public final class BazaarActionService {
                 : commit.completedTransactions().get(0).transactionId().value();
         long configRevision = result.order()
                 .map(order -> order.rules().configRevision()).orElse(0L);
+        long refundMinor = result.settlements().stream()
+                .filter(settlement -> settlement.kind()
+                        == BazaarSettlementKind.BUYER_REFUND_CLAIM)
+                .map(BazaarEscrowSettlement::moneyMinor)
+                .reduce(0L, Math::addExact);
+        String detail = "CANCEL".equals(action)
+                ? S2CMarketActionResponsePacket.bazaarCancelDetail(
+                commit.orderId(), refundMinor)
+                : commit.orderId().toString();
         respond(player, requestId, action, result.status().name(), transactionId,
-                result.observedRevision(), configRevision, commit.orderId().toString());
+                result.observedRevision(), configRevision, detail);
     }
 
     private static void respondFromResult(ServerPlayer player, UUID requestId, String action,

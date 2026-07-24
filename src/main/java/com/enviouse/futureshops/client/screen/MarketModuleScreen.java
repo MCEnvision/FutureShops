@@ -345,7 +345,8 @@ public final class MarketModuleScreen extends Screen
                 rememberPaymentSource(usedSource);
             }
             showActionStatus(
-                    MarketActionFeedback.successMessage(actionKey), true);
+                    MarketActionFeedback.successMessage(
+                            actionKey, response), true);
             if ("auction_bid".equals(actionKey)) {
                 bidEditorOpen = false;
             }
@@ -364,6 +365,11 @@ public final class MarketModuleScreen extends Screen
                 if (search != null && !subjectId.isEmpty()) {
                     search.setValue(subjectId);
                 }
+            }
+            if ("bazaar_cancel".equals(actionKey)) {
+                requestCapabilities();
+                openView("claims");
+                return;
             }
             refreshAfterAction(subjectId);
             return;

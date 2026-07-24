@@ -5,7 +5,7 @@ and shop transaction system.
 
 | Area | Supported | Behavior and boundary |
 | --- | --- | --- |
-| Minecraft and loader | Minecraft 1.20.1 with the repository Forge toolchain | Client and server must run compatible FutureShops builds. Protocol 51 rejects peers that do not synchronize escrow readiness and market capability recovery. |
+| Minecraft and loader | Minecraft 1.20.1 with the repository Forge toolchain | Client and server must run compatible FutureShops builds. Protocol 52 rejects peers that do not synchronize escrow readiness, market capability recovery, and exact ATM deposit recovery identity. |
 | Dedicated and integrated servers | Yes | Escrow, claims, auctions, Bazaar orders, physical cash, and recovery use server-owned data. |
 | Windows world saves | Yes | Checkpoint and journal files are forced before atomic moves. Windows does not expose directory fsync through Java, so the unavailable directory barrier uses an explicit best-effort fallback and logs one warning instead of crashing world startup. |
 | Built-in physical currency | `currency.provider = "futureshops"` | Mint IDs, checksums, reservations, spent-mint tracking, replay protection, and replacement-mint refunds are enforced. |

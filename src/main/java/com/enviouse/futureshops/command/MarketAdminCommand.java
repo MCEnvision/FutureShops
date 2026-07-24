@@ -192,6 +192,16 @@ public final class MarketAdminCommand {
                 .then(Commands.literal("recovery")
                         .executes(ctx -> recovery(ctx.getSource())))
 
+                .then(Commands.literal("inspect")
+                        .requires(src -> src.hasPermission(3)
+                                && MarketPermissions.canEscrowAdmin(src))
+                        .then(Commands.argument(
+                                        "transactionId", UuidArgument.uuid())
+                                .executes(ctx -> inspect(
+                                        ctx.getSource(),
+                                        UuidArgument.getUuid(
+                                                ctx, "transactionId")))))
+
                 .then(Commands.literal("sweep")
                         .requires(src -> src.hasPermission(3)
                                 && MarketPermissions.canEscrowAdmin(src))
@@ -472,6 +482,73 @@ public final class MarketAdminCommand {
         source.sendSuccess(() -> Component.translatable(KEY + "recovery.line",
                         Component.translatable(kindKey), requestId.toString(), ageSeconds)
                 .withStyle(ChatFormatting.GRAY), false);
+    }
+
+    private static int inspect(
+            CommandSourceStack source,
+            UUID transactionId
+    ) {
+        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
+        if (runtime == null) {
+            sendRuntimeUnavailable(source);
+            return 0;
+        }
+        try {
+            Optional<EscrowRuntimeService.RecoveryInspection> result =
+                    runtime.inspectRecovery(transactionId);
+            if (result.isEmpty()) {
+                source.sendFailure(Component.translatable(
+                        KEY + "inspect.missing", transactionId.toString()));
+                return 0;
+            }
+            EscrowRuntimeService.RecoveryInspection inspection =
+                    result.orElseThrow();
+            source.sendSuccess(() -> Component.translatable(
+                    KEY + "inspect.header",
+                    inspection.transactionId().toString(),
+                    inspection.operation().name(),
+                    inspection.state().name(),
+                    inspection.revision(),
+                    inspection.configRevision())
+                    .withStyle(ChatFormatting.GOLD), false);
+            source.sendSuccess(() -> Component.translatable(
+                    KEY + "inspect.identity",
+                    inspection.requestKey(),
+                    inspection.provider(),
+                    inspection.evidence(),
+                    inspection.safeAction())
+                    .withStyle(ChatFormatting.GRAY), false);
+            source.sendSuccess(() -> Component.translatable(
+                    KEY + "inspect.value",
+                    inspection.amountMinorUnits(),
+                    inspection.assetQuantity(),
+                    inspection.claimCount(),
+                    inspection.pendingClaimUnits(),
+                    String.join(", ", inspection.participants()))
+                    .withStyle(ChatFormatting.GRAY), false);
+            source.sendSuccess(() -> Component.translatable(
+                    KEY + "inspect.recovery",
+                    inspection.recoveryAttempts(),
+                    inspection.maximumRecoveryAttempts(),
+                    inspection.nextAttemptAt(),
+                    inspection.resumeState(),
+                    inspection.lastErrorCode(),
+                    inspection.lastErrorMessage())
+                    .withStyle(inspection.state()
+                            == com.enviouse.futureshops.server.escrow.model
+                            .EscrowState.MANUAL_REVIEW
+                            ? ChatFormatting.RED : ChatFormatting.GRAY),
+                    false);
+            return 1;
+        } catch (RuntimeException exception) {
+            LOGGER.error("Recovery inspection failed for {}",
+                    transactionId, exception);
+            source.sendFailure(Component.translatable(
+                    KEY + "error.internal",
+                    String.valueOf(exception.getMessage()))
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
     }
 
     // ─────────────────────────────── sweep ───────────────────────────────

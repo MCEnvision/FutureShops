@@ -98,6 +98,25 @@ public final class MarketActionFeedback {
                 "gui.futureshops.market.action.success." + key);
     }
 
+    public static Component successMessage(
+            String actionKey,
+            S2CMarketActionResponsePacket response
+    ) {
+        if ("bazaar_cancel".equals(actionKey)) {
+            var detail = S2CMarketActionResponsePacket
+                    .parseBazaarCancelDetail(response.detail())
+                    .filter(value -> value.refundMinorUnits() > 0L);
+            if (detail.isPresent()) {
+                return Component.translatable(
+                        "gui.futureshops.market.action.success."
+                                + "bazaar_cancel_refund",
+                        ShopUiUtil.formatMinorUnits(
+                                detail.orElseThrow().refundMinorUnits()));
+            }
+        }
+        return successMessage(actionKey);
+    }
+
     /** The plan §15 line shown alongside the automatic refresh on a stale-family status. */
     public static Component staleMessage(String status) {
         return Component.translatable(

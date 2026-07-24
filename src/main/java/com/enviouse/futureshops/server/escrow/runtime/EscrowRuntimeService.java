@@ -61,6 +61,7 @@ import com.enviouse.futureshops.server.escrow.ledger.LedgerSavedData;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerTransaction;
 import com.enviouse.futureshops.server.escrow.model.EscrowOperation;
 import com.enviouse.futureshops.server.escrow.model.EscrowAssetLotType;
+import com.enviouse.futureshops.server.escrow.model.EscrowPartyType;
 import com.enviouse.futureshops.server.escrow.model.EscrowState;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransactionId;
@@ -813,7 +814,8 @@ public final class EscrowRuntimeService implements AutoCloseable {
         recoveryScheduler.enqueue(current);
     }
 
-    synchronized boolean enqueueProtectedCashIntentRecovery(
+    synchronized CashDepositRecoveryEnqueueResult
+    enqueueProtectedCashIntentRecovery(
             ProtectedCashRedemptionEvidence evidence
     ) {
         assertServerThread();
@@ -828,7 +830,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
                         evidence.playerId(), evidence.transactionId());
         if (inspection.status()
                 == ProtectedCashRedemptionIntentStore.InspectionStatus.MISSING) {
-            return false;
+            return CashDepositRecoveryEnqueueResult.NO_DURABLE_EVIDENCE;
         }
         boolean alreadyQueued = protectedCashDiscoveryWork.stream()
                 .anyMatch(queued -> queued.transactionId()
@@ -838,7 +840,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
             protectedCashDiscoveryWork.addLast(inspection);
         }
         protectedCashDiscoveryComplete = false;
-        return true;
+        return CashDepositRecoveryEnqueueResult.QUEUED;
     }
 
     synchronized void scheduleProtectedCashCleanup(
@@ -874,7 +876,8 @@ public final class EscrowRuntimeService implements AutoCloseable {
         recoveryScheduler.enqueue(current);
     }
 
-    synchronized boolean enqueueForeignCashIntentRecovery(
+    synchronized CashDepositRecoveryEnqueueResult
+    enqueueForeignCashIntentRecovery(
             ForeignCashDepositEvidence evidence
     ) {
         assertServerThread();
@@ -888,7 +891,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
                         evidence.playerId(), evidence.transactionId());
         if (inspection.status()
                 == ForeignCashDepositIntentStore.InspectionStatus.MISSING) {
-            return false;
+            return CashDepositRecoveryEnqueueResult.NO_DURABLE_EVIDENCE;
         }
         boolean alreadyQueued = foreignCashDiscoveryWork.stream()
                 .anyMatch(queued -> queued.transactionId()
@@ -898,7 +901,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
             foreignCashDiscoveryWork.addLast(inspection);
         }
         foreignCashDiscoveryComplete = false;
-        return true;
+        return CashDepositRecoveryEnqueueResult.QUEUED;
     }
 
     synchronized void scheduleForeignCashCleanup(
@@ -1009,6 +1012,63 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 .map(com.enviouse.futureshops.server.escrow.ledger.LedgerTransactionReceipt::transaction);
     }
 
+    public synchronized Optional<RecoveryInspection> inspectRecovery(
+            UUID transactionId
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(transactionId, "transactionId");
+        EscrowTransaction transaction = transactions.getTransaction(
+                new EscrowTransactionId(transactionId));
+        if (transaction == null) {
+            return Optional.empty();
+        }
+        List<EscrowClaim> transactionClaims =
+                claims.claimsForTransaction(transactionId);
+        long amountMinorUnits = transaction.assetLots().stream()
+                .flatMap(lot -> lot.money().stream())
+                .map(value -> value.minorUnits())
+                .reduce(0L, Math::addExact);
+        long assetQuantity = transaction.assetLots().stream()
+                .mapToLong(lot -> lot.quantity())
+                .reduce(0L, Math::addExact);
+        long pendingClaimUnits = transactionClaims.stream()
+                .filter(claim -> claim.status() == ClaimStatus.PENDING)
+                .map(EscrowClaim::remainingUnits)
+                .reduce(0L, Math::addExact);
+        List<String> participants = transaction.participants().stream()
+                .map(participant -> participant.party().type().name()
+                        + ":" + participant.party().id()
+                        + ":" + participant.roles().stream()
+                        .map(Enum::name).sorted()
+                        .collect(java.util.stream.Collectors.joining(",")))
+                .sorted()
+                .toList();
+        String provider = cashProvider(transaction);
+        String evidence = cashEvidence(transaction, provider);
+        String safeAction = transaction.state().isTerminal()
+                ? "NO_ACTION"
+                : transaction.state() == EscrowState.MANUAL_REVIEW
+                ? "ADMIN_REVIEW" : "AUTOMATIC_RECOVERY";
+        return Optional.of(new RecoveryInspection(
+                transactionId, transaction.requestKey().value(),
+                transaction.operation(), transaction.state(),
+                transaction.revision(), transaction.configRevision(),
+                participants, provider, evidence, amountMinorUnits,
+                assetQuantity, transactionClaims.size(),
+                pendingClaimUnits,
+                transaction.lastError().map(error -> error.code())
+                        .orElse("NONE"),
+                transaction.lastError().map(error -> error.message())
+                        .orElse("NONE"),
+                transaction.retryMetadata().attemptCount(),
+                transaction.retryMetadata().maxAttempts(),
+                transaction.retryMetadata().nextAttemptAt()
+                        .map(Instant::toString).orElse("NONE"),
+                transaction.retryMetadata().resumeState()
+                        .map(Enum::name).orElse("NONE"),
+                safeAction));
+    }
+
     synchronized Optional<EscrowTransaction> transaction(UUID transactionId) {
         assertServerThread();
         Objects.requireNonNull(transactionId, "transactionId");
@@ -1020,6 +1080,54 @@ public final class EscrowRuntimeService implements AutoCloseable {
         assertServerThread();
         return claims.claimsForTransaction(Objects.requireNonNull(
                 transactionId, "transactionId"));
+    }
+
+    private String cashProvider(EscrowTransaction transaction) {
+        if (transaction.assetLots().stream().anyMatch(lot -> lot.type()
+                == EscrowAssetLotType.PROTECTED_PHYSICAL_CURRENCY)) {
+            return "PROTECTED";
+        }
+        if (transaction.assetLots().stream().anyMatch(lot -> lot.type()
+                == EscrowAssetLotType.FOREIGN_PHYSICAL_CURRENCY)) {
+            return "FOREIGN";
+        }
+        return "NOT_CASH";
+    }
+
+    private String cashEvidence(
+            EscrowTransaction transaction,
+            String provider
+    ) {
+        Optional<UUID> playerId = transaction.participants().stream()
+                .filter(participant -> participant.party().type()
+                        == EscrowPartyType.PLAYER)
+                .map(participant -> participant.party().id())
+                .map(UUID::fromString)
+                .findFirst();
+        if (playerId.isEmpty() || provider.equals("NOT_CASH")) {
+            return "NOT_APPLICABLE";
+        }
+        UUID transactionId = transaction.transactionId().value();
+        try {
+            if (provider.equals("PROTECTED")) {
+                ProtectedCashRedemptionIntentStore.Inspection inspection =
+                        protectedCashIntentStore.inspect(ownerServer,
+                                playerId.orElseThrow(), transactionId);
+                return inspection.status().name()
+                        + inspection.evidence()
+                        .map(value -> ":" + value.phase().name())
+                        .orElse("");
+            }
+            ForeignCashDepositIntentStore.Inspection inspection =
+                    foreignCashIntentStore.inspect(ownerServer,
+                            playerId.orElseThrow(), transactionId);
+            return inspection.status().name()
+                    + inspection.evidence()
+                    .map(value -> ":" + value.phase().name())
+                    .orElse("");
+        } catch (RuntimeException exception) {
+            return "INSPECTION_FAILED:" + exception.getClass().getSimpleName();
+        }
     }
 
     synchronized Optional<ClaimAttemptResult> claimAttempt(
@@ -3294,6 +3402,58 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 && first.requestKey().equals(second.requestKey())
                 && first.operations().equals(second.operations())
                 && first.preparedAt().equals(second.preparedAt());
+    }
+
+    public record RecoveryInspection(
+            UUID transactionId,
+            String requestKey,
+            EscrowOperation operation,
+            EscrowState state,
+            long revision,
+            long configRevision,
+            List<String> participants,
+            String provider,
+            String evidence,
+            long amountMinorUnits,
+            long assetQuantity,
+            int claimCount,
+            long pendingClaimUnits,
+            String lastErrorCode,
+            String lastErrorMessage,
+            int recoveryAttempts,
+            int maximumRecoveryAttempts,
+            String nextAttemptAt,
+            String resumeState,
+            String safeAction
+    ) {
+        public RecoveryInspection {
+            Objects.requireNonNull(transactionId, "transactionId");
+            requestKey = Objects.requireNonNull(requestKey, "requestKey");
+            Objects.requireNonNull(operation, "operation");
+            Objects.requireNonNull(state, "state");
+            participants = List.copyOf(Objects.requireNonNull(
+                    participants, "participants"));
+            provider = Objects.requireNonNull(provider, "provider");
+            evidence = Objects.requireNonNull(evidence, "evidence");
+            lastErrorCode = Objects.requireNonNull(
+                    lastErrorCode, "lastErrorCode");
+            lastErrorMessage = Objects.requireNonNull(
+                    lastErrorMessage, "lastErrorMessage");
+            nextAttemptAt = Objects.requireNonNull(
+                    nextAttemptAt, "nextAttemptAt");
+            resumeState = Objects.requireNonNull(
+                    resumeState, "resumeState");
+            safeAction = Objects.requireNonNull(safeAction, "safeAction");
+            if (revision < 0L || configRevision < 0L
+                    || amountMinorUnits < 0L || assetQuantity < 0L
+                    || claimCount < 0 || pendingClaimUnits < 0L
+                    || recoveryAttempts < 0
+                    || maximumRecoveryAttempts < 0
+                    || recoveryAttempts > maximumRecoveryAttempts) {
+                throw new IllegalArgumentException(
+                        "Recovery inspection is invalid");
+            }
+        }
     }
 
     private static final class CustodyExecutionScope {

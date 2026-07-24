@@ -30,6 +30,7 @@ import com.enviouse.futureshops.network.packets.S2CAdminEditAckPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmWithdrawPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmCollectCashPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
+import com.enviouse.futureshops.network.packets.C2SAtmDepositRecoveryPacket;
 import com.enviouse.futureshops.network.packets.C2SCloseMarketSessionPacket;
 import com.enviouse.futureshops.network.packets.C2SMarketCapabilitiesPacket;
 import com.enviouse.futureshops.network.packets.C2SMarketProfileMutationPacket;
@@ -240,6 +241,14 @@ public final class ShopClientPacketHandler {
     private static void sendAtmDeposit(
             AtmDepositTracker.PendingRequest request
     ) {
+        if (request.recoveryTransactionId().isPresent()) {
+            ShopPackets.CHANNEL.sendToServer(
+                    new C2SAtmDepositRecoveryPacket(
+                            request.requestId(),
+                            request.recoveryTransactionId()
+                                    .orElseThrow()));
+            return;
+        }
         ShopPackets.CHANNEL.sendToServer(atmDepositPacket(request));
     }
 
@@ -297,6 +306,29 @@ public final class ShopClientPacketHandler {
     public static void handleAtmData(S2CAtmDataPacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
+            packet.depositRecovery().ifPresent(recovery -> {
+                if (recovery.status().equals("RECOVERY_PENDING")) {
+                    ATM_DEPOSITS.adoptRecovery(
+                            recovery.requestId(),
+                            packet.currencySignature(),
+                            recovery.transactionId());
+                } else if (recovery.status().equals("MANUAL_REVIEW")) {
+                    ATM_DEPOSITS.adoptBlockedRecovery(
+                            recovery.requestId(),
+                            packet.currencySignature(),
+                            recovery.transactionId());
+                } else {
+                    ATM_DEPOSITS.reconcileTerminalRecovery(
+                            recovery.requestId(),
+                            recovery.transactionId());
+                }
+                lastRetryableAtmDepositResult = null;
+            });
+            if (packet.serviceAvailable()
+                    && packet.depositRecovery().isEmpty()
+                    && ATM_DEPOSITS.reconcileNoRecovery()) {
+                lastRetryableAtmDepositResult = null;
+            }
             if (mc.screen instanceof AtmScreen atm) {
                 atm.applyData(packet);
             } else {

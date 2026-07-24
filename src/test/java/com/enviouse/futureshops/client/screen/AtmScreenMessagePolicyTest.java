@@ -1,6 +1,9 @@
 package com.enviouse.futureshops.client.screen;
 
 import com.enviouse.futureshops.data.AtmDenominationData;
+import com.enviouse.futureshops.client.AtmCashClaimCollectionTracker;
+import com.enviouse.futureshops.client.AtmDepositTracker;
+import com.enviouse.futureshops.client.AtmWithdrawalTracker;
 import com.enviouse.futureshops.network.packets.S2CAtmCollectCashResultPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmDataPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
@@ -9,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -142,6 +146,12 @@ class AtmScreenMessagePolicyTest {
                 AtmScreen.depositResultKey("REQUEST_CONFLICT"));
         assertEquals("gui.futureshops.atm.deposit_result.cancelled",
                 AtmScreen.depositResultKey("CANCELLED"));
+        assertEquals("gui.futureshops.atm.deposit_result.recovery_pending",
+                AtmScreen.depositResultKey("RECOVERY_PENDING"));
+        assertEquals("gui.futureshops.atm.deposit_result.manual_review",
+                AtmScreen.depositResultKey("MANUAL_REVIEW"));
+        assertEquals("gui.futureshops.atm.deposit_result.refunded",
+                AtmScreen.depositResultKey("REFUNDED"));
         assertEquals("gui.futureshops.atm.deposit_result.server_error",
                 AtmScreen.depositResultKey("FUTURE_STATUS"));
         assertEquals("gui.futureshops.atm.deposit_source.main_hand",
@@ -151,6 +161,65 @@ class AtmScreenMessagePolicyTest {
                 "gui.futureshops.atm.deposit_source.off_hand_exact",
                 AtmScreen.depositSourceExactKey(
                         C2SAtmDepositPacket.Source.OFF_HAND));
+    }
+
+    @Test
+    void retryableDepositRecoveryDoesNotBlockCashClaimsOrModeTabs() {
+        assertEquals(true, AtmScreen.cashCollectionEnabled(
+                AtmWithdrawalTracker.PendingState.NONE,
+                AtmCashClaimCollectionTracker.PendingState.NONE,
+                AtmDepositTracker.PendingState.RETRYABLE,
+                true, true));
+        assertEquals(true, AtmScreen.modeNavigationEnabled(
+                AtmWithdrawalTracker.PendingState.NONE,
+                AtmCashClaimCollectionTracker.PendingState.NONE,
+                AtmDepositTracker.PendingState.RETRYABLE));
+        assertEquals(true, AtmScreen.cashCollectionEnabled(
+                AtmWithdrawalTracker.PendingState.NONE,
+                AtmCashClaimCollectionTracker.PendingState.NONE,
+                AtmDepositTracker.PendingState.BLOCKED,
+                true, true));
+        assertEquals(true, AtmScreen.modeNavigationEnabled(
+                AtmWithdrawalTracker.PendingState.NONE,
+                AtmCashClaimCollectionTracker.PendingState.NONE,
+                AtmDepositTracker.PendingState.BLOCKED));
+        assertEquals(false, AtmScreen.cashCollectionEnabled(
+                AtmWithdrawalTracker.PendingState.NONE,
+                AtmCashClaimCollectionTracker.PendingState.NONE,
+                AtmDepositTracker.PendingState.AWAITING,
+                true, true));
+    }
+
+    @Test
+    void cashClaimReconciliationPreservesDepositRecovery() {
+        UUID requestId = UUID.fromString(
+                "51000000-0000-0000-0000-000000000031");
+        UUID transactionId = UUID.fromString(
+                "51000000-0000-0000-0000-000000000032");
+        S2CAtmDataPacket.DepositRecoverySummary recovery =
+                new S2CAtmDataPacket.DepositRecoverySummary(
+                        requestId, transactionId, "RECOVERY_PENDING",
+                        3_007L);
+        S2CAtmDataPacket current = new S2CAtmDataPacket(
+                100L, true, "Credits", 2, "futureshops",
+                S2CAtmDataPacket.ROUTE_PROTECTED, true,
+                "a".repeat(64),
+                List.of(new AtmDenominationData(
+                        "futureshops:money", 100L, 64)),
+                true, S2CAtmDataPacket.AVAILABLE, true, 1,
+                List.of(new S2CAtmDataPacket.CashClaimSummary(
+                        UUID.fromString(
+                                "51000000-0000-0000-0000-000000000033"),
+                        "PROTECTED_CASH", 1)),
+                Optional.of(recovery));
+
+        S2CAtmDataPacket reconciled =
+                AtmScreen.reconcileTerminalCashClaims(
+                        current,
+                        List.of(current.collectibleCashClaims()
+                                .get(0).claimId()), 0);
+
+        assertEquals(Optional.of(recovery), reconciled.depositRecovery());
     }
 
     @Test

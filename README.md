@@ -4,7 +4,7 @@ FutureShops is a Minecraft Forge economy and marketplace mod for server shops, p
 
 ## Status
 
-The 3.0 markets implementation is in beta. Approval is blocked by the ATM deposit recovery and refund access defects in [Section 20 of the 3.0 plan](FutureShops3-0Plan.MD#20-release-blocker-atm-deposit-recovery-and-refund-access). Active phase branches are test builds. Use matching FutureShops builds on the client and server.
+The 3.0 markets implementation is in beta. The ATM deposit recovery and Bazaar refund access blocker in [Section 20 of the 3.0 plan](FutureShops3-0Plan.MD#20-release-blocker-atm-deposit-recovery-and-refund-access) is implemented on the active phase branch. The automated suite, build, headless client startup, and dedicated server startup pass. Active phase branches remain test builds until live multiplayer, reconnect, restart, and recovery fault acceptance is complete. Use matching FutureShops builds on the client and server.
 
 Supported runtime:
 
@@ -14,7 +14,7 @@ Supported runtime:
 | Forge | 47.4.20 |
 | Java | 17 |
 | GeckoLib | 4.8.3 or newer compatible 4.x release |
-| Network protocol | 51 |
+| Network protocol | 52 |
 
 ## Features
 
@@ -57,6 +57,7 @@ Common commands include:
 | `/baltop` | Open economy leaderboards |
 | `/atm` | Open physical currency controls |
 | `/marketadmin` | Inspect and control market runtime state |
+| `/marketadmin inspect <transactionId>` | Inspect one escrow recovery handle without changing it |
 
 See [Auction House and Bazaar guide](docs/markets-guide.md) for player and administrator workflows.
 
@@ -100,7 +101,7 @@ Useful run tasks are `runClient`, `runServer`, `runGameTestServer`, and `runData
 
 Read [Compatibility matrix](docs/compatibility-matrix.md) before using custom currency, permission plugins, external storage, or restored world data.
 
-When reporting a problem, include the FutureShops jar version, Minecraft and Forge versions, client and server logs, relevant sanitized TOML files, the command or screen involved, and whether the world was new or upgraded. For market availability failures, include the output of `/marketadmin status`.
+When reporting a problem, include the FutureShops jar version, Minecraft and Forge versions, client and server logs, relevant sanitized TOML files, the command or screen involved, and whether the world was new or upgraded. For market availability failures, include the output of `/marketadmin status`. For a deposit recovery, copy the complete ATM recovery handle and include `/marketadmin inspect <transactionId>`.
 
 ## License
 

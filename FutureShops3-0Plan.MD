@@ -1,6 +1,6 @@
 # FutureShops 3.0 Plan
 
-Status. Beta approval is blocked by the ATM deposit recovery and refund access defects documented in Section 20.
+Status. The ATM deposit recovery and Bazaar refund access blocker in Section 20 is implemented on the active 3.0 beta branch. Automated tests, the build, headless client startup, and dedicated server startup pass. Release approval still requires the remaining live multiplayer, reconnect, restart, and recovery fault acceptance checks.
 
 This document is the implementation contract for FutureShops 3.0. It covers the shared escrow foundation, migration of all existing value moving features, the Auction House, the Bazaar, the shared market interface, configuration, recovery, abuse controls, testing, and release sequencing.
 
@@ -1078,15 +1078,17 @@ These defaults maximize safety while retaining server and client customization. 
 
 ## 20. Release blocker. ATM deposit recovery and refund access
 
-Issue status. Not fixed.
+Issue status. Fixed in the active 3.0 implementation. Live acceptance remains pending.
 
-The reported single player deposit failure is reproducible from the current control flow. The ATM shows `RECOVERY_REQUIRED`, retains the original deposit request, and offers Retry deposit. The retry correctly reuses the same request UUID, but a stored nonterminal transaction or active player evidence is classified as `RECOVERY_REQUIRED` again without a client visible reconciliation result. This can become an endless status loop even though creating a new request is correctly forbidden.
+The pre fix audit reproduced the reported single player deposit failure from the former control flow. The ATM showed `RECOVERY_REQUIRED`, retained the original deposit request, and offered Retry deposit. The retry correctly reused the same request UUID, but a stored nonterminal transaction or active player evidence was classified as `RECOVERY_REQUIRED` again without a client visible reconciliation result. This could become an endless status loop even though creating a new request was correctly forbidden.
 
-The same screen can display an already committed cash claim while making it unreachable. `AtmScreen` enables Collect cash only while no deposit request is pending and while withdrawal mode is selected. It also prevents switching between Deposit and Withdrawal while that request is pending. A retryable deposit recovery can therefore disable Collect cash and prevent the player from entering the mode that would enable it. Back remains available, but reopening restores the static client tracker, so leaving the screen does not resolve the dead end.
+The former screen could display an already committed cash claim while making it unreachable. `AtmScreen` enabled Collect cash only while no deposit request was pending and while withdrawal mode was selected. It also prevented switching between Deposit and Withdrawal while that request was pending. A retryable deposit recovery could therefore disable Collect cash and prevent the player from entering the mode that would enable it. Back remained available, but reopening restored the static client tracker, so leaving the screen did not resolve the dead end.
 
-The recovery enqueue path contains a confirmed false success result. `ProtectedCashRedemptionWorkflow.enqueueIntentRecovery` catches a runtime failure from the runtime queue and returns `true`. `ForeignCashDepositWorkflow.enqueueIntentRecovery` has the same behavior. Their callers interpret `true` as successfully queued recovery, so a failed enqueue can leave live evidence attached to the player while no recovery work was accepted. Future deposits then detect that evidence and return `RECOVERY_REQUIRED`.
+The former recovery enqueue path contained a confirmed false success result. `ProtectedCashRedemptionWorkflow.enqueueIntentRecovery` caught a runtime failure from the runtime queue and returned `true`. `ForeignCashDepositWorkflow.enqueueIntentRecovery` had the same behavior. Their callers interpreted `true` as successfully queued recovery, so a failed enqueue could leave live evidence attached to the player while no recovery work was accepted. Future deposits then detected that evidence and returned `RECOVERY_REQUIRED`.
 
-Bazaar cancellation is a related discoverability problem, not the same claim type as the ATM screenshot. Canceling an unfilled or partially filled buy order releases the remaining hold into a durable `BUYER_REFUND_CLAIM`. `BazaarEscrowLifecyclePlanner` stores it as a pending `ClaimKind.MONEY` claim labeled `Bazaar buyer refund`. This is a Claims balance, not an ATM physical cash claim, including when Inventory Cash first funded the order under the current refund policy. The current success text says that remaining value returns through Claims, but it does not report the exact amount, open Claims, or guarantee that the refreshed claim badge makes the refund obvious. The screenshot's Collect cash count represents a separate cash claim and must not be presented as proof that the Bazaar refund is available there.
+Bazaar cancellation was a related discoverability problem, not the same claim type as the ATM screenshot. Canceling an unfilled or partially filled buy order releases the remaining hold into a durable `BUYER_REFUND_CLAIM`. `BazaarEscrowLifecyclePlanner` stores it as a pending `ClaimKind.MONEY` claim labeled `Bazaar buyer refund`. This is a Claims balance, not an ATM physical cash claim, including when Inventory Cash first funded the order under the current refund policy. The former success text said that remaining value returned through Claims, but it did not report the exact amount, open Claims, or guarantee that the refreshed claim badge made the refund obvious. The screenshot's Collect cash count represents a separate cash claim and must not be presented as proof that the Bazaar refund is available there.
+
+The implementation now preserves and synchronizes the exact request and transaction identity, uses explicit recovery enqueue results, performs bounded exact recovery checks, fails ambiguous evidence into manual review, keeps unrelated ATM navigation and cash claim collection available, and exposes `/marketadmin inspect <transactionId>`. Bazaar buy order cancellation reports the exact durable refund, refreshes capabilities, and opens Claims directly. Network protocol 52 carries the authoritative ATM recovery snapshot used after open and reconnect.
 
 ### 20.1 Server recovery contract
 
@@ -1140,11 +1142,11 @@ Bazaar cancellation is a related discoverability problem, not the same claim typ
 - Bazaar refunds funded by wallet and Inventory Cash, collected normally and at maximum wallet balance.
 - Bazaar disabled after order placement with cancellation and Claims still available.
 
-The 3.0 beta cannot be approved while the reported recovery banner can remain stuck, a committed cash claim can be inaccessible, a recovery enqueue failure can be reported as success, or a Bazaar cancellation refund lacks a verifiable collection path. Completion requires source fixes, automated coverage for the matrix above, dedicated server and client smoke tests, multiplayer reconnect and restart drills, and updated operator recovery documentation.
+The source blockers described above are implemented. Automated recovery, packet, interface policy, refund detail, and architecture coverage passes. The headless client reaches FutureShops client setup and the render thread, and the dedicated server reaches ready state with FutureShops loaded. Release approval still requires the remaining live multiplayer reconnect, restart, and fault drills from the matrix above.
 
 ## 21. Completion record
 
-The record below describes the implemented 3.0 scope before the newly confirmed Section 20 blocker. It does not waive that blocker or mark the current beta ready for approval.
+The record below describes the implemented 3.0 scope together with the completed Section 20 source fixes. The active phase remains a beta until the remaining live acceptance checks are complete.
 
 The implementation covers the escrow foundation, migrated shop and currency flows, shared market
 shell, independently configurable Auction House and Bazaar modules, wallet and inventory cash

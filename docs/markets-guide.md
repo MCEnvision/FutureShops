@@ -238,6 +238,7 @@ The §13 administrative surface. The command tree stays registered while modules
 | `status` | 2 | Per-module control status + escrow runtime state + open listing/order counts + pending recovery counts |
 | `audit [count]` | 2 | Latest administrative audit records (1–50, default 10) |
 | `recovery` | 2 | Pending auction/bazaar create-recovery intents with age |
+| `inspect <transactionId>` | 3 | Read only inspection of one complete escrow recovery handle, including evidence, claims, retry state, and safe next action |
 | `freeze <module> <reason…>` | 3 | Freeze a module (timers pause; claims stay available) |
 | `resume <module> <reason…>` / `enable <module> <reason…>` | 3 | Return a module to ENABLED |
 | `disable <module> <reason…>` | 3 | Drain mode (plan §11): no new value operations, existing ones resolve |
@@ -253,6 +254,12 @@ idempotent and cannot refund twice.
 Players reach their claims from the Claims tab, the header counter, `/ah claims`, `/bz claims`, or
 the dedicated `/claims` (aliases `/claimall`, `/escrow`) command, which opens the claims view
 directly — collection itself always runs inside a route-validated market session.
+
+Canceling a Bazaar buy order reports the exact unfilled money refund after the durable commit,
+refreshes claim capabilities, and opens Claims directly. The refund remains a money claim labeled
+`Bazaar buyer refund`, including an order originally funded through Inventory Cash. It is not an
+ATM physical cash claim. Partial cancellation returns only the remaining reserve; fills, fees,
+price improvement, and earlier claims remain separate.
 
 ### Permissions
 

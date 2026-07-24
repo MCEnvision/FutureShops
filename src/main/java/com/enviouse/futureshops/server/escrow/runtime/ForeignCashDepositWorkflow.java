@@ -134,8 +134,15 @@ final class ForeignCashDepositWorkflow {
             } else if (reservation != null && reservationCommitted) {
                 enqueueRecovery(reservation, exception);
             } else if (intentPersistAttempted && intent != null) {
-                if (!enqueueIntentRecovery(intent, exception)) {
-                    discardMatchingLiveIntent(player, intent);
+                CashDepositRecoveryEnqueueResult enqueueResult =
+                        enqueueIntentRecovery(intent, exception);
+                switch (enqueueResult) {
+                    case NO_DURABLE_EVIDENCE -> discardMatchingIntent(
+                            player, intent, exception);
+                    case QUEUED -> {
+                    }
+                    case FAILED -> {
+                    }
                 }
             }
             if (cancellationResolved) {
@@ -182,7 +189,7 @@ final class ForeignCashDepositWorkflow {
         }
     }
 
-    private boolean enqueueIntentRecovery(
+    private CashDepositRecoveryEnqueueResult enqueueIntentRecovery(
             ForeignCashDepositEvidence evidence,
             Throwable failure
     ) {
@@ -190,25 +197,19 @@ final class ForeignCashDepositWorkflow {
             return runtime.enqueueForeignCashIntentRecovery(evidence);
         } catch (RuntimeException enqueueFailure) {
             failure.addSuppressed(enqueueFailure);
-            return true;
+            return CashDepositRecoveryEnqueueResult.FAILED;
         }
     }
 
-    private static void discardMatchingLiveIntent(
+    private void discardMatchingIntent(
             ServerPlayer player,
-            ForeignCashDepositEvidence evidence
+            ForeignCashDepositEvidence evidence,
+            Throwable failure
     ) {
-        net.minecraft.nbt.Tag raw = player.getPersistentData().get(
-                ForeignCashDepositIntentStore.EVIDENCE_KEY);
-        if (raw instanceof net.minecraft.nbt.ByteArrayTag bytes) {
-            try {
-                if (ForeignCashDepositEvidence.decode(
-                        bytes.getAsByteArray()).equals(evidence)) {
-                    player.getPersistentData().remove(
-                            ForeignCashDepositIntentStore.EVIDENCE_KEY);
-                }
-            } catch (RuntimeException ignored) {
-            }
+        try {
+            intentStore.discardIntent(server, player, evidence);
+        } catch (IOException | RuntimeException cleanupFailure) {
+            failure.addSuppressed(cleanupFailure);
         }
     }
 

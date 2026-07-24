@@ -92,7 +92,8 @@ public final class MarketPhysicalFundingService {
                     CREATIVE_BLOCKED, LEGACY_MIGRATION_REQUIRED,
                     INVALID_CURRENCY -> Status.INVALID_CASH;
             case REQUEST_CONFLICT -> Status.REQUEST_CONFLICT;
-            case CANCELLED, RECOVERY_REQUIRED -> Status.RECOVERY_REQUIRED;
+            case CANCELLED, RECOVERY_REQUIRED, RECOVERY_PENDING,
+                    MANUAL_REVIEW, REFUNDED -> Status.RECOVERY_REQUIRED;
             case CONFIG_CHANGED -> Status.CONFIG_CHANGED;
             case RATE_LIMITED -> Status.RATE_LIMITED;
             case ESCROW_UNAVAILABLE -> Status.UNAVAILABLE;

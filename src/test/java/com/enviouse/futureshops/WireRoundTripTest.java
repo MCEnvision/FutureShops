@@ -17,6 +17,7 @@ import com.enviouse.futureshops.network.packets.C2SAdminShopEditPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmWithdrawPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmCollectCashPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
+import com.enviouse.futureshops.network.packets.C2SAtmDepositRecoveryPacket;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuyPacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyAdminCartPacket;
@@ -603,6 +604,13 @@ public class WireRoundTripTest {
 
     @Test
     void atmDataPacketRoundTripsSecurityAndDenominations() {
+        S2CAtmDataPacket.DepositRecoverySummary recovery =
+                new S2CAtmDataPacket.DepositRecoverySummary(
+                        UUID.fromString(
+                                "30000000-0000-0000-0000-000000000010"),
+                        UUID.fromString(
+                                "30000000-0000-0000-0000-000000000011"),
+                        "RECOVERY_PENDING", 3_007L);
         S2CAtmDataPacket in = new S2CAtmDataPacket(
                 123_456L, true, "Credits", 2, "custom",
                 S2CAtmDataPacket.ROUTE_FOREIGN, false, "a".repeat(64),
@@ -618,7 +626,8 @@ public class WireRoundTripTest {
                         new S2CAtmDataPacket.CashClaimSummary(
                                 UUID.fromString(
                                         "30000000-0000-0000-0000-000000000002"),
-                                "FOREIGN_CASH", 3)));
+                                "FOREIGN_CASH", 3)),
+                Optional.of(recovery));
         FriendlyByteBuf b = buf();
         S2CAtmDataPacket.encode(in, b);
         S2CAtmDataPacket out = S2CAtmDataPacket.decode(b);
@@ -631,7 +640,26 @@ public class WireRoundTripTest {
         assertEquals(2, out.denominations().size());
         assertEquals(6, out.pendingCashClaimCount());
         assertEquals(2, out.collectibleCashClaims().size());
+        assertEquals(Optional.of(recovery), out.depositRecovery());
         assertEquals(0, b.readableBytes());
+    }
+
+    @Test
+    void atmDepositRecoveryCheckRoundTripsExactIdentity() {
+        C2SAtmDepositRecoveryPacket in =
+                new C2SAtmDepositRecoveryPacket(
+                        UUID.fromString(
+                                "30000000-0000-0000-0000-000000000020"),
+                        UUID.fromString(
+                                "30000000-0000-0000-0000-000000000021"));
+        FriendlyByteBuf buffer = buf();
+
+        C2SAtmDepositRecoveryPacket.encode(in, buffer);
+        C2SAtmDepositRecoveryPacket out =
+                C2SAtmDepositRecoveryPacket.decode(buffer);
+
+        assertEquals(in, out);
+        assertEquals(0, buffer.readableBytes());
     }
 
     @Test
@@ -1109,6 +1137,30 @@ public class WireRoundTripTest {
                     S2CAtmDepositResultPacket.decode(buffer));
             assertEquals(0, buffer.readableBytes());
         }
+    }
+
+    @Test
+    void atmDepositRefundReportsExactReturnedInventoryValue() {
+        UUID requestId = UUID.fromString(
+                "34000000-0000-0000-0000-000000000013");
+        UUID transactionId = UUID.fromString(
+                "34000000-0000-0000-0000-000000000014");
+        S2CAtmDepositResultPacket input =
+                new S2CAtmDepositResultPacket(
+                        requestId, "REFUNDED", false, false,
+                        Optional.of(transactionId),
+                        0L, 0, 0L, 0L,
+                        1_250L, "ORIGINAL_INVENTORY",
+                        false, 0L, false, Optional.empty(), 0L);
+        FriendlyByteBuf buffer = buf();
+
+        S2CAtmDepositResultPacket.encode(input, buffer);
+
+        assertEquals(input,
+                S2CAtmDepositResultPacket.decode(buffer));
+        assertEquals(1_250L, input.returnedMinorUnits());
+        assertEquals("ORIGINAL_INVENTORY", input.refundDestination());
+        assertEquals(0, buffer.readableBytes());
     }
 
     @Test

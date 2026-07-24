@@ -19,6 +19,7 @@ import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountId;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountType;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerTransaction;
 import com.enviouse.futureshops.server.escrow.model.EscrowOperation;
+import com.enviouse.futureshops.server.escrow.model.EscrowAssetLotType;
 import com.enviouse.futureshops.server.escrow.model.EscrowState;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
 import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
@@ -72,6 +73,160 @@ public final class EscrowCashDepositService {
     ) {
         return depositInternal(player, request,
                 CashDepositMode.INTERNAL_ESCROW);
+    }
+
+    public static synchronized Optional<DepositRecovery> recoverySnapshot(
+            ServerPlayer player
+    ) {
+        Objects.requireNonNull(player, "player");
+        ActiveEvidence evidence = inspectActiveEvidence(player);
+        if (evidence.corrupt() || evidence.identity().isEmpty()
+                || evidence.identity().orElseThrow().depositMode()
+                != CashDepositMode.PUBLIC_WALLET) {
+            return Optional.empty();
+        }
+        RecoveryIdentity identity = evidence.identity().orElseThrow();
+        if (!transactionIdForRequest(player.getUUID(), identity.requestId())
+                .equals(identity.transactionId())) {
+            return Optional.of(new DepositRecovery(
+                    identity.requestId(), identity.transactionId(),
+                    RecoveryStatus.MANUAL_REVIEW,
+                    identity.amountMinorUnits()));
+        }
+        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
+        RecoveryStatus status = RecoveryStatus.RECOVERY_PENDING;
+        if (runtime != null) {
+            Optional<EscrowTransaction> transaction =
+                    runtime.transaction(identity.transactionId());
+            if (transaction.isPresent()) {
+                EscrowTransaction stored = transaction.orElseThrow();
+                if (!matchesPublicRecovery(
+                        stored, player.getUUID(), identity.requestId(),
+                        identity.transactionId())) {
+                    status = RecoveryStatus.MANUAL_REVIEW;
+                } else if (stored.state().isTerminal()) {
+                    if (runtime.isReady()
+                            && enqueueTransactionRecovery(
+                            runtime, stored, player.getUUID())) {
+                        recoverBounded(runtime);
+                    }
+                    if (!hasRawEvidence(player)) {
+                        return Optional.empty();
+                    }
+                    status = runtime.failure().isPresent()
+                            ? RecoveryStatus.MANUAL_REVIEW
+                            : RecoveryStatus.RECOVERY_PENDING;
+                } else {
+                    status = recoveryStatus(stored.state());
+                }
+            }
+        }
+        return Optional.of(new DepositRecovery(
+                identity.requestId(), identity.transactionId(), status,
+                identity.amountMinorUnits()));
+    }
+
+    public static synchronized DepositResult checkRecovery(
+            ServerPlayer player,
+            UUID requestId,
+            UUID transactionId
+    ) {
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(requestId, "requestId");
+        Objects.requireNonNull(transactionId, "transactionId");
+        DepositRequest request = recoveryRequest(requestId);
+        if (!transactionIdForRequest(
+                player.getUUID(), requestId).equals(transactionId)) {
+            return failure(Status.REQUEST_CONFLICT, request,
+                    Optional.of(transactionId), Optional.empty());
+        }
+        ServerRequestSecurityManager.GateDecision gate =
+                ServerRequestSecurityManager.tryAcquire(
+                        player, ServerRequestAction.ATM_DEPOSIT);
+        if (!gate.allowed()) {
+            return gateFailure(request, gate);
+        }
+        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
+        if (runtime == null) {
+            return failure(Status.ESCROW_UNAVAILABLE, request,
+                    Optional.empty(), Optional.empty());
+        }
+        ActiveEvidence evidence = inspectActiveEvidence(player);
+        if (evidence.corrupt()) {
+            return failure(Status.MANUAL_REVIEW, request,
+                    Optional.of(transactionId), Optional.empty());
+        }
+        if (evidence.identity().isPresent()) {
+            RecoveryIdentity identity = evidence.identity().orElseThrow();
+            if (!identity.requestId().equals(requestId)
+                    || !identity.transactionId().equals(transactionId)
+                    || identity.depositMode()
+                    != CashDepositMode.PUBLIC_WALLET) {
+                return failure(Status.REQUEST_CONFLICT, request,
+                        Optional.of(transactionId), Optional.empty());
+            }
+        }
+        Optional<EscrowTransaction> stored = runtime.transaction(
+                transactionId);
+        if (stored.isPresent()) {
+            EscrowTransaction transaction = stored.orElseThrow();
+            if (!matchesPublicRecovery(
+                    transaction, player.getUUID(),
+                    requestId, transactionId)) {
+                return failure(Status.REQUEST_CONFLICT, request,
+                        Optional.of(transactionId), Optional.empty());
+            }
+            if (transaction.state().isTerminal()
+                    || transaction.state() == EscrowState.MANUAL_REVIEW) {
+                Optional<DepositResult> cleanupBlock =
+                        terminalCleanupBlock(runtime, player, request,
+                                transactionId, transaction);
+                if (cleanupBlock.isPresent()) {
+                    return cleanupBlock.orElseThrow();
+                }
+                return recoveryResult(
+                        runtime, player, request, transactionId);
+            }
+        }
+        if (!runtime.isReady()) {
+            Status status = evidence.identity().isPresent()
+                    || stored.isPresent()
+                    ? Status.RECOVERY_PENDING
+                    : Status.ESCROW_UNAVAILABLE;
+            return failure(status, request,
+                    status == Status.RECOVERY_PENDING
+                            ? Optional.of(transactionId) : Optional.empty(),
+                    Optional.empty());
+        }
+        if (stored.isEmpty()) {
+            boolean queued = enqueueIntentRecovery(
+                    runtime, player, evidence, transactionId);
+            if (queued) {
+                recoverBounded(runtime);
+            }
+            stored = runtime.transaction(transactionId);
+            if (stored.isEmpty() && !queued) {
+                return failure(Status.MANUAL_REVIEW, request,
+                        Optional.of(transactionId), Optional.empty());
+            }
+        }
+        if (stored.isEmpty()) {
+            Status status = evidence.identity().isPresent()
+                    ? Status.RECOVERY_PENDING : Status.MANUAL_REVIEW;
+            return failure(status, request, Optional.of(transactionId),
+                    Optional.empty());
+        }
+        EscrowTransaction transaction = stored.orElseThrow();
+        if (!transaction.state().isTerminal()
+                && transaction.state() != EscrowState.MANUAL_REVIEW) {
+            if (!enqueueTransactionRecovery(
+                    runtime, transaction, player.getUUID())) {
+                return failure(Status.MANUAL_REVIEW, request,
+                        Optional.of(transactionId), Optional.empty());
+            }
+            recoverBounded(runtime);
+        }
+        return recoveryResult(runtime, player, request, transactionId);
     }
 
     public static EscrowClaim requireInternalEscrowFundingClaim(
@@ -279,9 +434,10 @@ public final class EscrowCashDepositService {
             return failure(Status.ESCROW_UNAVAILABLE, request,
                     Optional.empty(), Optional.empty());
         }
-        if (activeEvidence.transactionId().isPresent()) {
+        if (activeEvidence.identity().isPresent()) {
             return failure(Status.RECOVERY_REQUIRED, request,
-                    activeEvidence.transactionId(), Optional.empty());
+                    Optional.of(activeEvidence.identity().orElseThrow()
+                            .transactionId()), Optional.empty());
         }
         return adapter.isInternal()
                 ? depositProtected(runtime, player, request,
@@ -507,7 +663,8 @@ public final class EscrowCashDepositService {
         long balance = runtime.ledgerBalance(playerWallet(player.getUUID()));
         return new DepositResult(Status.SUCCESS, request.requestId(),
                 Optional.of(transactionId), amount, items, walletCredit,
-                overflowClaim, balance, cleanupPending, false,
+                overflowClaim, 0L, RefundDestination.NONE,
+                balance, cleanupPending, false,
                 Optional.empty(), 0L);
     }
 
@@ -540,7 +697,8 @@ public final class EscrowCashDepositService {
             long retryAfterMillis
     ) {
         return new DepositResult(status, request.requestId(), transactionId,
-                0L, 0, 0L, 0L, 0L, false, false, legacy,
+                0L, 0, 0L, 0L, 0L, RefundDestination.NONE,
+                0L, false, false, legacy,
                 retryAfterMillis);
     }
 
@@ -577,17 +735,46 @@ public final class EscrowCashDepositService {
                         Optional.of(transactionId), Optional.empty()));
             }
             case CANCELLED -> {
+                Optional<DepositResult> cleanupBlock =
+                        terminalCleanupBlock(
+                                runtime, player, request, transactionId,
+                                stored.orElseThrow());
+                if (cleanupBlock.isPresent()) {
+                    return cleanupBlock;
+                }
                 return Optional.of(failure(Status.CANCELLED, request,
                         Optional.of(transactionId), Optional.empty()));
             }
             case RECOVERY_REQUIRED -> {
-                return Optional.of(failure(Status.RECOVERY_REQUIRED, request,
-                        Optional.of(transactionId), Optional.empty()));
+                EscrowTransaction transaction = stored.orElseThrow();
+                if (matchesPublicRecovery(transaction, player.getUUID(),
+                        request.requestId(), transactionId)
+                        && transaction.state()
+                        != EscrowState.MANUAL_REVIEW) {
+                    if (!enqueueTransactionRecovery(
+                            runtime, transaction, player.getUUID())) {
+                        DepositResult current = recoveryResult(
+                                runtime, player, request, transactionId);
+                        return Optional.of(current.status()
+                                == Status.RECOVERY_PENDING
+                                ? failure(Status.MANUAL_REVIEW, request,
+                                Optional.of(transactionId), Optional.empty())
+                                : current);
+                    }
+                    recoverBounded(runtime);
+                }
+                return Optional.of(recoveryResult(
+                        runtime, player, request, transactionId));
             }
             case COMPLETED -> {
             }
         }
         EscrowTransaction transaction = stored.orElseThrow();
+        Optional<DepositResult> cleanupBlock = terminalCleanupBlock(
+                runtime, player, request, transactionId, transaction);
+        if (cleanupBlock.isPresent()) {
+            return cleanupBlock;
+        }
         return Optional.of(completedReplayFromRuntime(runtime, player,
                 request, transactionId, transaction));
     }
@@ -747,7 +934,8 @@ public final class EscrowCashDepositService {
         }
         return new DepositResult(Status.SUCCESS,
                 request.requestId(), Optional.of(transactionId), amount,
-                items, walletCredit, overflow, resultingBalanceMinorUnits,
+                items, walletCredit, overflow, 0L, RefundDestination.NONE,
+                resultingBalanceMinorUnits,
                 cleanupPending, true, Optional.empty(), 0L);
     }
 
@@ -876,10 +1064,21 @@ public final class EscrowCashDepositService {
                 ProtectedCashRedemptionEvidence evidence =
                         ProtectedCashRedemptionEvidence.decode(
                                 bytes.getAsByteArray());
-                return evidence.playerId().equals(player.getUUID())
-                        ? ActiveEvidence.transaction(
-                        evidence.transactionId())
-                        : ActiveEvidence.corruptEvidence();
+                if (!evidence.playerId().equals(player.getUUID())) {
+                    return ActiveEvidence.corruptEvidence();
+                }
+                UUID requestId = requestId(
+                        evidence.reservation().heldTransaction())
+                        .orElse(null);
+                return requestId == null
+                        ? ActiveEvidence.corruptEvidence()
+                        : ActiveEvidence.recovery(new RecoveryIdentity(
+                        requestId, evidence.transactionId(),
+                        evidence.reservation().amountMinorUnits(),
+                        evidence.reservation().depositMode(),
+                        evidence.phase()
+                                == ProtectedCashRedemptionEvidence.Phase
+                                .INTENT));
             }
             if (foreignRaw != null) {
                 if (!(foreignRaw instanceof ByteArrayTag bytes)) {
@@ -889,14 +1088,233 @@ public final class EscrowCashDepositService {
                         ForeignCashDepositEvidence.decode(
                                 bytes.getAsByteArray());
                 return evidence.playerId().equals(player.getUUID())
-                        ? ActiveEvidence.transaction(
-                        evidence.transactionId())
+                        ? ActiveEvidence.recovery(new RecoveryIdentity(
+                        evidence.reservation().requestId(),
+                        evidence.transactionId(),
+                        evidence.reservation().amountMinorUnits(),
+                        evidence.reservation().depositMode(),
+                        evidence.phase()
+                                == ForeignCashDepositEvidence.Phase.INTENT))
                         : ActiveEvidence.corruptEvidence();
             }
             return ActiveEvidence.none();
         } catch (RuntimeException exception) {
             return ActiveEvidence.corruptEvidence();
         }
+    }
+
+    private static DepositRequest recoveryRequest(UUID requestId) {
+        return new DepositRequest(requestId, "0".repeat(64),
+                Source.INVENTORY, OptionalLong.empty(),
+                CashDepositMode.PUBLIC_WALLET);
+    }
+
+    private static boolean enqueueIntentRecovery(
+            EscrowRuntimeService runtime,
+            ServerPlayer player,
+            ActiveEvidence evidence,
+            UUID transactionId
+    ) {
+        if (evidence.identity().isEmpty()
+                || !evidence.identity().orElseThrow().intent()
+                || !evidence.identity().orElseThrow().transactionId()
+                .equals(transactionId)) {
+            return false;
+        }
+        Tag protectedRaw = player.getPersistentData().get(
+                CashDepositEvidenceKeys.PROTECTED);
+        Tag foreignRaw = player.getPersistentData().get(
+                CashDepositEvidenceKeys.FOREIGN);
+        try {
+            if (protectedRaw instanceof ByteArrayTag bytes) {
+                return runtime.enqueueProtectedCashIntentRecovery(
+                        ProtectedCashRedemptionEvidence.decode(
+                                bytes.getAsByteArray()))
+                        == CashDepositRecoveryEnqueueResult.QUEUED;
+            }
+            if (foreignRaw instanceof ByteArrayTag bytes) {
+                return runtime.enqueueForeignCashIntentRecovery(
+                        ForeignCashDepositEvidence.decode(
+                                bytes.getAsByteArray()))
+                        == CashDepositRecoveryEnqueueResult.QUEUED;
+            }
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+        return false;
+    }
+
+    private static boolean enqueueTransactionRecovery(
+            EscrowRuntimeService runtime,
+            EscrowTransaction transaction,
+            UUID playerId
+    ) {
+        try {
+            if (transaction.assetLots().stream().anyMatch(lot ->
+                    lot.type() == EscrowAssetLotType
+                            .PROTECTED_PHYSICAL_CURRENCY)) {
+                if (transaction.state().isTerminal()) {
+                    runtime.scheduleProtectedCashCleanup(
+                            playerId, transaction.transactionId().value());
+                } else {
+                    runtime.enqueueProtectedCashRecovery(
+                            transaction.transactionId().value());
+                }
+                return true;
+            } else if (transaction.assetLots().stream().anyMatch(lot ->
+                    lot.type() == EscrowAssetLotType
+                            .FOREIGN_PHYSICAL_CURRENCY)) {
+                if (transaction.state().isTerminal()) {
+                    runtime.scheduleForeignCashCleanup(
+                            playerId, transaction.transactionId().value());
+                } else {
+                    runtime.enqueueForeignCashRecovery(
+                            transaction.transactionId().value());
+                }
+                return true;
+            }
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+        return false;
+    }
+
+    private static Optional<DepositResult> terminalCleanupBlock(
+            EscrowRuntimeService runtime,
+            ServerPlayer player,
+            DepositRequest request,
+            UUID transactionId,
+            EscrowTransaction transaction
+    ) {
+        if (!transaction.state().isTerminal() || !hasRawEvidence(player)) {
+            return Optional.empty();
+        }
+        if (!runtime.isReady()
+                || !enqueueTransactionRecovery(
+                runtime, transaction, player.getUUID())) {
+            return Optional.of(failure(Status.MANUAL_REVIEW, request,
+                    Optional.of(transactionId), Optional.empty()));
+        }
+        recoverBounded(runtime);
+        if (!hasRawEvidence(player)) {
+            return Optional.empty();
+        }
+        Status status = runtime.failure().isPresent()
+                ? Status.MANUAL_REVIEW : Status.RECOVERY_PENDING;
+        return Optional.of(failure(status, request,
+                Optional.of(transactionId), Optional.empty()));
+    }
+
+    private static boolean recoverBounded(EscrowRuntimeService runtime) {
+        try {
+            runtime.recoverBatch(32);
+            return true;
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private static DepositResult recoveryResult(
+            EscrowRuntimeService runtime,
+            ServerPlayer player,
+            DepositRequest request,
+            UUID transactionId
+    ) {
+        Optional<EscrowTransaction> stored = runtime.transaction(
+                transactionId);
+        if (stored.isEmpty()) {
+            return failure(Status.RECOVERY_PENDING, request,
+                    Optional.of(transactionId), Optional.empty());
+        }
+        EscrowTransaction transaction = stored.orElseThrow();
+        return switch (transaction.state()) {
+            case COMPLETED -> {
+                try {
+                    yield completedReplayFromRuntime(runtime, player,
+                            request, transactionId, transaction);
+                } catch (RuntimeException exception) {
+                    yield failure(Status.MANUAL_REVIEW, request,
+                            Optional.of(transactionId), Optional.empty());
+                }
+            }
+            case REFUNDED -> refunded(
+                    request, transactionId, transaction);
+            case MANUAL_REVIEW -> failure(Status.MANUAL_REVIEW, request,
+                    Optional.of(transactionId), Optional.empty());
+            default -> failure(Status.RECOVERY_PENDING, request,
+                    Optional.of(transactionId), Optional.empty());
+        };
+    }
+
+    private static boolean matchesPublicRecovery(
+            EscrowTransaction transaction,
+            UUID playerId,
+            UUID requestId,
+            UUID transactionId
+    ) {
+        return transaction.transactionId().value().equals(transactionId)
+                && transaction.operation() == EscrowOperation.CURRENCY_DEPOSIT
+                && transactionIdForRequest(playerId, requestId).equals(
+                transactionId)
+                && requestId(transaction).filter(requestId::equals)
+                .isPresent()
+                && !transaction.assetLots().isEmpty()
+                && transaction.assetLots().stream().allMatch(lot ->
+                (lot.type() == EscrowAssetLotType
+                        .PROTECTED_PHYSICAL_CURRENCY
+                        || lot.type() == EscrowAssetLotType
+                        .FOREIGN_PHYSICAL_CURRENCY)
+                        && (CashDepositMode.PUBLIC_WALLET.name().equals(
+                        lot.attributes().get("deposit_mode"))
+                        || !lot.attributes().containsKey("deposit_mode")));
+    }
+
+    private static Optional<UUID> requestId(EscrowTransaction transaction) {
+        String key = transaction.requestKey().value();
+        String prefix = "cash.deposit.";
+        if (!key.startsWith(prefix)) {
+            return Optional.empty();
+        }
+        int end = key.indexOf('.', prefix.length());
+        if (end < 0) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(UUID.fromString(
+                    key.substring(prefix.length(), end)));
+        } catch (IllegalArgumentException exception) {
+            return Optional.empty();
+        }
+    }
+
+    private static RecoveryStatus recoveryStatus(EscrowState state) {
+        return switch (state) {
+            case COMPLETED -> RecoveryStatus.COMPLETED;
+            case REFUNDED -> RecoveryStatus.REFUNDED;
+            case MANUAL_REVIEW -> RecoveryStatus.MANUAL_REVIEW;
+            default -> RecoveryStatus.RECOVERY_PENDING;
+        };
+    }
+
+    private static DepositResult refunded(
+            DepositRequest request,
+            UUID transactionId,
+            EscrowTransaction transaction
+    ) {
+        long returnedMinorUnits = transaction.assetLots().stream()
+                .map(lot -> lot.money().orElseThrow().minorUnits())
+                .reduce(0L, Math::addExact);
+        if (returnedMinorUnits <= 0L) {
+            return failure(Status.MANUAL_REVIEW, request,
+                    Optional.of(transactionId), Optional.empty());
+        }
+        return new DepositResult(
+                Status.REFUNDED, request.requestId(),
+                Optional.of(transactionId),
+                0L, 0, 0L, 0L,
+                returnedMinorUnits,
+                RefundDestination.ORIGINAL_INVENTORY,
+                0L, false, false, Optional.empty(), 0L);
     }
 
     private static boolean hasRawEvidence(ServerPlayer player) {
@@ -1002,14 +1420,12 @@ public final class EscrowCashDepositService {
     }
 
     private record ActiveEvidence(
-            Optional<UUID> transactionId,
+            Optional<RecoveryIdentity> identity,
             boolean corrupt
     ) {
         private ActiveEvidence {
-            transactionId = Objects.requireNonNull(
-                    transactionId, "transactionId");
-            if (corrupt && transactionId.isPresent()
-                    || transactionId.filter(ZERO_UUID::equals).isPresent()) {
+            identity = Objects.requireNonNull(identity, "identity");
+            if (corrupt && identity.isPresent()) {
                 throw new IllegalArgumentException(
                         "Active cash deposit evidence is invalid");
             }
@@ -1019,12 +1435,32 @@ public final class EscrowCashDepositService {
             return new ActiveEvidence(Optional.empty(), false);
         }
 
-        private static ActiveEvidence transaction(UUID transactionId) {
-            return new ActiveEvidence(Optional.of(transactionId), false);
+        private static ActiveEvidence recovery(RecoveryIdentity identity) {
+            return new ActiveEvidence(Optional.of(identity), false);
         }
 
         private static ActiveEvidence corruptEvidence() {
             return new ActiveEvidence(Optional.empty(), true);
+        }
+    }
+
+    private record RecoveryIdentity(
+            UUID requestId,
+            UUID transactionId,
+            long amountMinorUnits,
+            CashDepositMode depositMode,
+            boolean intent
+    ) {
+        private RecoveryIdentity {
+            Objects.requireNonNull(requestId, "requestId");
+            Objects.requireNonNull(transactionId, "transactionId");
+            Objects.requireNonNull(depositMode, "depositMode");
+            if (requestId.equals(ZERO_UUID)
+                    || transactionId.equals(ZERO_UUID)
+                    || amountMinorUnits <= 0L) {
+                throw new IllegalArgumentException(
+                        "Cash deposit recovery identity is invalid");
+            }
         }
     }
 
@@ -1058,7 +1494,41 @@ public final class EscrowCashDepositService {
         CONFIG_CHANGED,
         RATE_LIMITED,
         ESCROW_UNAVAILABLE,
-        RECOVERY_REQUIRED
+        RECOVERY_REQUIRED,
+        RECOVERY_PENDING,
+        MANUAL_REVIEW,
+        REFUNDED
+    }
+
+    public enum RecoveryStatus {
+        RECOVERY_PENDING,
+        MANUAL_REVIEW,
+        COMPLETED,
+        REFUNDED
+    }
+
+    public enum RefundDestination {
+        NONE,
+        ORIGINAL_INVENTORY
+    }
+
+    public record DepositRecovery(
+            UUID requestId,
+            UUID transactionId,
+            RecoveryStatus status,
+            long amountMinorUnits
+    ) {
+        public DepositRecovery {
+            Objects.requireNonNull(requestId, "requestId");
+            Objects.requireNonNull(transactionId, "transactionId");
+            Objects.requireNonNull(status, "status");
+            if (requestId.equals(ZERO_UUID)
+                    || transactionId.equals(ZERO_UUID)
+                    || amountMinorUnits <= 0L) {
+                throw new IllegalArgumentException(
+                        "Cash deposit recovery is invalid");
+            }
+        }
     }
 
     public record DepositRequest(
@@ -1127,21 +1597,47 @@ public final class EscrowCashDepositService {
             int itemsConsumed,
             long walletCreditMinorUnits,
             long overflowClaimMinorUnits,
+            long returnedMinorUnits,
+            RefundDestination refundDestination,
             long resultingBalanceMinorUnits,
             boolean cleanupPending,
             boolean replayed,
             Optional<LegacyMigrationFacts> legacyMigration,
             long retryAfterMillis
     ) {
+        public DepositResult(
+                Status status,
+                UUID requestId,
+                Optional<UUID> transactionId,
+                long depositedMinorUnits,
+                int itemsConsumed,
+                long walletCreditMinorUnits,
+                long overflowClaimMinorUnits,
+                long resultingBalanceMinorUnits,
+                boolean cleanupPending,
+                boolean replayed,
+                Optional<LegacyMigrationFacts> legacyMigration,
+                long retryAfterMillis
+        ) {
+            this(status, requestId, transactionId,
+                    depositedMinorUnits, itemsConsumed,
+                    walletCreditMinorUnits, overflowClaimMinorUnits,
+                    0L, RefundDestination.NONE,
+                    resultingBalanceMinorUnits, cleanupPending, replayed,
+                    legacyMigration, retryAfterMillis);
+        }
+
         public DepositResult {
             Objects.requireNonNull(status, "status");
             Objects.requireNonNull(requestId, "requestId");
             transactionId = Objects.requireNonNull(
                     transactionId, "transactionId");
+            Objects.requireNonNull(refundDestination, "refundDestination");
             legacyMigration = Objects.requireNonNull(
                     legacyMigration, "legacyMigration");
             if (requestId.equals(ZERO_UUID)
                     || transactionId.filter(ZERO_UUID::equals).isPresent()
+                    || returnedMinorUnits < 0L
                     || retryAfterMillis < 0L
                     || retryAfterMillis > MAX_RETRY_AFTER_MILLIS
                     || (status == Status.RATE_LIMITED)
@@ -1150,6 +1646,10 @@ public final class EscrowCashDepositService {
                     || status == Status.REQUEST_CONFLICT
                     && transactionId.isEmpty()
                     || status == Status.CANCELLED
+                    && transactionId.isEmpty()
+                    || (status == Status.RECOVERY_PENDING
+                    || status == Status.MANUAL_REVIEW
+                    || status == Status.REFUNDED)
                     && transactionId.isEmpty()
                     || status == Status.SUCCESS
                     && (transactionId.isEmpty()
@@ -1164,6 +1664,13 @@ public final class EscrowCashDepositService {
                     || walletCreditMinorUnits != 0L
                     || overflowClaimMinorUnits != 0L
                     || cleanupPending || replayed)
+                    || status == Status.REFUNDED
+                    && (returnedMinorUnits <= 0L
+                    || refundDestination
+                    != RefundDestination.ORIGINAL_INVENTORY)
+                    || status != Status.REFUNDED
+                    && (returnedMinorUnits != 0L
+                    || refundDestination != RefundDestination.NONE)
                     || status == Status.LEGACY_MIGRATION_REQUIRED
                     && legacyMigration.isEmpty()
                     || status != Status.LEGACY_MIGRATION_REQUIRED
@@ -1180,7 +1687,8 @@ public final class EscrowCashDepositService {
         public boolean retryable() {
             return status == Status.RATE_LIMITED
                     || status == Status.ESCROW_UNAVAILABLE
-                    || status == Status.RECOVERY_REQUIRED;
+                    || status == Status.RECOVERY_REQUIRED
+                    || status == Status.RECOVERY_PENDING;
         }
 
         public long retryAfterSeconds() {

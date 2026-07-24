@@ -8,6 +8,7 @@ import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -64,6 +65,40 @@ public record S2CMarketActionResponsePacket(
         return "APPLIED".equals(status);
     }
 
+    public static String bazaarCancelDetail(
+            UUID orderId,
+            long refundMinorUnits
+    ) {
+        Objects.requireNonNull(orderId, "orderId");
+        if (orderId.equals(NO_TRANSACTION) || refundMinorUnits < 0L) {
+            throw new IllegalArgumentException(
+                    "Bazaar cancellation detail is invalid");
+        }
+        return "bazaar_cancel:" + orderId + ":" + refundMinorUnits;
+    }
+
+    public static Optional<BazaarCancelDetail> parseBazaarCancelDetail(
+            String detail
+    ) {
+        String value = Objects.requireNonNull(detail, "detail");
+        String prefix = "bazaar_cancel:";
+        if (!value.startsWith(prefix)) {
+            return Optional.empty();
+        }
+        int separator = value.indexOf(':', prefix.length());
+        if (separator < 0) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(new BazaarCancelDetail(
+                    UUID.fromString(value.substring(
+                            prefix.length(), separator)),
+                    Long.parseLong(value.substring(separator + 1))));
+        } catch (IllegalArgumentException exception) {
+            return Optional.empty();
+        }
+    }
+
     public static void encode(S2CMarketActionResponsePacket packet, FriendlyByteBuf buffer) {
         buffer.writeUUID(packet.requestId());
         buffer.writeUUID(packet.transactionId());
@@ -93,5 +128,18 @@ public record S2CMarketActionResponsePacket(
         context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
                 () -> () -> ShopClientPacketHandler.handleMarketActionResponse(packet)));
         context.setPacketHandled(true);
+    }
+
+    public record BazaarCancelDetail(
+            UUID orderId,
+            long refundMinorUnits
+    ) {
+        public BazaarCancelDetail {
+            Objects.requireNonNull(orderId, "orderId");
+            if (orderId.equals(NO_TRANSACTION) || refundMinorUnits < 0L) {
+                throw new IllegalArgumentException(
+                        "Bazaar cancellation detail is invalid");
+            }
+        }
     }
 }

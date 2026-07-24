@@ -24,6 +24,8 @@ public record S2CAtmDepositResultPacket(
         int itemsConsumed,
         long walletCreditMinorUnits,
         long overflowClaimMinorUnits,
+        long returnedMinorUnits,
+        String refundDestination,
         boolean balanceKnown,
         long resultingBalanceMinorUnits,
         boolean cleanupPending,
@@ -45,17 +47,45 @@ public record S2CAtmDepositResultPacket(
             "WRONG_PROVIDER", "CREATIVE_BLOCKED",
             "LEGACY_MIGRATION_REQUIRED", "INVALID_CURRENCY",
             "CONFIG_CHANGED", "CANCELLED", "ESCROW_UNAVAILABLE",
-            "RECOVERY_REQUIRED", "REQUEST_CONFLICT",
+            "RECOVERY_REQUIRED", "RECOVERY_PENDING", "MANUAL_REVIEW",
+            "REFUNDED", "REQUEST_CONFLICT",
             "RATE_LIMITED", "SERVER_ERROR");
     private static final Set<String> RETRYABLE_STATUSES = Set.of(
-            "ESCROW_UNAVAILABLE", "RECOVERY_REQUIRED",
+            "ESCROW_UNAVAILABLE", "RECOVERY_REQUIRED", "RECOVERY_PENDING",
             "RATE_LIMITED", "SERVER_ERROR");
+    private static final Set<String> REFUND_DESTINATIONS = Set.of(
+            "NONE", "ORIGINAL_INVENTORY");
+
+    public S2CAtmDepositResultPacket(
+            UUID requestId,
+            String status,
+            boolean retryable,
+            boolean replayed,
+            Optional<UUID> transactionId,
+            long depositedMinorUnits,
+            int itemsConsumed,
+            long walletCreditMinorUnits,
+            long overflowClaimMinorUnits,
+            boolean balanceKnown,
+            long resultingBalanceMinorUnits,
+            boolean cleanupPending,
+            Optional<LegacyMigrationSummary> legacyMigration,
+            long retryAfterMillis
+    ) {
+        this(requestId, status, retryable, replayed, transactionId,
+                depositedMinorUnits, itemsConsumed,
+                walletCreditMinorUnits, overflowClaimMinorUnits,
+                0L, "NONE", balanceKnown, resultingBalanceMinorUnits,
+                cleanupPending, legacyMigration, retryAfterMillis);
+    }
 
     public S2CAtmDepositResultPacket {
         Objects.requireNonNull(requestId, "requestId");
         status = Objects.requireNonNull(status, "status");
         transactionId = Objects.requireNonNull(
                 transactionId, "transactionId");
+        refundDestination = Objects.requireNonNull(
+                refundDestination, "refundDestination");
         legacyMigration = Objects.requireNonNull(
                 legacyMigration, "legacyMigration");
         transactionId.ifPresent(value -> {
@@ -68,6 +98,9 @@ public record S2CAtmDepositResultPacket(
         boolean rateLimited = status.equals("RATE_LIMITED");
         boolean requiresTransaction = success
                 || status.equals("RECOVERY_REQUIRED")
+                || status.equals("RECOVERY_PENDING")
+                || status.equals("MANUAL_REVIEW")
+                || status.equals("REFUNDED")
                 || status.equals("CANCELLED")
                 || status.equals("REQUEST_CONFLICT");
         boolean permitsTransaction = requiresTransaction
@@ -80,6 +113,8 @@ public record S2CAtmDepositResultPacket(
                 || itemsConsumed > MAX_ITEMS_CONSUMED
                 || walletCreditMinorUnits < 0L
                 || overflowClaimMinorUnits < 0L
+                || returnedMinorUnits < 0L
+                || !REFUND_DESTINATIONS.contains(refundDestination)
                 || !balanceKnown && resultingBalanceMinorUnits != 0L
                 || retryAfterMillis < 0L
                 || retryAfterMillis > MAX_RETRY_AFTER_MILLIS
@@ -103,6 +138,12 @@ public record S2CAtmDepositResultPacket(
                 || itemsConsumed != 0 || walletCreditMinorUnits != 0L
                 || overflowClaimMinorUnits != 0L || balanceKnown
                 || resultingBalanceMinorUnits != 0L || cleanupPending)
+                || status.equals("REFUNDED")
+                && (returnedMinorUnits <= 0L
+                || !refundDestination.equals("ORIGINAL_INVENTORY"))
+                || !status.equals("REFUNDED")
+                && (returnedMinorUnits != 0L
+                || !refundDestination.equals("NONE"))
                 || legacyMigration.isPresent()
                 != status.equals("LEGACY_MIGRATION_REQUIRED")) {
             throw new IllegalArgumentException(
@@ -119,6 +160,7 @@ public record S2CAtmDepositResultPacket(
                 + transactionId + "," + depositedMinorUnits + ","
                 + itemsConsumed + "," + walletCreditMinorUnits + ","
                 + overflowClaimMinorUnits + ","
+                + returnedMinorUnits + "," + refundDestination + ","
                 + balanceKnown + "," + resultingBalanceMinorUnits + ","
                 + cleanupPending + ","
                 + legacyMigration + "," + retryAfterMillis;
@@ -138,6 +180,8 @@ public record S2CAtmDepositResultPacket(
         buffer.writeVarInt(packet.itemsConsumed());
         buffer.writeLong(packet.walletCreditMinorUnits());
         buffer.writeLong(packet.overflowClaimMinorUnits());
+        buffer.writeLong(packet.returnedMinorUnits());
+        buffer.writeUtf(packet.refundDestination(), 32);
         buffer.writeBoolean(packet.balanceKnown());
         buffer.writeLong(packet.resultingBalanceMinorUnits());
         buffer.writeBoolean(packet.cleanupPending());
@@ -166,6 +210,8 @@ public record S2CAtmDepositResultPacket(
             int items = buffer.readVarInt();
             long walletCredit = buffer.readLong();
             long overflowClaim = buffer.readLong();
+            long returned = buffer.readLong();
+            String refundDestination = buffer.readUtf(32);
             boolean balanceKnown = buffer.readBoolean();
             long balance = buffer.readLong();
             boolean cleanupPending = buffer.readBoolean();
@@ -178,7 +224,8 @@ public record S2CAtmDepositResultPacket(
             return new S2CAtmDepositResultPacket(
                     requestId, status, retryable, replayed,
                     transactionId, deposited, items, walletCredit,
-                    overflowClaim, balanceKnown, balance, cleanupPending,
+                    overflowClaim, returned, refundDestination,
+                    balanceKnown, balance, cleanupPending,
                     legacy,
                     retryAfterMillis);
         } catch (DecoderException exception) {
