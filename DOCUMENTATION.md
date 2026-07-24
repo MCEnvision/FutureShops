@@ -94,7 +94,7 @@ Forge registers blocks, items, menus, packets, commands, configurations, and eve
 
 During recovery, value mutations fail closed. Claims remain the safety route. Screens may render read only information, but no client snapshot can authorize a mutation.
 
-Market capability requests project current server configuration, runtime readiness, module control status, claim counts, branding, currency metadata, and a display balance. The client uses the snapshot to present availability. Navigation remains server authoritative because a capability response can become stale immediately after it is sent. The server resolves an attempted route to the requested view, a safe fallback, or claims.
+Market capability requests project current server configuration, runtime readiness, module control status, claim counts, branding, currency metadata, and a display balance. The client uses the snapshot to present availability. During recovery, screens retry capability requests. A correlated response with a newer server revision is accepted even if another retry is already outstanding, which prevents a slow response from leaving the client stuck on the recovery snapshot. Equal revision conflicts and older revisions still fail closed. Navigation remains server authoritative because a capability response can become stale immediately after it is sent. The server resolves an attempted route to the requested view, a safe fallback, or claims.
 
 If escrow remains in recovery or maintenance, run `/marketadmin status` and inspect `run/logs/latest.log` or the dedicated server log. Do not delete journal, checkpoint, ledger, claim, or custody files.
 

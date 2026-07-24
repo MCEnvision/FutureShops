@@ -39,6 +39,8 @@ FutureShops currently assumes one authoritative server and world. It does not pr
 
 For 3.0 upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
 
+Marketplace screens opened while escrow is recovering refresh automatically when the runtime becomes ready. Reconnecting or reopening the screen should not be necessary.
+
 ## Usage
 
 Common commands include:

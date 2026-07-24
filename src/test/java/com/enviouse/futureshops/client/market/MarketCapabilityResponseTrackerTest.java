@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MarketCapabilityResponseTrackerTest {
     @Test
-    void newestCorrelatedResponseWinsAndOlderResponseIsStale() {
+    void knownResponseInitializesStateAndNewerResponseWins() {
         MarketCapabilityResponseTracker tracker =
                 new MarketCapabilityResponseTracker(8);
         UUID first = UUID.randomUUID();
@@ -20,8 +20,7 @@ class MarketCapabilityResponseTrackerTest {
         tracker.begin(first);
         tracker.begin(second);
 
-        assertEquals(
-                MarketCapabilityResponseTracker.Decision.STALE_REQUEST,
+        assertEquals(MarketCapabilityResponseTracker.Decision.ACCEPT,
                 tracker.accept(snapshot(first, 1L, "Bazaar")));
         assertEquals(MarketCapabilityResponseTracker.Decision.ACCEPT,
                 tracker.accept(snapshot(second, 2L, "Bazaar")));
@@ -77,7 +76,7 @@ class MarketCapabilityResponseTrackerTest {
     }
 
     @Test
-    void walletPresentationRejectsStaleAndConflictingResponses() {
+    void walletPresentationUsesNewestRevisionAcrossOverlappingRequests() {
         MarketCapabilityResponseTracker tracker =
                 new MarketCapabilityResponseTracker(8);
         UUID accepted = UUID.randomUUID();
@@ -90,17 +89,16 @@ class MarketCapabilityResponseTrackerTest {
         UUID current = UUID.randomUUID();
         tracker.begin(stale);
         tracker.begin(current);
-        assertEquals(
-                MarketCapabilityResponseTracker.Decision.STALE_REQUEST,
+        assertEquals(MarketCapabilityResponseTracker.Decision.ACCEPT,
                 tracker.accept(snapshot(stale, 6L, "Bazaar",
                         9999L, "Credits", 2)));
-        assertEquals(1250L, tracker.latest().orElseThrow()
+        assertEquals(9999L, tracker.latest().orElseThrow()
                 .walletBalanceMinorUnits());
         assertEquals(
                 MarketCapabilityResponseTracker.Decision.REVISION_CONFLICT,
-                tracker.accept(snapshot(current, 5L, "Bazaar",
+                tracker.accept(snapshot(current, 6L, "Bazaar",
                         1251L, "Credits", 2)));
-        assertEquals(1250L, tracker.latest().orElseThrow()
+        assertEquals(9999L, tracker.latest().orElseThrow()
                 .walletBalanceMinorUnits());
     }
 
@@ -123,19 +121,75 @@ class MarketCapabilityResponseTrackerTest {
     }
 
     @Test
+    void marketOptionsRejectSameRevisionConflicts() {
+        MarketCapabilityResponseTracker tracker =
+                new MarketCapabilityResponseTracker(8);
+        UUID accepted = UUID.randomUUID();
+        tracker.begin(accepted);
+        assertEquals(MarketCapabilityResponseTracker.Decision.ACCEPT,
+                tracker.accept(snapshotWithOptions(accepted, 5L,
+                        100L, false, List.of(3_600L, 21_600L))));
+
+        UUID feeConflict = UUID.randomUUID();
+        tracker.begin(feeConflict);
+        assertEquals(
+                MarketCapabilityResponseTracker.Decision.REVISION_CONFLICT,
+                tracker.accept(snapshotWithOptions(feeConflict, 5L,
+                        101L, false, List.of(3_600L, 21_600L))));
+
+        UUID catalogConflict = UUID.randomUUID();
+        tracker.begin(catalogConflict);
+        assertEquals(
+                MarketCapabilityResponseTracker.Decision.REVISION_CONFLICT,
+                tracker.accept(snapshotWithOptions(catalogConflict, 5L,
+                        100L, true, List.of(3_600L, 21_600L))));
+
+        UUID durationConflict = UUID.randomUUID();
+        tracker.begin(durationConflict);
+        assertEquals(
+                MarketCapabilityResponseTracker.Decision.REVISION_CONFLICT,
+                tracker.accept(snapshotWithOptions(durationConflict, 5L,
+                        100L, false, List.of(3_600L, 86_400L))));
+    }
+
+    @Test
+    void newerRecoveryRevisionSurvivesAnOverlappingRetry() {
+        MarketCapabilityResponseTracker tracker =
+                new MarketCapabilityResponseTracker(8);
+        UUID recovering = UUID.randomUUID();
+        tracker.begin(recovering);
+        assertEquals(MarketCapabilityResponseTracker.Decision.ACCEPT,
+                tracker.accept(snapshot(recovering, 5L,
+                        "Bazaar", false)));
+
+        UUID ready = UUID.randomUUID();
+        UUID overlappingRetry = UUID.randomUUID();
+        tracker.begin(ready);
+        tracker.begin(overlappingRetry);
+
+        assertEquals(MarketCapabilityResponseTracker.Decision.ACCEPT,
+                tracker.accept(snapshot(ready, 6L,
+                        "Bazaar", true)));
+        assertTrue(tracker.latest().orElseThrow().escrowReady());
+    }
+
+    @Test
     void trackingIsBoundedAndConsumedIdentityCannotBeReused() {
         MarketCapabilityResponseTracker tracker =
                 new MarketCapabilityResponseTracker(2);
         UUID evicted = UUID.randomUUID();
         UUID consumed = UUID.randomUUID();
+        UUID current = UUID.randomUUID();
         tracker.begin(evicted);
         tracker.begin(consumed);
-        tracker.begin(UUID.randomUUID());
+        tracker.begin(current);
 
         assertEquals(2, tracker.trackedRequestCount());
         assertEquals(
                 MarketCapabilityResponseTracker.Decision.UNKNOWN_REQUEST,
                 tracker.accept(snapshot(evicted, 1L, "Bazaar")));
+        assertEquals(MarketCapabilityResponseTracker.Decision.ACCEPT,
+                tracker.accept(snapshot(current, 1L, "Bazaar")));
         assertEquals(
                 MarketCapabilityResponseTracker.Decision.STALE_REQUEST,
                 tracker.accept(snapshot(consumed, 1L, "Bazaar")));
@@ -201,6 +255,23 @@ class MarketCapabilityResponseTrackerTest {
         return new MarketCapabilitiesSnapshot(requestId, revision,
                 base.showNavigation(), base.defaultModule(), balance,
                 true, currency, decimals, base.modules());
+    }
+
+    private static MarketCapabilitiesSnapshot snapshotWithOptions(
+            UUID requestId,
+            long revision,
+            long listingFee,
+            boolean playerCatalog,
+            List<Long> durations
+    ) {
+        MarketCapabilitiesSnapshot base = snapshot(
+                requestId, revision, "Bazaar");
+        return new MarketCapabilitiesSnapshot(requestId, revision,
+                base.showNavigation(), base.escrowReady(),
+                base.defaultModule(), base.walletBalanceMinorUnits(),
+                base.walletBalanceKnown(), base.currencyName(),
+                base.currencyDecimals(), listingFee, playerCatalog,
+                durations, base.modules());
     }
 
     private static MarketModuleCapability capability(
