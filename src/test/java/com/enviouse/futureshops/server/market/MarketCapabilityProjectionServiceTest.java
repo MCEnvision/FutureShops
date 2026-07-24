@@ -22,6 +22,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -112,6 +113,27 @@ class MarketCapabilityProjectionServiceTest {
 
         assertEquals(first.revision(), repeated.revision());
         assertTrue(changed.revision() > first.revision());
+    }
+
+    @Test
+    void escrowReadinessAdvancesTheProjectionRevision() {
+        UUID owner = UUID.randomUUID();
+        MarketCapabilityRevisionTracker revisions =
+                new MarketCapabilityRevisionTracker(8);
+        OpenClaimSourceCounts claims = new OpenClaimSourceCounts(
+                0L, Map.of("auction.", 0L, "bazaar.", 0L));
+        MarketCapabilitiesSnapshot recovering =
+                MarketCapabilityProjectionService.project(
+                        projection(owner, false, false, false),
+                        claims, revisions);
+        MarketCapabilitiesSnapshot ready =
+                MarketCapabilityProjectionService.project(
+                        projection(owner, false, false, true),
+                        claims, revisions);
+
+        assertFalse(recovering.escrowReady());
+        assertTrue(ready.escrowReady());
+        assertTrue(ready.revision() > recovering.revision());
     }
 
     @Test

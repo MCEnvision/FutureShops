@@ -164,6 +164,7 @@ class MarketCapabilitiesPacketTest {
         assertEquals(-1250L, snapshot.walletBalanceMinorUnits());
         assertEquals("Credits", snapshot.currencyName());
         assertEquals(3, snapshot.currencyDecimals());
+        assertEquals(false, snapshot.escrowReady());
 
         assertThrows(IllegalArgumentException.class, () ->
                 new MarketCapabilitiesSnapshot(UUID.randomUUID(), 1L,
@@ -192,7 +193,10 @@ class MarketCapabilitiesPacketTest {
 
     private static MarketCapabilitiesSnapshot snapshot(UUID requestId) {
         return new MarketCapabilitiesSnapshot(requestId, 4L, true,
-                MarketModule.SHOP, -1250L, true, "Credits", 3,
+                false, MarketModule.SHOP, -1250L, true, "Credits", 3,
+                0L, false,
+                List.of(3_600L, 21_600L, 86_400L, 259_200L,
+                        604_800L),
                 List.of(
                 capability(MarketModule.SHOP,
                         MarketModuleAvailability.ENABLED, 0L),

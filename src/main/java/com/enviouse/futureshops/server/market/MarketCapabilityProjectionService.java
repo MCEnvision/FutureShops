@@ -15,7 +15,7 @@ import com.enviouse.futureshops.server.escrow.claim.EscrowClaim;
 import com.enviouse.futureshops.server.escrow.claim.OpenClaimSourceCounts;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeManager;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
-import com.enviouse.futureshops.server.escrow.runtime.EscrowWalletService;
+import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.market.control.MarketControlSavedData;
 import com.enviouse.futureshops.server.market.control.MarketControlState;
 import com.enviouse.futureshops.server.market.control.MarketControlModule;
@@ -66,12 +66,7 @@ public final class MarketCapabilityProjectionService {
                         AUCTION_CLAIM_PREFIX));
         EscrowRuntimeService runtime =
                 EscrowRuntimeManager.getOrNull();
-        long walletBalance = 0L;
-        boolean walletBalanceKnown = false;
-        if (runtime != null && runtime.isReady()) {
-            walletBalance = EscrowWalletService.live().balance(ownerId);
-            walletBalanceKnown = true;
-        }
+        long walletBalance = BalanceManager.getDisplayBalance(ownerId);
         Optional<MarketControlState> marketControl =
                 marketControl(server);
         BazaarConfig.Branding bazaar =
@@ -83,7 +78,7 @@ public final class MarketCapabilityProjectionService {
                 MarketModule.fromId(Config.defaultModule()),
                 runtime != null && runtime.isReady(),
                 Config.bazaarEnabled(), Config.auctionHouseEnabled(),
-                walletBalance, walletBalanceKnown,
+                walletBalance, true,
                 configuredCurrencyName(),
                 Config.economyCurrencyDecimals,
                 auctionDurationPresetSeconds(),
@@ -236,6 +231,7 @@ public final class MarketCapabilityProjectionService {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) {
                 output.writeBoolean(snapshot.showNavigation());
+                output.writeBoolean(snapshot.escrowReady());
                 writeText(output, snapshot.defaultModule().id());
                 output.writeLong(snapshot.walletBalanceMinorUnits());
                 output.writeBoolean(snapshot.walletBalanceKnown());
@@ -292,7 +288,8 @@ public final class MarketCapabilityProjectionService {
             MarketCapabilitiesSnapshot snapshot, Projection projection) {
         return new MarketCapabilitiesSnapshot(snapshot.requestId(),
                 snapshot.revision(), snapshot.showNavigation(),
-                snapshot.defaultModule(), snapshot.walletBalanceMinorUnits(),
+                projection.escrowReady(), snapshot.defaultModule(),
+                snapshot.walletBalanceMinorUnits(),
                 snapshot.walletBalanceKnown(), snapshot.currencyName(),
                 snapshot.currencyDecimals(),
                 projection.auctionListingFeeMinor(),

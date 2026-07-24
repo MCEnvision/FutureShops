@@ -54,7 +54,6 @@ class MarketNavigationIntegrationSourceTest {
         assertTrue(source.contains("navigation.rememberDetail(card)"));
         assertTrue(source.contains("activateFocusedCard()"));
         assertTrue(source.contains("GLFW.GLFW_KEY_KP_ENTER"));
-        assertTrue(source.contains("MarketRoute.detailView(module)"));
         assertTrue(source.contains("renderSecondaryTabs("));
         assertTrue(source.contains("renderCategoryDrawer("));
         assertTrue(source.contains("MarketCompactPager.nextOffset("));
@@ -97,6 +96,46 @@ class MarketNavigationIntegrationSourceTest {
                 "!moduleOpenable(target, true)"));
         assertTrue(source.contains(
                 "sendOpen(navigation.beginSwitchModule("));
+    }
+
+    @Test
+    void localMarketTabsAreRoutedByTheServer()
+            throws Exception {
+        String source = Files.readString(Path.of(
+            "src/main/java/com/enviouse/futureshops/client/screen/MarketModuleScreen.java"));
+
+        assertTrue(source.contains(
+                "sendOpen(navigation.beginTab(UUID.randomUUID(), view))"));
+        assertFalse(source.contains(
+                ".map(capability -> !capability.canOpenView(view))"));
+        assertFalse(source.contains(
+                "boolean allowed = moduleCapability(module)"));
+        assertFalse(source.contains(
+                "enabled = moduleOpenable(target, enabled)"));
+        assertFalse(source.contains(
+                "private boolean moduleOpenable("));
+    }
+
+    @Test
+    void marketScreensRetryCapabilitiesDuringEscrowRecovery()
+            throws Exception {
+        String market = Files.readString(Path.of(
+            "src/main/java/com/enviouse/futureshops/client/screen/MarketModuleScreen.java"));
+        String shop = Files.readString(Path.of(
+            "src/main/java/com/enviouse/futureshops/client/screen/ShopMainScreen.java"));
+
+        assertTrue(market.contains(
+                "CAPABILITY_RETRY_INTERVAL_MILLIS"));
+        assertTrue(market.contains(
+                "capabilities == null || !capabilities.escrowReady()"));
+        assertTrue(market.contains(
+                "requestCapabilities();"));
+        assertTrue(shop.contains(
+                "CAPABILITY_RETRY_INTERVAL_MILLIS"));
+        assertTrue(shop.contains(
+                "snapshot -> !snapshot.escrowReady()"));
+        assertTrue(shop.contains(
+                "requestMarketCapabilities();"));
     }
 
     @Test

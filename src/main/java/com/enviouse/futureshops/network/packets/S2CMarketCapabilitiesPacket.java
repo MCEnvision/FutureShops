@@ -65,6 +65,7 @@ public record S2CMarketCapabilitiesPacket(
         for (long seconds : snapshot.auctionDurationPresetSeconds()) {
             buffer.writeVarLong(seconds);
         }
+        buffer.writeBoolean(snapshot.escrowReady());
     }
 
     public static S2CMarketCapabilitiesPacket decode(
@@ -104,11 +105,12 @@ public record S2CMarketCapabilitiesPacket(
             for (int index = 0; index < durationCount; index++) {
                 durationPresets.add(buffer.readVarLong());
             }
+            boolean escrowReady = buffer.readBoolean();
             S2CMarketCapabilitiesPacket result =
                     new S2CMarketCapabilitiesPacket(
                             new MarketCapabilitiesSnapshot(requestId,
                                     revision, showNavigation,
-                                    defaultModule, walletBalance,
+                                    escrowReady, defaultModule, walletBalance,
                                     walletBalanceKnown, currencyName,
                                     currencyDecimals,
                                     auctionListingFeeMinor,

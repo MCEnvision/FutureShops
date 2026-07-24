@@ -10,6 +10,7 @@ public record MarketCapabilitiesSnapshot(
     UUID requestId,
     long revision,
     boolean showNavigation,
+    boolean escrowReady,
     MarketModule defaultModule,
     long walletBalanceMinorUnits,
     boolean walletBalanceKnown,
@@ -81,10 +82,25 @@ public record MarketCapabilitiesSnapshot(
             UUID requestId, long revision, boolean showNavigation,
             MarketModule defaultModule, long walletBalanceMinorUnits,
             boolean walletBalanceKnown, String currencyName,
+            int currencyDecimals, long auctionListingFeeMinor,
+            boolean bazaarPlayerCatalog,
+            List<Long> auctionDurationPresetSeconds,
+            List<MarketModuleCapability> modules) {
+        this(requestId, revision, showNavigation, true, defaultModule,
+                walletBalanceMinorUnits, walletBalanceKnown,
+                currencyName, currencyDecimals, auctionListingFeeMinor,
+                bazaarPlayerCatalog, auctionDurationPresetSeconds,
+                modules);
+    }
+
+    public MarketCapabilitiesSnapshot(
+            UUID requestId, long revision, boolean showNavigation,
+            MarketModule defaultModule, long walletBalanceMinorUnits,
+            boolean walletBalanceKnown, String currencyName,
             int currencyDecimals,
             List<Long> auctionDurationPresetSeconds,
             List<MarketModuleCapability> modules) {
-        this(requestId, revision, showNavigation, defaultModule,
+        this(requestId, revision, showNavigation, true, defaultModule,
                 walletBalanceMinorUnits, walletBalanceKnown,
                 currencyName, currencyDecimals, 0L, false,
                 auctionDurationPresetSeconds, modules);
@@ -96,7 +112,7 @@ public record MarketCapabilitiesSnapshot(
             boolean walletBalanceKnown, String currencyName,
             int currencyDecimals,
             List<MarketModuleCapability> modules) {
-        this(requestId, revision, showNavigation, defaultModule,
+        this(requestId, revision, showNavigation, true, defaultModule,
                 walletBalanceMinorUnits, walletBalanceKnown,
                 currencyName, currencyDecimals, 0L, false,
                 List.of(3_600L, 21_600L, 86_400L, 259_200L,
@@ -110,7 +126,7 @@ public record MarketCapabilitiesSnapshot(
         MarketModule defaultModule,
         List<MarketModuleCapability> modules
     ) {
-        this(requestId, revision, showNavigation, defaultModule,
+        this(requestId, revision, showNavigation, true, defaultModule,
             0L, false, "Coins", 2, 0L, false,
                 List.of(3_600L, 21_600L, 86_400L, 259_200L,
                         604_800L), modules);

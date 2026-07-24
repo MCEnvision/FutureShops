@@ -70,7 +70,7 @@ currency from another mod remains compatible but carries a clear warning that Fu
 protect that mod's item supply from duplication.
 
 ### ⚠️ Updating to 3.0
-- 🔌 **Network protocol is now 46** — the server and **all** clients must update to 3.0 together; mixed versions cannot connect
+- 🔌 **Network protocol is now 51** — the server and **all** clients must update to 3.0 together; mixed versions cannot connect
 - 💾 **Back up your world first** — 3.0 performs a one-way migration of balances, mint records, and pending settlements into escrow (see `docs/backup-restore.md` in the repo)
 - ⚙️ New config files generate on first launch: `futureshops-escrow.toml`, `futureshops-auction-house.toml`, `futureshops-bazaar.toml`, and `futureshops-client.toml` (see `docs/config-3.0-examples.md`)
 

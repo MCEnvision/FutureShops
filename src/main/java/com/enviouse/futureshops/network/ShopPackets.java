@@ -111,8 +111,8 @@ public final class ShopPackets {
     // Protocol 44 adds market capability synchronization.
     // Protocol 47 adds Bazaar player product registration and market fee capabilities.
     // Protocol 49 adds market department counts.
-    // Protocol 50 selects player Bazaar products by registry item id.
-    public static final String PROTOCOL_VERSION = "50";
+    // protocol 51 synchronizes escrow readiness in market capabilities.
+    public static final String PROTOCOL_VERSION = "51";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))

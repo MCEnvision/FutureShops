@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class MarketCapabilityProjectorTest {
     @Test
@@ -66,6 +67,7 @@ class MarketCapabilityProjectorTest {
                         .availability());
         assertEquals(MarketModule.AUCTION_HOUSE,
                 snapshot.defaultModule());
+        assertFalse(snapshot.escrowReady());
     }
 
     @Test

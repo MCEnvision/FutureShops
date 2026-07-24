@@ -94,6 +94,7 @@ public final class MarketModuleScreen extends Screen
     private static final long ACTION_STATUS_VISIBLE_MILLIS = 8_000L;
     private static final int PLAYER_MAIN_INVENTORY_SLOTS = 36;
     private static final long DEFAULT_CREATE_DURATION_SECONDS = 86_400L;
+    private static final long CAPABILITY_RETRY_INTERVAL_MILLIS = 1_000L;
 
     private final S2COpenMarketModulePacket packet;
     private final MarketModule module;
@@ -110,6 +111,7 @@ public final class MarketModuleScreen extends Screen
     private String selectedCategory = "";
     private String selectedSort;
     private long searchChangedAtMillis;
+    private long lastCapabilityRequestAtMillis;
     private UUID pendingOpenRequest;
     private int requestedPage;
     private int scrollOffset;
@@ -288,21 +290,27 @@ public final class MarketModuleScreen extends Screen
     @Override
     public void tick() {
         super.tick();
+        long now = Util.getMillis();
         if (search != null) {
             search.tick();
         }
         for (EditBox box : activeOverlayBoxes()) {
             box.tick();
         }
-        if (!PENDING_ACTIONS.expire(Util.getMillis(),
+        if (!PENDING_ACTIONS.expire(now,
                 MarketPendingActionTracker.DEFAULT_TIMEOUT_MILLIS)
                 .isEmpty()) {
             // The entry stays tracked (double-spend guard): the button surface now offers
             // an explicit same-request Retry and a give-up ✕ instead of a fresh send.
             showActionStatus(MarketActionFeedback.timeoutMessage(), false);
         }
+        if ((capabilities == null || !capabilities.escrowReady())
+                && now - lastCapabilityRequestAtMillis
+                >= CAPABILITY_RETRY_INTERVAL_MILLIS) {
+            requestCapabilities();
+        }
         if (!normalizedSearch().equals(sentSearch)
-                && Util.getMillis() - searchChangedAtMillis
+                && now - searchChangedAtMillis
                 >= ClientConfig.settings().search().debounceMillis()) {
             sendPageQuery();
         }
@@ -546,7 +554,7 @@ public final class MarketModuleScreen extends Screen
         if (!currentlyOpen) {
             page = null;
             pageResult = "CAPABILITY_BLOCKED";
-            if (packet.enabled() && !packet.escrowReady()
+            if (!snapshot.escrowReady()
                     && currentAvailability()
                     != MarketModuleAvailability.HIDDEN) {
                 warnMarketRetry("ESCROW_NOT_READY");
@@ -817,12 +825,9 @@ public final class MarketModuleScreen extends Screen
                 tabsY, 18, labels, selected);
         for (int slot = 0; slot < visible.size(); slot++) {
             String view = visible.get(slot);
-            boolean allowed = moduleCapability(module)
-                    .map(capability -> capability.canOpenView(view))
-                    .orElse(true);
             MarketRectangle tab = new MarketRectangle(edges[slot], tabsY,
                     edges[slot + 1] - edges[slot], 18);
-            if (allowed && !activeView.equals(view)) {
+            if (!activeView.equals(view)) {
                 registerHit(tab, () -> openView(view));
             }
         }
@@ -887,18 +892,9 @@ public final class MarketModuleScreen extends Screen
         if (current < 0) {
             current = 0;
         }
-        for (int step = 1; step <= views.size(); step++) {
-            int index = Math.floorMod(current
-                    + (reverse ? -step : step), views.size());
-            String view = views.get(index);
-            boolean allowed = moduleCapability(module)
-                    .map(capability -> capability.canOpenView(view))
-                    .orElse(true);
-            if (allowed) {
-                openView(view);
-                return;
-            }
-        }
+        int index = Math.floorMod(current + (reverse ? -1 : 1),
+                views.size());
+        openView(views.get(index));
     }
 
     private void renderRail(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -3945,7 +3941,6 @@ public final class MarketModuleScreen extends Screen
         }
         String label = moduleLabel(target, true);
         label = label + claimBadge(target);
-        enabled = moduleOpenable(target, enabled);
         MarketRectangle rectangle = new MarketRectangle(x, y, width,
                 Math.max(14, layout.footer().height() - 8));
         boolean selected = target == module;
@@ -4041,9 +4036,7 @@ public final class MarketModuleScreen extends Screen
     }
 
     private void openView(String view) {
-        if (!navigation.isOpen() || moduleCapability(module)
-                .map(capability -> !capability.canOpenView(view))
-                .orElse(false)) {
+        if (!navigation.isOpen()) {
             return;
         }
         synchronizeRoute();
@@ -4054,10 +4047,7 @@ public final class MarketModuleScreen extends Screen
             int cardIndex,
             MarketPageCard card
     ) {
-        if (!navigation.isOpen() || isDetailView()
-                || moduleCapability(module).map(capability ->
-                !capability.canOpenView(
-                        MarketRoute.detailView(module))).orElse(false)) {
+        if (!navigation.isOpen() || isDetailView()) {
             return;
         }
         focusedCardIndex = cardIndex;
@@ -4713,6 +4703,7 @@ public final class MarketModuleScreen extends Screen
 
     private void requestCapabilities() {
         if (minecraft != null && minecraft.getConnection() != null) {
+            lastCapabilityRequestAtMillis = Util.getMillis();
             ShopClientPacketHandler.requestMarketCapabilities();
         }
     }
@@ -4748,16 +4739,6 @@ public final class MarketModuleScreen extends Screen
         return moduleCapability(target)
                 .map(capability -> capability.availability().visible())
                 .orElse(true);
-    }
-
-    private boolean moduleOpenable(
-            MarketModule target,
-            boolean fallback
-    ) {
-        return moduleCapability(target)
-                .map(capability -> capability.availability().allowsBrowse()
-                        || capability.availability().allowsClaims())
-                .orElse(fallback);
     }
 
     private boolean showNavigation() {

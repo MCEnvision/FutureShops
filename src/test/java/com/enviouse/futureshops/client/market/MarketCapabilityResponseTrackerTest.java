@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -104,6 +105,24 @@ class MarketCapabilityResponseTrackerTest {
     }
 
     @Test
+    void escrowReadinessRequiresARevisionChange() {
+        MarketCapabilityResponseTracker tracker =
+                new MarketCapabilityResponseTracker(8);
+        UUID recovering = UUID.randomUUID();
+        tracker.begin(recovering);
+        assertEquals(MarketCapabilityResponseTracker.Decision.ACCEPT,
+                tracker.accept(snapshot(recovering, 5L,
+                        "Bazaar", false)));
+
+        UUID ready = UUID.randomUUID();
+        tracker.begin(ready);
+        assertEquals(
+                MarketCapabilityResponseTracker.Decision.REVISION_CONFLICT,
+                tracker.accept(snapshot(ready, 5L, "Bazaar", true)));
+        assertFalse(tracker.latest().orElseThrow().escrowReady());
+    }
+
+    @Test
     void trackingIsBoundedAndConsumedIdentityCannotBeReused() {
         MarketCapabilityResponseTracker tracker =
                 new MarketCapabilityResponseTracker(2);
@@ -150,6 +169,23 @@ class MarketCapabilityResponseTrackerTest {
                 capability(MarketModule.AUCTION_HOUSE,
                         MarketModuleAvailability.ENABLED,
                         "Auction House", revision)));
+    }
+
+    private static MarketCapabilitiesSnapshot snapshot(
+            UUID requestId,
+            long revision,
+            String bazaarName,
+            boolean escrowReady
+    ) {
+        MarketCapabilitiesSnapshot base = snapshot(requestId, revision,
+                bazaarName);
+        return new MarketCapabilitiesSnapshot(requestId, revision,
+                base.showNavigation(), escrowReady,
+                base.defaultModule(), base.walletBalanceMinorUnits(),
+                base.walletBalanceKnown(), base.currencyName(),
+                base.currencyDecimals(), base.auctionListingFeeMinor(),
+                base.bazaarPlayerCatalog(),
+                base.auctionDurationPresetSeconds(), base.modules());
     }
 
     private static MarketCapabilitiesSnapshot snapshot(

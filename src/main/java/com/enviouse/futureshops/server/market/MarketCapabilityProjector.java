@@ -66,10 +66,12 @@ public final class MarketCapabilityProjector {
                 bazaarEnabled, escrowReady, bazaarClaims);
         MarketModuleAvailability auctionAvailability = availability(
                 auctionHouseEnabled, escrowReady, auctionClaims);
-        return project(requestId, revision, showNavigation,
+        return withEscrowReady(project(requestId, revision,
+                showNavigation,
                 defaultModule, shopAvailability, bazaarAvailability,
                 auctionAvailability, shopBranding, bazaarBranding,
-                auctionHouseBranding, claims, 0L, false, "Coins", 2);
+                auctionHouseBranding, claims, 0L, false, "Coins", 2),
+                escrowReady);
     }
 
     public static MarketCapabilitiesSnapshot project(
@@ -144,6 +146,22 @@ public final class MarketCapabilityProjector {
         return new MarketModuleCapability(module, availability,
                 branding.displayName(), branding.accentHex(), claims,
                 revision);
+    }
+
+    private static MarketCapabilitiesSnapshot withEscrowReady(
+            MarketCapabilitiesSnapshot snapshot,
+            boolean escrowReady
+    ) {
+        return new MarketCapabilitiesSnapshot(snapshot.requestId(),
+                snapshot.revision(), snapshot.showNavigation(),
+                escrowReady, snapshot.defaultModule(),
+                snapshot.walletBalanceMinorUnits(),
+                snapshot.walletBalanceKnown(), snapshot.currencyName(),
+                snapshot.currencyDecimals(),
+                snapshot.auctionListingFeeMinor(),
+                snapshot.bazaarPlayerCatalog(),
+                snapshot.auctionDurationPresetSeconds(),
+                snapshot.modules());
     }
 
     private static MarketModuleAvailability availability(

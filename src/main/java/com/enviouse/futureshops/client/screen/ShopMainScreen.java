@@ -17,6 +17,7 @@ import com.enviouse.futureshops.network.packets.C2SOpenBalanceUiPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenMarketModulePacket;
 import com.enviouse.futureshops.network.packets.C2SOpenShopPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopActionPacket;
+import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
@@ -57,6 +58,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
     private static final int EDIT_GRID_HEADER_H = 24;
     /** Vertical room reserved at the sidebar bottom for edit-mode category management. */
     private static final int EDIT_SIDEBAR_RESERVED = 66;
+    private static final long CAPABILITY_RETRY_INTERVAL_MILLIS = 1_000L;
 
     private int guiLeft;
     private int guiTop;
@@ -120,8 +122,9 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
 
     // ── Hit models stashed each frame so mouseClicked can route against the exact drawn geometry ──
     private ShopUiUtil.HeaderHit headerHit;
-    /** One capability refresh per screen open (init() re-runs on resize). */
+    /** capability refresh state for recovery retries. */
     private boolean capabilitiesRequested;
+    private long lastCapabilityRequestAtMillis;
     private int[] footerCartRect;
     private int[] segEdges;
     private int segY;
@@ -245,11 +248,10 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         footerH = guiH < 300 ? 24 : 28;
         sidebarW = Math.min(194, Math.max(120, guiW / 5));
 
-        // Refresh module capabilities once per screen open so the header switcher renders the
-        // current Bazaar / Auction House availability (resize re-runs init; the tracker dedupes).
+        // refresh capabilities so the header reflects server availability.
         if (!capabilitiesRequested && this.minecraft != null && this.minecraft.getConnection() != null) {
             capabilitiesRequested = true;
-            ShopClientPacketHandler.requestMarketCapabilities();
+            requestMarketCapabilities();
         }
 
         rebuildFilteredItems();
@@ -277,6 +279,28 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         addRenderableWidget(searchField);
         // Edit-mode controls (grid add buttons + sidebar category management) are drawn as flat
         // Nocturne buttons in renderEditControls().
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        long now = Util.getMillis();
+        boolean recoverySnapshot = MarketCapabilityClientState.latest()
+                .map(snapshot -> !snapshot.escrowReady())
+                .orElse(true);
+        if (capabilitiesRequested && recoverySnapshot
+                && now - lastCapabilityRequestAtMillis
+                >= CAPABILITY_RETRY_INTERVAL_MILLIS) {
+            requestMarketCapabilities();
+        }
+    }
+
+    private void requestMarketCapabilities() {
+        if (this.minecraft != null
+                && this.minecraft.getConnection() != null) {
+            lastCapabilityRequestAtMillis = Util.getMillis();
+            ShopClientPacketHandler.requestMarketCapabilities();
+        }
     }
 
     /**

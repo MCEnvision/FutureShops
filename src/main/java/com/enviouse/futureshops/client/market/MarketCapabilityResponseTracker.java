@@ -126,6 +126,7 @@ public final class MarketCapabilityResponseTracker {
             MarketCapabilitiesSnapshot second
     ) {
         return first.showNavigation() == second.showNavigation()
+                && first.escrowReady() == second.escrowReady()
                 && first.defaultModule() == second.defaultModule()
                 && first.walletBalanceMinorUnits()
                 == second.walletBalanceMinorUnits()
