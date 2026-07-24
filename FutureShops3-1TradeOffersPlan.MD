@@ -71,6 +71,25 @@ The current player shop model still has important limits:
 
 The 3.1 design must reuse proven player shop bundle and escrow behavior where appropriate, but it must not copy the current field limitations into the new contract.
 
+### Current administrator editing limitations
+
+The current Server Shop administrator flow explains why advanced listing setup feels confusing:
+
+* The main editor is a fixed 260 by 230 modal containing display name, buy price, sell price, stock, and category.
+* The meaning of the two price fields changes to output count and ingredient count when the modal was opened through the barter add path.
+* The batch item picker reuses the same footer fields for prices, output count, or ingredient count depending on hidden mode.
+* Add Held Barter assigns the main hand as output and the offhand as payment. The relationship is explained through a short hint rather than explicit component roles.
+* Existing barter opens a separate recipe editor, which opens another item picker. Each ingredient count and removal is sent to the server immediately.
+* Removing barter may remove the entire listing when both legacy prices are zero.
+* Category selection uses left and right arrows instead of a visible searchable choice.
+* Blank or unparsable values silently become zero, one, or unlimited depending on the field.
+* The main modal provides a tooltip only for the unlimited stock button. The item picker provides item tooltips and one unlimited stock tooltip, while price, direction, barter, category, count, save, and remove behavior lack contextual explanations.
+* Save and Remove close the modal immediately after sending an uncorrelated generic action packet.
+* The server acknowledgement appears later in the parent screen status strip. A failed save cannot highlight a field and the closed modal no longer owns the typed draft.
+* The generic edit packet uses action strings and positional string and long slots, making client intent difficult to inspect and validation errors difficult to associate with one control.
+
+The 3.1 editor must replace these hidden mode changes and fragmented mutations with one persistent, explicit offer draft.
+
 ## Product terminology
 
 User interface wording is always from the visitor perspective:
@@ -469,34 +488,336 @@ Every icon and color state needs text. Disabled actions explain the reason throu
 
 Stale revisions return to a refreshed detail state with a clear quote changed message. Recovery states do not invite blind retries with a new request UUID.
 
-## Administrator interface
+## Administrator offer builder
 
-The listing editor becomes an offer builder with these sections:
+### Design goals
 
-* Outputs.
-* Ways to get this listing.
-* Ways to sell to this shop.
-* Stock and limits.
-* Bundle comparison.
-* Schedule and permissions.
-* Preview.
+The editor must optimize the common path without hiding advanced behavior.
 
-Quick templates:
+Required principles:
 
-* Money only.
-* Barter only.
-* Money or barter.
-* Money and barter.
+* One field has one meaning.
+* The complete draft remains visible and editable in one workflow.
+* Common listings start from plain language templates.
+* Advanced sections appear through progressive disclosure.
+* AND and OR relationships are visible, not implied by screen order.
+* No mutation occurs while choosing items or changing draft fields.
+* Save is acknowledged before the editor closes or discards its baseline.
+* Every error identifies the affected section and field.
+* Every administrator field and icon only control has contextual help.
+* Mouse and keyboard focus behavior are first class.
+
+### Screen structure
+
+The fixed compact modal becomes a responsive full editor surface.
+
+At ordinary resolutions the screen uses three regions:
+
+* A left outline lists General, Outputs, Get Options, Sell Options, Stock and Limits, Schedule and Permissions, Bundle Value, and Preview.
+* A central work area displays the selected section.
+* A right summary shows the visitor facing offer, current validation state, and unsaved changes.
+
+At narrow resolutions the outline becomes a top step strip, the summary becomes a collapsible panel, and the work area uses one scrollable column. Fields must not overlap, clip labels, or require a GUI scale reduction.
+
+The footer remains visible and contains:
+
+* Revert.
+* Apply.
+* Save and Close.
+* Cancel.
+
+Apply saves and keeps the editor open. Save and Close waits for a successful acknowledgement before returning to the shop.
+
+### Persistent draft
+
+The client owns an `OfferEditorDraft` while the editor and its child pickers are open.
+
+The draft contains:
+
+* The loaded listing identifier and revision.
+* Every presentation, component, option, stock, limit, schedule, permission, and comparison field.
+* Dirty paths.
+* Client validation issues.
+* The last successfully acknowledged baseline.
+* Current outline section, scroll position, focused field, and expanded cards.
+
+Opening an item picker passes the draft and a precise destination path. Returning restores the same section, scroll position, focus, and unsaved values.
+
+Resizing, changing GUI scale, opening Preview, and switching editor sections must not recreate or default draft values.
+
+Cancel or Escape with unsaved changes opens a clear discard confirmation. Escape without changes returns immediately.
+
+The first 3.1 implementation preserves drafts for the active editor session. Persistence across game restarts is deferred.
+
+### Quick creation flows
+
+The first screen asks what the shop should do in visitor language:
+
+* Give an item for money.
+* Give an item for barter.
+* Let the player choose money or barter.
+* Require money and barter.
+* Give an item for free.
+* Buy items from the player.
+* Offer both Buy and Sell to Shop.
+* Create a bundle.
+* Start from a blank advanced offer.
+
+Each choice initializes the same normalized draft. Templates do not create a separate schema or transaction path.
+
+A basic money listing from a held item requires only:
+
+1. Choose Use Held Item.
+2. Choose Money Only.
+3. Enter the price.
+4. Save.
+
+The screen must not ask for barter, sell, schedule, comparison, or permission values unless the administrator enables those sections.
+
+### General section
+
+General contains:
+
+* Display name.
+* Description.
+* Category.
+* Icon source.
+* Active state.
+* Optional expiry summary.
+
+Category uses a searchable dropdown with an explicit No Category choice. It must not require cycling through categories with arrow buttons.
+
+Icon and exact NBT previews show the actual stack tooltip. The administrator can choose:
+
+* Use Held Item.
+* Pick from Inventory.
+* Search Item Registry.
+
+Main hand and offhand never gain hidden roles. Every picker title and destination card states whether the selected item is an output, payment component, or Sell to Shop input.
+
+### Output editor
+
+Outputs are item cards containing:
+
+* Icon and full item tooltip.
+* Item name and registry identifier.
+* Exact NBT indicator.
+* Count stepper and direct count entry.
+* Drag or button based reorder controls.
+* Duplicate and Remove actions.
+
+The Add Output action opens the item picker without saving. Bundles are created by adding another output card.
+
+The editor shows the total output stack count and warns when a bundle approaches codec or claim limits.
+
+### Acquire option editor
+
+The Get Options section displays option cards separated by a visible `OR`.
+
+Each card starts with a payment type:
+
 * Free.
-* Sell only.
-* Buy and Sell.
-* Bundle.
+* Money.
+* Items.
+* Money and Items.
 
-Templates initialize the editor but do not create a separate runtime model.
+Components inside one option are separated by a visible plus sign and an `All required` label.
 
-Administrators can add, remove, reorder, and label options and components. Save remains disabled until the complete offer compiles.
+Free is a radio or card choice. It is never entered as price zero.
 
-The preview shows visitor facing wording and the normalized JSON. It must make AND and OR relationships visually explicit.
+Money fields display the configured currency name and decimal precision. They validate exact minor units without using floating point parsing.
+
+Item payment components use the same item card and picker behavior as outputs.
+
+Each option card supports:
+
+* Plain language label.
+* Duplicate.
+* Move up and down.
+* Limits and schedule override.
+* Remove with confirmation when the option already exists on the server.
+
+The summary renders examples such as:
+
+* `10 coins`
+* `or 4 iron ingots and 1 stick`
+* `or 5 coins plus 2 emeralds`
+
+### Sell option editor
+
+The Sell Options section uses `Sell to Shop` consistently.
+
+Each option card contains:
+
+* One or more item input components.
+* Money payout.
+* Capacity behavior.
+* Limits, schedule, and permission override.
+* A visitor facing summary.
+
+An empty Sell Options section means the listing does not buy from players.
+
+Sell only is a visible listing summary, not a side effect of a zero buy price.
+
+### Stock and limits editor
+
+Stock uses an explicit choice:
+
+* Unlimited stock.
+* Limited stock.
+
+Limited stock reveals the quantity and refresh controls. No text field uses blank text or an infinity character as a hidden sentinel.
+
+Limits use separate labeled controls for request quantity, per player lifetime limit, period limit, and cooldown. Disabled limits remain summarized as Not Limited.
+
+Bundle stock policy is shown with a concise explanation of Independent and Linked behavior. Linked remains unavailable until its transaction phase is implemented.
+
+### Schedule, permission, and bundle value editors
+
+Schedule shows start, end, timezone interpretation, and current active state.
+
+Permission shows the exact permission node or access rule and a plain language visitor impact.
+
+Bundle Value lets the administrator select comparison listings for each output. It previews:
+
+* Individual total.
+* Bundle price.
+* Savings amount.
+* Savings percentage.
+* Any component that cannot be compared.
+
+The editor never accepts a manually typed savings claim.
+
+### Preview
+
+Preview uses the same presentation model as the visitor detail screen.
+
+It supports:
+
+* Browse card preview.
+* Detail preview.
+* Option chooser preview.
+* Sell only preview.
+* Bundle and savings preview.
+* Empty, disabled, expired, out of stock, and limit reached states.
+
+Preview does not mutate the shop and does not bypass validation.
+
+An Advanced Data panel may show the normalized JSON and stable identifiers for debugging. It is collapsed by default and clearly separated from normal editing.
+
+### Contextual tooltips and help
+
+Every administrator specific field, toggle, badge, option header, count control, icon only button, disabled action, and destructive action must provide a localized tooltip.
+
+Visible labels remain primary. Tooltips explain behavior and edge cases rather than replacing labels.
+
+Tooltip content follows this order:
+
+1. What the control changes.
+2. How visitors experience it.
+3. Important stock, escrow, migration, or compatibility consequences.
+
+Examples:
+
+* Free explains that no money or items are taken, while stock and claim limits still apply.
+* Money or Barter explains that the visitor chooses one option.
+* Money and Barter explains that every component is required.
+* Sell to Shop explains that the player gives the listed inputs and receives the payout.
+* Unlimited Stock explains that Server Shop outputs are a configured system source.
+* Exact NBT explains that damage, enchantments, names, and other saved data must match.
+* Bundle Comparison explains that savings are calculated from validated live listing references.
+* Apply explains that the editor remains open after a successful server acknowledgement.
+* A disabled Save action lists the first validation issue and the number of remaining issues.
+
+Tooltip behavior:
+
+* Mouse hover and keyboard focus expose the same help.
+* Tooltips appear after a short stable hover to reduce visual noise.
+* Long text wraps inside the screen and never covers the focused field when space is available.
+* Holding Shift may reveal advanced identifiers and migration details.
+* An optional Help toggle keeps contextual descriptions visible beneath fields for administrators who do not want hover only help.
+* Icon only controls always have an accessible name and tooltip.
+
+Tooltip coverage is enforced by tests over the editor control registry and translation keys.
+
+### Inline validation
+
+Client validation runs after each draft change and uses the same pure validation rules as the offer compiler where possible.
+
+Invalid fields show:
+
+* A visible error outline.
+* A short message beneath the field or card.
+* A tooltip with the full explanation.
+* A section error badge in the outline.
+* A summary entry that moves focus to the field when selected.
+
+Warnings do not block Save unless settlement would be ambiguous or unsafe.
+
+The editor must never silently convert invalid or blank values to zero, one, or unlimited. Defaults are inserted only when a template is created and remain visible.
+
+Apply and Save and Close remain disabled while client validation has blocking errors. Their tooltips explain why.
+
+### Save acknowledgement and conflict handling
+
+Version 2 editor packets use typed draft payloads rather than a generic action string with positional fields.
+
+Every save contains:
+
+* Request UUID.
+* Shop and listing identifiers.
+* Expected listing revision.
+* The complete normalized candidate offer.
+* The intended operation, Create, Update, Duplicate, or Remove.
+
+The server returns:
+
+* Correlated request UUID.
+* Success or failure.
+* Current listing revision.
+* Structured validation issues with field paths and localized codes.
+* A stale revision result with the current server snapshot.
+
+While a save is pending, the editor shows progress and prevents duplicate submission. The draft remains intact.
+
+On success, the acknowledged server snapshot becomes the new baseline. Apply stays open. Save and Close returns to the refreshed shop.
+
+On validation failure, the editor stays open and focuses the first affected field.
+
+On stale revision, the editor offers:
+
+* Review Changes.
+* Reload Server Version.
+* Cancel.
+
+The editor must not overwrite a newer server listing silently.
+
+### Destructive actions and recovery
+
+Remove Listing and Remove Option use named confirmation dialogs that explain the result.
+
+Removing barter must never silently remove the entire listing. Listing removal is a separate action.
+
+Revert restores the last acknowledged baseline after confirmation.
+
+Reset Section restores only the selected section.
+
+Duplicate Listing creates a new stable listing identifier and keeps the original unchanged.
+
+Server side catalog writing retains validation, temporary file, atomic replacement, backup, and last valid catalog recovery requirements.
+
+### Keyboard and accessibility behavior
+
+Required behavior:
+
+* Tab and Shift Tab follow visible field order.
+* Arrow keys navigate option and component cards only when focus is not inside text entry.
+* Enter activates the focused primary control.
+* Escape follows picker, section, unsaved draft, and editor hierarchy predictably.
+* Search fields support `Ctrl F`.
+* Tooltips are available from keyboard focus.
+* Color is never the only error, option, or stock indicator.
+* All text clips or wraps safely at GUI scales 2 through 4.
 
 Removing or changing a live option increments the listing revision. Pending transactions retain their captured evidence and follow normal replay or quote changed rules.
 
@@ -610,17 +931,35 @@ Gate:
 
 Deliver:
 
+* Responsive full screen editor and persistent `OfferEditorDraft`.
 * Quick templates and complete offer editing.
 * Multi component input and output editing.
 * Alternative option editing.
 * Bundle comparison references.
 * Limits, schedule, and permission editing.
+* Explicit stock, free, direction, and component role controls.
+* Searchable category and item selectors.
+* Contextual tooltips, visible help mode, and translation coverage.
+* Inline field and section validation.
+* Typed, correlated save packets with expected revisions.
+* Apply, Save and Close, Revert, Duplicate, and safe Remove flows.
+* Structured server errors and stale revision review.
 * Validated atomic JSON writing and backups.
 * Visitor preview.
 
 Gate:
 
 * Every required combination can be created, edited, reloaded, and removed in game.
+* No field changes meaning because of the screen entry path.
+* A basic held item money listing uses the four step common flow.
+* Returning from any picker preserves every draft value, section, scroll position, and focus target.
+* Invalid values remain visible and are never silently converted to another value.
+* A rejected save keeps the editor open and identifies the exact field.
+* A successful Apply keeps the editor open with a new acknowledged baseline.
+* Save and Close waits for the matching successful acknowledgement.
+* Stale edits cannot overwrite a newer listing without review.
+* Every administrator field and icon only control has localized hover and focus help.
+* Keyboard only editing reaches every control in a predictable order.
 * Invalid partial offers cannot replace the live catalog.
 * Reload failures preserve the last valid catalog.
 
@@ -680,6 +1019,14 @@ Add focused tests for:
 * Limits, cooldowns, schedules, and permissions.
 * Packet round trips and malformed packet rejection.
 * Old and new commit codec round trips.
+* `OfferEditorDraft` creation, dirty tracking, section reset, revert, and acknowledged baseline updates.
+* Draft preservation through picker, preview, resize, and section transitions.
+* Client validation issue paths and section summaries.
+* Structured server validation issue mapping.
+* Save request correlation, duplicate acknowledgement handling, and stale revision behavior.
+* Exact minor unit price parsing without floating point.
+* Tooltip registration and translation key coverage for every administrator control.
+* Removal paths that distinguish listing removal from option or barter removal.
 
 ### Escrow and recovery tests
 
@@ -724,6 +1071,15 @@ Test at minimum:
 * Exact NBT components.
 * Finite and unlimited stock.
 * Expiry and promotion changes during confirmation.
+* Basic money, free, barter, compound, sell only, two way, and bundle administrator workflows.
+* Item selection from held item, inventory, and registry search.
+* Picker cancellation and return with an unchanged draft.
+* Client validation failure and server validation failure.
+* Apply, Save and Close, Revert, Duplicate, and Remove.
+* Concurrent administrator edits producing a stale revision review.
+* Mouse hover and keyboard focus tooltips.
+* Help mode, tab order, arrow navigation, Enter, Escape, and `Ctrl F`.
+* Resize and GUI scale changes with an unsaved advanced draft.
 
 Visual acceptance sizes include the supplied 1640 by 1350 detail screen, 568 by 112 toolbar crop, and 1430 by 1233 barter editor, plus 1280 by 720 and common GUI scales from 2 through 4.
 
@@ -766,4 +1122,9 @@ The following defaults are part of this plan unless the owner changes them befor
 * Sell to Shop stays outside the acquire cart in 3.1.
 * Server Shop is implemented before Player Shop convergence.
 * Old transaction codecs remain readable.
+* Administrator editing uses one persistent draft rather than immediate component mutations.
+* Free, unlimited stock, direction, and component roles use explicit controls.
+* Apply stays open, while Save and Close waits for a successful correlated acknowledgement.
+* Tooltips are available through mouse hover and keyboard focus, with an optional visible help mode.
+* Removing barter never removes the listing implicitly.
 * Arbitrary scripts, randomized rewards, partial fulfillment, and negative prices remain out of scope.
