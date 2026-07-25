@@ -313,20 +313,21 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         // ── Grid header row: [+ Add Items] | [+ Held Item] (below the toolbar) ──
         int rowX = gridX();
         int rowY = gridY() + TOOLBAR_H + 4;
-        int addW = 84;
+        int addW = Math.min(84, Math.max(48,
+                (gridW() - 2 * ShopUiUtil.PAD_XS - 62) / 3));
+        int newOfferColumn = 2;
         if (tradeFilter == 3) {
             ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY, rowX, rowY, addW, 16,
                     Component.translatable("gui.futureshops.admin_edit.add_barter_items"),
                     ShopUiUtil.ButtonStyle.PRIMARY, true,
                     () -> this.minecraft.setScreen(new AdminItemPickerScreen(this, activeCategoryId(), true)));
-            // Held-item entry remains the NBT-aware shortcut for variants that do not exist as a
-            // useful pristine registry stack in the creative picker.
             ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                     rowX + addW + ShopUiUtil.PAD_XS, rowY, addW, 16,
                     Component.translatable("gui.futureshops.admin_edit.add_barter_held"),
                     ShopUiUtil.ButtonStyle.PRIMARY, true,
                     () -> ShopPackets.CHANNEL.sendToServer(new C2SAdminShopEditPacket(
                             "ADD_BARTER_TARGET_HELD", "", "", activeCategoryId(), 1L, 0L, 0L)));
+            newOfferColumn = 2;
         } else {
             ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY, rowX, rowY, addW, 16,
                     Component.translatable("gui.futureshops.admin_edit.add_items"),
@@ -348,12 +349,36 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                                 AdminOfferEditorScreen.create(this)));
             }
         }
+        int newOfferX = rowX
+                + newOfferColumn * (addW + ShopUiUtil.PAD_XS);
+        if (selectMode) {
+            ShopUiUtil.button(graphics, this.font, clickZones,
+                    mouseX, mouseY, newOfferX, rowY, addW, 16,
+                    Component.translatable(
+                            "gui.futureshops.admin_edit.remove_selected",
+                            selectedListingIds.size()),
+                    ShopUiUtil.ButtonStyle.DANGER,
+                    !selectedListingIds.isEmpty(),
+                    this::openBulkDeleteConfirm);
+        } else {
+            ShopUiUtil.button(graphics, this.font, clickZones,
+                    mouseX, mouseY, newOfferX, rowY, addW, 16,
+                    Component.translatable(
+                            "gui.futureshops.admin_edit.new_offer"),
+                    ShopUiUtil.ButtonStyle.PRIMARY, true,
+                    () -> this.minecraft.setScreen(
+                            AdminOfferEditorScreen.create(this)));
+        }
 
         // ── Bulk select + delete: a Select toggle, then a Remove(N) button while selecting ──
-        int selX = rowX + 2 * (addW + ShopUiUtil.PAD_XS);
-        int selW = 62;
+        int selX = rowX
+                + (newOfferColumn + 1) * (addW + ShopUiUtil.PAD_XS);
+        int selW = Math.min(62,
+                Math.max(48, rowX + gridW() - selX));
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY, selX, rowY, selW, 16,
-                Component.translatable("gui.futureshops.admin_edit.select"),
+                Component.translatable(selectMode
+                        ? "gui.futureshops.admin_edit.done"
+                        : "gui.futureshops.admin_edit.select"),
                 selectMode ? ShopUiUtil.ButtonStyle.PRIMARY : ShopUiUtil.ButtonStyle.SECONDARY, true,
                 () -> {
                     selectMode = !selectMode;
@@ -361,12 +386,6 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                         selectedListingIds.clear();
                     }
                 });
-        if (selectMode) {
-            ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
-                    selX + selW + ShopUiUtil.PAD_XS, rowY, 96, 16,
-                    Component.translatable("gui.futureshops.admin_edit.remove_selected", selectedListingIds.size()),
-                    ShopUiUtil.ButtonStyle.DANGER, !selectedListingIds.isEmpty(), this::openBulkDeleteConfirm);
-        }
 
         // ── Sidebar category management (bottom of the sidebar panel) ──
         int sbX = contentX();
@@ -448,6 +467,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                                 "REMOVE_LISTING", id, "", "", 0L, 0L, 0L));
                     }
                     selectedListingIds.clear();
+                    selectMode = false;
                     confirmModal = null; // acks land in the footer status line
                 },
                 () -> confirmModal = null);

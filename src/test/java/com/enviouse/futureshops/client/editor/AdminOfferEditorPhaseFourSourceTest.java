@@ -133,6 +133,51 @@ class AdminOfferEditorPhaseFourSourceTest {
         assertTrue(source.contains("help(\"reset_section\")"));
     }
 
+    @Test
+    void commonOffersOpenInTheGuidedFourStepEditor()
+            throws IOException {
+        String source = read("AdminOfferEditorScreen.java");
+
+        assertTrue(source.contains("if (!advancedMode)"));
+        assertTrue(source.contains("initSimpleEditor"));
+        assertTrue(source.contains("BASICS(\"basics\")"));
+        assertTrue(source.contains("ITEMS(\"items\")"));
+        assertTrue(source.contains("TRADE(\"trade\")"));
+        assertTrue(source.contains("REVIEW(\"review\")"));
+        assertTrue(source.contains(
+                "OfferEditorTemplates.Template.FREE"));
+        assertTrue(source.contains(
+                "OfferEditorTemplates.Template.SELL"));
+        assertTrue(source.contains(
+                "OfferEditorTemplates.Template.BUNDLE"));
+        assertTrue(source.contains("OfferEditorSimpleMode.apply"));
+        assertTrue(source.contains("openSimpleSearch"));
+        assertTrue(source.contains("maximumSimpleScroll"));
+        assertTrue(source.contains("simpleViewportTop"));
+    }
+
+    @Test
+    void editorFieldsReserveLabelSpace()
+            throws IOException {
+        String source = read("AdminOfferEditorScreen.java");
+
+        assertTrue(source.contains("fieldWidth, 18,"));
+        assertTrue(source.contains(
+                "\"description\", listing.description(), y + 42,"));
+        assertTrue(source.contains("simpleFieldLabels.getOrDefault"));
+    }
+
+    @Test
+    void newOfferIsAlwaysAvailableFromTheEditToolbar()
+            throws IOException {
+        String source = read("ShopMainScreen.java");
+
+        assertTrue(source.contains(
+                "gui.futureshops.admin_edit.new_offer"));
+        assertTrue(source.contains(
+                "AdminOfferEditorScreen.create(this)"));
+    }
+
     private static String read(String file) throws IOException {
         return Files.readString(Path.of(
                 "src/main/java/com/enviouse/futureshops/"

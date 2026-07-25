@@ -2,6 +2,7 @@ package com.enviouse.futureshops.client.screen;
 
 import com.enviouse.futureshops.catalog.AdminShopOfferConfigWriter;
 import com.enviouse.futureshops.catalog.offer.AcquireOfferOption;
+import com.enviouse.futureshops.catalog.offer.OfferBundleComparison;
 import com.enviouse.futureshops.catalog.offer.OfferItemComponent;
 import com.enviouse.futureshops.catalog.offer.OfferComponentNormalizer;
 import com.enviouse.futureshops.catalog.offer.OfferLimitPolicy;
@@ -15,6 +16,7 @@ import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.client.editor.AdminOfferSaveAcknowledgement;
 import com.enviouse.futureshops.client.editor.OfferEditorControlRegistry;
 import com.enviouse.futureshops.client.editor.OfferEditorDraft;
+import com.enviouse.futureshops.client.editor.OfferEditorSimpleMode;
 import com.enviouse.futureshops.client.editor.OfferEditorStaleReview;
 import com.enviouse.futureshops.client.editor.OfferEditorTemplates;
 import com.enviouse.futureshops.network.ShopPackets;
@@ -41,7 +43,9 @@ import net.minecraftforge.registries.ForgeRegistries;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -80,6 +84,11 @@ public final class AdminOfferEditorScreen extends Screen
     private int summaryWidth;
     private OfferItemComponent hoveredEditorComponent;
     private boolean addingContentWidgets;
+    private final Map<EditBox, Component> simpleFieldLabels =
+            new IdentityHashMap<>();
+    private boolean advancedMode;
+    private SimpleStep simpleStep = SimpleStep.BASICS;
+    private int simpleScrollPosition;
 
     public AdminOfferEditorScreen(Screen parent, String listingId) {
         this(parent, ShopClientState.getCatalogOffer(listingId)
@@ -123,6 +132,11 @@ public final class AdminOfferEditorScreen extends Screen
     protected void init() {
         clearWidgets();
         bindings.clear();
+        simpleFieldLabels.clear();
+        if (!advancedMode) {
+            initSimpleEditor();
+            return;
+        }
         boolean narrow = width < 640;
         int margin = 10;
         int outlineWidth = narrow ? 0 : 118;
@@ -184,6 +198,773 @@ public final class AdminOfferEditorScreen extends Screen
                 setFocused(binding.field()));
         ShopClientPacketHandler.takeAdminOfferSaveResult(
                 pendingRequestId).ifPresent(this::applySaveResult);
+        buildEditorModeButton();
+    }
+
+    private void initSimpleEditor() {
+        int margin = 14;
+        summaryWidth = 0;
+        summaryLeft = width;
+        contentLeft = margin;
+        contentTop = 66;
+        contentWidth = Math.max(120, width - margin * 2);
+        buildSimpleNavigation();
+        buildContentWidgets(this::buildSimpleStep);
+        buildFooter();
+        buildEditorModeButton();
+        bindings.stream().filter(binding ->
+                        binding.path().equals(draft.focusedPath()))
+                .findFirst().ifPresent(binding ->
+                        setFocused(binding.field()));
+        ShopClientPacketHandler.takeAdminOfferSaveResult(
+                pendingRequestId).ifPresent(this::applySaveResult);
+    }
+
+    private void buildSimpleNavigation() {
+        int gap = 4;
+        int available = width - 28;
+        int buttonWidth = Math.max(
+                52, (available - gap * 3) / 4);
+        SimpleStep[] steps = SimpleStep.values();
+        for (int index = 0; index < steps.length; index++) {
+            SimpleStep step = steps[index];
+            Button button = FutureShopsButton.styled(
+                    Component.translatable(
+                            "gui.futureshops.offer_editor.simple.step."
+                                    + step.key()),
+                    ignored -> switchSimpleStep(step))
+                    .bounds(14 + index * (buttonWidth + gap),
+                            36, buttonWidth, 22).build();
+            button.active = simpleStep != step
+                    && (templateChosen || step == SimpleStep.BASICS);
+            button.setTooltip(Tooltip.create(Component.translatable(
+                    "gui.futureshops.offer_editor.simple.help.step."
+                            + step.key())));
+            addRenderableWidget(button);
+        }
+    }
+
+    private void buildEditorModeButton() {
+        String key = advancedMode
+                ? "simple_mode" : "advanced_mode";
+        int buttonWidth = Math.min(112,
+                Math.max(82, width / 5));
+        Button button = FutureShopsButton.styled(
+                Component.translatable(
+                        "gui.futureshops.offer_editor." + key),
+                ignored -> toggleEditorMode())
+                .bounds(width - buttonWidth - 10, 8,
+                        buttonWidth, 20).build();
+        button.setTooltip(Tooltip.create(Component.translatable(
+                "gui.futureshops.offer_editor.help." + key)));
+        addRenderableWidget(button);
+    }
+
+    private void toggleEditorMode() {
+        flushFields();
+        advancedMode = !advancedMode;
+        simpleScrollPosition = 0;
+        if (advancedMode) {
+            templateChosen = true;
+            draft.section(OfferEditorDraft.Section.GENERAL);
+            draft.scrollPosition(0);
+        }
+        rebuildWidgets();
+    }
+
+    private void switchSimpleStep(SimpleStep step) {
+        flushFields();
+        simpleStep = step;
+        simpleScrollPosition = 0;
+        rebuildWidgets();
+    }
+
+    private void buildSimpleStep() {
+        switch (simpleStep) {
+            case BASICS -> buildSimpleBasics();
+            case ITEMS -> buildSimpleItems();
+            case TRADE -> buildSimpleTrade();
+            case REVIEW -> buildSimpleReview();
+        }
+    }
+
+    private void buildSimpleBasics() {
+        if (!templateChosen) {
+            buildSimpleTemplateChooser();
+            return;
+        }
+        ServerShopOfferListing listing = draft.candidate();
+        int y = simpleY(42);
+        addSimpleTextField(
+                "displayName", listing.displayName(), y,
+                "name", value -> mutateGeneral(
+                        "displayName", value,
+                        null, null, null, null));
+        addSimpleTextField(
+                "description", listing.description(), y + 42,
+                "description", value -> mutateGeneral(
+                        "description", null,
+                        value, null, null, null));
+        Button category = FutureShopsButton.styled(
+                Component.translatable(
+                        "gui.futureshops.offer_editor.simple.category",
+                        categoryName(listing.categoryId())),
+                ignored -> openCategoryPicker())
+                .bounds(contentLeft, y + 84,
+                        Math.min(260, contentWidth), 22).build();
+        category.setTooltip(help("select_category"));
+        addRenderableWidget(category);
+        Button active = FutureShopsButton.styled(
+                Component.translatable(listing.active()
+                        ? "gui.futureshops.offer_editor.simple.active"
+                        : "gui.futureshops.offer_editor.simple.inactive"),
+                ignored -> mutateAndRebuild(() ->
+                        mutateGeneral("active", null, null,
+                                null, null, !draft.candidate().active())))
+                .bounds(contentLeft, y + 114,
+                        Math.min(180, contentWidth), 22).build();
+        active.setTooltip(help("active"));
+        addRenderableWidget(active);
+        if (!creating && playerShopTarget == null) {
+            int actionWidth = Math.min(
+                    150, Math.max(90, (contentWidth - 6) / 2));
+            Button duplicate = FutureShopsButton.styled(
+                    Component.translatable(
+                            "gui.futureshops.offer_editor.duplicate"),
+                    ignored -> submitDuplicate())
+                    .bounds(contentLeft, y + 150,
+                            actionWidth, 22).build();
+            duplicate.setTooltip(help("duplicate"));
+            addRenderableWidget(duplicate);
+            Button remove = FutureShopsButton.styled(
+                    Component.translatable(
+                            "gui.futureshops.offer_editor.remove_listing"),
+                    ignored -> confirmRemove())
+                    .bounds(contentLeft + actionWidth + 6,
+                            y + 150, actionWidth, 22).build();
+            remove.setTooltip(help("remove_listing"));
+            addRenderableWidget(remove);
+        }
+    }
+
+    private void buildSimpleTemplateChooser() {
+        int columns = contentWidth < 300 ? 1 : 2;
+        int gap = 6;
+        int buttonWidth = Math.max(100,
+                (Math.min(contentWidth, 600)
+                        - gap * (columns - 1)) / columns);
+        OfferEditorTemplates.Template[] templates = {
+                OfferEditorTemplates.Template.MONEY,
+                OfferEditorTemplates.Template.FREE,
+                OfferEditorTemplates.Template.SELL,
+                OfferEditorTemplates.Template.BUY_AND_SELL,
+                OfferEditorTemplates.Template.BARTER,
+                OfferEditorTemplates.Template.MONEY_OR_BARTER,
+                OfferEditorTemplates.Template.MONEY_AND_BARTER,
+                OfferEditorTemplates.Template.BUNDLE
+        };
+        for (int index = 0; index < templates.length; index++) {
+            OfferEditorTemplates.Template template = templates[index];
+            int x = contentLeft + index % columns
+                    * (buttonWidth + gap);
+            int y = simpleY(48 + index / columns * 30);
+            Button button = FutureShopsButton.styled(
+                    Component.translatable(
+                            "gui.futureshops.offer_editor.template."
+                                    + template.key()),
+                    ignored -> applySimpleTemplate(template))
+                    .bounds(x, y, buttonWidth, 24).build();
+            button.setTooltip(Tooltip.create(Component.translatable(
+                    "gui.futureshops.offer_editor.help.template."
+                            + template.key())));
+            addRenderableWidget(button);
+        }
+    }
+
+    private void applySimpleTemplate(
+            OfferEditorTemplates.Template template
+    ) {
+        flushFields();
+        OfferItemComponent held = heldComponent("output");
+        draft.replace("template." + template.key(),
+                OfferEditorTemplates.apply(
+                        draft.candidate(), template,
+                        Optional.ofNullable(held)));
+        templateChosen = true;
+        simpleStep = SimpleStep.ITEMS;
+        simpleScrollPosition = 0;
+        synchronizeSimpleIdentity();
+        rebuildWidgets();
+    }
+
+    private void buildSimpleItems() {
+        boolean sellInputs = simpleEditsSellInputs();
+        int y = simpleY(44);
+        int pickerWidth = Math.max(
+                72, (Math.min(contentWidth, 420) - 8) / 3);
+        Button held = FutureShopsButton.styled(
+                Component.translatable(
+                        "gui.futureshops.offer_editor.simple.add_held"),
+                ignored -> mutateStructureAndRebuild(
+                        sellInputs ? "sellOptions.0.itemInputs"
+                                : "outputs",
+                        this::addSimpleHeldItem))
+                .bounds(contentLeft, y, pickerWidth, 22).build();
+        held.setTooltip(help(sellInputs ? "sell_input" : "output"));
+        addRenderableWidget(held);
+        Button inventory = FutureShopsButton.styled(
+                Component.translatable(
+                        "gui.futureshops.offer_editor.pick_inventory"),
+                ignored -> openItemPicker(
+                        OfferEditorItemPickerScreen.Source.INVENTORY,
+                        sellInputs ? "sell_input" : "output",
+                        sellInputs ? this::acceptSimpleSellInput
+                                : this::acceptSimpleOutput))
+                .bounds(contentLeft + pickerWidth + 4,
+                        y, pickerWidth, 22).build();
+        inventory.setTooltip(help("pick_inventory"));
+        addRenderableWidget(inventory);
+        Button registry = FutureShopsButton.styled(
+                Component.translatable(
+                        "gui.futureshops.offer_editor.search_registry"),
+                ignored -> openItemPicker(
+                        OfferEditorItemPickerScreen.Source.REGISTRY,
+                        sellInputs ? "sell_input" : "output",
+                        sellInputs ? this::acceptSimpleSellInput
+                                : this::acceptSimpleOutput))
+                .bounds(contentLeft + (pickerWidth + 4) * 2,
+                        y, pickerWidth, 22).build();
+        registry.setTooltip(help("search_registry"));
+        addRenderableWidget(registry);
+        List<OfferItemComponent> components =
+                simpleEditedComponents();
+        for (int index = 0; index < components.size(); index++) {
+            buildSimpleComponentControls(
+                    index, simpleY(82 + index * 36),
+                    sellInputs ? SimpleComponentList.SELL_INPUTS
+                            : SimpleComponentList.OUTPUTS);
+        }
+    }
+
+    private void buildSimpleTrade() {
+        OfferEditorSimpleMode.Mode current =
+                OfferEditorSimpleMode.detect(draft.candidate());
+        OfferEditorSimpleMode.Mode[] modes = {
+                OfferEditorSimpleMode.Mode.MONEY,
+                OfferEditorSimpleMode.Mode.FREE,
+                OfferEditorSimpleMode.Mode.BARTER,
+                OfferEditorSimpleMode.Mode.MONEY_OR_BARTER,
+                OfferEditorSimpleMode.Mode.MONEY_AND_BARTER,
+                OfferEditorSimpleMode.Mode.SELL_ONLY,
+                OfferEditorSimpleMode.Mode.BUY_AND_SELL
+        };
+        int columns = contentWidth < 430 ? 1 : 2;
+        int gap = 6;
+        int buttonWidth = Math.max(110,
+                (Math.min(contentWidth, 560)
+                        - gap * (columns - 1)) / columns);
+        for (int index = 0; index < modes.length; index++) {
+            OfferEditorSimpleMode.Mode mode = modes[index];
+            int x = contentLeft + index % columns
+                    * (buttonWidth + gap);
+            int y = simpleY(42 + index / columns * 28);
+            Button button = FutureShopsButton.styled(
+                    Component.translatable(
+                            "gui.futureshops.offer_editor.simple.mode."
+                                    + mode.key()),
+                    ignored -> applySimpleMode(mode))
+                    .bounds(x, y, buttonWidth, 22).build();
+            button.active = current != mode;
+            button.setTooltip(Tooltip.create(Component.translatable(
+                    "gui.futureshops.offer_editor.simple.help.mode."
+                            + mode.key())));
+            addRenderableWidget(button);
+        }
+        int rows = (modes.length + columns - 1) / columns;
+        int detailY = 42 + rows * 28 + 18;
+        if (current == OfferEditorSimpleMode.Mode.ADVANCED) {
+            Button advanced = FutureShopsButton.styled(
+                    Component.translatable(
+                            "gui.futureshops.offer_editor.advanced_mode"),
+                    ignored -> toggleEditorMode())
+                    .bounds(contentLeft, simpleY(detailY),
+                            Math.min(220, contentWidth), 22).build();
+            addRenderableWidget(advanced);
+            return;
+        }
+        int moneyIndex = simpleMoneyOptionIndex();
+        if (moneyIndex >= 0) {
+            AcquireOfferOption money = draft.candidate()
+                    .acquireOptions().get(moneyIndex);
+            selectedAcquireIndex = moneyIndex;
+            addSimpleTextField(
+                    "acquireOptions." + moneyIndex + ".moneyCost",
+                    Long.toString(money.moneyCostMinorUnits()),
+                    simpleY(detailY), "price",
+                    value -> {
+                        selectedAcquireIndex = moneyIndex;
+                        updateAcquireMoney(parseLong(value, -1L));
+                    });
+            detailY += 44;
+        }
+        if (!draft.candidate().sellOptions().isEmpty()) {
+            selectedSellIndex = 0;
+            SellOfferOption sell =
+                    draft.candidate().sellOptions().get(0);
+            addSimpleTextField(
+                    "sellOptions.0.moneyPayout",
+                    Long.toString(sell.moneyPayoutMinorUnits()),
+                    simpleY(detailY), "payout",
+                    value -> {
+                        selectedSellIndex = 0;
+                        updateSellPayout(parseLong(value, -1L));
+                    });
+            detailY += 44;
+        }
+        int barterIndex = simpleBarterOptionIndex();
+        if (barterIndex >= 0) {
+            buildSimpleBarterEditor(barterIndex, detailY);
+        }
+    }
+
+    private void buildSimpleBarterEditor(
+            int optionIndex,
+            int offset
+    ) {
+        selectedAcquireIndex = optionIndex;
+        int y = simpleY(offset);
+        int pickerWidth = Math.max(
+                72, (Math.min(contentWidth, 420) - 8) / 3);
+        Button held = FutureShopsButton.styled(
+                Component.translatable(
+                        "gui.futureshops.offer_editor.simple.add_held_cost"),
+                ignored -> mutateStructureAndRebuild(
+                        "acquireOptions." + optionIndex + ".itemCosts",
+                        () -> {
+                            selectedAcquireIndex = optionIndex;
+                            addHeldAcquireCost();
+                        }))
+                .bounds(contentLeft, y, pickerWidth, 22).build();
+        held.setTooltip(help("item_cost"));
+        addRenderableWidget(held);
+        Button inventory = FutureShopsButton.styled(
+                Component.translatable(
+                        "gui.futureshops.offer_editor.pick_inventory"),
+                ignored -> {
+                    selectedAcquireIndex = optionIndex;
+                    openItemPicker(
+                            OfferEditorItemPickerScreen.Source.INVENTORY,
+                            "payment", this::acceptAcquireCost);
+                }).bounds(contentLeft + pickerWidth + 4,
+                        y, pickerWidth, 22).build();
+        inventory.setTooltip(help("pick_inventory"));
+        addRenderableWidget(inventory);
+        Button registry = FutureShopsButton.styled(
+                Component.translatable(
+                        "gui.futureshops.offer_editor.search_registry"),
+                ignored -> {
+                    selectedAcquireIndex = optionIndex;
+                    openItemPicker(
+                            OfferEditorItemPickerScreen.Source.REGISTRY,
+                            "payment", this::acceptAcquireCost);
+                }).bounds(contentLeft + (pickerWidth + 4) * 2,
+                        y, pickerWidth, 22).build();
+        registry.setTooltip(help("search_registry"));
+        addRenderableWidget(registry);
+        List<OfferItemComponent> costs = draft.candidate()
+                .acquireOptions().get(optionIndex).itemCosts();
+        for (int index = 0; index < costs.size(); index++) {
+            buildSimpleComponentControls(
+                    index, simpleY(offset + 38 + index * 36),
+                    SimpleComponentList.BARTER_COSTS);
+        }
+    }
+
+    private void buildSimpleReview() {
+        if (draft.candidate().outputs().size() > 1) {
+            Button compare = FutureShopsButton.styled(
+                    Component.translatable(
+                            "gui.futureshops.offer_editor.simple."
+                                    + "find_bundle_prices"),
+                    ignored -> mutateAndRebuild(
+                            this::autoConfigureBundleComparisons))
+                    .bounds(contentLeft, simpleY(42),
+                            Math.min(230, contentWidth), 22).build();
+            compare.setTooltip(help("bundle_comparison"));
+            addRenderableWidget(compare);
+        }
+    }
+
+    private void buildSimpleComponentControls(
+            int index,
+            int y,
+            SimpleComponentList list
+    ) {
+        int right = contentLeft + contentWidth;
+        Button decrease = FutureShopsButton.styled(
+                Component.translatable(
+                        "gui.futureshops.offer_editor.decrease_count"),
+                ignored -> mutateAndRebuild(() ->
+                        changeSimpleComponentCount(
+                                list, index, -1)))
+                .bounds(right - 102, y + 3, 24, 22).build();
+        decrease.active = simpleComponents(list)
+                .get(index).count() > 1;
+        decrease.setTooltip(help("decrease_component_count"));
+        addRenderableWidget(decrease);
+        Button increase = FutureShopsButton.styled(
+                Component.translatable(
+                        "gui.futureshops.offer_editor.increase_count"),
+                ignored -> mutateAndRebuild(() ->
+                        changeSimpleComponentCount(
+                                list, index, 1)))
+                .bounds(right - 74, y + 3, 24, 22).build();
+        increase.setTooltip(help("increase_component_count"));
+        addRenderableWidget(increase);
+        Button remove = FutureShopsButton.styled(
+                Component.translatable(
+                        "gui.futureshops.offer_editor.simple.remove_item"),
+                ignored -> mutateStructureAndRebuild(
+                        simpleComponentPath(list),
+                        () -> removeSimpleComponent(list, index)))
+                .bounds(right - 46, y + 3, 36, 22).build();
+        remove.setTooltip(help("remove_component"));
+        addRenderableWidget(remove);
+    }
+
+    private void addSimpleTextField(
+            String path,
+            String value,
+            int y,
+            String labelKey,
+            Consumer<String> save
+    ) {
+        addTextField(path, value, y, save);
+        EditBinding binding = bindings.get(bindings.size() - 1);
+        simpleFieldLabels.put(binding.field(),
+                Component.translatable(
+                        "gui.futureshops.offer_editor.simple.field."
+                                + labelKey));
+    }
+
+    private void applySimpleMode(
+            OfferEditorSimpleMode.Mode mode
+    ) {
+        flushFields();
+        draft.replace("simple.mode." + mode.key(),
+                OfferEditorSimpleMode.apply(
+                        draft.candidate(), mode));
+        templateChosen = true;
+        selectedAcquireIndex = 0;
+        selectedAcquireCostIndex = 0;
+        selectedSellIndex = 0;
+        selectedSellInputIndex = 0;
+        synchronizeSimpleIdentity();
+        rebuildWidgets();
+    }
+
+    private boolean simpleEditsSellInputs() {
+        OfferEditorSimpleMode.Mode mode =
+                OfferEditorSimpleMode.detect(draft.candidate());
+        return mode == OfferEditorSimpleMode.Mode.SELL_ONLY
+                || draft.candidate().outputs().isEmpty()
+                && !draft.candidate().sellOptions().isEmpty();
+    }
+
+    private List<OfferItemComponent> simpleEditedComponents() {
+        return simpleEditsSellInputs()
+                ? simpleComponents(SimpleComponentList.SELL_INPUTS)
+                : simpleComponents(SimpleComponentList.OUTPUTS);
+    }
+
+    private List<OfferItemComponent> simpleComponents(
+            SimpleComponentList list
+    ) {
+        return switch (list) {
+            case OUTPUTS -> draft.candidate().outputs();
+            case SELL_INPUTS -> draft.candidate().sellOptions()
+                    .stream().findFirst()
+                    .map(SellOfferOption::itemInputs)
+                    .orElse(List.of());
+            case BARTER_COSTS -> {
+                int index = simpleBarterOptionIndex();
+                yield index < 0 ? List.of()
+                        : draft.candidate().acquireOptions()
+                        .get(index).itemCosts();
+            }
+        };
+    }
+
+    private static String simpleComponentPath(
+            SimpleComponentList list
+    ) {
+        return switch (list) {
+            case OUTPUTS -> "outputs";
+            case SELL_INPUTS -> "sellOptions.0.itemInputs";
+            case BARTER_COSTS -> "acquireOptions.itemCosts";
+        };
+    }
+
+    private void addSimpleHeldItem() {
+        if (simpleEditsSellInputs()) {
+            selectedSellIndex = 0;
+            addHeldSellInput();
+        } else {
+            addHeldOutput();
+        }
+        synchronizeSimpleIdentity();
+    }
+
+    private void acceptSimpleOutput(OfferItemComponent component) {
+        acceptOutput(component);
+        synchronizeSimpleIdentity();
+    }
+
+    private void acceptSimpleSellInput(OfferItemComponent component) {
+        selectedSellIndex = 0;
+        acceptSellInput(component);
+        synchronizeSimpleIdentity();
+    }
+
+    private void changeSimpleComponentCount(
+            SimpleComponentList list,
+            int index,
+            int delta
+    ) {
+        List<OfferItemComponent> values =
+                new ArrayList<>(simpleComponents(list));
+        if (index < 0 || index >= values.size()) {
+            return;
+        }
+        OfferItemComponent old = values.get(index);
+        int count;
+        try {
+            count = Math.addExact(old.count(), delta);
+        } catch (ArithmeticException exception) {
+            return;
+        }
+        if (count < 1) {
+            return;
+        }
+        values.set(index, new OfferItemComponent(
+                old.componentId(), old.itemId(),
+                count, old.exactNbt()));
+        replaceSimpleComponents(list, values);
+    }
+
+    private void removeSimpleComponent(
+            SimpleComponentList list,
+            int index
+    ) {
+        List<OfferItemComponent> values =
+                new ArrayList<>(simpleComponents(list));
+        if (index < 0 || index >= values.size()) {
+            return;
+        }
+        values.remove(index);
+        replaceSimpleComponents(list, values);
+        synchronizeSimpleIdentity();
+    }
+
+    private void replaceSimpleComponents(
+            SimpleComponentList list,
+            List<OfferItemComponent> values
+    ) {
+        switch (list) {
+            case OUTPUTS -> {
+                draft.clearFieldValues("outputs");
+                draft.update("outputs", current -> copy(
+                        current, null, null, null, null, null,
+                        values, null, null, null));
+            }
+            case SELL_INPUTS -> {
+                List<SellOfferOption> options = new ArrayList<>(
+                        draft.candidate().sellOptions());
+                if (options.isEmpty()) {
+                    return;
+                }
+                SellOfferOption old = options.get(0);
+                options.set(0, new SellOfferOption(
+                        old.optionId(), old.label(), values,
+                        old.moneyPayoutMinorUnits(), old.capacity(),
+                        old.limits(), old.schedule(),
+                        old.permissionNode()));
+                draft.clearFieldValues(
+                        "sellOptions.0.itemInputs");
+                draft.update("sellOptions.0.itemInputs",
+                        current -> copy(current,
+                                null, null, null, null, null,
+                                null, null, options, null));
+            }
+            case BARTER_COSTS -> {
+                int optionIndex = simpleBarterOptionIndex();
+                if (optionIndex < 0) {
+                    return;
+                }
+                List<AcquireOfferOption> options =
+                        new ArrayList<>(
+                                draft.candidate().acquireOptions());
+                AcquireOfferOption old = options.get(optionIndex);
+                options.set(optionIndex, new AcquireOfferOption(
+                        old.optionId(), old.label(), old.free(),
+                        old.moneyCostPresent(),
+                        old.moneyCostMinorUnits(), values,
+                        old.outputMultiplier(), old.limits(),
+                        old.schedule(), old.permissionNode()));
+                draft.clearFieldValues(
+                        "acquireOptions." + optionIndex
+                                + ".itemCosts");
+                draft.update("acquireOptions." + optionIndex
+                                + ".itemCosts",
+                        current -> copy(current,
+                                null, null, null, null, null,
+                                null, options, null, null));
+            }
+        }
+    }
+
+    private int simpleMoneyOptionIndex() {
+        List<AcquireOfferOption> options =
+                draft.candidate().acquireOptions();
+        for (int index = 0; index < options.size(); index++) {
+            if (options.get(index).moneyCostPresent()) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private int simpleBarterOptionIndex() {
+        List<AcquireOfferOption> options =
+                draft.candidate().acquireOptions();
+        for (int index = 0; index < options.size(); index++) {
+            AcquireOfferOption option = options.get(index);
+            if (!option.free()
+                    && (option.hasItemCosts()
+                    || !option.moneyCostPresent()
+                    || option.optionId().contains("barter"))) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private void synchronizeSimpleIdentity() {
+        ServerShopOfferListing listing = draft.candidate();
+        OfferItemComponent primary = !listing.outputs().isEmpty()
+                ? listing.outputs().get(0)
+                : listing.sellOptions().stream()
+                .flatMap(option -> option.itemInputs().stream())
+                .findFirst().orElse(null);
+        if (primary == null) {
+            return;
+        }
+        String name = listing.displayName();
+        if (name.isBlank()) {
+            ResourceLocation identifier =
+                    ResourceLocation.tryParse(primary.itemId());
+            var item = identifier == null ? null
+                    : ForgeRegistries.ITEMS.getValue(identifier);
+            name = item == null ? primary.itemId()
+                    : item.getDescription().getString();
+        }
+        String resolvedName = name;
+        draft.update("simple.identity", current ->
+                new ServerShopOfferListing(
+                        current.listingId(), current.revision(),
+                        resolvedName, current.description(),
+                        current.categoryId(), primary.itemId(),
+                        primary.exactNbt(), current.active(),
+                        current.expiresAtEpoch(),
+                        current.permissionNode(), current.outputs(),
+                        current.acquireOptions(),
+                        current.sellOptions(),
+                        current.stockPolicy(), current.limits(),
+                        current.schedule(),
+                        current.bundleComparisons()));
+    }
+
+    private void autoConfigureBundleComparisons() {
+        ServerShopOfferListing listing = draft.candidate();
+        List<OfferBundleComparison> comparisons =
+                new ArrayList<>();
+        for (OfferItemComponent output : listing.outputs()) {
+            OfferBundleComparison comparison =
+                    ShopClientState.getCatalogOffers().stream()
+                    .filter(candidate -> !candidate.listingId()
+                            .equals(listing.listingId()))
+                    .filter(candidate -> candidate.active()
+                            && candidate.outputs().size() == 1)
+                    .filter(candidate -> {
+                        OfferItemComponent component =
+                                candidate.outputs().get(0);
+                        return component.itemId().equals(output.itemId())
+                                && component.count() == output.count()
+                                && component.exactNbt().equals(
+                                output.exactNbt());
+                    })
+                    .flatMap(candidate ->
+                            candidate.acquireOptions().stream()
+                                    .filter(option ->
+                                            option.moneyCostPresent()
+                                                    && !option.free()
+                                                    && !option
+                                                    .hasItemCosts())
+                                    .map(option ->
+                                            new OfferBundleComparison(
+                                                    output.componentId(),
+                                                    candidate.listingId(),
+                                                    option.optionId())))
+                    .findFirst().orElse(null);
+            if (comparison != null) {
+                comparisons.add(comparison);
+            }
+        }
+        draft.update("bundleComparisons", current -> copy(
+                current, null, null, null, null, null,
+                null, null, null, comparisons));
+        boolean complete = comparisons.size()
+                == listing.outputs().size();
+        resultSuccess = complete;
+        resultMessage = Component.translatable(
+                complete
+                        ? "gui.futureshops.offer_editor.simple."
+                        + "bundle_prices_found"
+                        : "gui.futureshops.offer_editor.simple."
+                        + "bundle_prices_missing");
+    }
+
+    private int simpleY(int offset) {
+        int statusOffset = resultMessage == null ? 0 : 14;
+        return contentTop + offset + statusOffset
+                - simpleScrollPosition;
+    }
+
+    private int simpleViewportTop() {
+        int statusOffset = resultMessage == null ? 0 : 14;
+        return contentTop + 30 + statusOffset;
+    }
+
+    private int maximumSimpleScroll() {
+        int componentRows = switch (simpleStep) {
+            case ITEMS -> simpleEditedComponents().size();
+            case TRADE -> {
+                int barter = simpleBarterOptionIndex();
+                yield barter < 0 ? 0 : draft.candidate()
+                        .acquireOptions().get(barter)
+                        .itemCosts().size();
+            }
+            default -> 0;
+        };
+        int contentHeight = switch (simpleStep) {
+            case BASICS -> templateChosen ? 240 : 310;
+            case ITEMS -> 120 + componentRows * 36;
+            case TRADE -> 360 + componentRows * 36;
+            case REVIEW -> 420;
+        };
+        int statusOffset = resultMessage == null ? 0 : 14;
+        return Math.max(0, contentHeight + statusOffset
+                - Math.max(100, footerTop() - contentTop - 8));
     }
 
     @Override
@@ -208,7 +989,8 @@ public final class AdminOfferEditorScreen extends Screen
     }
 
     private boolean contentWidgetVisible(AbstractWidget widget) {
-        int top = contentTop + 22;
+        int top = advancedMode
+                ? contentTop + 22 : simpleViewportTop() + 9;
         int bottom = footerTop() - 4;
         return widget.getY() >= top
                 && widget.getY() + widget.getHeight() <= bottom;
@@ -1373,7 +2155,7 @@ public final class AdminOfferEditorScreen extends Screen
         String registeredPath = registeredFieldPath(path);
         int fieldWidth = Math.min(220, contentWidth);
         EditBox field = new EditBox(font, contentLeft, y,
-                fieldWidth, 20,
+                fieldWidth, 18,
                 Component.translatable(
                         OfferEditorControlRegistry.fieldLabelKey(
                                 registeredPath)));
@@ -1557,6 +2339,11 @@ public final class AdminOfferEditorScreen extends Screen
             float partialTick
     ) {
         hoveredEditorComponent = null;
+        if (!advancedMode) {
+            renderSimpleEditor(
+                    graphics, mouseX, mouseY, partialTick);
+            return;
+        }
         renderBackground(graphics);
         graphics.fill(6, 6, width - 6, height - 32,
                 ShopColors.SURFACE_BASE);
@@ -1582,6 +2369,259 @@ public final class AdminOfferEditorScreen extends Screen
         if (confirmation != null) {
             confirmation.render(graphics, font, width, height,
                     mouseX, mouseY);
+        }
+    }
+
+    private void renderSimpleEditor(
+            GuiGraphics graphics,
+            int mouseX,
+            int mouseY,
+            float partialTick
+    ) {
+        renderBackground(graphics);
+        graphics.fill(6, 6, width - 6, height - 32,
+                ShopColors.SURFACE_BASE);
+        ShopUiUtil.renderAccentLine(
+                graphics, 8, 6, width - 16);
+        graphics.drawString(font, title, 12, 12,
+                ShopColors.TEXT_STRONG, false);
+        renderSimpleContent(graphics, mouseX, mouseY);
+        super.render(graphics, mouseX, mouseY, partialTick);
+        renderFieldLabelsAndHelp(graphics, mouseX, mouseY);
+        if (hoveredEditorComponent != null) {
+            ShopUiUtil.renderItemTooltip(
+                    graphics, font,
+                    hoveredEditorComponent.itemId(),
+                    hoveredEditorComponent.exactNbt(),
+                    mouseX, mouseY);
+        }
+        if (confirmation != null) {
+            confirmation.render(graphics, font, width, height,
+                    mouseX, mouseY);
+        }
+    }
+
+    private void renderSimpleContent(
+            GuiGraphics graphics,
+            int mouseX,
+            int mouseY
+    ) {
+        int bottom = footerTop() - 4;
+        if (bottom <= contentTop) {
+            return;
+        }
+        graphics.drawString(font,
+                Component.translatable(
+                        "gui.futureshops.offer_editor.simple.title."
+                                + simpleStep.key()),
+                contentLeft, contentTop + 4,
+                ShopColors.ACCENT_PRIMARY, false);
+        graphics.drawString(font,
+                font.plainSubstrByWidth(
+                        Component.translatable(
+                                "gui.futureshops.offer_editor."
+                                        + "simple.subtitle."
+                                        + simpleStep.key())
+                                .getString(),
+                        contentWidth),
+                contentLeft, contentTop + 18,
+                ShopColors.TEXT_MUTED, false);
+        if (resultMessage != null) {
+            graphics.drawString(font,
+                    font.plainSubstrByWidth(
+                            resultMessage.getString(),
+                            contentWidth),
+                    contentLeft, contentTop + 30,
+                    resultSuccess ? ShopColors.SUCCESS
+                            : ShopColors.ERROR, false);
+        }
+        int viewportTop = simpleViewportTop();
+        if (bottom <= viewportTop) {
+            return;
+        }
+        graphics.enableScissor(
+                contentLeft, viewportTop,
+                contentLeft + contentWidth, bottom);
+        try {
+            switch (simpleStep) {
+                case BASICS -> renderSimpleBasics(
+                        graphics, mouseX, mouseY);
+                case ITEMS -> renderSimpleItems(
+                        graphics, mouseX, mouseY);
+                case TRADE -> renderSimpleTrade(
+                        graphics, mouseX, mouseY);
+                case REVIEW -> renderSimpleReview(
+                        graphics, mouseX, mouseY);
+            }
+        } finally {
+            graphics.disableScissor();
+        }
+    }
+
+    private void renderSimpleBasics(
+            GuiGraphics graphics,
+            int mouseX,
+            int mouseY
+    ) {
+        if (!templateChosen) {
+            return;
+        }
+        ServerShopOfferListing listing = draft.candidate();
+        OfferEditorSimpleMode.Mode mode =
+                OfferEditorSimpleMode.detect(listing);
+        String text = Component.translatable(
+                "gui.futureshops.offer_editor.simple.current_type",
+                Component.translatable(
+                        "gui.futureshops.offer_editor.simple.mode."
+                                + mode.key())).getString();
+        graphics.drawString(font,
+                font.plainSubstrByWidth(text, contentWidth),
+                contentLeft, simpleY(226),
+                ShopColors.TEXT_MUTED, false);
+        if (!listing.iconItemId().isBlank()
+                && contentWidth >= 310) {
+            int x = contentLeft + Math.min(
+                    290, contentWidth - 34);
+            int y = simpleY(42);
+            ShopUiUtil.renderCard(graphics, x, y, 28, 28);
+            OfferItemComponent icon =
+                    new OfferItemComponent(
+                            "simple_icon",
+                            listing.iconItemId(), 1,
+                            listing.iconNbt());
+            renderComponentPreview(
+                    graphics, icon, x + 6, y + 6,
+                    mouseX, mouseY);
+        }
+    }
+
+    private void renderSimpleItems(
+            GuiGraphics graphics,
+            int mouseX,
+            int mouseY
+    ) {
+        boolean sellInputs = simpleEditsSellInputs();
+        List<OfferItemComponent> components =
+                simpleEditedComponents();
+        graphics.drawString(font,
+                Component.translatable(sellInputs
+                        ? "gui.futureshops.offer_editor.simple."
+                        + "shop_buys_items"
+                        : "gui.futureshops.offer_editor.simple."
+                        + "player_gets_items"),
+                contentLeft, simpleY(70),
+                ShopColors.TEXT_STRONG, false);
+        if (!sellInputs && components.size() > 1) {
+            graphics.drawString(font,
+                    Component.translatable(
+                            "gui.futureshops.offer_editor.simple."
+                                    + "bundle_badge",
+                            components.size()),
+                    contentLeft + Math.min(170,
+                            Math.max(0, contentWidth - 130)),
+                    simpleY(70),
+                    ShopColors.ACCENT_PRIMARY, false);
+        }
+        if (components.isEmpty()) {
+            graphics.drawString(font,
+                    Component.translatable(
+                            "gui.futureshops.offer_editor.simple."
+                                    + "no_items"),
+                    contentLeft, simpleY(90),
+                    ShopColors.STATUS_WARNING, false);
+            return;
+        }
+        for (int index = 0; index < components.size(); index++) {
+            renderSimpleComponentRow(
+                    graphics, components.get(index),
+                    simpleY(82 + index * 36),
+                    mouseX, mouseY);
+        }
+    }
+
+    private void renderSimpleTrade(
+            GuiGraphics graphics,
+            int mouseX,
+            int mouseY
+    ) {
+        OfferEditorSimpleMode.Mode mode =
+                OfferEditorSimpleMode.detect(draft.candidate());
+        graphics.drawString(font,
+                Component.translatable(
+                        "gui.futureshops.offer_editor.simple."
+                                + "selected_mode",
+                        Component.translatable(
+                                "gui.futureshops.offer_editor."
+                                        + "simple.mode."
+                                        + mode.key())),
+                contentLeft, simpleY(30),
+                ShopColors.TEXT_STRONG, false);
+        int barterIndex = simpleBarterOptionIndex();
+        if (barterIndex < 0) {
+            return;
+        }
+        int columns = contentWidth < 430 ? 1 : 2;
+        int modeRows = (7 + columns - 1) / columns;
+        int offset = 42 + modeRows * 28 + 18;
+        if (simpleMoneyOptionIndex() >= 0) {
+            offset += 44;
+        }
+        if (!draft.candidate().sellOptions().isEmpty()) {
+            offset += 44;
+        }
+        List<OfferItemComponent> costs = draft.candidate()
+                .acquireOptions().get(barterIndex).itemCosts();
+        graphics.drawString(font,
+                Component.translatable(
+                        "gui.futureshops.offer_editor.simple."
+                                + "barter_costs"),
+                contentLeft, simpleY(offset - 12),
+                ShopColors.TEXT_STRONG, false);
+        for (int index = 0; index < costs.size(); index++) {
+            renderSimpleComponentRow(
+                    graphics, costs.get(index),
+                    simpleY(offset + 38 + index * 36),
+                    mouseX, mouseY);
+        }
+    }
+
+    private void renderSimpleReview(
+            GuiGraphics graphics,
+            int mouseX,
+            int mouseY
+    ) {
+        int offset = draft.candidate().outputs().size() > 1
+                ? 68 : 34;
+        renderPreview(
+                graphics, simpleY(offset), mouseX, mouseY);
+    }
+
+    private void renderSimpleComponentRow(
+            GuiGraphics graphics,
+            OfferItemComponent component,
+            int y,
+            int mouseX,
+            int mouseY
+    ) {
+        int rowWidth = Math.max(120, contentWidth);
+        ShopUiUtil.renderCard(
+                graphics, contentLeft, y,
+                rowWidth, 30);
+        ShopUiUtil.renderItemIconWithNbt(
+                graphics, font, component.itemId(),
+                component.exactNbt(),
+                contentLeft + 6, y + 6);
+        String text = component.count() + " x "
+                + component.itemId();
+        graphics.drawString(font,
+                font.plainSubstrByWidth(
+                        text, Math.max(40, contentWidth - 142)),
+                contentLeft + 30, y + 11,
+                ShopColors.TEXT_STRONG, false);
+        if (mouseX >= contentLeft
+                && mouseX < contentLeft + contentWidth - 108
+                && mouseY >= y && mouseY < y + 30) {
+            hoveredEditorComponent = component;
         }
     }
 
@@ -2083,9 +3123,13 @@ public final class AdminOfferEditorScreen extends Screen
                 continue;
             }
             graphics.drawString(font,
-                    Component.translatable(
-                            OfferEditorControlRegistry.fieldLabelKey(
-                                    binding.registeredPath())),
+                    simpleFieldLabels.getOrDefault(
+                            field,
+                            Component.translatable(
+                                    OfferEditorControlRegistry
+                                            .fieldLabelKey(
+                                                    binding
+                                                            .registeredPath()))),
                     field.getX(), field.getY() - 9,
                     ShopColors.TEXT_MUTED, false);
             List<com.enviouse.futureshops.catalog.offer
@@ -2319,6 +3363,19 @@ public final class AdminOfferEditorScreen extends Screen
             return confirmation.mouseScrolled(
                     mouseX, mouseY, delta);
         }
+        if (!advancedMode) {
+            int previous = simpleScrollPosition;
+            int next = Math.max(0,
+                    Math.min(maximumSimpleScroll(),
+                            previous - (int) Math.signum(delta) * 24));
+            if (next == previous) {
+                return super.mouseScrolled(mouseX, mouseY, delta);
+            }
+            flushFields();
+            simpleScrollPosition = next;
+            rebuildWidgets();
+            return true;
+        }
         if (!templateChosen) {
             return super.mouseScrolled(mouseX, mouseY, delta);
         }
@@ -2345,7 +3402,11 @@ public final class AdminOfferEditorScreen extends Screen
         }
         if (Screen.hasControlDown()
                 && keyCode == GLFW.GLFW_KEY_F) {
-            openSearchForSection();
+            if (advancedMode) {
+                openSearchForSection();
+            } else {
+                openSimpleSearch();
+            }
             return true;
         }
         if (Screen.hasControlDown()
@@ -2356,7 +3417,12 @@ public final class AdminOfferEditorScreen extends Screen
         if (Screen.hasAltDown()
                 && (keyCode == GLFW.GLFW_KEY_LEFT
                 || keyCode == GLFW.GLFW_KEY_RIGHT)) {
-            moveSection(keyCode == GLFW.GLFW_KEY_RIGHT ? 1 : -1);
+            int direction = keyCode == GLFW.GLFW_KEY_RIGHT ? 1 : -1;
+            if (advancedMode) {
+                moveSection(direction);
+            } else {
+                moveSimpleStep(direction);
+            }
             return true;
         }
         if ((keyCode == GLFW.GLFW_KEY_ENTER
@@ -2370,6 +3436,45 @@ public final class AdminOfferEditorScreen extends Screen
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    private void openSimpleSearch() {
+        if (!templateChosen) {
+            return;
+        }
+        switch (simpleStep) {
+            case BASICS -> openCategoryPicker();
+            case ITEMS -> {
+                boolean sellInputs = simpleEditsSellInputs();
+                openItemPicker(
+                        OfferEditorItemPickerScreen.Source.REGISTRY,
+                        sellInputs ? "sell_input" : "output",
+                        sellInputs ? this::acceptSimpleSellInput
+                                : this::acceptSimpleOutput);
+            }
+            case TRADE -> {
+                int barterIndex = simpleBarterOptionIndex();
+                if (barterIndex >= 0) {
+                    selectedAcquireIndex = barterIndex;
+                    openItemPicker(
+                            OfferEditorItemPickerScreen.Source.REGISTRY,
+                            "payment", this::acceptAcquireCost);
+                }
+            }
+            case REVIEW -> {
+            }
+        }
+    }
+
+    private void moveSimpleStep(int direction) {
+        SimpleStep[] steps = SimpleStep.values();
+        int index = Math.floorMod(
+                simpleStep.ordinal() + direction,
+                steps.length);
+        SimpleStep next = steps[index];
+        if (templateChosen || next == SimpleStep.BASICS) {
+            switchSimpleStep(next);
+        }
     }
 
     private void openSearchForSection() {
@@ -4001,6 +5106,29 @@ public final class AdminOfferEditorScreen extends Screen
                         "Player shop listing index is invalid");
             }
         }
+    }
+
+    private enum SimpleStep {
+        BASICS("basics"),
+        ITEMS("items"),
+        TRADE("trade"),
+        REVIEW("review");
+
+        private final String key;
+
+        SimpleStep(String key) {
+            this.key = key;
+        }
+
+        private String key() {
+            return key;
+        }
+    }
+
+    private enum SimpleComponentList {
+        OUTPUTS,
+        SELL_INPUTS,
+        BARTER_COSTS
     }
 
     private enum PreviewMode {

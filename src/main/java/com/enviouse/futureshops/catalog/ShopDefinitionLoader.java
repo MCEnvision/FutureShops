@@ -1,12 +1,23 @@
 package com.enviouse.futureshops.catalog;
 
 import com.enviouse.futureshops.catalog.offer.LegacyServerShopOfferCompiler;
+import com.enviouse.futureshops.catalog.offer.AcquireOfferOption;
+import com.enviouse.futureshops.catalog.offer.OfferBundleComparison;
+import com.enviouse.futureshops.catalog.offer.OfferItemComponent;
+import com.enviouse.futureshops.catalog.offer.OfferLimitPolicy;
+import com.enviouse.futureshops.catalog.offer.OfferSchedule;
+import com.enviouse.futureshops.catalog.offer.OfferStockPolicy;
 import com.enviouse.futureshops.catalog.offer.OfferValidationIssue;
 import com.enviouse.futureshops.catalog.offer.OfferValidationResult;
+import com.enviouse.futureshops.catalog.offer.SellOfferOption;
 import com.enviouse.futureshops.catalog.offer.ServerShopOfferCatalogValidator;
 import com.enviouse.futureshops.catalog.offer.ServerShopOfferJsonParser;
+import com.enviouse.futureshops.catalog.offer.ServerShopOfferJsonWriter;
 import com.enviouse.futureshops.catalog.offer.ServerShopOfferLegacyProjection;
 import com.enviouse.futureshops.catalog.offer.ServerShopOfferListing;
+import com.enviouse.futureshops.catalog.offer.ServerShopOfferRevision;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -27,9 +38,9 @@ import java.util.List;
  * Reads shop definitions from {@code config/futureshops/shops/*.json}.
  *
  * <p>The bundled admin shop lives in {@code admin.json}. If that file is missing on any load
- * (e.g. removed or moved by the operator) it is rewritten from {@link #DEFAULT_SHOP_JSON}.
+ * (e.g. removed or moved by the operator) it is rewritten from the bundled default.
  * A legacy {@code default.json} is auto-renamed to {@code admin.json} on first sight.
- * JSON schema: see {@code DEFAULT_SHOP_JSON} for a fully annotated example.
+ * Existing operator files are never replaced when the bundled default changes.
  * Prices are in minor currency units (e.g., 1500 = $15.00 at 2 dp).
  */
 public final class ShopDefinitionLoader {
@@ -83,7 +94,7 @@ public final class ShopDefinitionLoader {
 
         // Regenerate admin.json on every load if it's missing (operator deleted/moved it).
         if (!Files.exists(adminFile)) {
-            writeFile(adminFile, DEFAULT_SHOP_JSON);
+            writeFile(adminFile, defaultShopJson());
         }
 
         // Collect .json files
@@ -334,7 +345,9 @@ public final class ShopDefinitionLoader {
         List<ItemDef> items = List.of(
                 new ItemDef("minecraft:diamond_pickaxe",         "Diamond Pickaxe",         2000L, 1000L, -1,  false, "tools"),
                 new ItemDef("minecraft:diamond_sword",           "Diamond Sword",            1500L,  750L, -1,  false, "tools"),
-                new ItemDef("minecraft:iron_sword",              "Iron Sword",                500L,  250L, -1,  false, "tools"),
+                new ItemDef("minecraft:iron_pickaxe",            "Iron Pickaxe",              400L,  200L, -1,  false, "tools"),
+                new ItemDef("minecraft:iron_sword",              "Iron Sword",                400L,  200L, -1,  false, "tools"),
+                new ItemDef("minecraft:iron_shovel",             "Iron Shovel",               400L,  200L, -1,  false, "tools"),
                 new ItemDef("minecraft:diamond",                 "Diamond",                   500L,  250L, -1,  false, "materials"),
                 new ItemDef("minecraft:emerald",                 "Emerald",                   300L,  150L, -1,  true,  "materials"),
                 new ItemDef("minecraft:iron_ingot",              "Iron Ingot",                 50L,   25L, 100, false, "materials"),
@@ -360,57 +373,126 @@ public final class ShopDefinitionLoader {
                         1,
                         List.of(new BarterIngredientDef("minecraft:gold_ingot", 8), new BarterIngredientDef("minecraft:apple", 1))));
 
-        return new ShopDefinition("default", "Server Shop",
-                List.copyOf(cats), List.copyOf(items), List.copyOf(promos), List.copyOf(barterRecipes));
+        List<ServerShopOfferListing> offers = new ArrayList<>(
+                LegacyServerShopOfferCompiler.compile(
+                        items, barterRecipes));
+        offers.add(defaultFreeOffer());
+        offers.add(defaultSellOnlyOffer());
+        offers.add(defaultBundleOffer());
+        return new ShopDefinition(
+                ServerShopOfferJsonParser.SCHEMA_VERSION,
+                "default", "Server Shop",
+                List.copyOf(cats), List.copyOf(items),
+                List.copyOf(promos), List.copyOf(barterRecipes),
+                List.copyOf(offers));
     }
 
-    // ─── Default JSON template written to disk on first run ──────────────────
-    private static final String DEFAULT_SHOP_JSON = """
-            {
-              "shopId": "default",
-              "displayName": "Server Shop",
-              "categories": [
-                { "id": "all",       "displayName": "All",       "sortOrder": 0 },
-                { "id": "tools",     "displayName": "Tools",     "sortOrder": 1 },
-                { "id": "materials", "displayName": "Materials", "sortOrder": 2 },
-                { "id": "food",      "displayName": "Food",      "sortOrder": 3 }
-              ],
-              "items": [
-                { "itemId": "minecraft:diamond_pickaxe",        "displayName": "Diamond Pickaxe",        "buyPrice": 2000, "sellPrice": 1000, "stock": -1,  "categoryId": "tools"     },
-                { "itemId": "minecraft:diamond_sword",          "displayName": "Diamond Sword",          "buyPrice": 1500, "sellPrice":  750, "stock": -1,  "categoryId": "tools"     },
-                { "itemId": "minecraft:iron_sword",             "displayName": "Iron Sword",             "buyPrice":  500, "sellPrice":  250, "stock": -1,  "categoryId": "tools"     },
-                { "itemId": "minecraft:diamond",                "displayName": "Diamond",                "buyPrice":  500, "sellPrice":  250, "stock": -1,  "categoryId": "materials" },
-                { "itemId": "minecraft:emerald",                "displayName": "Emerald",                "buyPrice":  300, "sellPrice":  150, "stock": -1,  "barterEnabled": true, "categoryId": "materials", "promoId": "promo_emerald_10" },
-                { "itemId": "minecraft:iron_ingot",             "displayName": "Iron Ingot",             "buyPrice":   50, "sellPrice":   25, "stock": 100, "categoryId": "materials", "stockRefreshSeconds": 300 },
-                { "itemId": "minecraft:gold_ingot",             "displayName": "Gold Ingot",             "buyPrice":  150, "sellPrice":   75, "stock": -1,  "categoryId": "materials" },
-                { "itemId": "minecraft:netherite_ingot",        "displayName": "Netherite Ingot",        "buyPrice": 5000, "sellPrice": 2500, "stock":  10, "categoryId": "materials" },
-                { "itemId": "minecraft:bread",                  "displayName": "Bread",                  "buyPrice":   10, "sellPrice":    5, "stock": -1,  "categoryId": "food"      },
-                { "itemId": "minecraft:cooked_beef",            "displayName": "Steak",                  "buyPrice":   20, "sellPrice":   10, "stock": -1,  "categoryId": "food"      },
-                { "itemId": "minecraft:golden_apple",           "displayName": "Golden Apple",           "buyPrice":  200, "sellPrice":  100, "stock":  50, "categoryId": "food"      },
-                { "itemId": "minecraft:enchanted_golden_apple", "displayName": "Enchanted Golden Apple", "buyPrice": 5000, "sellPrice":    0, "stock":   5, "categoryId": "food"      }
-              ],
-              "promos": [
-                { "promoId": "promo_emerald_10", "promoType": "PERCENTAGE", "targetItemId": "minecraft:emerald", "discountValue": 10.0, "endTimeEpoch": 0 }
-              ],
-              "barterRecipes": [
-                {
-                  "recipeId": "emerald_trade_iron",
-                  "targetItemId": "minecraft:emerald",
-                  "outputCount": 1,
-                  "ingredients": [
-                    { "itemId": "minecraft:iron_ingot", "count": 4 }
-                  ]
-                },
-                {
-                  "recipeId": "golden_apple_trade_gold",
-                  "targetItemId": "minecraft:golden_apple",
-                  "outputCount": 1,
-                  "ingredients": [
-                    { "itemId": "minecraft:gold_ingot", "count": 8 },
-                    { "itemId": "minecraft:apple", "count": 1 }
-                  ]
-                }
-              ]
-            }
-            """;
+    static String defaultShopJson() {
+        ShopDefinition shop = buildDefaultShop();
+        JsonObject root = new JsonObject();
+        root.addProperty("schemaVersion",
+                ServerShopOfferJsonParser.SCHEMA_VERSION);
+        root.addProperty("shopId", shop.shopId());
+        root.addProperty("displayName", shop.displayName());
+        JsonArray categories = new JsonArray();
+        shop.categories().forEach(category -> {
+            JsonObject value = new JsonObject();
+            value.addProperty("id", category.id());
+            value.addProperty("displayName", category.displayName());
+            value.addProperty("sortOrder", category.sortOrder());
+            categories.add(value);
+        });
+        root.add("categories", categories);
+        JsonArray promotions = new JsonArray();
+        shop.promos().forEach(promotion -> {
+            JsonObject value = new JsonObject();
+            value.addProperty("promoId", promotion.promoId());
+            value.addProperty("promoType", promotion.promoType());
+            value.addProperty("targetItemId",
+                    promotion.targetItemId());
+            value.addProperty("discountValue",
+                    promotion.discountValue());
+            value.addProperty("endTimeEpoch",
+                    promotion.endTimeEpoch());
+            promotions.add(value);
+        });
+        root.add("promos", promotions);
+        root.add("listings",
+                ServerShopOfferJsonWriter.writeListings(shop.offers()));
+        return new GsonBuilder().setPrettyPrinting().create()
+                .toJson(root) + System.lineSeparator();
+    }
+
+    private static ServerShopOfferListing defaultFreeOffer() {
+        return versioned(new ServerShopOfferListing(
+                "free_welcome_cookie", 0L,
+                "Free Welcome Cookie",
+                "A free example. Each player can claim it once.",
+                "food", "minecraft:cookie", "", true, 0L, "",
+                List.of(new OfferItemComponent(
+                        "cookie", "minecraft:cookie", 1, "")),
+                List.of(AcquireOfferOption.free("get_free")),
+                List.of(), OfferStockPolicy.unlimited(),
+                new OfferLimitPolicy(1, 1L, 0L, 0L, 0L),
+                OfferSchedule.always(), List.of()));
+    }
+
+    private static ServerShopOfferListing defaultSellOnlyOffer() {
+        return versioned(new ServerShopOfferListing(
+                "sell_rotten_flesh", 0L,
+                "Sell Rotten Flesh",
+                "Give the shop 8 rotten flesh and receive 1.00.",
+                "materials", "minecraft:rotten_flesh", "",
+                true, 0L, "", List.of(), List.of(),
+                List.of(new SellOfferOption(
+                        "sell_to_shop", "Sell 8 Rotten Flesh",
+                        List.of(new OfferItemComponent(
+                                "rotten_flesh",
+                                "minecraft:rotten_flesh", 8, "")),
+                        100L, 0L, OfferLimitPolicy.defaults(),
+                        OfferSchedule.always(), "")),
+                OfferStockPolicy.unlimited(),
+                OfferLimitPolicy.defaults(),
+                OfferSchedule.always(), List.of()));
+    }
+
+    private static ServerShopOfferListing defaultBundleOffer() {
+        return versioned(new ServerShopOfferListing(
+                "iron_tool_bundle", 0L,
+                "Iron Tool Bundle",
+                "Three iron tools for 10.00. Save 2.00.",
+                "tools", "minecraft:iron_pickaxe", "",
+                true, 0L, "",
+                List.of(
+                        new OfferItemComponent(
+                                "pickaxe",
+                                "minecraft:iron_pickaxe", 1, ""),
+                        new OfferItemComponent(
+                                "sword",
+                                "minecraft:iron_sword", 1, ""),
+                        new OfferItemComponent(
+                                "shovel",
+                                "minecraft:iron_shovel", 1, "")),
+                List.of(AcquireOfferOption.money(
+                        "get_money", 1000L)),
+                List.of(), OfferStockPolicy.unlimited(),
+                OfferLimitPolicy.defaults(), OfferSchedule.always(),
+                List.of(
+                        new OfferBundleComparison(
+                                "pickaxe",
+                                "minecraft:iron_pickaxe", "money"),
+                        new OfferBundleComparison(
+                                "sword",
+                                "minecraft:iron_sword", "money"),
+                        new OfferBundleComparison(
+                                "shovel",
+                                "minecraft:iron_shovel", "money"))));
+    }
+
+    private static ServerShopOfferListing versioned(
+            ServerShopOfferListing listing
+    ) {
+        return listing.withRevision(
+                ServerShopOfferRevision.compute(listing));
+    }
 }

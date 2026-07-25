@@ -16,7 +16,10 @@ public final class ServerShopOfferLegacyProjection {
     ) {
         List<ItemDef> items = new ArrayList<>();
         for (ServerShopOfferListing listing : listings) {
-            OfferItemComponent output = listing.outputs().get(0);
+            OfferItemComponent representative = representative(listing);
+            if (representative == null) {
+                continue;
+            }
             long buyPrice = listing.acquireOptions().stream()
                     .filter(AcquireOfferOption::moneyCostPresent)
                     .mapToLong(AcquireOfferOption::moneyCostMinorUnits)
@@ -28,16 +31,29 @@ public final class ServerShopOfferLegacyProjection {
                     == OfferStockPolicy.Type.UNLIMITED ? -1
                     : Math.toIntExact(Math.min(Integer.MAX_VALUE,
                     listing.stockPolicy().quantity()));
-            items.add(new ItemDef(listing.listingId(), output.itemId(),
+            items.add(new ItemDef(listing.listingId(),
+                    representative.itemId(),
                     listing.displayName(), buyPrice, sellPrice, stock,
                     listing.acquireOptions().stream()
                             .anyMatch(AcquireOfferOption::hasItemCosts),
                     listing.categoryId(),
                     Math.toIntExact(Math.min(Integer.MAX_VALUE,
                             listing.stockPolicy().refreshSeconds())),
-                    output.exactNbt(), listing.expiresAtEpoch()));
+                    representative.exactNbt(),
+                    listing.expiresAtEpoch()));
         }
         return List.copyOf(items);
+    }
+
+    private static OfferItemComponent representative(
+            ServerShopOfferListing listing
+    ) {
+        if (!listing.outputs().isEmpty()) {
+            return listing.outputs().get(0);
+        }
+        return listing.sellOptions().stream()
+                .flatMap(option -> option.itemInputs().stream())
+                .findFirst().orElse(null);
     }
 
     public static List<BarterRecipeDef> barterRecipes(

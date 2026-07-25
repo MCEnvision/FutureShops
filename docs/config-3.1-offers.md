@@ -18,18 +18,20 @@ Open the Server Shop as an administrator and choose the offer editor for a listi
 
 The quickest common workflow is:
 
-1. Choose what the shop should do from the visitor perspective.
-2. Pick the held item, an inventory item, or a registry item.
-3. Choose Free, Money, Items, Money and Items, or alternative options.
-4. Review the visitor preview and save.
+1. In Basics, choose Money, Free, Sell Only, Buy and Sell, Barter, Money or Barter, Money and Barter, or Bundle.
+2. In Items, add what the player receives or what the shop buys from a held item, inventory, or the registry list. Several outputs become one bundle automatically.
+3. In Trade, select the trade type and enter the price, payout, or barter items.
+4. In Review, inspect the visitor view, optionally match standalone bundle prices, and save.
 
-Use the outline for outputs, acquire options, Sell to Shop options, stock, limits, schedule, permissions, bundle value, and advanced data. Adding several components to one option means every component is required. Adding several options creates alternatives.
+Use Advanced Settings only for stock, limits, schedules, permissions, exact NBT, arbitrary option structures, or manual bundle comparisons. Adding several components to one advanced option means every component is required. Adding several advanced options creates alternatives.
 
 Every administrator field and icon control has contextual help by hover or keyboard focus. Help mode keeps descriptions visible. Invalid controls receive an outline and short message. Section badges count unresolved issues, and selecting a validation summary entry returns focus to the affected control. Save actions remain disabled while settlement would be ambiguous or unsafe.
 
 Apply waits for the matching server acknowledgement and keeps the editor open with the acknowledged snapshot as its new baseline. Save and Close returns only after that acknowledgement. Revert restores the acknowledged baseline. Duplicate creates a new stable listing identifier. Remove Option and Remove Listing use separate confirmations. A stale revision opens review choices and never overwrites the newer server listing silently.
 
 Returning from category, held item, inventory, or registry pickers preserves raw field text, selected section, scroll position, focus target, and every other draft value.
+
+If `admin.json` is missing, FutureShops creates a schema version 2 example catalog with a one claim free cookie, a Sell Only rotten flesh offer, and an iron tool bundle with verified savings against its three standalone tool offers. Existing operator catalogs are never replaced.
 
 ## Minimal schema version 2 catalog
 

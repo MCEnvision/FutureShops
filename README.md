@@ -21,7 +21,8 @@ Supported runtime:
 
 * Server shops with explicit free offers, money, barter, money plus barter, alternative payments, Sell to Shop, multi item bundles, validated savings, categories, search, mixed carts, and transaction history.
 * Player shop blocks with versioned offers, legacy listing migration, physical storage, free and paid acquisition, multiple barter components, alternative options, Sell to Shop input bundles, promotions, stock alerts, and owner settlement tools.
-* An in game offer editor with templates, item and category pickers, validation, contextual help, visitor preview, correlated saves, revision conflict handling, atomic catalog backups, and responsive FutureShops styled controls.
+* A guided four step offer editor opened through Edit, then New Offer, for money, free, barter, Sell Only, Buy and Sell, and bundles, with advanced settings available when needed.
+* New generated Server Shop catalogs include working free, Sell Only, and discounted bundle examples without replacing an existing `admin.json`.
 * Wallet balances, payments, leaderboards, deposits, withdrawals, ATM controls, and protected FutureShops currency.
 * Auction House listings, bids, buy now sales, watchlists, history, anti sniping rules, and exact item custody.
 * Bazaar products, instant orders, limit orders, partial fills, price time priority, fees, price history, and circuit breakers.

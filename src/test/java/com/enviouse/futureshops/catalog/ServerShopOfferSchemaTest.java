@@ -104,6 +104,53 @@ class ServerShopOfferSchemaTest {
     }
 
     @Test
+    void bundledDefaultIncludesSimpleTradeExamples() {
+        ShopDefinition definition = ShopDefinitionLoader.parseJson(
+                ShopDefinitionLoader.defaultShopJson(), "admin.json");
+
+        assertEquals(2, definition.schemaVersion());
+        assertEquals(1, definition.promos().size());
+        var free = definition.offers().stream()
+                .filter(offer -> offer.listingId().equals(
+                        "free_welcome_cookie"))
+                .findFirst().orElseThrow();
+        var sellOnly = definition.offers().stream()
+                .filter(offer -> offer.listingId().equals(
+                        "sell_rotten_flesh"))
+                .findFirst().orElseThrow();
+        var bundle = definition.offers().stream()
+                .filter(offer -> offer.listingId().equals(
+                        "iron_tool_bundle"))
+                .findFirst().orElseThrow();
+
+        assertTrue(free.acquireOptions().get(0).free());
+        assertEquals(1L, free.limits().lifetimeLimit());
+        assertTrue(sellOnly.outputs().isEmpty());
+        assertTrue(sellOnly.acquireOptions().isEmpty());
+        assertEquals(8, sellOnly.sellOptions().get(0)
+                .itemInputs().get(0).count());
+        assertEquals(3, bundle.outputs().size());
+        assertEquals(1000L, bundle.acquireOptions().get(0)
+                .moneyCostMinorUnits());
+        assertEquals(3, bundle.bundleComparisons().size());
+        long standaloneTotal = bundle.bundleComparisons().stream()
+                .mapToLong(comparison -> definition.offers().stream()
+                        .filter(offer -> offer.listingId().equals(
+                                comparison.listingId()))
+                        .findFirst().orElseThrow()
+                        .acquireOptions().stream()
+                        .filter(option -> option.optionId().equals(
+                                comparison.optionId()))
+                        .findFirst().orElseThrow()
+                        .moneyCostMinorUnits())
+                .sum();
+        assertEquals(1200L, standaloneTotal);
+        assertTrue(standaloneTotal
+                > bundle.acquireOptions().get(0)
+                .moneyCostMinorUnits());
+    }
+
+    @Test
     void versionTwoParserRejectsOversizedAndMalformedCollections() {
         StringBuilder components = new StringBuilder();
         for (int index = 0;
