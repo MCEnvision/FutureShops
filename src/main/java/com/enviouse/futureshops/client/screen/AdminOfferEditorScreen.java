@@ -26,9 +26,13 @@ import com.enviouse.futureshops.network.packets
         .S2CPlayerShopOfferSaveResultPacket;
 import net.minecraft.core.BlockPos;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -75,6 +79,7 @@ public final class AdminOfferEditorScreen extends Screen
     private int summaryLeft;
     private int summaryWidth;
     private OfferItemComponent hoveredEditorComponent;
+    private boolean addingContentWidgets;
 
     public AdminOfferEditorScreen(Screen parent, String listingId) {
         this(parent, ShopClientState.getCatalogOffer(listingId)
@@ -166,10 +171,10 @@ public final class AdminOfferEditorScreen extends Screen
             contentTop = sectionY + 40;
         }
         if (staleReviewing && staleSnapshot != null) {
-            buildStaleReviewActions();
+            buildContentWidgets(this::buildStaleReviewActions);
         } else {
             buildSectionResetButton();
-            buildSection();
+            buildContentWidgets(this::buildSection);
         }
         buildFooter();
         buildValidationNavigation();
@@ -179,6 +184,34 @@ public final class AdminOfferEditorScreen extends Screen
                 setFocused(binding.field()));
         ShopClientPacketHandler.takeAdminOfferSaveResult(
                 pendingRequestId).ifPresent(this::applySaveResult);
+    }
+
+    @Override
+    protected <T extends GuiEventListener & Renderable
+            & NarratableEntry> T addRenderableWidget(T widget) {
+        T added = super.addRenderableWidget(widget);
+        if (addingContentWidgets
+                && widget instanceof AbstractWidget abstractWidget) {
+            abstractWidget.visible = contentWidgetVisible(
+                    abstractWidget);
+        }
+        return added;
+    }
+
+    private void buildContentWidgets(Runnable builder) {
+        addingContentWidgets = true;
+        try {
+            builder.run();
+        } finally {
+            addingContentWidgets = false;
+        }
+    }
+
+    private boolean contentWidgetVisible(AbstractWidget widget) {
+        int top = contentTop + 22;
+        int bottom = footerTop() - 4;
+        return widget.getY() >= top
+                && widget.getY() + widget.getHeight() <= bottom;
     }
 
     private Component sectionButtonLabel(
@@ -1250,7 +1283,7 @@ public final class AdminOfferEditorScreen extends Screen
             buildNarrowFooter();
             return;
         }
-        int y = height - 26;
+        int y = footerTop();
         int x = 10;
         addFooterButton(x, y, 62, "revert",
                 ignored -> confirmRevert(), "revert");
@@ -1278,7 +1311,7 @@ public final class AdminOfferEditorScreen extends Screen
         int gap = 4;
         int firstWidth = Math.max(44,
                 (width - margin * 2 - gap * 2) / 3);
-        int y = height - 48;
+        int y = footerTop();
         addFooterButton(margin, y, firstWidth, "revert",
                 ignored -> confirmRevert(), "revert");
         addFooterButton(margin + firstWidth + gap, y,
@@ -1557,47 +1590,67 @@ public final class AdminOfferEditorScreen extends Screen
             int mouseX,
             int mouseY
     ) {
-        if (staleReviewing && staleSnapshot != null) {
-            renderStaleReview(graphics);
+        int contentBottom = footerTop() - 4;
+        if (contentBottom <= contentTop) {
             return;
         }
-        graphics.drawString(font, sectionLabel(draft.section()),
-                contentLeft, contentTop + 4,
-                ShopColors.ACCENT_PRIMARY, false);
-        if (draft.section() == OfferEditorDraft.Section.GENERAL) {
-            ServerShopOfferListing listing = draft.candidate();
-            if (!listing.iconItemId().isBlank()) {
-                OfferItemComponent icon = new OfferItemComponent(
-                        "icon", listing.iconItemId(), 1,
-                        listing.iconNbt());
-                renderComponentPreview(graphics, icon,
-                        contentLeft + Math.min(170,
-                                Math.max(0, contentWidth - 20)),
-                        sectionY(196), mouseX, mouseY);
+        graphics.enableScissor(contentLeft, contentTop,
+                contentLeft + contentWidth, contentBottom);
+        try {
+            if (staleReviewing && staleSnapshot != null) {
+                renderStaleReview(graphics);
+                return;
             }
-        } else if (draft.section()
-                == OfferEditorDraft.Section.OUTPUTS) {
-            renderOutputTotals(graphics, sectionY(180));
-            renderComponents(graphics, draft.candidate().outputs(),
-                    sectionY(224), mouseX, mouseY);
-        } else if (draft.section()
-                == OfferEditorDraft.Section.GET_OPTIONS) {
-            renderAcquireSummary(
-                    graphics, sectionY(456), mouseX, mouseY);
-        } else if (draft.section()
-                == OfferEditorDraft.Section.SELL_OPTIONS) {
-            renderSellSummary(
-                    graphics, sectionY(426), mouseX, mouseY);
-        } else if (draft.section()
-                == OfferEditorDraft.Section.BUNDLE_VALUE) {
-            graphics.drawString(font, Component.translatable(
-                            "gui.futureshops.offer_editor.comparison_help"),
-                    contentLeft, contentTop + 58,
-                    ShopColors.TEXT_MUTED, false);
-        } else if (draft.section()
-                == OfferEditorDraft.Section.PREVIEW) {
-            renderPreview(
-                    graphics, contentTop + 58, mouseX, mouseY);
+            graphics.drawString(font, sectionLabel(draft.section()),
+                    contentLeft, contentTop + 4,
+                    ShopColors.ACCENT_PRIMARY, false);
+            if (draft.section() == OfferEditorDraft.Section.GENERAL) {
+                ServerShopOfferListing listing = draft.candidate();
+                int fieldWidth = Math.min(220, contentWidth);
+                int previewSize = 24;
+                int previewY = sectionY(138);
+                if (!listing.iconItemId().isBlank()
+                        && contentWidth >= fieldWidth + previewSize + 6
+                        && previewY >= contentTop
+                        && previewY + previewSize + 4 <= footerTop()) {
+                    OfferItemComponent icon = new OfferItemComponent(
+                            "icon", listing.iconItemId(), 1,
+                            listing.iconNbt());
+                    int previewX = contentLeft + fieldWidth + 6;
+                    ShopUiUtil.renderCard(graphics, previewX, previewY,
+                            previewSize, previewSize);
+                    renderComponentPreview(graphics, icon,
+                            previewX + 4, previewY + 4,
+                            mouseX, mouseY);
+                }
+            } else if (draft.section()
+                    == OfferEditorDraft.Section.OUTPUTS) {
+                renderOutputTotals(graphics, sectionY(180));
+                renderComponents(graphics,
+                        draft.candidate().outputs(),
+                        sectionY(224), mouseX, mouseY);
+            } else if (draft.section()
+                    == OfferEditorDraft.Section.GET_OPTIONS) {
+                renderAcquireSummary(
+                        graphics, sectionY(456), mouseX, mouseY);
+            } else if (draft.section()
+                    == OfferEditorDraft.Section.SELL_OPTIONS) {
+                renderSellSummary(
+                        graphics, sectionY(426), mouseX, mouseY);
+            } else if (draft.section()
+                    == OfferEditorDraft.Section.BUNDLE_VALUE) {
+                graphics.drawString(font, Component.translatable(
+                                "gui.futureshops.offer_editor."
+                                        + "comparison_help"),
+                        contentLeft, contentTop + 58,
+                        ShopColors.TEXT_MUTED, false);
+            } else if (draft.section()
+                    == OfferEditorDraft.Section.PREVIEW) {
+                renderPreview(
+                        graphics, contentTop + 58, mouseX, mouseY);
+            }
+        } finally {
+            graphics.disableScissor();
         }
     }
 
@@ -2026,6 +2079,9 @@ public final class AdminOfferEditorScreen extends Screen
     ) {
         for (EditBinding binding : bindings) {
             EditBox field = binding.field();
+            if (!field.visible) {
+                continue;
+            }
             graphics.drawString(font,
                     Component.translatable(
                             OfferEditorControlRegistry.fieldLabelKey(
@@ -3713,6 +3769,10 @@ public final class AdminOfferEditorScreen extends Screen
 
     private int sectionY(int offset) {
         return contentTop + offset - draft.scrollPosition();
+    }
+
+    private int footerTop() {
+        return height - (width < 430 ? 48 : 26);
     }
 
     private int maximumScroll() {

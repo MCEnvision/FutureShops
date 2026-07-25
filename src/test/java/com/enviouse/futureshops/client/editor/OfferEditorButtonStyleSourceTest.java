@@ -65,6 +65,34 @@ class OfferEditorButtonStyleSourceTest {
                 "(contentWidth - gap * (columns - 1)) / columns"));
     }
 
+    @Test
+    void generalIconPreviewHasAFramedSlotOutsidePickerButtons()
+            throws IOException {
+        String source = readScreen("AdminOfferEditorScreen.java");
+        assertTrue(source.contains(
+                "contentWidth >= fieldWidth + previewSize + 6"));
+        assertTrue(source.contains(
+                "previewY + previewSize + 4 <= footerTop()"));
+        assertTrue(source.contains(
+                "int previewX = contentLeft + fieldWidth + 6;"));
+        assertTrue(source.contains(
+                "ShopUiUtil.renderCard(graphics, previewX, previewY,"));
+        assertFalse(source.contains(
+                "sectionY(196), mouseX, mouseY);"));
+    }
+
+    @Test
+    void narrowEditorClipsScrollableContentAboveFooter()
+            throws IOException {
+        String source = readScreen("AdminOfferEditorScreen.java");
+        assertTrue(source.contains(
+                "abstractWidget.visible = contentWidgetVisible("));
+        assertTrue(source.contains(
+                "graphics.enableScissor(contentLeft, contentTop,"));
+        assertTrue(source.contains(
+                "if (!field.visible) {"));
+    }
+
     private static String readScreen(String file) throws IOException {
         return Files.readString(Path.of(
                 "src/main/java/com/enviouse/futureshops/"
