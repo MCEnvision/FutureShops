@@ -30,7 +30,8 @@ public final class MarketActionFeedback {
      * payment source is not accepted by server policy).
      */
     private static final Set<String> EXTRA_STATUSES = Set.of(
-            "ITEMS_MISSING", "PAYMENT_SOURCE_DENIED");
+            "ITEMS_MISSING", "PAYMENT_SOURCE_DENIED",
+            "RECOVERY_REQUIRED");
 
     /**
      * Status tokens with a dedicated lang key. Built from the module operation-status enums so

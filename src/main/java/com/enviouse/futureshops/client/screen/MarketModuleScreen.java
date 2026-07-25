@@ -394,6 +394,16 @@ public final class MarketModuleScreen extends Screen
                     MarketActionFeedback.failureMessage(response), false);
             return;
         }
+        if ("RECOVERY_REQUIRED".equals(response.status())) {
+            showActionStatus(
+                    MarketActionFeedback.failureMessage(response), false);
+            if ("auction_create".equals(actionKey)) {
+                closeCreateWizard();
+            }
+            requestCapabilities();
+            refreshAfterAction(subjectId);
+            return;
+        }
         if (MarketActionFeedback.stale(response.status())) {
             showActionStatus(
                     MarketActionFeedback.staleMessage(response.status()),
@@ -3068,8 +3078,13 @@ public final class MarketModuleScreen extends Screen
                         content.y() + 4, 14, 12), "✕", true,
                 this::closeCreateWizard);
         y += 12;
-        int cell = content.width() >= 176 + padding * 2 ? 18 : 16;
-        int gridWidth = cell * 9;
+        int formWidth = Math.max(1,
+                content.width() - padding * 2);
+        int cell = formWidth >= 162 ? 18 : 16;
+        int gridColumns = Math.max(1,
+                Math.min(9, formWidth / cell));
+        int gridRows = (PLAYER_MAIN_INVENTORY_SLOTS
+                + gridColumns - 1) / gridColumns;
         var player = minecraft == null ? null : minecraft.player;
         if (player != null) {
             graphics.drawString(font,
@@ -3080,8 +3095,8 @@ public final class MarketModuleScreen extends Screen
             y += 11;
             for (int slot = 0; slot < PLAYER_MAIN_INVENTORY_SLOTS;
                  slot++) {
-                int column = slot % 9;
-                int row = slot / 9;
+                int column = slot % gridColumns;
+                int row = slot / gridColumns;
                 MarketRectangle cellRect = new MarketRectangle(
                         x + column * cell, y + row * cell,
                         cell - 1, cell - 1);
@@ -3105,7 +3120,7 @@ public final class MarketModuleScreen extends Screen
                             () -> selectCreateSlot(slotIndex));
                 }
             }
-            y += cell * 4 + 4;
+            y += cell * gridRows + 4;
             ItemStack selectedStack = createSelectedSlot >= 0
                     && createSelectedSlot < PLAYER_MAIN_INVENTORY_SLOTS
                     ? player.getInventory().items.get(createSelectedSlot)
@@ -3126,26 +3141,30 @@ public final class MarketModuleScreen extends Screen
                             : theme.textStrong(), false);
             y += 13;
         }
-        int formWidth = Math.max(gridWidth,
-                content.width() - padding * 2);
-        int typeWidth = Math.max(40, (formWidth - 8) / 3);
         AuctionListingType[] types = AuctionListingType.values();
+        boolean stackTypes = formWidth < 132;
+        int typeWidth = stackTypes
+                ? formWidth : Math.max(1, (formWidth - 8) / 3);
         for (int index = 0; index < types.length; index++) {
             AuctionListingType type = types[index];
             AuctionListingType target = type;
+            int typeX = stackTypes
+                    ? x : x + index * (typeWidth + 4);
+            int typeY = stackTypes
+                    ? y + index * 18 : y;
             button(graphics, mouseX, mouseY,
-                    new MarketRectangle(x + index * (typeWidth + 4), y,
+                    new MarketRectangle(typeX, typeY,
                             typeWidth, 14),
                     listingTypeLabel(type),
                     createType != type,
                     () -> selectCreateType(target));
             if (createType == type) {
-                graphics.fill(x + index * (typeWidth + 4),
-                        y + 14, x + index * (typeWidth + 4) + typeWidth,
-                        y + 16, theme.accent());
+                graphics.fill(typeX, typeY + 14,
+                        typeX + typeWidth,
+                        typeY + 16, theme.accent());
             }
         }
-        y += 20;
+        y += stackTypes ? types.length * 18 + 2 : 20;
         createStartBidBox = ensureOverlayBox(createStartBidBox, true, 20);
         createBuyoutBox = ensureOverlayBox(createBuyoutBox, true, 20);
         if (createType != AuctionListingType.BUY_NOW) {
@@ -3154,8 +3173,13 @@ public final class MarketModuleScreen extends Screen
                     .getString();
             graphics.drawString(font, label, x, y + 4,
                     theme.textMuted(), false);
+            int fieldX = x + Math.min(
+                    Math.max(0, formWidth - 64),
+                    font.width(label) + 8);
             positionBox(createStartBidBox,
-                    x + Math.min(96, font.width(label) + 8), y + 1, 64);
+                    fieldX, y + 1,
+                    Math.max(1, Math.min(64,
+                            content.right() - padding - fieldX)));
             createStartBidBox.render(graphics, mouseX, mouseY, 0.0F);
             y += 18;
         }
@@ -3165,8 +3189,13 @@ public final class MarketModuleScreen extends Screen
                     .getString();
             graphics.drawString(font, label, x, y + 4,
                     theme.textMuted(), false);
+            int fieldX = x + Math.min(
+                    Math.max(0, formWidth - 64),
+                    font.width(label) + 8);
             positionBox(createBuyoutBox,
-                    x + Math.min(96, font.width(label) + 8), y + 1, 64);
+                    fieldX, y + 1,
+                    Math.max(1, Math.min(64,
+                            content.right() - padding - fieldX)));
             createBuyoutBox.render(graphics, mouseX, mouseY, 0.0F);
             y += 18;
         }
@@ -3175,7 +3204,9 @@ public final class MarketModuleScreen extends Screen
                 .getString();
         graphics.drawString(font, durationLabel, x, y + 4,
                 theme.textMuted(), false);
-        int durationX = x + Math.min(96, font.width(durationLabel) + 8);
+        int durationX = x + Math.min(
+                Math.max(0, formWidth - 22),
+                font.width(durationLabel) + 8);
         if (createType == AuctionListingType.BUY_NOW) {
             button(graphics, mouseX, mouseY,
                     new MarketRectangle(durationX, y, 22, 14),
@@ -3190,11 +3221,18 @@ public final class MarketModuleScreen extends Screen
             }
             durationX += 26;
         }
-        int presetWidth = Math.max(20, Math.min(36,
-                Math.max(1, content.right() - padding - durationX)
-                        / createDurationPresets.size() - 4));
+        int availablePresetWidth = Math.max(1,
+                content.right() - padding - durationX);
+        int visiblePresetCount = Math.max(1,
+                Math.min(createDurationPresets.size(),
+                        availablePresetWidth / 24));
+        int presetWidth = Math.max(1, Math.min(36,
+                availablePresetWidth / visiblePresetCount - 4));
         for (int index = 0; index < createDurationPresets.size();
              index++) {
+            if (index >= visiblePresetCount) {
+                break;
+            }
             long seconds = createDurationPresets.get(index);
             int presetX = durationX + index * (presetWidth + 4);
             button(graphics, mouseX, mouseY,

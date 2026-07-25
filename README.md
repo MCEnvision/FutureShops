@@ -21,7 +21,7 @@ Supported runtime:
 
 * Server shops with explicit free offers, money, barter, money plus barter, alternative payments, Sell to Shop, multi item bundles, validated savings, categories, search, mixed carts, and transaction history.
 * Player shop blocks with versioned offers, legacy listing migration, physical storage, free and paid acquisition, multiple barter components, alternative options, Sell to Shop input bundles, promotions, stock alerts, and owner settlement tools.
-* A guided four step offer editor opened through Edit, then New Offer, for money, free, barter, Sell Only, Buy and Sell, and bundles, with advanced settings available when needed.
+* A guided four step offer editor opened after item selection or through Edit, then New Offer, for money, free, barter, Sell Only, Buy and Sell, and bundles, with advanced settings available when needed.
 * New generated Server Shop catalogs include working free, Sell Only, and discounted bundle examples without replacing an existing `admin.json`.
 * Wallet balances, payments, leaderboards, deposits, withdrawals, ATM controls, and protected FutureShops currency.
 * Auction House listings, bids, buy now sales, watchlists, history, anti sniping rules, and exact item custody.
@@ -40,11 +40,15 @@ FutureShops currently assumes one authoritative server and world. It does not pr
 5. Start the server once to create the TOML files and product directories.
 6. Review module, economy, escrow, Auction House, and Bazaar settings before opening the server.
 
+The Bazaar and Auction House are disabled on a new installation. Enable either module in `futureshops-common.toml` after reviewing its rules. Existing configuration files keep their configured values.
+
 For 3.0 or 3.1 upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
 
 Marketplace screens opened while escrow is recovering refresh automatically when the runtime becomes ready. Reconnecting or reopening the screen should not be necessary.
 
 Interrupted normalized Server Shop offers recover from exact persisted evidence when the player logs in and through bounded background retries while the escrow runtime is ready. A retry never reconstructs a trade from current client state.
+
+Pending escrow money and exact item claims are delivered automatically while the beneficiary is online. A full inventory or temporary delivery failure leaves the durable claim available instead of discarding value.
 
 ## Usage
 

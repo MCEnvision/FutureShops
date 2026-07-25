@@ -334,7 +334,9 @@ public final class MarketClientNavigationCoordinator {
         MarketRoute activated = desired.withNonce(route);
         MarketNavigationState.Transition transition;
         switch (pending.request().action()) {
-            case TAB, DETAIL -> transition = navigation.navigate(activated);
+            case TAB -> transition =
+                    navigation.replaceWithinModule(activated);
+            case DETAIL -> transition = navigation.navigate(activated);
             case RETURN -> {
                 Optional<MarketRoute> previous = navigation.previous();
                 if (previous.isEmpty()

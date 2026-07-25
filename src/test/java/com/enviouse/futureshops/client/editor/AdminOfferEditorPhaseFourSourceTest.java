@@ -44,6 +44,18 @@ class AdminOfferEditorPhaseFourSourceTest {
     }
 
     @Test
+    void addingAListingOpensTheGuidedOfferBuilder()
+            throws IOException {
+        String shop = read("ShopMainScreen.java");
+        String picker = read("OfferEditorItemPickerScreen.java");
+
+        assertTrue(shop.contains(
+                "OfferEditorItemPickerScreen.forNewOffer"));
+        assertTrue(picker.contains(
+                "AdminOfferEditorScreen.create"));
+    }
+
+    @Test
     void everyComponentRoleSupportsDirectEditRemoveAndReorder()
             throws IOException {
         String source = read("AdminOfferEditorScreen.java");

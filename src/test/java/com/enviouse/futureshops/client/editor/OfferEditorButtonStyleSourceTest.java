@@ -70,11 +70,11 @@ class OfferEditorButtonStyleSourceTest {
             throws IOException {
         String source = readScreen("AdminOfferEditorScreen.java");
         assertTrue(source.contains(
-                "contentWidth >= fieldWidth + previewSize + 6"));
+                "fieldX + fieldWidth + previewSize + 6"));
         assertTrue(source.contains(
                 "previewY + previewSize + 4 <= footerTop()"));
         assertTrue(source.contains(
-                "int previewX = contentLeft + fieldWidth + 6;"));
+                "int previewX = fieldX + fieldWidth + 6;"));
         assertTrue(source.contains(
                 "ShopUiUtil.renderCard(graphics, previewX, previewY,"));
         assertFalse(source.contains(

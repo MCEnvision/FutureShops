@@ -19,6 +19,7 @@ import com.enviouse.futureshops.client.editor.OfferEditorDraft;
 import com.enviouse.futureshops.client.editor.OfferEditorSimpleMode;
 import com.enviouse.futureshops.client.editor.OfferEditorStaleReview;
 import com.enviouse.futureshops.client.editor.OfferEditorTemplates;
+import com.enviouse.futureshops.command.EconomyCommandUtil;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SAdminOfferSavePacket;
 import com.enviouse.futureshops.network.packets
@@ -98,6 +99,24 @@ public final class AdminOfferEditorScreen extends Screen
     public static AdminOfferEditorScreen create(Screen parent) {
         return new AdminOfferEditorScreen(
                 parent, blankListing(), true, null);
+    }
+
+    public static AdminOfferEditorScreen create(
+            Screen parent,
+            OfferItemComponent component,
+            String categoryId
+    ) {
+        ServerShopOfferListing base = withCategory(
+                blankListing(), categoryId);
+        ServerShopOfferListing listing = OfferEditorTemplates.apply(
+                base, OfferEditorTemplates.Template.MONEY,
+                Optional.of(java.util.Objects.requireNonNull(
+                        component, "component")));
+        AdminOfferEditorScreen editor = new AdminOfferEditorScreen(
+                parent, listing, true, null);
+        editor.templateChosen = true;
+        editor.simpleStep = SimpleStep.TRADE;
+        return editor;
     }
 
     public static AdminOfferEditorScreen createPlayerShop(
@@ -499,11 +518,13 @@ public final class AdminOfferEditorScreen extends Screen
             selectedAcquireIndex = moneyIndex;
             addSimpleTextField(
                     "acquireOptions." + moneyIndex + ".moneyCost",
-                    Long.toString(money.moneyCostMinorUnits()),
+                    ShopUiUtil.formatMinorUnits(
+                            money.moneyCostMinorUnits()),
                     simpleY(detailY), "price",
                     value -> {
                         selectedAcquireIndex = moneyIndex;
-                        updateAcquireMoney(parseLong(value, -1L));
+                        updateAcquireMoney(
+                                parseMoneyMinor(value, -1L));
                     });
             detailY += 44;
         }
@@ -513,11 +534,13 @@ public final class AdminOfferEditorScreen extends Screen
                     draft.candidate().sellOptions().get(0);
             addSimpleTextField(
                     "sellOptions.0.moneyPayout",
-                    Long.toString(sell.moneyPayoutMinorUnits()),
+                    ShopUiUtil.formatMinorUnits(
+                            sell.moneyPayoutMinorUnits()),
                     simpleY(detailY), "payout",
                     value -> {
                         selectedSellIndex = 0;
-                        updateSellPayout(parseLong(value, -1L));
+                        updateSellPayout(
+                                parseMoneyMinor(value, -1L));
                     });
             detailY += 44;
         }
@@ -1437,8 +1460,10 @@ public final class AdminOfferEditorScreen extends Screen
         if (selected.moneyCostPresent()) {
             addTextField("acquireOptions." + selectedAcquireIndex
                             + ".moneyCost",
-                    Long.toString(selected.moneyCostMinorUnits()), y + 62,
-                    value -> updateAcquireMoney(parseLong(value, -1L)));
+                    ShopUiUtil.formatMinorUnits(
+                            selected.moneyCostMinorUnits()), y + 62,
+                    value -> updateAcquireMoney(
+                            parseMoneyMinor(value, -1L)));
         }
         addTextField("acquireOptions." + selectedAcquireIndex
                         + ".outputMultiplier",
@@ -1661,9 +1686,11 @@ public final class AdminOfferEditorScreen extends Screen
         addTextField("sellOptions." + selectedSellIndex + ".label",
                 selected.label(), y + 34, this::updateSellLabel);
         addTextField("sellOptions." + selectedSellIndex + ".moneyPayout",
-                Long.toString(selected.moneyPayoutMinorUnits()),
+                ShopUiUtil.formatMinorUnits(
+                        selected.moneyPayoutMinorUnits()),
                 y + 62,
-                value -> updateSellPayout(parseLong(value, -1L)));
+                value -> updateSellPayout(
+                        parseMoneyMinor(value, -1L)));
         addTextField("sellOptions." + selectedSellIndex + ".capacity",
                 Long.toString(selected.capacity()), y + 90,
                 value -> updateSellCapacity(parseLong(value, -1L)));
@@ -2153,8 +2180,12 @@ public final class AdminOfferEditorScreen extends Screen
             Consumer<String> save
     ) {
         String registeredPath = registeredFieldPath(path);
-        int fieldWidth = Math.min(220, contentWidth);
-        EditBox field = new EditBox(font, contentLeft, y,
+        int labelWidth = advancedMode
+                ? advancedFieldLabelWidth() : 0;
+        int fieldX = contentLeft + labelWidth;
+        int fieldWidth = Math.max(1, Math.min(260,
+                contentWidth - labelWidth));
+        EditBox field = new EditBox(font, fieldX, y,
                 fieldWidth, 18,
                 Component.translatable(
                         OfferEditorControlRegistry.fieldLabelKey(
@@ -2164,7 +2195,8 @@ public final class AdminOfferEditorScreen extends Screen
         field.setTooltip(Tooltip.create(fieldHelp(registeredPath)));
         addRenderableWidget(field);
         bindings.add(new EditBinding(path, registeredPath, field, save,
-                numericField(registeredPath)));
+                numericField(registeredPath)
+                        && !moneyField(registeredPath)));
     }
 
     private void switchSection(OfferEditorDraft.Section section) {
@@ -2646,17 +2678,21 @@ public final class AdminOfferEditorScreen extends Screen
                     ShopColors.ACCENT_PRIMARY, false);
             if (draft.section() == OfferEditorDraft.Section.GENERAL) {
                 ServerShopOfferListing listing = draft.candidate();
-                int fieldWidth = Math.min(220, contentWidth);
+                int fieldX = contentLeft + advancedFieldLabelWidth();
+                int fieldWidth = Math.max(1, Math.min(260,
+                        contentWidth
+                                - advancedFieldLabelWidth()));
                 int previewSize = 24;
                 int previewY = sectionY(138);
                 if (!listing.iconItemId().isBlank()
-                        && contentWidth >= fieldWidth + previewSize + 6
+                        && fieldX + fieldWidth + previewSize + 6
+                        <= contentLeft + contentWidth
                         && previewY >= contentTop
                         && previewY + previewSize + 4 <= footerTop()) {
                     OfferItemComponent icon = new OfferItemComponent(
                             "icon", listing.iconItemId(), 1,
                             listing.iconNbt());
-                    int previewX = contentLeft + fieldWidth + 6;
+                    int previewX = fieldX + fieldWidth + 6;
                     ShopUiUtil.renderCard(graphics, previewX, previewY,
                             previewSize, previewSize);
                     renderComponentPreview(graphics, icon,
@@ -3122,15 +3158,20 @@ public final class AdminOfferEditorScreen extends Screen
             if (!field.visible) {
                 continue;
             }
+            Component label = simpleFieldLabels.getOrDefault(
+                    field,
+                    Component.translatable(
+                            OfferEditorControlRegistry.fieldLabelKey(
+                                    binding.registeredPath())));
             graphics.drawString(font,
-                    simpleFieldLabels.getOrDefault(
-                            field,
-                            Component.translatable(
-                                    OfferEditorControlRegistry
-                                            .fieldLabelKey(
-                                                    binding
-                                                            .registeredPath()))),
-                    field.getX(), field.getY() - 9,
+                    font.plainSubstrByWidth(label.getString(),
+                            advancedMode
+                                    ? Math.max(8,
+                                    advancedFieldLabelWidth() - 6)
+                                    : contentWidth),
+                    advancedMode ? contentLeft : field.getX(),
+                    advancedMode ? field.getY() + 5
+                            : field.getY() - 9,
                     ShopColors.TEXT_MUTED, false);
             List<com.enviouse.futureshops.catalog.offer
                     .OfferValidationIssue> issues =
@@ -3141,14 +3182,16 @@ public final class AdminOfferEditorScreen extends Screen
                         field.getWidth() + 2,
                         field.getHeight() + 2,
                         ShopColors.ERROR);
-                graphics.drawString(font,
-                        font.plainSubstrByWidth(
-                                validationMessage(issues.get(0))
-                                        .getString(),
-                                contentWidth),
-                        field.getX(),
-                        field.getY() + field.getHeight() + 1,
-                        ShopColors.ERROR, false);
+                if (!advancedMode) {
+                    graphics.drawString(font,
+                            font.plainSubstrByWidth(
+                                    validationMessage(issues.get(0))
+                                            .getString(),
+                                    contentWidth),
+                            field.getX(),
+                            field.getY() + field.getHeight() + 1,
+                            ShopColors.ERROR, false);
+                }
             }
             if (field.isFocused()) {
                 graphics.renderTooltip(font,
@@ -4856,12 +4899,44 @@ public final class AdminOfferEditorScreen extends Screen
                 current.schedule(), current.bundleComparisons());
     }
 
+    private static ServerShopOfferListing withCategory(
+            ServerShopOfferListing current,
+            String categoryId
+    ) {
+        String category = categoryId == null || categoryId.isBlank()
+                ? current.categoryId() : categoryId;
+        return copy(current, null, null, category,
+                null, null, null, null, null, null);
+    }
+
     private static long parseLong(String value, long invalid) {
         try {
             return Long.parseLong(value);
         } catch (NumberFormatException exception) {
             return invalid;
         }
+    }
+
+    private static long parseMoneyMinor(
+            String value,
+            long invalid
+    ) {
+        try {
+            return EconomyCommandUtil.parseAmountToMinorUnits(
+                    value, ShopClientState.getCurrencyDecimals());
+        } catch (IllegalArgumentException exception) {
+            return invalid;
+        }
+    }
+
+    private int advancedFieldLabelWidth() {
+        if (!advancedMode) {
+            return 0;
+        }
+        int desired = Math.min(190,
+                Math.max(92, contentWidth / 3));
+        return Math.max(0,
+                Math.min(desired, contentWidth - 48));
     }
 
     private static int parseInt(String value, int invalid) {
@@ -4969,6 +5044,11 @@ public final class AdminOfferEditorScreen extends Screen
                 || path.endsWith("startsAtEpoch")
                 || path.endsWith("endsAtEpoch")
                 || path.endsWith("expiresAtEpoch");
+    }
+
+    private static boolean moneyField(String path) {
+        return path.endsWith("moneyCost")
+                || path.endsWith("moneyPayout");
     }
 
     private static String registeredFieldPath(String path) {

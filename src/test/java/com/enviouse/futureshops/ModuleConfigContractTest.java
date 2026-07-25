@@ -23,6 +23,12 @@ class ModuleConfigContractTest {
         assertTrue(source.contains("modules.auction_house_enabled"));
         assertTrue(source.contains("modules.show_module_navigation"));
         assertTrue(source.contains("modules.default_module"));
+        assertTrue(source.contains(
+                "define(\"modules.bazaar_enabled\", false)"));
+        assertTrue(source.contains(
+                "define(\"modules.auction_house_enabled\", false)"));
+        assertTrue(source.contains(
+                "new ModuleSettings(false, false, true, \"shop\")"));
         assertTrue(source.contains("public record ModuleSettings"));
         assertTrue(source.contains("private static volatile ModuleSettings moduleSettings"));
         assertTrue(source.contains("event.getConfig().getSpec() != SPEC"));

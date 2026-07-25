@@ -11,8 +11,11 @@ import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.FileSystemException;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
@@ -543,16 +546,63 @@ public final class ServerShopOfferReplayLedger
 
     private static void forceDirectory(Path directory)
             throws IOException {
+        DirectoryForceResult result = forceDirectory(
+                directory, isWindowsPlatform(),
+                ServerShopOfferReplayLedger::nativeForceDirectory);
+        if (result == DirectoryForceResult
+                .UNSUPPORTED_PLATFORM_BEST_EFFORT
+                && DIRECTORY_FORCE_WARNING.compareAndSet(false, true)) {
+            LOGGER.warn(
+                    "Server shop replay directory force is unavailable on this platform");
+        }
+    }
+
+    static DirectoryForceResult forceDirectory(
+            Path directory,
+            boolean windowsPlatform,
+            DirectoryForceAction action
+    ) throws IOException {
+        if (!Files.isDirectory(
+                directory, LinkOption.NOFOLLOW_LINKS)) {
+            throw new NoSuchFileException(directory.toString());
+        }
+        try {
+            action.force(directory);
+            return DirectoryForceResult.FORCED;
+        } catch (UnsupportedOperationException exception) {
+            return DirectoryForceResult
+                    .UNSUPPORTED_PLATFORM_BEST_EFFORT;
+        } catch (FileSystemException exception) {
+            if (windowsPlatform) {
+                return DirectoryForceResult
+                        .UNSUPPORTED_PLATFORM_BEST_EFFORT;
+            }
+            throw exception;
+        }
+    }
+
+    private static void nativeForceDirectory(Path directory)
+            throws IOException {
         try (FileChannel channel = FileChannel.open(
                 directory, StandardOpenOption.READ,
                 LinkOption.NOFOLLOW_LINKS)) {
             channel.force(true);
-        } catch (UnsupportedOperationException exception) {
-            if (DIRECTORY_FORCE_WARNING.compareAndSet(false, true)) {
-                LOGGER.warn(
-                        "Server shop replay directory force is unavailable on this platform");
-            }
         }
+    }
+
+    private static boolean isWindowsPlatform() {
+        return "\\".equals(
+                FileSystems.getDefault().getSeparator());
+    }
+
+    enum DirectoryForceResult {
+        FORCED,
+        UNSUPPORTED_PLATFORM_BEST_EFFORT
+    }
+
+    @FunctionalInterface
+    interface DirectoryForceAction {
+        void force(Path directory) throws IOException;
     }
 
     private static byte[] sha256(byte[] value) {

@@ -18,11 +18,11 @@ public class Config {
 
     private static final ForgeConfigSpec.BooleanValue MODULES_BAZAAR_ENABLED = BUILDER
         .comment("Enable the Bazaar module. Disabling it preserves existing orders, custody, refunds, and claims.")
-        .define("modules.bazaar_enabled", true);
+        .define("modules.bazaar_enabled", false);
 
     private static final ForgeConfigSpec.BooleanValue MODULES_AUCTION_HOUSE_ENABLED = BUILDER
         .comment("Enable the Auction House module. Disabling it preserves existing listings, bids, custody, refunds, and claims.")
-        .define("modules.auction_house_enabled", true);
+        .define("modules.auction_house_enabled", false);
 
     private static final ForgeConfigSpec.BooleanValue MODULES_SHOW_MODULE_NAVIGATION = BUILDER
         .comment("Show navigation between Shop, Bazaar, and Auction House when those modules are available.")
@@ -326,7 +326,7 @@ public class Config {
         }
 
         public static ModuleSettings defaults() {
-            return new ModuleSettings(true, true, true, "shop");
+            return new ModuleSettings(false, false, true, "shop");
         }
 
         public String effectiveDefaultModule() {

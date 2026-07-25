@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 public final class OfferEditorItemPickerScreen extends Screen
         implements ShopScreenMarker {
@@ -35,6 +36,7 @@ public final class OfferEditorItemPickerScreen extends Screen
     private final Source source;
     private final Component destination;
     private final Consumer<OfferItemComponent> selection;
+    private final Function<OfferItemComponent, Screen> completionScreen;
     private List<Entry> allEntries = List.of();
     private List<Entry> filteredEntries = List.of();
     private EditBox search;
@@ -57,6 +59,31 @@ public final class OfferEditorItemPickerScreen extends Screen
             Component destination,
             Consumer<OfferItemComponent> selection
     ) {
+        this(parent, source, destination, selection, null);
+    }
+
+    public static OfferEditorItemPickerScreen forNewOffer(
+            Screen parent,
+            String categoryId
+    ) {
+        return new OfferEditorItemPickerScreen(
+                parent,
+                Source.REGISTRY,
+                Component.translatable(
+                        "gui.futureshops.offer_editor.picker.destination.output"),
+                ignored -> {
+                },
+                component -> AdminOfferEditorScreen.create(
+                        parent, component, categoryId));
+    }
+
+    private OfferEditorItemPickerScreen(
+            Screen parent,
+            Source source,
+            Component destination,
+            Consumer<OfferItemComponent> selection,
+            Function<OfferItemComponent, Screen> completionScreen
+    ) {
         super(Component.translatable(
                 source == Source.INVENTORY
                         ? "gui.futureshops.offer_editor.picker.inventory_title"
@@ -67,6 +94,7 @@ public final class OfferEditorItemPickerScreen extends Screen
                 destination, "destination");
         this.selection = Objects.requireNonNull(
                 selection, "selection");
+        this.completionScreen = completionScreen;
     }
 
     @Override
@@ -346,9 +374,11 @@ public final class OfferEditorItemPickerScreen extends Screen
             return;
         }
         Entry entry = filteredEntries.get(selectedIndex);
-        selection.accept(new OfferItemComponent(
-                "", entry.itemId(), 1, entry.exactNbt()));
-        minecraft.setScreen(parent);
+        OfferItemComponent component = new OfferItemComponent(
+                "", entry.itemId(), 1, entry.exactNbt());
+        selection.accept(component);
+        minecraft.setScreen(completionScreen == null
+                ? parent : completionScreen.apply(component));
     }
 
     @Override

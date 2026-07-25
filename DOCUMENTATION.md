@@ -107,6 +107,8 @@ If escrow remains in recovery or maintenance, run `/marketadmin status` and insp
 
 A client market route contains a module, view, route nonce, search state, category, sort order, page, scroll offset, and optional selection. The navigation coordinator tracks history and response families. Opening a module or local tab sends a request to the server. The server validates the current session, permission, configured module toggle, lifecycle state, escrow readiness, ownership requirements, and route availability before returning an open screen packet.
 
+Top level tabs replace the current route within the module. Detail pages retain one return route. Escape therefore closes a top level market screen in one action and returns from a detail page in one action without accumulating a tab history stack.
+
 Page queries and mutations carry request UUIDs. Responses are accepted only for the active route and expected response family. Economic retries reuse the original request UUID so the server can replay a stored result instead of applying a second transaction.
 
 The Shop, Bazaar, and Auction House share a responsive shell. Shop data supplies a safe display balance even while escrow migration or recovery is completing. Market capability and profile paths must use the same display balance boundary. Live economy provider calls are reserved for ready, authoritative operations.
@@ -122,6 +124,8 @@ Escrow owns all durable value movement. Its main invariants are:
 5. Delivery failure creates a durable claim.
 6. Recovery can resume or compensate interrupted operations without charging twice.
 7. Persistent state from a newer or unverifiable lineage fails closed.
+
+When `claims.automatic_delivery` is enabled, the server attempts bounded delivery for pending public money claims and exact item claims while the owner is online. Money goes to the wallet. Items go to player inventory. Capacity failure leaves the remaining claim pending. Automatic retries use stable request identities derived from the claim and remaining amount, so partial money delivery can continue without duplicating an earlier settlement.
 
 Persistent data spans normal world saved data and the FutureShops escrow directory. Checkpoints, journal segments, ledger state, custody, replay records, claims, market contracts, player data, and configuration must be backed up as one consistent generation.
 
@@ -150,6 +154,8 @@ Auction listings move the exact item from player inventory into custody before b
 
 Bids reserve money immediately. Outbid money becomes a claim when direct delivery is unavailable. Buy now settlement transfers the item and proceeds through escrow. Expiry returns unsold custody or settles the accepted winner. Anti sniping, fees, taxes, limits, and duration rules are snapshotted into contracts where required.
 
+Cancellation creates the exact item return claim in the same durable commit that closes the listing. Automatic claim delivery then returns the item immediately when inventory capacity permits. If capacity is unavailable, the item remains visible in Claims and does not require administrator review.
+
 ## Bazaar
 
 The Bazaar supports an administrator JSON catalog or player selected registered commodities. Admin definitions live in `config/futureshops/bazaar/products/` and are validated as one atomic catalog.
@@ -176,7 +182,7 @@ Interrupted normalized Server Shop single and cart requests are recovered from t
 
 Normalized Server Shop and Player Shop settlement preserves the public `ShopTransactionEvent` and `BarterTradeEvent` integration points when `events.transaction_events` is enabled. Pre events run only while creating a new prepared request. Cancellation prevents preparation. A positive trusted money leg may be changed only to another positive value, explicit free remains zero, and item only barter retains an absent money leg. Item and compound acquire options report every required item component through the barter event. The legacy event fields expose the first output or input item for compatibility; exact bundle and option identity remains in durable evidence and transaction history. Post events run after the first durable outer commit and do not repeat during request replay. Transaction history uses idempotency markers per component and records every exact bundle output, barter input, Sell to Shop input, selected option, and validated bundle comparison revision.
 
-Edit mode keeps New Offer visible beside the fast Add Items action in every filter. New Offer opens a guided Basics, Items, Trade, and Review flow. Basics chooses the offer template and visible metadata. Items uses held, inventory, and registry pickers for either visitor outputs or Sell Only inputs. Adding several outputs automatically creates a bundle. Trade switches between Money Only, Free, Barter Only, Money or Barter, Money and Barter, Sell Only, and Buy and Sell without exposing the normalized schema. Review uses the visitor projection and can match bundle outputs to standalone money offers for verified savings. Advanced Settings retains limits, schedules, permissions, exact NBT, stock controls, arbitrary option structures, and manual bundle comparisons.
+Edit mode keeps New Offer and Add Items visible in every filter. Add Items first opens the searchable item selector, then opens the same guided Basics, Items, Trade, and Review flow with the chosen item already filled in. Basics chooses the offer template and visible metadata. Items uses held, inventory, and registry pickers for either visitor outputs or Sell Only inputs. Adding several outputs automatically creates a bundle. Trade switches between Money Only, Free, Barter Only, Money or Barter, Money and Barter, Sell Only, and Buy and Sell without exposing the normalized schema. Price and payout fields use displayed decimal amounts, so `1.00` means `1.00`. Review uses the visitor projection and can match bundle outputs to standalone money offers for verified savings. Advanced Settings retains limits, schedules, permissions, exact NBT, stock controls, arbitrary option structures, and manual bundle comparisons. Advanced field labels occupy a separate column and validation remains in the help surface so fields do not overlap.
 
 Every editor and picker action uses the FutureShops Nocturne button renderer while retaining standard focus, keyboard activation, narration, tooltips, and disabled state behavior. Fields reserve a dedicated label row and scrolling clips content above the persistent footer. Apply waits for the matching successful acknowledgement and stays open. Save and Close waits for the same acknowledgement before returning. Stale revisions must be reviewed or reloaded and cannot silently overwrite a newer listing. Catalog saves validate the complete candidate, write a temporary sibling, preserve a bounded backup, atomically replace the target when supported, and restore the last valid file if reload fails.
 
@@ -280,6 +286,8 @@ Read the first validation error in the server log. The loader rejects the whole 
 ### Escrow enters maintenance
 
 Preserve the world and logs. Read the first causal recovery error. Do not delete state files. Restore one complete consistent backup if lineage or schema validation cannot be resolved in place.
+
+On Windows, directory synchronization is not exposed through the Java file channel API. FutureShops treats only that platform specific directory operation as best effort after each replay file has already been written, forced, and atomically moved. A Windows `AccessDeniedException` for the `offer_replay` directory should no longer leave escrow in recovery. File write, file force, atomic replacement, and non Windows directory synchronization failures still fail closed.
 
 ## Release procedure
 

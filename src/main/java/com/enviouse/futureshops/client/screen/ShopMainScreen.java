@@ -332,7 +332,9 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
             ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY, rowX, rowY, addW, 16,
                     Component.translatable("gui.futureshops.admin_edit.add_items"),
                     ShopUiUtil.ButtonStyle.PRIMARY, true,
-                    () -> this.minecraft.setScreen(new AdminItemPickerScreen(this, activeCategoryId(), false)));
+                    () -> this.minecraft.setScreen(
+                            OfferEditorItemPickerScreen.forNewOffer(
+                                    this, activeCategoryId())));
             if (tradeFilter == 0) {
                 ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                         rowX + addW + ShopUiUtil.PAD_XS, rowY, addW, 16,

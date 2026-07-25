@@ -27,6 +27,10 @@ All money values are integer minor units: with the default two `economy.currency
 `100` means `1.00` and `100000000000` means `1,000,000,000.00`. Percentage rules use basis
 points: `250` basis points is `2.50%`.
 
+This minor unit rule applies to TOML, JSON, packets, and persistent data. Player and administrator
+screen fields use displayed decimal amounts. In those screens, entering `1.00` means `1.00`; users
+do not enter `100` for the same amount.
+
 ## Reload behavior
 
 All five files hot-reload through Forge's config watcher. What a reload can change differs by kind
@@ -53,9 +57,9 @@ valid settings snapshot stays active and the server log reports the rejected fie
 ```toml
 [modules]
 	# Enable the Bazaar. Disabling preserves existing orders, custody, refunds, and claims.
-	bazaar_enabled = true
+	bazaar_enabled = false
 	# Enable the Auction House. Disabling preserves existing listings, bids, custody, and claims.
-	auction_house_enabled = true
+	auction_house_enabled = false
 	# Show the Shop / Bazaar / AH switcher chips in the shared market header.
 	show_module_navigation = true
 	# Module opened by shared market navigation: "shop", "bazaar", or "auction_house".
