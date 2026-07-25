@@ -127,13 +127,21 @@ class ModuleDisableDrillTest {
         assertTrue(MarketModuleAvailability.CANCEL_AND_REFUND
                 .allowsOwnershipCancellationRoutes());
 
-        // A config-disabled module degrades to FROZEN, never to invisible.
+        // A configuration disabled module is hidden without claims.
         MarketControlState state = MarketControlState.initial(100L);
-        assertEquals(MarketModuleAvailability.FROZEN,
+        assertEquals(MarketModuleAvailability.HIDDEN,
                 MarketModuleAccessPolicy.capability(MarketModule.BAZAAR,
                         false, true,
                         Optional.of(state.module(
                                 MarketControlModule.BAZAAR)), 0L));
+        MarketModuleAccessPolicy.PageAccess hiddenClaims =
+                MarketModuleAccessPolicy.pageAccess(
+                        MarketModule.BAZAAR, "claims", false, true,
+                        Optional.of(state.module(
+                                MarketControlModule.BAZAAR)));
+        assertTrue(hiddenClaims.allowed());
+        assertEquals(MarketModuleAvailability.CLAIMS_ONLY,
+                hiddenClaims.availability());
 
         // The claims page stays reachable under a frozen control.
         MarketControlApplyResult frozen = transition(state, id(30),

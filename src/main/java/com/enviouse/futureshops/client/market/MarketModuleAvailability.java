@@ -10,7 +10,8 @@ public enum MarketModuleAvailability {
     CANCEL_AND_REFUND;
 
     public boolean visible() {
-        return this != HIDDEN;
+        return this == ENABLED || this == FROZEN
+                || this == DRAINING || this == CANCEL_AND_REFUND;
     }
 
     public boolean allowsBrowse() {

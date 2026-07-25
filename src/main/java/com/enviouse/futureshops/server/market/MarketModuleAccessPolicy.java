@@ -31,6 +31,11 @@ public final class MarketModuleAccessPolicy {
             throw new IllegalArgumentException(
                     "Market module claim count is invalid");
         }
+        if (!configuredEnabled) {
+            return openClaims > 0L
+                    ? MarketModuleAvailability.CLAIMS_ONLY
+                    : MarketModuleAvailability.HIDDEN;
+        }
         if (persisted.isEmpty()
                 || module != MarketModule.SHOP && !escrowReady) {
             return fallback(openClaims);
@@ -50,6 +55,13 @@ public final class MarketModuleAccessPolicy {
         String requestedView = Objects.requireNonNull(view, "view");
         Optional<MarketModuleControl> persisted = Objects.requireNonNull(
                 control, "control");
+        if (!configuredEnabled) {
+            return "claims".equals(requestedView)
+                    ? PageAccess.allowed(
+                    MarketModuleAvailability.CLAIMS_ONLY)
+                    : PageAccess.denied(MarketModuleAvailability.HIDDEN,
+                    "MODULE_DISABLED");
+        }
         if ("claims".equals(requestedView)
                 || MarketRoute.isDetailView(module, requestedView)) {
             MarketModuleAvailability availability = persisted.isEmpty()
@@ -162,13 +174,11 @@ public final class MarketModuleAccessPolicy {
             boolean configuredEnabled,
             MarketModuleStatus status
     ) {
-        MarketModuleStatus persisted = Objects.requireNonNull(
-                status, "status");
-        if (!configuredEnabled
-                && persisted == MarketModuleStatus.ENABLED) {
-            return MarketModuleStatus.FROZEN;
+        if (!configuredEnabled) {
+            throw new IllegalArgumentException(
+                    "Disabled module status must not be projected");
         }
-        return persisted;
+        return Objects.requireNonNull(status, "status");
     }
 
     private static MarketModuleAvailability availability(

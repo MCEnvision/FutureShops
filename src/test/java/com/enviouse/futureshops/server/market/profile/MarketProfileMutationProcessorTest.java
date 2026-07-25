@@ -154,7 +154,7 @@ class MarketProfileMutationProcessorTest {
     }
 
     @Test
-    void browseMutationsRequireAccessButFrozenPresentationIsAllowed() {
+    void browseMutationsRequireModuleAccess() {
         Harness unavailable = harness(MarketModule.BAZAAR, "products");
         MarketProfileMutationCommand denied = command(unavailable, 0L,
                 new MarketProfileMutation.BazaarFavorite(
@@ -184,17 +184,19 @@ class MarketProfileMutationProcessorTest {
                         .MODULE_CONTROL_UNAVAILABLE,
                 disabled.resultCode());
 
-        Harness frozen = harness(MarketModule.BAZAAR, "products");
-        MarketProfileMutationResult allowed =
-                frozen.processor.process(frozen.player,
-                        command(frozen, 0L,
+        Harness disabledConfiguration =
+                harness(MarketModule.BAZAAR, "products");
+        MarketProfileMutationResult configurationDenied =
+                disabledConfiguration.processor.process(
+                        disabledConfiguration.player,
+                        command(disabledConfiguration, 0L,
                                 new MarketProfileMutation
                                         .BazaarFavorite(PRODUCT, true)),
-                        NOW, frozen.profiles, ALL_TARGETS,
+                        NOW, disabledConfiguration.profiles, ALL_TARGETS,
                         access(MarketModule.BAZAAR, false, true));
-        assertEquals(MarketProfileMutationResultCode.SUCCESS,
-                allowed.resultCode());
-        assertEquals(1L, allowed.profileRevision());
+        assertEquals(MarketProfileMutationResultCode.MODULE_DISABLED,
+                configurationDenied.resultCode());
+        assertEquals(0L, configurationDenied.profileRevision());
     }
 
     @Test

@@ -94,6 +94,19 @@ public final class EscrowCashDepositService {
                     identity.amountMinorUnits()));
         }
         EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
+        if (runtime != null && runtime.isReady()) {
+            evidence = attemptAutomaticRecovery(runtime, player, evidence);
+            if (evidence.corrupt()) {
+                return Optional.of(new DepositRecovery(
+                        identity.requestId(), identity.transactionId(),
+                        RecoveryStatus.MANUAL_REVIEW,
+                        identity.amountMinorUnits()));
+            }
+            if (evidence.identity().isEmpty()) {
+                return Optional.empty();
+            }
+            identity = evidence.identity().orElseThrow();
+        }
         RecoveryStatus status = RecoveryStatus.RECOVERY_PENDING;
         if (runtime != null) {
             Optional<EscrowTransaction> transaction =
@@ -433,6 +446,18 @@ public final class EscrowCashDepositService {
         if (activeEvidence.corrupt()) {
             return failure(Status.ESCROW_UNAVAILABLE, request,
                     Optional.empty(), Optional.empty());
+        }
+        if (activeEvidence.identity().isPresent()) {
+            RecoveryIdentity identity =
+                    activeEvidence.identity().orElseThrow();
+            if (!identity.requestId().equals(request.requestId())) {
+                activeEvidence = attemptAutomaticRecovery(
+                        runtime, player, activeEvidence);
+                if (activeEvidence.corrupt()) {
+                    return failure(Status.ESCROW_UNAVAILABLE, request,
+                            Optional.empty(), Optional.empty());
+                }
+            }
         }
         if (activeEvidence.identity().isPresent()) {
             return failure(Status.RECOVERY_REQUIRED, request,
@@ -1177,6 +1202,47 @@ public final class EscrowCashDepositService {
             return false;
         }
         return false;
+    }
+
+    private static ActiveEvidence attemptAutomaticRecovery(
+            EscrowRuntimeService runtime,
+            ServerPlayer player,
+            ActiveEvidence evidence
+    ) {
+        Objects.requireNonNull(runtime, "runtime");
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(evidence, "evidence");
+        if (!runtime.isReady() || evidence.corrupt()
+                || evidence.identity().isEmpty()) {
+            return evidence;
+        }
+        RecoveryIdentity identity = evidence.identity().orElseThrow();
+        if (identity.depositMode() != CashDepositMode.PUBLIC_WALLET
+                || !transactionIdForRequest(
+                player.getUUID(), identity.requestId())
+                .equals(identity.transactionId())) {
+            return ActiveEvidence.corruptEvidence();
+        }
+        Optional<EscrowTransaction> transaction =
+                runtime.transaction(identity.transactionId());
+        boolean queued;
+        if (transaction.isEmpty()) {
+            queued = enqueueIntentRecovery(
+                    runtime, player, evidence, identity.transactionId());
+        } else {
+            EscrowTransaction stored = transaction.orElseThrow();
+            if (!matchesPublicRecovery(stored, player.getUUID(),
+                    identity.requestId(), identity.transactionId())) {
+                return ActiveEvidence.corruptEvidence();
+            }
+            queued = stored.state() != EscrowState.MANUAL_REVIEW
+                    && enqueueTransactionRecovery(
+                    runtime, stored, player.getUUID());
+        }
+        if (queued) {
+            recoverBounded(runtime);
+        }
+        return inspectActiveEvidence(player);
     }
 
     private static Optional<DepositResult> terminalCleanupBlock(

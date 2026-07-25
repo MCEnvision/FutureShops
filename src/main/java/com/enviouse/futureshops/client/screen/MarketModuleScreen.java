@@ -100,6 +100,7 @@ public final class MarketModuleScreen extends Screen
     private static final int PLAYER_MAIN_INVENTORY_SLOTS = 36;
     private static final long DEFAULT_CREATE_DURATION_SECONDS = 86_400L;
     private static final long CAPABILITY_RETRY_INTERVAL_MILLIS = 1_000L;
+    private static final long CAPABILITY_REFRESH_INTERVAL_MILLIS = 5_000L;
 
     private final S2COpenMarketModulePacket packet;
     private final MarketModule module;
@@ -310,9 +311,11 @@ public final class MarketModuleScreen extends Screen
             // an explicit same-request Retry and a give-up ✕ instead of a fresh send.
             showActionStatus(MarketActionFeedback.timeoutMessage(), false);
         }
-        if ((capabilities == null || !capabilities.escrowReady())
-                && now - lastCapabilityRequestAtMillis
-                >= CAPABILITY_RETRY_INTERVAL_MILLIS) {
+        long capabilityInterval = capabilities == null
+                || !capabilities.escrowReady()
+                ? CAPABILITY_RETRY_INTERVAL_MILLIS
+                : CAPABILITY_REFRESH_INTERVAL_MILLIS;
+        if (now - lastCapabilityRequestAtMillis >= capabilityInterval) {
             requestCapabilities();
         }
         if (!normalizedSearch().equals(sentSearch)

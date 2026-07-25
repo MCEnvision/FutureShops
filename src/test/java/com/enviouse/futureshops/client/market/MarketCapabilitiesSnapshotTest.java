@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MarketCapabilitiesSnapshotTest {
     @Test
-    void disabledModuleWithClaimsBecomesClaimsOnlyAndVisible() {
+    void disabledModuleWithClaimsKeepsClaimsWithoutNavigation() {
         MarketModuleCapability capability = new MarketModuleCapability(
             MarketModule.AUCTION_HOUSE,
             MarketModuleAvailability.CLAIMS_ONLY,
@@ -22,9 +22,24 @@ class MarketCapabilitiesSnapshotTest {
             4L
         );
 
-        assertTrue(capability.availability().visible());
+        assertFalse(capability.availability().visible());
         assertTrue(capability.canOpenView("claims"));
         assertFalse(capability.canOpenView("browse"));
+    }
+
+    @Test
+    void hiddenClaimsOnlyDefaultFallsBackToShop() {
+        MarketModuleCapability shop = capability(
+                MarketModule.SHOP, MarketModuleAvailability.ENABLED, 0L);
+        MarketModuleCapability bazaar = capability(
+                MarketModule.BAZAAR,
+                MarketModuleAvailability.CLAIMS_ONLY, 2L);
+        MarketCapabilitiesSnapshot snapshot =
+                new MarketCapabilitiesSnapshot(
+                        UUID.randomUUID(), 8L, true,
+                        MarketModule.BAZAAR, List.of(shop, bazaar));
+
+        assertEquals(MarketModule.SHOP, snapshot.defaultModule());
     }
 
     @Test

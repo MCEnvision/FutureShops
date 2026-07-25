@@ -48,7 +48,7 @@ class MarketCapabilityProjectionServiceTest {
                 .get(MarketModule.BAZAAR).openClaims());
         assertEquals(1L, snapshot.byModule()
                 .get(MarketModule.SHOP).openClaims());
-        assertEquals(MarketModuleAvailability.FROZEN,
+        assertEquals(MarketModuleAvailability.CLAIMS_ONLY,
                 snapshot.byModule().get(MarketModule.AUCTION_HOUSE)
                         .availability());
     }
@@ -240,7 +240,7 @@ class MarketCapabilityProjectionServiceTest {
     }
 
     @Test
-    void disabledToggleFreezesAnOtherwiseEnabledModule() {
+    void disabledToggleHidesAnOtherwiseEnabledModule() {
         MarketCapabilitiesSnapshot snapshot =
                 MarketCapabilityProjectionService.project(
                         projection(UUID.randomUUID(), false, true,
@@ -249,9 +249,38 @@ class MarketCapabilityProjectionServiceTest {
                                 "auction.", 0L, "bazaar.", 0L)),
                         new MarketCapabilityRevisionTracker(8));
 
-        assertEquals(MarketModuleAvailability.FROZEN,
+        assertEquals(MarketModuleAvailability.HIDDEN,
                 snapshot.byModule().get(MarketModule.BAZAAR)
                         .availability());
+        assertFalse(snapshot.byModule().get(MarketModule.BAZAAR)
+                .availability().visible());
+    }
+
+    @Test
+    void enabledToggleExposesModuleAndAdvancesRevision() {
+        UUID owner = UUID.randomUUID();
+        MarketCapabilityRevisionTracker revisions =
+                new MarketCapabilityRevisionTracker(8);
+        OpenClaimSourceCounts claims = new OpenClaimSourceCounts(
+                0L, Map.of("auction.", 0L, "bazaar.", 0L));
+        MarketCapabilitiesSnapshot disabled =
+                MarketCapabilityProjectionService.project(
+                        projection(owner, false, true, true),
+                        claims, revisions);
+        MarketCapabilitiesSnapshot enabled =
+                MarketCapabilityProjectionService.project(
+                        projection(owner, true, true, true),
+                        claims, revisions);
+
+        assertEquals(MarketModuleAvailability.HIDDEN,
+                disabled.byModule().get(MarketModule.BAZAAR)
+                        .availability());
+        assertEquals(MarketModuleAvailability.ENABLED,
+                enabled.byModule().get(MarketModule.BAZAAR)
+                        .availability());
+        assertTrue(enabled.byModule().get(MarketModule.BAZAAR)
+                .availability().visible());
+        assertTrue(enabled.revision() > disabled.revision());
     }
 
     private static MarketCapabilityProjectionService.Projection projection(

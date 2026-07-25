@@ -65,7 +65,7 @@ class MarketCapabilityProjectorTest {
         assertEquals(MarketModuleAvailability.CLAIMS_ONLY,
                 snapshot.byModule().get(MarketModule.AUCTION_HOUSE)
                         .availability());
-        assertEquals(MarketModule.AUCTION_HOUSE,
+        assertEquals(MarketModule.SHOP,
                 snapshot.defaultModule());
         assertFalse(snapshot.escrowReady());
     }

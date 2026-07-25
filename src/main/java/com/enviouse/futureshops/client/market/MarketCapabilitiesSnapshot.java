@@ -63,11 +63,11 @@ public record MarketCapabilitiesSnapshot(
         }
         MarketModuleCapability defaultCapability = unique.get(defaultModule);
         if (defaultCapability == null
-                || !defaultCapability.availability().allowsBrowse()
-                && !(defaultCapability.availability().allowsClaims()
-                && defaultCapability.openClaims() > 0L)) {
+                || !defaultCapability.availability().visible()
+                || !defaultCapability.availability().allowsBrowse()) {
             defaultModule = unique.values().stream()
-                .filter(capability -> capability.availability().allowsBrowse())
+                .filter(capability -> capability.availability().visible()
+                        && capability.availability().allowsBrowse())
                 .map(MarketModuleCapability::module)
                 .findFirst()
                 .orElseGet(() -> unique.values().stream()

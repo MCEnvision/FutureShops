@@ -12,6 +12,11 @@ import com.enviouse.futureshops.catalog.offer.OfferSchedule;
 import com.enviouse.futureshops.catalog.offer.OfferStockPolicy;
 import com.enviouse.futureshops.catalog.offer.ServerShopOfferListing;
 import com.enviouse.futureshops.catalog.offer.ServerShopOfferRevision;
+import com.enviouse.futureshops.init.ModItems;
+import com.enviouse.futureshops.server.escrow.runtime.AtmAccessSnapshot;
+import com.enviouse.futureshops.server.escrow.runtime.AtmWithdrawalOutcome;
+import com.enviouse.futureshops.server.escrow.runtime.EscrowAtmWithdrawalService;
+import com.enviouse.futureshops.server.escrow.runtime.EscrowCashDepositService;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeManager;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
 import com.enviouse.futureshops.server.escrow.runtime.ServerShopOfferCartService;
@@ -41,6 +46,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.UUID;
 
 @GameTestHolder("futureshops")
@@ -134,6 +140,80 @@ public final class ServerShopOfferGameTests {
             helper.assertTrue(player.getInventory().countItem(Items.APPLE)
                             == 1,
                     "Changed replay mutated the inventory");
+            helper.succeed();
+        } finally {
+            disconnect(helper, connected);
+        }
+    }
+
+    @GameTest(
+            templateNamespace = "minecraft",
+            template = "bastion/mobs/empty",
+            batch = BATCH,
+            timeoutTicks = 200
+    )
+    public static void connectedPlayerCanWithdrawAndDepositProtectedCash(
+            GameTestHelper helper
+    ) {
+        ConnectedPlayer connected = connectPlayer(helper, "atm_multiplayer");
+        try {
+            ServerPlayer player = connected.player();
+            AtmAccessSnapshot before =
+                    EscrowAtmWithdrawalService.access(player);
+            helper.assertTrue(before.serviceAvailable(),
+                    "ATM must be available to a connected player");
+
+            List<Integer> counts = new ArrayList<>();
+            for (int index = 0;
+                 index < before.catalog().denominations().size();
+                 index++) {
+                counts.add(0);
+            }
+            counts.set(0, 1);
+            long amount = before.catalog().denominations().get(0)
+                    .valueMinorUnits();
+            AtmWithdrawalOutcome withdrawal =
+                    EscrowAtmWithdrawalService.withdraw(
+                            player, UUID.randomUUID(),
+                            before.catalog().signature(), counts);
+            helper.assertTrue(withdrawal.status().success(),
+                    "ATM withdrawal must succeed for a connected player");
+            helper.assertTrue(
+                    player.getInventory().countItem(
+                            ModItems.MONEY_ITEM.get()) == 1,
+                    "ATM withdrawal must deliver one protected bill");
+
+            EscrowCashDepositService.DepositRequest request =
+                    EscrowCashDepositService.requestForCurrentState(
+                            player,
+                            EscrowCashDepositService.Source.INVENTORY,
+                            OptionalLong.of(amount));
+            EscrowCashDepositService.DepositResult deposit =
+                    EscrowCashDepositService.deposit(player, request);
+            helper.assertTrue(
+                    deposit.status()
+                            == EscrowCashDepositService.Status.SUCCESS,
+                    "ATM deposit must succeed for a connected player");
+            helper.assertTrue(deposit.itemsConsumed() == 1,
+                    "ATM deposit must consume the protected bill");
+            helper.assertTrue(deposit.depositedMinorUnits() == amount,
+                    "ATM deposit must credit the exact protected value");
+            helper.assertTrue(
+                    player.getInventory().countItem(
+                            ModItems.MONEY_ITEM.get()) == 0,
+                    "ATM deposit must remove the deposited bill");
+
+            AtmAccessSnapshot after =
+                    EscrowAtmWithdrawalService.access(player);
+            helper.assertTrue(after.serviceAvailable(),
+                    "ATM must remain available after deposit");
+            helper.assertTrue(after.balanceMinorUnits()
+                            == before.balanceMinorUnits(),
+                    "ATM balance must return to its original value");
+            helper.assertTrue(
+                    EscrowCashDepositService.recoverySnapshot(player)
+                            .isEmpty(),
+                    "ATM deposit must leave no recovery evidence");
             helper.succeed();
         } finally {
             disconnect(helper, connected);

@@ -40,7 +40,7 @@ FutureShops currently assumes one authoritative server and world. It does not pr
 5. Start the server once to create the TOML files and product directories.
 6. Review module, economy, escrow, Auction House, and Bazaar settings before opening the server.
 
-The Bazaar and Auction House are disabled on a new installation. Enable either module in `futureshops-common.toml` after reviewing its rules. Existing configuration files keep their configured values.
+The Bazaar and Auction House are disabled on a new installation. Enable either module in `futureshops-common.toml` after reviewing its rules. Existing configuration files keep their configured values. Disabled modules are omitted from the marketplace header. An accepted server configuration change appears on an open marketplace screen within five seconds without requiring a reconnect.
 
 For 3.0 or 3.1 upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
 
@@ -49,6 +49,8 @@ Marketplace screens opened while escrow is recovering refresh automatically when
 Interrupted normalized Server Shop offers recover from exact persisted evidence when the player logs in and through bounded background retries while the escrow runtime is ready. A retry never reconstructs a trade from current client state.
 
 Pending escrow money and exact item claims are delivered automatically while the beneficiary is online. A full inventory or temporary delivery failure leaves the durable claim available instead of discarding value.
+
+Opening the ATM and starting a new deposit both attempt bounded automatic reconciliation of safe pending deposit evidence. This behavior is server authoritative and identical for singleplayer and connected dedicated server players. Conflicting or corrupt evidence remains protected for administrator inspection.
 
 ## Usage
 

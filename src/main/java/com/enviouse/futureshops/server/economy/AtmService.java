@@ -16,8 +16,10 @@ import com.enviouse.futureshops.server.escrow.runtime.EscrowAtmWithdrawalService
 import com.enviouse.futureshops.server.escrow.runtime.EscrowCashDepositService;
 import com.enviouse.futureshops.server.security.ServerRequestAction;
 import com.enviouse.futureshops.server.security.ServerRequestSecurityManager;
+import com.mojang.logging.LogUtils;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.network.chat.Component;
+import org.slf4j.Logger;
 
 import java.util.List;
 import java.util.UUID;
@@ -26,6 +28,8 @@ import java.util.OptionalLong;
 import java.util.function.Supplier;
 
 public final class AtmService {
+    private static final Logger LOGGER = LogUtils.getLogger();
+
     private AtmService() {
     }
 
@@ -45,6 +49,13 @@ public final class AtmService {
             ServerPlayer player,
             boolean openScreen
     ) {
+        Optional<S2CAtmDataPacket.DepositRecoverySummary> recovery =
+                EscrowCashDepositService.recoverySnapshot(player)
+                        .map(value -> new S2CAtmDataPacket
+                                .DepositRecoverySummary(
+                                value.requestId(), value.transactionId(),
+                                value.status().name(),
+                                value.amountMinorUnits()));
         AtmAccessSnapshot access = EscrowAtmWithdrawalService.access(player);
         AtmCurrencyCatalog catalog = access.catalog();
         List<AtmDenominationData> denominations = catalog.denominations()
@@ -55,13 +66,6 @@ public final class AtmService {
                 .toList();
         AtmCashClaimCenter.CashClaimSummary cashClaims =
                 AtmCashClaimCenter.summary(player);
-        Optional<S2CAtmDataPacket.DepositRecoverySummary> recovery =
-                EscrowCashDepositService.recoverySnapshot(player)
-                        .map(value -> new S2CAtmDataPacket
-                                .DepositRecoverySummary(
-                                value.requestId(), value.transactionId(),
-                                value.status().name(),
-                                value.amountMinorUnits()));
         ShopPackets.sendToPlayer(player, new S2CAtmDataPacket(
                 access.balanceMinorUnits(), access.balanceKnown(),
                 catalog.currencyName(), catalog.decimalPlaces(),
@@ -148,6 +152,9 @@ public final class AtmService {
             packet = depositResultPacket(
                     EscrowCashDepositService.deposit(player, request));
         } catch (RuntimeException exception) {
+            LOGGER.error(
+                    "ATM deposit failed before a recoverable result was created. player {}, request {}.",
+                    player.getUUID(), requestId, exception);
             packet = depositFailurePacket(requestId, "SERVER_ERROR");
         }
         ShopPackets.sendToPlayer(player, packet);
@@ -286,7 +293,10 @@ public final class AtmService {
     private static void refreshAfterMutation(ServerPlayer player) {
         try {
             sendAuthoritativeData(player, false);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException exception) {
+            LOGGER.warn(
+                    "ATM state refresh failed. player {}.",
+                    player.getUUID(), exception);
         }
     }
 

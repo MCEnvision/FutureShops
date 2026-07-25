@@ -102,21 +102,36 @@ class MarketModuleAccessPolicyTest {
     }
 
     @Test
-    void disabledToggleBecomesFrozenWithoutErasingStrongerMode() {
+    void disabledToggleHidesNavigationWhileClaimsRemainReachable() {
         MarketModuleControl enabled = control(
                 MarketControlModule.BAZAAR,
                 MarketModuleStatus.ENABLED);
-        assertEquals(MarketModuleAvailability.FROZEN,
+        assertEquals(MarketModuleAvailability.HIDDEN,
                 MarketModuleAccessPolicy.capability(
                         MarketModule.BAZAAR, false, true,
                         Optional.of(enabled), 0L));
         MarketModuleControl draining = control(
                 MarketControlModule.BAZAAR,
                 MarketModuleStatus.DRAINING);
-        assertEquals(MarketModuleAvailability.DRAINING,
+        assertEquals(MarketModuleAvailability.CLAIMS_ONLY,
                 MarketModuleAccessPolicy.capability(
                         MarketModule.BAZAAR, false, true,
-                        Optional.of(draining), 0L));
+                        Optional.of(draining), 2L));
+        MarketModuleAccessPolicy.PageAccess claims =
+                MarketModuleAccessPolicy.pageAccess(
+                        MarketModule.BAZAAR, "claims", false, true,
+                        Optional.of(draining));
+        assertTrue(claims.allowed());
+        assertEquals(MarketModuleAvailability.CLAIMS_ONLY,
+                claims.availability());
+        MarketModuleAccessPolicy.PageAccess products =
+                MarketModuleAccessPolicy.pageAccess(
+                        MarketModule.BAZAAR, "products", false, true,
+                        Optional.of(enabled));
+        assertFalse(products.allowed());
+        assertEquals(MarketModuleAvailability.HIDDEN,
+                products.availability());
+        assertEquals("MODULE_DISABLED", products.denialCode());
         assertEquals("products",
                 MarketModuleAccessPolicy.preferredView(
                         MarketModule.BAZAAR,

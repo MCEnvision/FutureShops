@@ -127,7 +127,13 @@ class MarketNavigationIntegrationSourceTest {
         assertTrue(market.contains(
                 "CAPABILITY_RETRY_INTERVAL_MILLIS"));
         assertTrue(market.contains(
-                "capabilities == null || !capabilities.escrowReady()"));
+                "CAPABILITY_REFRESH_INTERVAL_MILLIS"));
+        assertTrue(market.contains(
+                "long capabilityInterval = capabilities == null"));
+        assertTrue(market.contains(
+                "? CAPABILITY_RETRY_INTERVAL_MILLIS"));
+        assertTrue(market.contains(
+                ": CAPABILITY_REFRESH_INTERVAL_MILLIS"));
         assertTrue(market.contains(
                 "requestCapabilities();"));
         assertTrue(shop.contains(
