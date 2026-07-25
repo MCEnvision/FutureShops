@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.server.transaction;
 
+import com.enviouse.futureshops.catalog.offer.ServerShopBundleSavings;
 import com.enviouse.futureshops.data.TransactionHistoryEntry;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.S2CHistoryResponsePacket;
@@ -11,6 +12,7 @@ import net.minecraft.server.level.ServerPlayer;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -155,6 +157,159 @@ public final class TransactionHistoryService {
             pushLatestToSubscriber(server, playerId,
                     ShopDataService.resolveShopId(shopId));
         }
+    }
+
+    public static void recordServerOffer(
+            MinecraftServer server,
+            UUID playerId,
+            String shopId,
+            UUID transactionId,
+            String listingId,
+            String type,
+            String itemId,
+            int quantity,
+            long totalMinorUnits,
+            String optionId,
+            String nbtJson,
+            Instant occurredAt
+    ) {
+        recordServerOfferComponents(server, playerId, shopId,
+                transactionId, listingId, type, quantity,
+                totalMinorUnits, optionId, List.of(
+                        new ServerOfferComponent(
+                                ComponentRole.OUTPUT, "primary",
+                                itemId, 1,
+                                nbtJson == null ? "" : nbtJson)),
+                Optional.empty(), occurredAt);
+    }
+
+    public static void recordServerOfferComponents(
+            MinecraftServer server,
+            UUID playerId,
+            String shopId,
+            UUID transactionId,
+            String listingId,
+            String type,
+            int offerQuantity,
+            long totalMinorUnits,
+            String optionId,
+            List<ServerOfferComponent> components,
+            Optional<ServerShopBundleSavings.Snapshot> savings,
+            Instant occurredAt
+    ) {
+        java.util.Objects.requireNonNull(server, "server");
+        java.util.Objects.requireNonNull(playerId, "playerId");
+        java.util.Objects.requireNonNull(transactionId, "transactionId");
+        java.util.Objects.requireNonNull(savings, "savings");
+        List<ServerOfferComponent> exactComponents = List.copyOf(
+                java.util.Objects.requireNonNull(
+                        components, "components"));
+        if (offerQuantity <= 0 || exactComponents.isEmpty()
+                || exactComponents.size() > 72) {
+            throw new IllegalArgumentException(
+                    "Server offer history components are invalid");
+        }
+        long epoch = java.util.Objects.requireNonNull(
+                occurredAt, "occurredAt").getEpochSecond();
+        boolean appended = false;
+        for (int index = 0; index < exactComponents.size(); index++) {
+            ServerOfferComponent component = exactComponents.get(index);
+            int exactQuantity = Math.multiplyExact(
+                    component.unitsPerOffer(), offerQuantity);
+            String marker = "server.shop.offer." + transactionId + "."
+                    + listingId + "." + optionId + "."
+                    + component.role().name().toLowerCase(
+                    java.util.Locale.ROOT) + "."
+                    + component.componentId();
+            String note = historyNote(
+                    optionId, component, index,
+                    exactComponents.size(),
+                    index == 0 ? savings : Optional.empty());
+            appended |= TransactionHistorySavedData.get(server)
+                    .appendIfAbsent(
+                            playerId, marker,
+                            new TransactionHistoryEntry(
+                                    epoch, type, component.itemId(),
+                                    exactQuantity,
+                                    index == 0
+                                            ? totalMinorUnits : 0L,
+                                    note, component.exactNbt()));
+        }
+        if (appended) {
+            pushLatestToSubscriber(server, playerId,
+                    ShopDataService.resolveShopId(shopId));
+        }
+    }
+
+    private static String historyNote(
+            String optionId,
+            ServerOfferComponent component,
+            int index,
+            int count,
+            Optional<ServerShopBundleSavings.Snapshot> savings
+    ) {
+        StringBuilder note = new StringBuilder("option ")
+                .append(optionId).append(", ")
+                .append(component.role().name().toLowerCase(
+                        java.util.Locale.ROOT))
+                .append(" component ")
+                .append(component.componentId())
+                .append(", bundle line ")
+                .append(index + 1).append(" of ").append(count);
+        savings.ifPresent(snapshot -> {
+            note.append(", individual total ")
+                    .append(snapshot.individualTotalMinorUnits())
+                    .append(", bundle total ")
+                    .append(snapshot.bundleTotalMinorUnits())
+                    .append(", savings ")
+                    .append(snapshot.savingsMinorUnits())
+                    .append(", savings basis points ")
+                    .append(snapshot.savingsBasisPoints());
+            for (ServerShopBundleSavings.ComparisonRevision comparison
+                    : snapshot.comparisonRevisions()) {
+                note.append(", comparison ")
+                        .append(comparison.componentId()).append(" ")
+                        .append(comparison.listingId()).append(" ")
+                        .append(comparison.optionId()).append(" revision ")
+                        .append(comparison.revision());
+            }
+        });
+        return note.toString();
+    }
+
+    public record ServerOfferComponent(
+            ComponentRole role,
+            String componentId,
+            String itemId,
+            int unitsPerOffer,
+            String exactNbt
+    ) {
+        public ServerOfferComponent {
+            role = java.util.Objects.requireNonNull(role, "role");
+            componentId = required(componentId, "componentId");
+            itemId = required(itemId, "itemId");
+            exactNbt = java.util.Objects.requireNonNull(
+                    exactNbt, "exactNbt");
+            if (unitsPerOffer <= 0) {
+                throw new IllegalArgumentException(
+                        "Server offer history quantity is invalid");
+            }
+        }
+
+        private static String required(String value, String field) {
+            String exact = java.util.Objects.requireNonNull(
+                    value, field).strip();
+            if (exact.isEmpty() || exact.length() > 160) {
+                throw new IllegalArgumentException(
+                        "Server offer history identifier is invalid");
+            }
+            return exact;
+        }
+    }
+
+    public enum ComponentRole {
+        OUTPUT,
+        INPUT
     }
 
     public static void sendHistoryPage(ServerPlayer player, String requestedShopId, int page, int pageSize,

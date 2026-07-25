@@ -6,6 +6,8 @@ import com.enviouse.futureshops.client.ShopClientState;
 import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.client.market.MarketCapabilityClientState;
 import com.enviouse.futureshops.client.market.MarketModule;
+import com.enviouse.futureshops.catalog.offer.AcquireOfferOption;
+import com.enviouse.futureshops.catalog.offer.ServerShopOfferListing;
 import com.enviouse.futureshops.data.CatalogCategory;
 import com.enviouse.futureshops.data.CatalogItem;
 import com.enviouse.futureshops.data.LocalShopOwnerEntry;
@@ -312,7 +314,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         int rowX = gridX();
         int rowY = gridY() + TOOLBAR_H + 4;
         int addW = 84;
-        if (tradeFilter == 2) {
+        if (tradeFilter == 3) {
             ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY, rowX, rowY, addW, 16,
                     Component.translatable("gui.futureshops.admin_edit.add_barter_items"),
                     ShopUiUtil.ButtonStyle.PRIMARY, true,
@@ -342,7 +344,8 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                         rowX + addW + ShopUiUtil.PAD_XS, rowY, addW, 16,
                         Component.translatable("gui.futureshops.admin_edit.add_held"),
                         ShopUiUtil.ButtonStyle.PRIMARY, true,
-                        () -> this.minecraft.setScreen(new AdminListingEditModal(this)));
+                        () -> this.minecraft.setScreen(
+                                AdminOfferEditorScreen.create(this)));
             }
         }
 
@@ -485,7 +488,8 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                 // Barter, so a barter add no longer also shows up as a bogus 0-cost Buy entry.
                 .filter(item -> ServerShopTradeFilterPolicy.matches(
                         ServerShopTradeFilterPolicy.fromIndex(tradeFilter),
-                        item))
+                        item, ShopClientState.getCatalogOffer(
+                                item.listingId())))
                 .filter(item -> categoryFilter == null || categoryFilter.equals(item.categoryId()))
                 .filter(item -> searchQuery.isBlank()
                         || item.displayName().toLowerCase(Locale.ROOT).contains(searchQuery)
@@ -657,7 +661,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         if (editMode) {
             return Component.translatable("gui.futureshops.admin_edit.footer_help").getString();
         }
-        if (tradeFilter == 2) {
+        if (tradeFilter == 3) {
             return Component.translatable("gui.futureshops.shop_main.footer.barter_active").getString();
         }
         return Component.translatable("gui.futureshops.shop_main.footer.help").getString();
@@ -727,55 +731,130 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         segH = 18;
         segY = ty + (TOOLBAR_H - segH) / 2;
 
-        // All / Buy / Barter segmented control
-        String[] segLabels = {
-                Component.translatable("gui.futureshops.shell.seg_all").getString(),
-                Component.translatable("gui.futureshops.shell.seg_buy").getString(),
-                Component.translatable("gui.futureshops.shell.seg_barter").getString()
-        };
-        segEdges = ShopUiUtil.renderSegmented(graphics, this.font, tx, segY, segH, segLabels, tradeFilter);
-        int cursorX = segEdges[segEdges.length - 1] + 8;
-
-        // EDITING chip
-        if (editMode && !compact()) {
-            int tagW = ShopUiUtil.renderTag(graphics, this.font, cursorX, segY + 2,
-                    Component.translatable("gui.futureshops.admin_edit.editing_pill").getString(),
-                    ShopUiUtil.TagStyle.ACCENT);
-            cursorX += tagW + 8;
-        }
-
         int rightX = gridX() + gridW();
-
-        // Edit toggle (OP-gated) — rightmost of the toolbar
         if (canEdit()) {
             String editLabel = Component.translatable(editMode
                     ? "gui.futureshops.shell.edit_on" : "gui.futureshops.shell.edit").getString();
-            int editW = this.font.width(editLabel) + 16;
+            int editW = Math.min(this.font.width(editLabel) + 16,
+                    Math.max(34, gridW() / 4));
             int editX = rightX - editW;
             editToggleRect = new int[]{editX, segY, editW, segH};
             boolean hover = inRect(editToggleRect, mouseX, mouseY);
             ShopUiUtil.renderNocturnePanel(graphics, editX, segY, editW, segH, ShopColors.SURFACE_RAISED,
                     editMode || hover ? ShopColors.ACCENT_PRIMARY : ShopColors.BORDER_MUTED);
-            graphics.drawCenteredString(this.font, editLabel, editX + editW / 2, segY + (segH - 8) / 2,
+            String clippedEdit = this.font.plainSubstrByWidth(
+                    editLabel, editW - 8);
+            graphics.drawCenteredString(this.font, clippedEdit, editX + editW / 2, segY + (segH - 8) / 2,
                     editMode ? ShopColors.ACCENT_300 : ShopColors.TEXT_MUTED);
+            if (hover && !clippedEdit.equals(editLabel)) {
+                pendingButtonTooltip = Component.literal(editLabel);
+            }
             rightX = editX - 8;
         } else {
             editToggleRect = null;
         }
 
-        // Sort button
         String sortLabel = Component.translatable(switch (sortMode) {
             case 1 -> "gui.futureshops.shell.sort_price";
             case 2 -> "gui.futureshops.shell.sort_stock";
             default -> "gui.futureshops.shell.sort_name";
         }).getString();
-        int sortW = this.font.width(sortLabel) + 18;
+        int sortW = Math.min(this.font.width(sortLabel) + 18,
+                Math.max(34, gridW() / 4));
         int sortX = rightX - sortW;
         sortRect = new int[]{sortX, segY, sortW, segH};
         boolean sortHover = inRect(sortRect, mouseX, mouseY);
         ShopUiUtil.renderNocturnePanel(graphics, sortX, segY, sortW, segH, ShopColors.SURFACE_RAISED,
                 sortHover ? ShopColors.BORDER_STRONG : ShopColors.BORDER_MUTED);
-        graphics.drawCenteredString(this.font, sortLabel, sortX + sortW / 2, segY + (segH - 8) / 2, ShopColors.TEXT_MUTED);
+        String clippedSort = this.font.plainSubstrByWidth(
+                sortLabel, sortW - 8);
+        graphics.drawCenteredString(this.font, clippedSort,
+                sortX + sortW / 2, segY + (segH - 8) / 2,
+                ShopColors.TEXT_MUTED);
+        if (sortHover && !clippedSort.equals(sortLabel)) {
+            pendingButtonTooltip = Component.literal(sortLabel);
+        }
+
+        String[] segLabels = {
+                Component.translatable("gui.futureshops.shell.seg_all").getString(),
+                Component.translatable("gui.futureshops.shell.seg_buy").getString(),
+                Component.translatable("gui.futureshops.shell.seg_sell").getString(),
+                Component.translatable("gui.futureshops.shell.seg_barter").getString(),
+                Component.translatable("gui.futureshops.shell.seg_bundles").getString()
+        };
+        int segmentBudget = Math.max(0, sortX - 8 - tx);
+        segEdges = renderResponsiveSegments(graphics, tx, segY,
+                segH, segmentBudget, segLabels, tradeFilter,
+                mouseX, mouseY);
+        int cursorX = segEdges == null
+                ? tx : segEdges[segEdges.length - 1] + 8;
+        if (editMode && !compact() && segEdges != null) {
+            String editing = Component.translatable(
+                    "gui.futureshops.admin_edit.editing_pill")
+                    .getString();
+            int tagW = Math.max(20, this.font.width(editing) + 12);
+            if (cursorX + tagW <= sortX - 8) {
+                ShopUiUtil.renderTag(graphics, this.font,
+                        cursorX, segY + 2, editing,
+                        ShopUiUtil.TagStyle.ACCENT);
+            }
+        }
+    }
+
+    private int[] renderResponsiveSegments(
+            GuiGraphics graphics,
+            int x,
+            int y,
+            int height,
+            int maximumWidth,
+            String[] labels,
+            int active,
+            int mouseX,
+            int mouseY
+    ) {
+        if (maximumWidth < labels.length) {
+            return null;
+        }
+        int naturalWidth = 0;
+        for (String label : labels) {
+            naturalWidth += this.font.width(label) + 22;
+        }
+        if (naturalWidth <= maximumWidth) {
+            return ShopUiUtil.renderSegmented(graphics, this.font,
+                    x, y, height, labels, active);
+        }
+        int[] edges = new int[labels.length + 1];
+        edges[0] = x;
+        int baseWidth = maximumWidth / labels.length;
+        int remainder = maximumWidth % labels.length;
+        for (int index = 0; index < labels.length; index++) {
+            int segmentWidth = baseWidth
+                    + (index < remainder ? 1 : 0);
+            int segmentX = edges[index];
+            edges[index + 1] = segmentX + segmentWidth;
+            boolean selected = index == active;
+            ShopUiUtil.renderNocturnePanel(graphics,
+                    segmentX, y, segmentWidth, height,
+                    selected ? ShopColors.SURFACE_PRESSED
+                            : ShopColors.SURFACE_RAISED,
+                    selected ? ShopColors.ACCENT_PRIMARY
+                            : ShopColors.BORDER_MUTED);
+            String clipped = this.font.plainSubstrByWidth(
+                    labels[index], Math.max(1, segmentWidth - 6));
+            graphics.drawCenteredString(this.font, clipped,
+                    segmentX + segmentWidth / 2,
+                    y + (height - 8) / 2,
+                    selected ? ShopColors.ACCENT_300
+                            : ShopColors.TEXT_MUTED);
+            if (!clipped.equals(labels[index])
+                    && mouseX >= segmentX
+                    && mouseX < segmentX + segmentWidth
+                    && mouseY >= y && mouseY < y + height) {
+                pendingButtonTooltip =
+                        Component.literal(labels[index]);
+            }
+        }
+        return edges;
     }
 
     // ── Server-shop grid ──
@@ -871,6 +950,8 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         String nbt = item.nbtJson();
         ShopUiUtil.renderItemIconWithNbt(graphics, this.font, item.itemId(), nbt,
                 slotX + (slot - 16) / 2, slotY + (slot - 16) / 2);
+        ServerShopOfferListing offer = ShopClientState
+                .getCatalogOffer(item.listingId()).orElse(null);
 
         int tx = slotX + slot + 8;
         int tRight = x + width - 8;
@@ -878,7 +959,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         // name row (+ promo chip on the right)
         int nameY = y + 8;
         int nameBudget = tRight - tx;
-        if (item.hasPromo()) {
+        if (item.hasPromo() && offer == null) {
             int percent = ShopUiUtil.computePromoPercent(item.buyPrice(), item.promoPrice());
             if (percent > 0) {
                 String promoLabel = percent >= 100
@@ -888,6 +969,14 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                 ShopUiUtil.renderTag(graphics, this.font, tRight - tagW, nameY - 2, promoLabel, ShopUiUtil.TagStyle.ACCENT);
                 nameBudget -= tagW + 6;
             }
+        } else if (offer != null && offer.bundle()) {
+            String bundle = Component.translatable(
+                    "gui.futureshops.offer.bundle").getString();
+            int tagW = Math.max(20, this.font.width(bundle) + 12);
+            ShopUiUtil.renderTag(graphics, this.font,
+                    tRight - tagW, nameY - 2, bundle,
+                    ShopUiUtil.TagStyle.ACCENT2);
+            nameBudget -= tagW + 6;
         }
         ShopUiUtil.renderScrollingString(graphics, this.font, item.displayName(), tx, nameY,
                 Math.max(20, nameBudget), ShopColors.TEXT_STRONG);
@@ -895,16 +984,38 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         // price row (coin + price, struck base if promo)
         int priceY = y + 24;
         long price = effectivePrice(item);
-        boolean barterOnly = item.hasBarterRecipes() && item.buyPrice() <= 0 && item.sellPrice() <= 0;
+        boolean barterOnly = offer == null
+                && item.hasBarterRecipes()
+                && item.buyPrice() <= 0 && item.sellPrice() <= 0;
         int coinW = 0;
-        if (barterOnly) {
+        String offerPrice = offer == null
+                ? "" : offerCardPrice(offer);
+        boolean offerMoneyPrice = offer != null
+                && offer.acquireOptions().size() == 1
+                && offer.acquireOptions().get(0).moneyCostPresent()
+                && !offer.acquireOptions().get(0).hasItemCosts()
+                && !offer.acquireOptions().get(0).free();
+        if (offer != null && !offerMoneyPrice) {
+            graphics.drawString(this.font,
+                    this.font.plainSubstrByWidth(
+                            offerPrice, tRight - tx),
+                    tx, priceY,
+                    offer.sellOnly()
+                            ? ShopColors.TEXT_SECONDARY
+                            : ShopColors.TEXT_BARTER,
+                    false);
+        } else if (barterOnly) {
             graphics.drawString(this.font, Component.translatable("gui.futureshops.storefront.barter_only"),
                     tx, priceY, ShopColors.TEXT_BARTER, false);
         } else {
+            if (offerMoneyPrice) {
+                price = offer.acquireOptions().get(0)
+                        .moneyCostMinorUnits();
+            }
             coinW = ShopUiUtil.renderCoinAmount(graphics, this.font, tx, priceY,
                     ShopUiUtil.formatMinorUnits(price), outOfStock ? ShopColors.TEXT_FAINT : ShopColors.TEXT_STRONG);
         }
-        if (item.hasPromo() && !barterOnly) {
+        if (item.hasPromo() && offer == null && !barterOnly) {
             String base = ShopUiUtil.formatMinorUnits(item.buyPrice());
             graphics.drawString(this.font,
                     Component.literal(base).withStyle(net.minecraft.ChatFormatting.STRIKETHROUGH),
@@ -926,11 +1037,37 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
             stockColor = item.stock() <= 5 ? ShopColors.STATUS_WARNING : ShopColors.NEUTRAL_500;
         }
         graphics.drawString(this.font, stockStr, tx, stockY, stockColor, false);
-        if (item.hasBarterRecipes()) {
+        if (offer != null) {
+            int sWidth = this.font.width(stockStr);
+            String badge = offerCardBadge(offer);
+            int available = Math.max(12,
+                    tRight - Math.min(tx + sWidth + 6, tRight));
+            String clippedBadge = this.font.plainSubstrByWidth(
+                    badge, Math.max(1, available - 12));
+            int badgeWidth = Math.max(20,
+                    this.font.width(clippedBadge) + 12);
+            int badgeX = Math.min(tx + sWidth + 6,
+                    tRight - badgeWidth);
+            ShopUiUtil.renderTag(graphics, this.font,
+                    badgeX,
+                    stockY - 2, clippedBadge,
+                    ShopUiUtil.TagStyle.OUTLINE);
+            if (!clippedBadge.equals(badge)
+                    && mouseX >= badgeX
+                    && mouseX < badgeX + badgeWidth
+                    && mouseY >= stockY - 2
+                    && mouseY < stockY + 12) {
+                pendingButtonTooltip = Component.literal(badge);
+            }
+        } else if (item.hasBarterRecipes()) {
             int sWidth = this.font.width(stockStr);
             ShopUiUtil.renderTag(graphics, this.font,
-                    Math.min(tx + sWidth + 6, tRight - 40), stockY - 2,
-                    Component.translatable("gui.futureshops.shell.trade_tag").getString(), ShopUiUtil.TagStyle.OUTLINE);
+                    Math.min(tx + sWidth + 6, tRight - 40),
+                    stockY - 2,
+                    Component.translatable(
+                            "gui.futureshops.shell.trade_tag")
+                            .getString(),
+                    ShopUiUtil.TagStyle.OUTLINE);
         }
 
         // advanced tooltip on hover
@@ -940,6 +1077,67 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
             tooltipMouseX = mouseX;
             tooltipMouseY = mouseY;
         }
+    }
+
+    private String offerCardPrice(ServerShopOfferListing offer) {
+        if (offer.sellOnly()) {
+            if (offer.sellOptions().size() == 1) {
+                return Component.translatable(
+                        "gui.futureshops.offer.sell_to_shop")
+                        .getString() + " "
+                        + ShopUiUtil.formatMinorUnits(
+                        offer.sellOptions().get(0)
+                                .moneyPayoutMinorUnits());
+            }
+            return Component.translatable(
+                    "gui.futureshops.offer.option_count",
+                    offer.sellOptions().size()).getString();
+        }
+        if (offer.acquireOptions().size() != 1) {
+            return Component.translatable(
+                    "gui.futureshops.offer.option_count",
+                    offer.acquireOptions().size()).getString();
+        }
+        AcquireOfferOption option = offer.acquireOptions().get(0);
+        if (option.free()) {
+            return Component.translatable(
+                    "gui.futureshops.offer.free").getString();
+        }
+        if (option.compound()) {
+            return Component.translatable(
+                    "gui.futureshops.offer.money_and_barter")
+                    .getString();
+        }
+        if (option.hasItemCosts()) {
+            return Component.translatable(
+                    "gui.futureshops.offer.barter").getString();
+        }
+        return ShopUiUtil.formatMinorUnits(
+                option.moneyCostMinorUnits());
+    }
+
+    private String offerCardBadge(ServerShopOfferListing offer) {
+        if (offer.sellOnly()) {
+            return Component.translatable(
+                    "gui.futureshops.offer.sell_only").getString();
+        }
+        if (offer.acquireOptions().stream()
+                .anyMatch(AcquireOfferOption::free)) {
+            return Component.translatable(
+                    "gui.futureshops.offer.free").getString();
+        }
+        boolean money = offer.acquireOptions().stream()
+                .anyMatch(AcquireOfferOption::moneyCostPresent);
+        boolean barter = offer.acquireOptions().stream()
+                .anyMatch(AcquireOfferOption::hasItemCosts);
+        if (money && barter) {
+            return Component.translatable(
+                    "gui.futureshops.offer.money_and_barter")
+                    .getString();
+        }
+        return Component.translatable(money
+                ? "gui.futureshops.offer.money"
+                : "gui.futureshops.offer.barter").getString();
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1390,28 +1588,61 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                         selectedListingIds.add(id);
                     }
                 } else {
-                    Minecraft.getInstance().setScreen(new AdminListingEditModal(this, item.listingId()));
+                    Minecraft.getInstance().setScreen(
+                            new AdminOfferEditorScreen(
+                                    this, item.listingId()));
                 }
             }
             return;
         }
         if (button == 0) {
             // Shift+Click → quick-add to cart (keyed by listingId so NBT variants stay distinct)
-            if (hasShiftDown() && item.buyPrice() > 0L && (item.unlimited() || item.stock() > 0)) {
-                ShopClientState.addToCart(item.listingId(), 1);
+            if (hasShiftDown() && quickAddToCart(item)) {
                 return;
             }
             // Barter mode: open BarterScreen directly (barter is registry-itemId keyed; the detail
             // screen is listingId keyed).
             boolean barterOnly = item.hasBarterRecipes() && item.buyPrice() <= 0 && item.sellPrice() <= 0;
-            if ((tradeFilter == 2 || (tradeFilter == 0 && barterOnly)) && item.hasBarterRecipes()) {
+            if ((tradeFilter == 3 || (tradeFilter == 0 && barterOnly))
+                    && item.hasBarterRecipes()
+                    && ShopClientState.getCatalogOffer(
+                    item.listingId()).isEmpty()) {
                 Minecraft.getInstance().setScreen(new BarterScreen(this, item.itemId()));
             } else {
                 Minecraft.getInstance().setScreen(new ItemDetailScreen(this, item.listingId()));
             }
-        } else if (button == 1 && item.buyPrice() > 0L) {
-            ShopClientState.addToCart(item.listingId(), 1);
+        } else if (button == 1) {
+            quickAddToCart(item);
         }
+    }
+
+    private boolean quickAddToCart(CatalogItem item) {
+        var offer = ShopClientState.getCatalogOffer(
+                item.listingId()).orElse(null);
+        if (offer != null) {
+            if (offer.acquireOptions().isEmpty()
+                    || !item.unlimited() && item.stock() <= 0) {
+                return false;
+            }
+            if (offer.acquireOptions().size() != 1) {
+                Minecraft.getInstance().setScreen(
+                        ServerShopOfferOptionScreen.quickCart(
+                                this, item.listingId()));
+                return true;
+            }
+            ShopClientState.addOfferToCart(
+                    offer.listingId(),
+                    offer.acquireOptions().get(0).optionId(),
+                    1,
+                    offer.revision());
+            return true;
+        }
+        if (item.buyPrice() <= 0L
+                || !item.unlimited() && item.stock() <= 0) {
+            return false;
+        }
+        ShopClientState.addToCart(item.listingId(), 1);
+        return true;
     }
 
     /** Player-shops card / legacy-nearby click routing. Returns true if consumed. */
@@ -1475,7 +1706,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
     }
 
     private void setTradeFilter(int filter) {
-        int next = Math.max(0, Math.min(2, filter));
+        int next = Math.max(0, Math.min(4, filter));
         if (tradeFilter == next) {
             return;
         }
@@ -1544,7 +1775,7 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         }
         // "B" → toggle barter mode (Server Shop only, when search not focused)
         if (keyCode == 66 && searchField != null && !searchField.isFocused() && !nearbyMode) {
-            setTradeFilter(tradeFilter == 2 ? 0 : 2);
+            setTradeFilter(tradeFilter == 3 ? 0 : 3);
             return true;
         }
 

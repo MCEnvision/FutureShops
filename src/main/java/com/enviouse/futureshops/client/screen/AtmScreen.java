@@ -363,7 +363,8 @@ public final class AtmScreen extends Screen implements ShopScreenMarker {
         boolean enabled = modeNavigationEnabled(
                 ShopClientPacketHandler.atmWithdrawalState(),
                 ShopClientPacketHandler.atmCashCollectionState(),
-                ShopClientPacketHandler.atmDepositState());
+                ShopClientPacketHandler.atmDepositState(),
+                depositRecoveryHandle().isPresent());
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + 10, y, 72, 16,
                 Component.translatable(
@@ -578,14 +579,17 @@ public final class AtmScreen extends Screen implements ShopScreenMarker {
                 ShopClientPacketHandler.atmCashCollectionState();
         AtmDepositTracker.PendingState depositState =
                 ShopClientPacketHandler.atmDepositState();
+        Optional<UUID> recoveryHandle = depositRecoveryHandle();
+        boolean recoveryActive = recoveryHandle.isPresent();
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + 10, buttonY, 54, 16, Component.translatable("gui.futureshops.local.back"),
                 ShopUiUtil.ButtonStyle.SECONDARY,
                 pendingState != AtmWithdrawalTracker.PendingState.AWAITING
                         && cashState
                         != AtmCashClaimCollectionTracker.PendingState.AWAITING
-                        && depositState
-                        != AtmDepositTracker.PendingState.AWAITING,
+                        && (depositState
+                        != AtmDepositTracker.PendingState.AWAITING
+                        || recoveryActive),
                 this::onClose);
         boolean cashRetry = cashState
                 == AtmCashClaimCollectionTracker.PendingState.RETRYABLE;
@@ -603,13 +607,13 @@ public final class AtmScreen extends Screen implements ShopScreenMarker {
         }
         boolean cashEnabled = cashCollectionEnabled(
                 pendingState, cashState, depositState,
+                recoveryActive,
                 serviceAvailable,
                 !data.collectibleCashClaims().isEmpty());
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + 68, buttonY, 118, 16, cashAction,
                 ShopUiUtil.ButtonStyle.SECONDARY, cashEnabled,
                 cashRetry ? this::retryCashCollection : this::collectCash);
-        Optional<UUID> recoveryHandle = depositRecoveryHandle();
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + 188, buttonY, 38, 16,
                 Component.translatable("gui.futureshops.atm.copy"),
@@ -839,6 +843,7 @@ public final class AtmScreen extends Screen implements ShopScreenMarker {
                 ShopClientPacketHandler.atmWithdrawalState(),
                 ShopClientPacketHandler.atmCashCollectionState(),
                 ShopClientPacketHandler.atmDepositState(),
+                depositRecoveryHandle().isPresent(),
                 serviceAvailable,
                 !data.collectibleCashClaims().isEmpty())) {
             return;
@@ -930,7 +935,8 @@ public final class AtmScreen extends Screen implements ShopScreenMarker {
         if (!modeNavigationEnabled(
                 ShopClientPacketHandler.atmWithdrawalState(),
                 ShopClientPacketHandler.atmCashCollectionState(),
-                ShopClientPacketHandler.atmDepositState())
+                ShopClientPacketHandler.atmDepositState(),
+                depositRecoveryHandle().isPresent())
                 || depositMode == value) {
             return;
         }
@@ -1115,13 +1121,16 @@ public final class AtmScreen extends Screen implements ShopScreenMarker {
             AtmWithdrawalTracker.PendingState withdrawalState,
             AtmCashClaimCollectionTracker.PendingState cashState,
             AtmDepositTracker.PendingState depositState,
+            boolean depositRecovery,
             boolean serviceAvailable,
             boolean hasCollectibleClaims
     ) {
         boolean retry = cashState
                 == AtmCashClaimCollectionTracker.PendingState.RETRYABLE;
         return withdrawalState == AtmWithdrawalTracker.PendingState.NONE
-                && depositState != AtmDepositTracker.PendingState.AWAITING
+                && (depositState
+                != AtmDepositTracker.PendingState.AWAITING
+                || depositRecovery)
                 && serviceAvailable
                 && (retry || cashState
                 == AtmCashClaimCollectionTracker.PendingState.NONE
@@ -1131,14 +1140,16 @@ public final class AtmScreen extends Screen implements ShopScreenMarker {
     static boolean modeNavigationEnabled(
             AtmWithdrawalTracker.PendingState withdrawalState,
             AtmCashClaimCollectionTracker.PendingState cashState,
-            AtmDepositTracker.PendingState depositState
+            AtmDepositTracker.PendingState depositState,
+            boolean depositRecovery
     ) {
         return withdrawalState
                 != AtmWithdrawalTracker.PendingState.AWAITING
                 && cashState
                 != AtmCashClaimCollectionTracker.PendingState.AWAITING
-                && depositState
-                != AtmDepositTracker.PendingState.AWAITING;
+                && (depositState
+                != AtmDepositTracker.PendingState.AWAITING
+                || depositRecovery);
     }
 
     private Component resultMessage(S2CAtmResultPacket result) {

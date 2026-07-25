@@ -22,6 +22,14 @@ public final class PlayerShopConservationValidator {
             case BUYBACK -> validateBuyback(intent, false, violations);
             case ADMIN_BUYBACK -> validateBuyback(intent, true, violations);
             case SETTLEMENT_CLAIM -> validateSettlement(intent, violations);
+            case SERVER_SHOP_OFFER_ACQUIRE ->
+                    validateServerOfferAcquire(intent, violations);
+            case SERVER_SHOP_OFFER_SELL ->
+                    validateServerOfferSell(intent, violations);
+            case PLAYER_SHOP_OFFER_ACQUIRE ->
+                    validatePlayerOfferAcquire(intent, violations);
+            case PLAYER_SHOP_OFFER_SELL ->
+                    validatePlayerOfferSell(intent, violations);
         }
         validateClaims(intent, violations);
         validateStorageCoverage(intent, violations);
@@ -207,6 +215,342 @@ public final class PlayerShopConservationValidator {
                 || !money.destination().participantId().equals(intent.actorId())
                 || money.paymentSource() != PlayerShopPaymentSource.NONE) {
             violations.add("Settlement money is not routed to the owner claim");
+        }
+    }
+
+    private static void validateServerOfferAcquire(
+            PlayerShopEscrowIntent intent,
+            List<String> violations
+    ) {
+        PlayerShopListingSnapshot listing = intent.listing();
+        if (listing == null || !listing.adminShop()
+                || listing.direction()
+                == PlayerShopListingSnapshot.Direction.BUY) {
+            violations.add("Server shop acquire listing is invalid");
+            return;
+        }
+        boolean needsMoney = intent.tradeMethod()
+                == PlayerShopTradeMethod.MONEY
+                || intent.tradeMethod()
+                == PlayerShopTradeMethod.MONEY_AND_BARTER;
+        boolean needsItems = intent.tradeMethod()
+                == PlayerShopTradeMethod.BARTER
+                || intent.tradeMethod()
+                == PlayerShopTradeMethod.MONEY_AND_BARTER;
+        if (needsMoney != !intent.moneyTransfers().isEmpty()
+                || needsMoney && intent.moneyTransfers().size() != 1) {
+            violations.add("Server shop acquire money leg is invalid");
+        }
+        for (PlayerShopMoneyTransfer transfer : intent.moneyTransfers()) {
+            if (!transfer.source().participantId().equals(intent.actorId())
+                    || transfer.paymentSource() != intent.paymentSource()
+                    || transfer.destination().kind()
+                    != PlayerShopAssetEndpoint.Kind.ADMIN_SINK) {
+                violations.add(
+                        "Server shop acquire money route is invalid");
+            }
+        }
+        List<PlayerShopItemTransfer> outputs = new ArrayList<>();
+        List<PlayerShopItemTransfer> inputs = new ArrayList<>();
+        for (PlayerShopItemTransfer transfer : intent.itemTransfers()) {
+            if (transfer.source().kind()
+                    == PlayerShopAssetEndpoint.Kind.ADMIN_MINT
+                    && transfer.destination().kind()
+                    == PlayerShopAssetEndpoint.Kind.ITEM_CLAIM
+                    && transfer.destination().participantId()
+                    .equals(intent.actorId())) {
+                outputs.add(transfer);
+            } else if (transfer.source().kind()
+                    == PlayerShopAssetEndpoint.Kind.ACTOR_INVENTORY
+                    && transfer.source().participantId()
+                    .equals(intent.actorId())
+                    && transfer.destination().kind()
+                    == PlayerShopAssetEndpoint.Kind.ADMIN_SINK) {
+                inputs.add(transfer);
+            } else {
+                violations.add(
+                        "Server shop acquire item route is invalid");
+            }
+        }
+        if (needsItems != !inputs.isEmpty()) {
+            violations.add("Server shop acquire item costs are invalid");
+        }
+        if (intent.tradeMethod() == PlayerShopTradeMethod.FREE
+                && (!intent.moneyTransfers().isEmpty()
+                || !inputs.isEmpty())) {
+            violations.add("Server shop free offer contains a cost");
+        }
+        validateOutputQuantities(intent, outputs, violations);
+        intent.offerSelection().ifPresent(selection ->
+                validateOfferComponents(intent, selection,
+                        outputs, inputs, violations));
+    }
+
+    private static void validateServerOfferSell(
+            PlayerShopEscrowIntent intent,
+            List<String> violations
+    ) {
+        PlayerShopListingSnapshot listing = intent.listing();
+        if (listing == null || !listing.adminShop()
+                || listing.direction()
+                == PlayerShopListingSnapshot.Direction.SELL
+                || intent.moneyTransfers().size() != 1) {
+            violations.add("Server shop sell offer shape is invalid");
+            return;
+        }
+        PlayerShopMoneyTransfer money = intent.moneyTransfers().get(0);
+        if (money.amountMinorUnits() <= 0L
+                || money.source().kind()
+                != PlayerShopAssetEndpoint.Kind.ADMIN_MINT
+                || money.destination().kind()
+                != PlayerShopAssetEndpoint.Kind.MONEY_CLAIM
+                || !money.destination().participantId()
+                .equals(intent.actorId())
+                || money.paymentSource() != PlayerShopPaymentSource.NONE) {
+            violations.add("Server shop sell payout is invalid");
+        }
+        List<PlayerShopItemTransfer> inputs = intent.itemTransfers().stream()
+                .filter(value -> value.source().kind()
+                        == PlayerShopAssetEndpoint.Kind.ACTOR_INVENTORY
+                        && value.source().participantId()
+                        .equals(intent.actorId())
+                        && value.destination().kind()
+                        == PlayerShopAssetEndpoint.Kind.ADMIN_SINK)
+                .toList();
+        if (inputs.isEmpty()
+                || inputs.size() != intent.itemTransfers().size()) {
+            violations.add("Server shop sell inputs are invalid");
+            return;
+        }
+        validateInputQuantities(intent, inputs, violations);
+        intent.offerSelection().ifPresent(selection ->
+                validateOfferSellComponents(intent, selection,
+                        inputs, violations));
+    }
+
+    private static void validatePlayerOfferAcquire(
+            PlayerShopEscrowIntent intent,
+            List<String> violations
+    ) {
+        PlayerShopListingSnapshot listing = intent.listing();
+        if (listing == null || listing.direction()
+                == PlayerShopListingSnapshot.Direction.BUY
+                || intent.offerSelection().isEmpty()) {
+            violations.add("Player shop acquire offer shape is invalid");
+            return;
+        }
+        boolean admin = listing.adminShop();
+        boolean needsMoney = intent.tradeMethod()
+                == PlayerShopTradeMethod.MONEY
+                || intent.tradeMethod()
+                == PlayerShopTradeMethod.MONEY_AND_BARTER;
+        boolean needsItems = intent.tradeMethod()
+                == PlayerShopTradeMethod.BARTER
+                || intent.tradeMethod()
+                == PlayerShopTradeMethod.MONEY_AND_BARTER;
+        if (needsMoney != !intent.moneyTransfers().isEmpty()
+                || needsMoney && intent.moneyTransfers().size() != 1) {
+            violations.add("Player shop acquire money leg is invalid");
+        }
+        for (PlayerShopMoneyTransfer transfer
+                : intent.moneyTransfers()) {
+            if (!transfer.source().participantId().equals(
+                    intent.actorId())
+                    || transfer.paymentSource()
+                    != intent.paymentSource()
+                    || transfer.destination().kind() != (admin
+                    ? PlayerShopAssetEndpoint.Kind.ADMIN_SINK
+                    : PlayerShopAssetEndpoint.Kind.MONEY_CLAIM)
+                    || !admin && !transfer.destination().participantId()
+                    .equals(intent.ownerId())) {
+                violations.add(
+                        "Player shop acquire money route is invalid");
+            }
+        }
+        List<PlayerShopItemTransfer> outputs = new ArrayList<>();
+        List<PlayerShopItemTransfer> inputs = new ArrayList<>();
+        for (PlayerShopItemTransfer transfer
+                : intent.itemTransfers()) {
+            if (transfer.source().kind() == (admin
+                    ? PlayerShopAssetEndpoint.Kind.ADMIN_MINT
+                    : PlayerShopAssetEndpoint.Kind.LINKED_STOCK)
+                    && transfer.destination().kind()
+                    == PlayerShopAssetEndpoint.Kind.ITEM_CLAIM
+                    && transfer.destination().participantId()
+                    .equals(intent.actorId())) {
+                outputs.add(transfer);
+            } else if (transfer.source().kind()
+                    == PlayerShopAssetEndpoint.Kind.ACTOR_INVENTORY
+                    && transfer.source().participantId()
+                    .equals(intent.actorId())
+                    && transfer.destination().kind() == (admin
+                    ? PlayerShopAssetEndpoint.Kind.ADMIN_SINK
+                    : PlayerShopAssetEndpoint.Kind.ITEM_CLAIM)
+                    && (admin || transfer.destination().participantId()
+                    .equals(intent.ownerId()))) {
+                inputs.add(transfer);
+            } else {
+                violations.add(
+                        "Player shop acquire item route is invalid");
+            }
+        }
+        if (needsItems != !inputs.isEmpty()) {
+            violations.add(
+                    "Player shop acquire item costs are invalid");
+        }
+        if (intent.tradeMethod() == PlayerShopTradeMethod.FREE
+                && (!intent.moneyTransfers().isEmpty()
+                || !inputs.isEmpty())) {
+            violations.add(
+                    "Player shop free offer contains a cost");
+        }
+        validateOutputQuantities(intent, outputs, violations);
+        validateOfferComponents(intent,
+                intent.offerSelection().orElseThrow(),
+                outputs, inputs, violations);
+    }
+
+    private static void validatePlayerOfferSell(
+            PlayerShopEscrowIntent intent,
+            List<String> violations
+    ) {
+        PlayerShopListingSnapshot listing = intent.listing();
+        if (listing == null || listing.direction()
+                == PlayerShopListingSnapshot.Direction.SELL
+                || intent.offerSelection().isEmpty()
+                || intent.moneyTransfers().size() != 1) {
+            violations.add("Player shop sell offer shape is invalid");
+            return;
+        }
+        boolean admin = listing.adminShop();
+        PlayerShopMoneyTransfer money =
+                intent.moneyTransfers().get(0);
+        if (money.amountMinorUnits() <= 0L
+                || money.source().kind() != (admin
+                ? PlayerShopAssetEndpoint.Kind.ADMIN_MINT
+                : PlayerShopAssetEndpoint.Kind.OWNER_WALLET)
+                || !admin && !money.source().participantId()
+                .equals(intent.ownerId())
+                || money.destination().kind()
+                != PlayerShopAssetEndpoint.Kind.MONEY_CLAIM
+                || !money.destination().participantId()
+                .equals(intent.actorId())
+                || money.paymentSource()
+                != PlayerShopPaymentSource.NONE) {
+            violations.add("Player shop sell payout is invalid");
+        }
+        List<PlayerShopItemTransfer> inputs =
+                intent.itemTransfers().stream()
+                .filter(value -> value.source().kind()
+                        == PlayerShopAssetEndpoint.Kind.ACTOR_INVENTORY
+                        && value.source().participantId()
+                        .equals(intent.actorId())
+                        && value.destination().kind() == (admin
+                        ? PlayerShopAssetEndpoint.Kind.ADMIN_SINK
+                        : PlayerShopAssetEndpoint.Kind.ITEM_CLAIM)
+                        && (admin || value.destination().participantId()
+                        .equals(intent.ownerId())))
+                .toList();
+        if (inputs.isEmpty()
+                || inputs.size() != intent.itemTransfers().size()) {
+            violations.add("Player shop sell inputs are invalid");
+            return;
+        }
+        validateInputQuantities(intent, inputs, violations);
+        validateOfferSellComponents(intent,
+                intent.offerSelection().orElseThrow(),
+                inputs, violations);
+    }
+
+    private static void validateOfferComponents(
+            PlayerShopEscrowIntent intent,
+            PlayerShopOfferSelection selection,
+            List<PlayerShopItemTransfer> outputs,
+            List<PlayerShopItemTransfer> inputs,
+            List<String> violations
+    ) {
+        if (!intent.listing().outputs().equals(
+                selection.outputComponents())) {
+            violations.add(
+                    "Offer output evidence does not match the quote");
+        }
+        validateTemplateQuantities(selection.outputComponents(),
+                outputs, intent.requestedUnits(),
+                "Offer output", violations);
+        validateTemplateQuantities(selection.inputComponents(),
+                inputs, intent.requestedUnits(),
+                "Offer item cost", violations);
+    }
+
+    private static void validateOfferSellComponents(
+            PlayerShopEscrowIntent intent,
+            PlayerShopOfferSelection selection,
+            List<PlayerShopItemTransfer> inputs,
+            List<String> violations
+    ) {
+        if (!intent.listing().outputs().equals(
+                selection.inputComponents())) {
+            violations.add(
+                    "Sell input evidence does not match the quote");
+        }
+        validateTemplateQuantities(selection.inputComponents(),
+                inputs, intent.requestedUnits(),
+                "Sell input", violations);
+    }
+
+    private static void validateTemplateQuantities(
+            List<PlayerShopListingSnapshot.ItemTemplate> templates,
+            List<PlayerShopItemTransfer> transfers,
+            int quantity,
+            String label,
+            List<String> violations
+    ) {
+        for (PlayerShopListingSnapshot.ItemTemplate template
+                : templates) {
+            int expected = Math.multiplyExact(
+                    template.unitsPerPurchase(), quantity);
+            int actual = transfers.stream()
+                    .filter(value -> matchesTemplate(
+                            value.lot(), template))
+                    .mapToInt(value -> value.lot().quantity())
+                    .sum();
+            if (actual != expected) {
+                violations.add(label
+                        + " quantity is not conserved");
+            }
+        }
+        for (PlayerShopItemTransfer transfer : transfers) {
+            if (templates.stream().noneMatch(template ->
+                    matchesTemplate(transfer.lot(), template))) {
+                violations.add(label
+                        + " contains an unquoted component");
+            }
+        }
+    }
+
+    private static void validateInputQuantities(
+            PlayerShopEscrowIntent intent,
+            List<PlayerShopItemTransfer> inputs,
+            List<String> violations
+    ) {
+        for (PlayerShopListingSnapshot.ItemTemplate template
+                : intent.listing().outputs()) {
+            int expected = Math.multiplyExact(template.unitsPerPurchase(),
+                    intent.requestedUnits());
+            int actual = inputs.stream()
+                    .filter(value -> matchesTemplate(value.lot(), template))
+                    .mapToInt(value -> value.lot().quantity()).sum();
+            if (actual != expected) {
+                violations.add(
+                        "Server shop sell input quantity is not conserved");
+            }
+        }
+        for (PlayerShopItemTransfer input : inputs) {
+            if (intent.listing().outputs().stream().noneMatch(template ->
+                    matchesTemplate(input.lot(), template))) {
+                violations.add(
+                        "Server shop sell contains an unquoted input");
+            }
         }
     }
 

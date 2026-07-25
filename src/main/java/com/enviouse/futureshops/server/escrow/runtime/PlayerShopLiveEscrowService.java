@@ -58,6 +58,9 @@ import java.util.OptionalLong;
 import java.util.UUID;
 
 public final class PlayerShopLiveEscrowService {
+    private static final org.slf4j.Logger LOGGER =
+            com.mojang.logging.LogUtils.getLogger();
+
     private PlayerShopLiveEscrowService() {
     }
 
@@ -460,8 +463,14 @@ public final class PlayerShopLiveEscrowService {
                 ItemStack stack = ItemStackSnapshotCodec.decode(
                         transfer.lot().serializedExactStack());
                 stack.setCount(1);
+                ItemInputMatcher matcher = transfer.lot().matchMode()
+                        == com.enviouse.futureshops.server.escrow.playershop
+                        .PlayerShopItemMatchMode.EXACT
+                        ? ItemInputMatcher.exact(stack)
+                        : ItemInputMatcher.itemOnly(
+                        transfer.lot().itemId());
                 entries.add(ItemInventoryBatchEntry.extract(
-                        transfer.transferId(), ItemInputMatcher.exact(stack),
+                        transfer.transferId(), matcher,
                         transfer.lot().quantity()));
             }
             UUID custodyRequest = deterministicId("inventory custody",
@@ -473,6 +482,9 @@ public final class PlayerShopLiveEscrowService {
             if (result.status() != ItemInventoryExecutionStatus.APPLIED
                     && result.status()
                     != ItemInventoryExecutionStatus.REPLAYED) {
+                LOGGER.error(
+                        "Player shop inventory custody failed for request {} with custody request {} and status {}",
+                        intent.requestId(), custodyRequest, result.status());
                 if (result.status()
                         == ItemInventoryExecutionStatus.INSUFFICIENT_ITEMS) {
                     throw rejected("Player shop input items are missing");
@@ -920,6 +932,17 @@ public final class PlayerShopLiveEscrowService {
             ExactItemClaimCollectionResult result = runtime
                     .collectExactItemClaim(plan.beneficiaryId(),
                             plan.claimId(), Instant.now());
+            if (result.status()
+                    == ExactItemClaimCollectionStatus.RECOVERY_REQUIRED
+                    || result.status()
+                    == ExactItemClaimCollectionStatus.MANUAL_REVIEW
+                    || result.status()
+                    == ExactItemClaimCollectionStatus.INVALID_PAYLOAD) {
+                LOGGER.error(
+                        "Player shop item claim delivery failed for claim {} with status {} and request {}",
+                        plan.claimId(), result.status(),
+                        result.requestId().orElse(null));
+            }
             switch (result.status()) {
                 case DELIVERED, REPLAYED, NOT_PENDING -> {
                 }

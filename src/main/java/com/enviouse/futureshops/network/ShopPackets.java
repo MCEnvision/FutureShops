@@ -3,6 +3,7 @@ package com.enviouse.futureshops.network;
 import com.enviouse.futureshops.Futureshops;
 import com.enviouse.futureshops.network.packets.C2SAdminShopAddItemsPacket;
 import com.enviouse.futureshops.network.packets.C2SAdminShopEditPacket;
+import com.enviouse.futureshops.network.packets.C2SAdminOfferSavePacket;
 import com.enviouse.futureshops.network.packets.C2SAtmWithdrawPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmCollectCashPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
@@ -30,12 +31,16 @@ import com.enviouse.futureshops.network.packets.C2SPlayerShopBuyPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuybackConfigPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopConfigPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopIconPacket;
+import com.enviouse.futureshops.network.packets.C2SPlayerShopOfferPacket;
+import com.enviouse.futureshops.network.packets.C2SPlayerShopOfferSavePacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopSavedConfigPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopSettlementClaimPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopUnlinkStoragePacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopPromoPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopSellPacket;
 import com.enviouse.futureshops.network.packets.C2SSellRequestPacket;
+import com.enviouse.futureshops.network.packets.C2SServerShopOfferPacket;
+import com.enviouse.futureshops.network.packets.C2SServerShopOfferCartPacket;
 import com.enviouse.futureshops.network.packets.C2SSetDepartmentPacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyAdminCartPacket;
 import com.enviouse.futureshops.network.packets.C2SAuctionBidPacket;
@@ -47,6 +52,7 @@ import com.enviouse.futureshops.network.packets.C2SBazaarOrderPacket;
 import com.enviouse.futureshops.network.packets.C2SBazaarRegisterProductPacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyCartPacket;
 import com.enviouse.futureshops.network.packets.S2CAdminEditAckPacket;
+import com.enviouse.futureshops.network.packets.S2CAdminOfferSaveResultPacket;
 import com.enviouse.futureshops.network.packets.S2CMarketActionResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CAtmDataPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmResultPacket;
@@ -69,8 +75,12 @@ import com.enviouse.futureshops.network.packets.S2CMarketClaimCollectionPacket;
 import com.enviouse.futureshops.network.packets.S2CMarketProfileMutationPacket;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopDataPacket;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopResultPacket;
+import com.enviouse.futureshops.network.packets
+        .S2CPlayerShopOfferSaveResultPacket;
 import com.enviouse.futureshops.network.packets.S2CSellResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CSettlementHistoryPacket;
+import com.enviouse.futureshops.network.packets.S2CServerShopOfferResultPacket;
+import com.enviouse.futureshops.network.packets.S2CServerShopOfferCartResultPacket;
 import com.enviouse.futureshops.network.packets.S2CShopDataPacket;
 import com.enviouse.futureshops.network.packets.S2CVerifyCartResponsePacket;
 import net.minecraft.resources.ResourceLocation;
@@ -81,6 +91,9 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ShopPackets {
+    // protocol 55 adds normalized player shop owner editing.
+    // protocol 54 adds normalized player shop offer execution.
+    // protocol 53 adds normalized server shop offers and atomic mixed offer carts.
     // Protocol 39 binds ATM deposits to currency catalog signatures.
     // Protocol 38 adds bounded ATM withdrawal retry timing.
     // Protocol 37 adds correlated ATM cash deposits.
@@ -113,7 +126,8 @@ public final class ShopPackets {
     // Protocol 47 adds Bazaar player product registration and market fee capabilities.
     // Protocol 49 adds market department counts.
     // protocol 52 synchronizes atm deposit recovery.
-    public static final String PROTOCOL_VERSION = "52";
+    // protocol 53 adds normalized server shop offers.
+    public static final String PROTOCOL_VERSION = "55";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))
@@ -589,6 +603,71 @@ public final class ShopPackets {
             .decoder(C2SAtmDepositRecoveryPacket::decode)
             .encoder(C2SAtmDepositRecoveryPacket::encode)
             .consumerMainThread(C2SAtmDepositRecoveryPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SServerShopOfferPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SServerShopOfferPacket::decode)
+            .encoder(C2SServerShopOfferPacket::encode)
+            .consumerMainThread(C2SServerShopOfferPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CServerShopOfferResultPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CServerShopOfferResultPacket::decode)
+            .encoder(S2CServerShopOfferResultPacket::encode)
+            .consumerMainThread(S2CServerShopOfferResultPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SAdminOfferSavePacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SAdminOfferSavePacket::decode)
+            .encoder(C2SAdminOfferSavePacket::encode)
+            .consumerMainThread(C2SAdminOfferSavePacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CAdminOfferSaveResultPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CAdminOfferSaveResultPacket::decode)
+            .encoder(S2CAdminOfferSaveResultPacket::encode)
+            .consumerMainThread(S2CAdminOfferSaveResultPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SServerShopOfferCartPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SServerShopOfferCartPacket::decode)
+            .encoder(C2SServerShopOfferCartPacket::encode)
+            .consumerMainThread(C2SServerShopOfferCartPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CServerShopOfferCartResultPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CServerShopOfferCartResultPacket::decode)
+            .encoder(S2CServerShopOfferCartResultPacket::encode)
+            .consumerMainThread(S2CServerShopOfferCartResultPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SPlayerShopOfferPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SPlayerShopOfferPacket::decode)
+            .encoder(C2SPlayerShopOfferPacket::encode)
+            .consumerMainThread(C2SPlayerShopOfferPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SPlayerShopOfferSavePacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SPlayerShopOfferSavePacket::decode)
+            .encoder(C2SPlayerShopOfferSavePacket::encode)
+            .consumerMainThread(C2SPlayerShopOfferSavePacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(
+                        S2CPlayerShopOfferSaveResultPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CPlayerShopOfferSaveResultPacket::decode)
+            .encoder(S2CPlayerShopOfferSaveResultPacket::encode)
+            .consumerMainThread(
+                    S2CPlayerShopOfferSaveResultPacket::handle)
             .add();
     }
 

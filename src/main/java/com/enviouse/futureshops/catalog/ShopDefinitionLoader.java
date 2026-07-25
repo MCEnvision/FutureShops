@@ -1,9 +1,19 @@
 package com.enviouse.futureshops.catalog;
 
+import com.enviouse.futureshops.catalog.offer.LegacyServerShopOfferCompiler;
+import com.enviouse.futureshops.catalog.offer.OfferValidationIssue;
+import com.enviouse.futureshops.catalog.offer.OfferValidationResult;
+import com.enviouse.futureshops.catalog.offer.ServerShopOfferCatalogValidator;
+import com.enviouse.futureshops.catalog.offer.ServerShopOfferJsonParser;
+import com.enviouse.futureshops.catalog.offer.ServerShopOfferLegacyProjection;
+import com.enviouse.futureshops.catalog.offer.ServerShopOfferListing;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.logging.LogUtils;
+import net.minecraft.nbt.TagParser;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
@@ -115,6 +125,14 @@ public final class ShopDefinitionLoader {
     static ShopDefinition parseJson(String json, String filename) {
         try {
             JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            int schemaVersion = getInt(root, "schemaVersion", 1);
+            if (schemaVersion < 1
+                    || schemaVersion
+                    > ServerShopOfferJsonParser.SCHEMA_VERSION) {
+                throw new IllegalArgumentException(
+                        "Unsupported server shop schema version "
+                                + schemaVersion);
+            }
 
             String shopId      = getString(root, "shopId", "default");
             String displayName = getString(root, "displayName", shopId);
@@ -208,13 +226,45 @@ public final class ShopDefinitionLoader {
                 }
             }
 
-            return new ShopDefinition(shopId, displayName,
-                    List.copyOf(categories), List.copyOf(items), List.copyOf(promos), List.copyOf(barterRecipes));
+            List<ServerShopOfferListing> offers;
+            if (schemaVersion == ServerShopOfferJsonParser.SCHEMA_VERSION) {
+                offers = ServerShopOfferJsonParser.parse(root);
+                OfferValidationResult validation =
+                        ServerShopOfferCatalogValidator.validate(offers,
+                                ShopDefinitionLoader::knownItem,
+                                ShopDefinitionLoader::validNbt,
+                                com.enviouse.futureshops.catalog.offer
+                                        .OfferEscrowFanout
+                                        ::registeredMaximumStackSize);
+                if (!validation.valid()) {
+                    OfferValidationIssue issue = validation.issues().stream()
+                            .filter(candidate -> candidate.severity()
+                                    == OfferValidationIssue.Severity.ERROR)
+                            .findFirst().orElseThrow();
+                    throw new IllegalArgumentException(issue.code()
+                            + " at " + issue.path());
+                }
+                items = new ArrayList<>(
+                        ServerShopOfferLegacyProjection.items(offers));
+                barterRecipes = new ArrayList<>(
+                        ServerShopOfferLegacyProjection.barterRecipes(
+                                offers));
+            } else {
+                offers = LegacyServerShopOfferCompiler.compile(items,
+                        barterRecipes);
+            }
+            return new ShopDefinition(schemaVersion, shopId, displayName,
+                    List.copyOf(categories), List.copyOf(items),
+                    List.copyOf(promos), List.copyOf(barterRecipes), offers);
 
         } catch (Exception e) {
             LOGGER.error("[FutureShops] Parse error in '{}': {}", filename, e.getMessage());
             return null;
         }
+    }
+
+    public static boolean validCandidate(String json, String filename) {
+        return parseJson(json, filename) != null;
     }
 
     // -------------------------------------------------------------------------
@@ -239,6 +289,23 @@ public final class ShopDefinitionLoader {
 
     private static boolean getBool(JsonObject o, String key, boolean fallback) {
         return o.has(key) ? o.get(key).getAsBoolean() : fallback;
+    }
+
+    private static boolean knownItem(String itemId) {
+        ResourceLocation id = ResourceLocation.tryParse(itemId);
+        if (id == null || "minecraft:air".equals(itemId)) {
+            return false;
+        }
+        return BuiltInRegistries.ITEM.containsKey(id);
+    }
+
+    private static boolean validNbt(String nbt) {
+        try {
+            TagParser.parseTag(nbt);
+            return true;
+        } catch (Exception exception) {
+            return false;
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -347,5 +414,3 @@ public final class ShopDefinitionLoader {
             }
             """;
 }
-
-

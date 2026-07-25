@@ -9,6 +9,7 @@ import com.enviouse.futureshops.client.market.MarketCardLayout;
 import com.enviouse.futureshops.client.market.MarketCapabilityClientState;
 import com.enviouse.futureshops.client.market.MarketClientNavigationCoordinator;
 import com.enviouse.futureshops.client.market.MarketCompactPager;
+import com.enviouse.futureshops.client.market.MarketClaimCollectionClientState;
 import com.enviouse.futureshops.client.market.MarketDetailSelection;
 import com.enviouse.futureshops.client.market.MarketLayout;
 import com.enviouse.futureshops.client.market.MarketLayoutEngine;
@@ -38,6 +39,7 @@ import com.enviouse.futureshops.network.packets.C2SBazaarOrderPacket;
 import com.enviouse.futureshops.network.packets.C2SBazaarRegisterProductPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenMarketModulePacket;
 import com.enviouse.futureshops.network.packets.C2SCloseMarketSessionPacket;
+import com.enviouse.futureshops.network.packets.C2SMarketClaimCollectionPacket;
 import com.enviouse.futureshops.network.packets.C2SMarketPageQueryPacket;
 import com.enviouse.futureshops.network.packets.C2SMarketProfileMutationPacket;
 import com.enviouse.futureshops.network.packets.C2SFetchLocalShopsPacket;
@@ -51,6 +53,9 @@ import com.enviouse.futureshops.server.market.auction.AuctionListingType;
 import com.enviouse.futureshops.server.market.bazaar.BazaarOrderSide;
 import com.enviouse.futureshops.server.market.bazaar.BazaarOrderType;
 import com.enviouse.futureshops.server.market.bazaar.BazaarTimeInForce;
+import com.enviouse.futureshops.server.market.claim.MarketClaimCollectionCode;
+import com.enviouse.futureshops.server.market.claim.MarketClaimCollectionCommand;
+import com.enviouse.futureshops.server.market.claim.MarketClaimCollectionResult;
 import com.enviouse.futureshops.server.market.profile.MarketProfileMutation;
 import com.enviouse.futureshops.server.market.profile.MarketProfileMutationCommand;
 import com.enviouse.futureshops.server.market.profile.MarketProfileMutationResult;
@@ -201,6 +206,7 @@ public final class MarketModuleScreen extends Screen
     private int pendingTooltipY;
     private String lastMarketWarning = "";
     private long lastMarketWarningAtMillis;
+    private UUID lastClaimCollectionResponse;
 
     public MarketModuleScreen(
             S2COpenMarketModulePacket packet,
@@ -314,6 +320,10 @@ public final class MarketModuleScreen extends Screen
                 >= ClientConfig.settings().search().debounceMillis()) {
             sendPageQuery();
         }
+        MarketClaimCollectionClientState.latest()
+                .filter(result -> !result.requestId().equals(
+                        lastClaimCollectionResponse))
+                .ifPresent(this::applyClaimCollectionResult);
     }
 
     /**
@@ -1442,7 +1452,31 @@ public final class MarketModuleScreen extends Screen
             registerHit(card, () -> openDetail(cardIndex, data));
             renderOrderCancelButton(graphics, card, data, mouseX,
                     mouseY);
+            renderClaimCollectionButton(graphics, card, data, mouseX,
+                    mouseY);
         }
+    }
+
+    private void renderClaimCollectionButton(
+            GuiGraphics graphics,
+            MarketRectangle card,
+            MarketPageCard data,
+            int mouseX,
+            int mouseY
+    ) {
+        if (data.kind() != MarketPageCardKind.CLAIM
+                || parseUuid(data.identity()) == null
+                || card.width() < 96 || card.height() < 40) {
+            return;
+        }
+        MarketRectangle collect = new MarketRectangle(
+                card.right() - 62, card.bottom() - 18, 56, 14);
+        accentActionButton(graphics, mouseX, mouseY, collect,
+                Component.translatable(
+                        "gui.futureshops.market.claim.collect").getString(),
+                data.primaryAction(), theme.callToAction(),
+                "claim_collect", data.identity(), true,
+                () -> sendClaimCollection(data));
     }
 
     private void renderCardIdentity(
@@ -2743,6 +2777,86 @@ public final class MarketModuleScreen extends Screen
             PENDING_PAYMENT_SOURCES.remove(
                     PENDING_PAYMENT_SOURCES.keySet().iterator().next());
         }
+    }
+
+    private void sendClaimCollection(MarketPageCard card) {
+        UUID claimId = parseUuid(card.identity());
+        if (claimId == null || !"claims".equals(packet.view())
+                || !navigation.isOpen()) {
+            showActionStatus(Component.translatable(
+                    "gui.futureshops.market.claim.invalid"), false);
+            return;
+        }
+        sendMarketAction("claim_collect", card.identity(), requestId -> {
+            MarketClaimCollectionCommand command =
+                    new MarketClaimCollectionCommand(requestId,
+                            navigation.current().routeNonce(), module,
+                            MarketClaimCollectionCommand.CLAIMS_VIEW,
+                            claimId);
+            MarketClaimCollectionClientState.begin(command);
+            return new C2SMarketClaimCollectionPacket(command);
+        });
+    }
+
+    private void applyClaimCollectionResult(
+            MarketClaimCollectionResult result
+    ) {
+        lastClaimCollectionResponse = result.requestId();
+        Optional<MarketPendingActionTracker.PendingAction> pending =
+                PENDING_ACTIONS.complete(result.requestId());
+        if (pending.isEmpty()) {
+            return;
+        }
+        result.resultingBalanceMinor().ifPresent(
+                ShopClientState::setCurrentBalanceMinorUnits);
+        boolean success = result.code()
+                == MarketClaimCollectionCode.COLLECTED
+                || result.code()
+                == MarketClaimCollectionCode.PARTIALLY_COLLECTED
+                || result.code()
+                == MarketClaimCollectionCode.ALREADY_COLLECTED;
+        showActionStatus(claimCollectionMessage(result), success);
+        if (result.refreshClaims()) {
+            requestCapabilities();
+            if (!isDetailView() && "claims".equals(packet.view())) {
+                sendPageQuery();
+            }
+        }
+    }
+
+    private Component claimCollectionMessage(
+            MarketClaimCollectionResult result
+    ) {
+        return switch (result.code()) {
+            case COLLECTED -> Component.translatable(
+                    "gui.futureshops.market.claim.collected",
+                    result.deliveredUnits());
+            case PARTIALLY_COLLECTED -> Component.translatable(
+                    "gui.futureshops.market.claim.partial",
+                    result.deliveredUnits(), result.remainingUnits());
+            case ALREADY_COLLECTED -> Component.translatable(
+                    "gui.futureshops.market.claim.already_collected");
+            case WALLET_FULL -> Component.translatable(
+                    "gui.futureshops.market.claim.wallet_full",
+                    result.remainingUnits());
+            case INVENTORY_FULL -> Component.translatable(
+                    "gui.futureshops.market.claim.inventory_full",
+                    result.remainingUnits());
+            case RECOVERY_REQUIRED -> Component.translatable(
+                    "gui.futureshops.market.claim.recovery_required");
+            case RATE_LIMITED, RETRYABLE, REENTRANT_REQUEST ->
+                    Component.translatable(
+                            "gui.futureshops.market.claim.retryable");
+            case STALE_ROUTE, WRONG_MODULE, WRONG_VIEW, SESSION_EXPIRED,
+                 MISSING_SESSION -> Component.translatable(
+                    "gui.futureshops.market.claim.stale");
+            case MODULE_UNAVAILABLE, ESCROW_UNAVAILABLE ->
+                    Component.translatable(
+                            "gui.futureshops.market.claim.unavailable");
+            default -> Component.translatable(
+                    "gui.futureshops.market.claim.failed",
+                    result.code().name());
+        };
     }
 
     /**
@@ -4789,6 +4903,7 @@ public final class MarketModuleScreen extends Screen
         PENDING_ACTIONS.clear();
         PENDING_PAYMENT_SOURCES.clear();
         DENIED_PAYMENT_SOURCES.clear();
+        MarketClaimCollectionClientState.clear();
         pendingDetailRefresh = null;
         actionStatus = null;
         profileRevision = 0L;

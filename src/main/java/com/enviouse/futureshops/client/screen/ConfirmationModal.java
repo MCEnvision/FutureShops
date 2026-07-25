@@ -38,6 +38,9 @@ public class ConfirmationModal {
 
     // Modal dimensions (computed in render)
     private int modalX, modalY, modalW, modalH;
+    private int summaryScroll;
+    private int[] summaryViewport;
+    private int visibleSummaryLines;
 
     // Flat Nocturne buttons: draw + hit-region come from the same ShopUiUtil.button calls,
     // registered here each render and consulted in mouseClicked via dispatchClicks.
@@ -158,11 +161,33 @@ public class ConfirmationModal {
         int tw = font.width(title);
         graphics.drawString(font, title, modalX + (modalW - tw) / 2, modalY + 8, ShopColors.TEXT_STRONG, true);
 
-        // Summary lines — track icon hover so we can render a vanilla tooltip at the end.
-        int lineY = modalY + 26;
+        int summaryY = modalY + 26;
+        int reservedAfterSummary = paymentSourceRequired ? 72 : 39;
+        int summaryHeight = Math.max(16,
+                modalH - 26 - reservedAfterSummary);
+        visibleSummaryLines = Math.max(1,
+                Math.min(summaryLines.size(), summaryHeight / 16));
+        summaryScroll = Math.max(0, Math.min(summaryScroll,
+                Math.max(0,
+                        summaryLines.size() - visibleSummaryLines)));
+        summaryViewport = new int[]{modalX + 6, summaryY,
+                modalW - 12, visibleSummaryLines * 16};
+
         String hoverItemId = null;
         String hoverNbtJson = null;
-        for (SummaryLine line : summaryLines) {
+        graphics.enableScissor(summaryViewport[0],
+                summaryViewport[1],
+                summaryViewport[0] + summaryViewport[2],
+                summaryViewport[1] + summaryViewport[3]);
+        for (int visibleIndex = 0;
+             visibleIndex < visibleSummaryLines;
+             visibleIndex++) {
+            int summaryIndex = summaryScroll + visibleIndex;
+            if (summaryIndex >= summaryLines.size()) {
+                break;
+            }
+            SummaryLine line = summaryLines.get(summaryIndex);
+            int lineY = summaryY + visibleIndex * 16;
             if (line.itemId != null && !line.itemId.isBlank()) {
                 int iconX = modalX + 10;
                 int iconY = lineY - 2;
@@ -179,8 +204,14 @@ public class ConfirmationModal {
             } else {
                 graphics.drawString(font, font.plainSubstrByWidth(line.text, modalW - 20), modalX + 10, lineY + 2, ShopColors.TEXT_MUTED, false);
             }
-            lineY += 16;
         }
+        graphics.disableScissor();
+        ShopUiUtil.renderScrollIndicators(graphics, font,
+                summaryViewport[0], summaryViewport[1],
+                summaryViewport[2], summaryViewport[3],
+                summaryScroll, visibleSummaryLines,
+                summaryLines.size());
+        int lineY = summaryY + visibleSummaryLines * 16;
 
         // Divider
         graphics.fill(modalX + 8, lineY, modalX + modalW - 8, lineY + 1, ShopColors.BORDER_MUTED);
@@ -269,6 +300,25 @@ public class ConfirmationModal {
         }
 
         return true; // consume click inside modal
+    }
+
+    public boolean mouseScrolled(
+            double mouseX,
+            double mouseY,
+            double delta
+    ) {
+        if (summaryViewport == null
+                || summaryLines.size() <= visibleSummaryLines
+                || mouseX < summaryViewport[0]
+                || mouseX >= summaryViewport[0] + summaryViewport[2]
+                || mouseY < summaryViewport[1]
+                || mouseY >= summaryViewport[1] + summaryViewport[3]) {
+            return false;
+        }
+        summaryScroll = Math.max(0, Math.min(
+                summaryLines.size() - visibleSummaryLines,
+                summaryScroll + (delta < 0.0D ? 1 : -1)));
+        return true;
     }
 
     /**

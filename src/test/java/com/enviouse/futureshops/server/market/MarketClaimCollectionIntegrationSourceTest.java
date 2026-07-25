@@ -28,7 +28,7 @@ class MarketClaimCollectionIntegrationSourceTest {
         assertEquals(62, count(source.substring(0, response),
                 "CHANNEL.messageBuilder"));
         assertTrue(source.contains(
-                "public static final String PROTOCOL_VERSION = \"52\""));
+                "public static final String PROTOCOL_VERSION = \"55\""));
 
         String c2s = read(
                 "src/main/java/com/enviouse/futureshops/network/packets/C2SMarketClaimCollectionPacket.java");
@@ -59,6 +59,25 @@ class MarketClaimCollectionIntegrationSourceTest {
         assertTrue(processor.contains(
                 "case SHOP -> !bazaar && !auction"));
         assertTrue(planner.contains("kind == ClaimKind.REFUND"));
+    }
+
+    @Test
+    void marketScreenCanSendCollectAndConsumeItsResponse()
+            throws Exception {
+        String screen = read(
+                "src/main/java/com/enviouse/futureshops/client/screen/MarketModuleScreen.java");
+        assertTrue(screen.contains(
+                "new MarketClaimCollectionCommand(requestId,"));
+        assertTrue(screen.contains(
+                "new C2SMarketClaimCollectionPacket(command)"));
+        assertTrue(screen.contains(
+                "MarketClaimCollectionClientState.begin(command)"));
+        assertTrue(screen.contains(
+                "PENDING_ACTIONS.complete(result.requestId())"));
+        assertTrue(screen.contains(
+                "ShopClientState::setCurrentBalanceMinorUnits"));
+        assertTrue(screen.contains(
+                "renderClaimCollectionButton(graphics, card, data"));
     }
 
     private static int count(String value, String needle) {

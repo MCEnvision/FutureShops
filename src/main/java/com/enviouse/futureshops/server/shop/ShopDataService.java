@@ -93,7 +93,11 @@ public final class ShopDataService {
                 nearbyShops,
                 forceOpen,
                 // In-GUI admin editor gate flag — display only; AdminShopEditService re-checks.
-                player.hasPermissions(2)));
+                player.hasPermissions(2),
+                adminEnabled
+                        ? ShopCatalog.get(shopId)
+                        .map(ShopDefinition::offers).orElse(List.of())
+                        : List.of()));
     }
 
     public static void resendActiveSessions(MinecraftServer server) {

@@ -1,25 +1,27 @@
 # FutureShops
 
-FutureShops is a Minecraft Forge economy and marketplace mod for server shops, player owned shop blocks, physical currency, barter trades, an Auction House, and a Bazaar order book. Version 3.0 routes value movement through durable escrow so interrupted trades recover or become claims instead of losing money or items.
+FutureShops is a Minecraft Forge economy and marketplace mod for server shops, player owned shop blocks, physical currency, barter trades, an Auction House, and a Bazaar order book. Version 3.1 adds one server authoritative trade offer model for free, money, barter, compound, alternative, Sell to Shop, and bundle exchanges. Value movement remains protected by the durable 3.0 escrow foundation.
 
 ## Status
 
-The 3.0 markets implementation is in beta. The ATM deposit recovery and Bazaar refund access blocker in [Section 20 of the 3.0 plan](FutureShops3-0Plan.MD#20-release-blocker-atm-deposit-recovery-and-refund-access) is implemented on the active phase branch. The automated suite, build, headless client startup, and dedicated server startup pass. Active phase branches remain test builds until live multiplayer, reconnect, restart, and recovery fault acceptance is complete. Use matching FutureShops builds on the client and server.
+The 3.1 trade offer implementation is in beta on the active phase branch. Active phase branches remain test builds until the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, and recovery acceptance run is complete. Use matching FutureShops builds on the client and server.
 
 Supported runtime:
 
 | Component | Version |
 | --- | --- |
+| FutureShops | 3.1.0 beta 1 |
 | Minecraft | 1.20.1 |
 | Forge | 47.4.20 |
 | Java | 17 |
 | GeckoLib | 4.8.3 or newer compatible 4.x release |
-| Network protocol | 52 |
+| Network protocol | 55 |
 
 ## Features
 
-* Infinite stock server shops with categories, search, carts, sales, barter, and transaction history.
-* Player shop blocks with linked storage, money and barter listings, promotions, stock alerts, and owner settlement tools.
+* Server shops with explicit free offers, money, barter, money plus barter, alternative payments, Sell to Shop, multi item bundles, validated savings, categories, search, mixed carts, and transaction history.
+* Player shop blocks with versioned offers, legacy listing migration, physical storage, free and paid acquisition, multiple barter components, alternative options, Sell to Shop input bundles, promotions, stock alerts, and owner settlement tools.
+* An in game offer editor with templates, item and category pickers, validation, contextual help, visitor preview, correlated saves, revision conflict handling, atomic catalog backups, and responsive FutureShops styled controls.
 * Wallet balances, payments, leaderboards, deposits, withdrawals, ATM controls, and protected FutureShops currency.
 * Auction House listings, bids, buy now sales, watchlists, history, anti sniping rules, and exact item custody.
 * Bazaar products, instant orders, limit orders, partial fills, price time priority, fees, price history, and circuit breakers.
@@ -37,9 +39,11 @@ FutureShops currently assumes one authoritative server and world. It does not pr
 5. Start the server once to create the TOML files and product directories.
 6. Review module, economy, escrow, Auction House, and Bazaar settings before opening the server.
 
-For 3.0 upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
+For 3.0 or 3.1 upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
 
 Marketplace screens opened while escrow is recovering refresh automatically when the runtime becomes ready. Reconnecting or reopening the screen should not be necessary.
+
+Interrupted normalized Server Shop offers recover from exact persisted evidence when the player logs in and through bounded background retries while the escrow runtime is ready. A retry never reconstructs a trade from current client state.
 
 ## Usage
 
@@ -73,7 +77,7 @@ FutureShops creates these files:
 
 Server shop catalogs live in `config/futureshops/shops/`. Bazaar products live in `config/futureshops/bazaar/products/`.
 
-See [Configuration examples](docs/config-3.0-examples.md) and [Bazaar product definitions](docs/bazaar-products.md).
+See [3.1 trade offer configuration](docs/config-3.1-offers.md), [Configuration examples](docs/config-3.0-examples.md), and [Bazaar product definitions](docs/bazaar-products.md).
 
 ## Development
 
@@ -99,7 +103,7 @@ Useful run tasks are `runClient`, `runServer`, `runGameTestServer`, and `runData
 
 ## Compatibility and support
 
-Read [Compatibility matrix](docs/compatibility-matrix.md) before using custom currency, permission plugins, external storage, or restored world data.
+Read [Compatibility matrix](docs/compatibility-matrix.md) before using custom currency, permission plugins, external storage, advanced trade offers, or restored world data. The player and administrator changes for this beta are summarized in [3.1 release notes](docs/release-notes-3.1.md).
 
 When reporting a problem, include the FutureShops jar version, Minecraft and Forge versions, client and server logs, relevant sanitized TOML files, the command or screen involved, and whether the world was new or upgraded. For market availability failures, include the output of `/marketadmin status`. For a deposit recovery, copy the complete ATM recovery handle and include `/marketadmin inspect <transactionId>`.
 

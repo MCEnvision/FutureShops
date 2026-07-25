@@ -169,25 +169,46 @@ class AtmScreenMessagePolicyTest {
                 AtmWithdrawalTracker.PendingState.NONE,
                 AtmCashClaimCollectionTracker.PendingState.NONE,
                 AtmDepositTracker.PendingState.RETRYABLE,
-                true, true));
+                true, true, true));
         assertEquals(true, AtmScreen.modeNavigationEnabled(
                 AtmWithdrawalTracker.PendingState.NONE,
                 AtmCashClaimCollectionTracker.PendingState.NONE,
-                AtmDepositTracker.PendingState.RETRYABLE));
+                AtmDepositTracker.PendingState.RETRYABLE,
+                true));
         assertEquals(true, AtmScreen.cashCollectionEnabled(
                 AtmWithdrawalTracker.PendingState.NONE,
                 AtmCashClaimCollectionTracker.PendingState.NONE,
                 AtmDepositTracker.PendingState.BLOCKED,
-                true, true));
+                true, true, true));
         assertEquals(true, AtmScreen.modeNavigationEnabled(
                 AtmWithdrawalTracker.PendingState.NONE,
                 AtmCashClaimCollectionTracker.PendingState.NONE,
-                AtmDepositTracker.PendingState.BLOCKED));
+                AtmDepositTracker.PendingState.BLOCKED,
+                true));
+        assertEquals(true, AtmScreen.cashCollectionEnabled(
+                AtmWithdrawalTracker.PendingState.NONE,
+                AtmCashClaimCollectionTracker.PendingState.NONE,
+                AtmDepositTracker.PendingState.AWAITING,
+                true, true, true));
+        assertEquals(true, AtmScreen.modeNavigationEnabled(
+                AtmWithdrawalTracker.PendingState.NONE,
+                AtmCashClaimCollectionTracker.PendingState.NONE,
+                AtmDepositTracker.PendingState.AWAITING,
+                true));
+    }
+
+    @Test
+    void activeDepositStillBlocksCashClaimsAndModeTabs() {
         assertEquals(false, AtmScreen.cashCollectionEnabled(
                 AtmWithdrawalTracker.PendingState.NONE,
                 AtmCashClaimCollectionTracker.PendingState.NONE,
                 AtmDepositTracker.PendingState.AWAITING,
-                true, true));
+                false, true, true));
+        assertEquals(false, AtmScreen.modeNavigationEnabled(
+                AtmWithdrawalTracker.PendingState.NONE,
+                AtmCashClaimCollectionTracker.PendingState.NONE,
+                AtmDepositTracker.PendingState.AWAITING,
+                false));
     }
 
     @Test

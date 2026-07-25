@@ -1,14 +1,15 @@
 # Backup and restore
 
-FutureShops 3.0 stores the economy in durable escrow state inside the world save. This guide
-covers what that state is, how the one-time 3.0 migration behaves, and how to take and restore a
+FutureShops 3.1 stores the economy and normalized offer recovery evidence in durable state inside the world save. This guide
+covers what that state is, how the 3.0 economy and 3.1 offer migrations behave, and how to take and restore a
 backup without corrupting or forking the economy.
 
-The single most important rule: **back up the world before starting it on 3.0 for the first
-time.** The migration from 2.x wallets, mint records, and settlements into escrow is one-way. The
-second most important rule: **a backup is the whole world directory, restored as one unit.**
-FutureShops state is deliberately cross-checked between files, and a restore that mixes files from
-different snapshots is detected and refused.
+The single most important rule: **back up the world before starting it on 3.0 or 3.1 for the first
+time.** The migration from 2.x wallets, mint records, and settlements into escrow is one way, and
+3.1 adds versioned Player Shop offers and a durable Server Shop replay ledger. The second most
+important rule: **a backup is the whole world directory, restored as one unit.** FutureShops state
+is deliberately cross checked between files, and a restore that mixes files from different
+snapshots is detected and refused.
 
 ## Where FutureShops keeps its data
 
@@ -31,6 +32,13 @@ Escrow core (fail closed on damage or newer schemas):
 | `futureshops_escrow_server_shop_intents` | Server shop transaction intents |
 | `futureshops_escrow_player_shop` | Player shop escrow state |
 | `futureshops_escrow_administrative_audit` | Immutable admin action audit records |
+| `futureshops_server_shop_offer_prepared` | Live prepared single offer evidence and a legacy replay migration cache |
+| `futureshops_server_shop_offer_commits` | Recent exact single offer commits and a legacy replay migration cache |
+| `futureshops_server_shop_offer_cart_prepared` | Live prepared mixed cart evidence and a legacy replay migration cache |
+| `futureshops_server_shop_offer_cart_commits` | Recent exact cart commits and a legacy replay migration cache |
+| `futureshops_server_shop_offer_terminal_receipts` | Correlated terminal offer outcomes |
+| `futureshops_server_shop_offer_usage` | Per player limits, cooldowns, and Sell to Shop capacity projection |
+| `futureshops_admin_offer_save_receipts` | Idempotent administrator and owner offer save outcomes |
 
 Markets:
 
@@ -72,6 +80,25 @@ truncated final record after a crash is discarded safely on its own; anything el
 mismatch, missing files, an unsupported newer schema — sends the economy into maintenance mode,
 where new value-moving operations stop and safe browsing, claims, and recovery remain available.
 
+### Server Shop replay ledger — `<world>/futureshops/escrow/offer_replay/`
+
+Successful normalized Server Shop single and cart requests write one immutable receipt under a
+two level request UUID shard, for example
+`offer_replay/ab/cd/abcdef12-3456-7890-abcd-ef1234567890.receipt`. `index.wal` is the forced append
+only discovery index. `ledger.lock` prevents two live servers from opening the same ledger.
+
+The receipt stores the exact request fingerprint, terminal result, and usage evidence. It remains
+after bounded live prepared and commit rows compact, so an old retry cannot execute again or evade
+lifetime and period limits. Existing receipt identities must match exactly. Files are decoded with
+a strict size bound, symlinks are rejected, and new receipts require an atomic move.
+
+Treat the complete `offer_replay/` directory as escrow state. Never copy only `index.wal`, only the
+sharded receipts, or only the corresponding SavedData files. The usage store persists a byte
+cursor into the discovery index, so mixing ledger and SavedData generations can replay an
+incomplete usage projection or fail closed. An earlier SavedData replay archive is copied into
+this ledger as a migration cache and must remain in the same backup until the upgraded world is
+verified.
+
 ### Player data — `<world>/playerdata/`
 
 Escrow delivery receipts are verified against vanilla `playerdata/<uuid>.dat` files during
@@ -104,6 +131,14 @@ On first 3.0 startup against an existing world, FutureShops:
 The legacy stores are retained until the new checkpoint verifies. Because the import IDs are
 deterministic, an interrupted migration resumes safely on the next start — it cannot double-import
 a wallet.
+
+## The 3.1 offer migration
+
+Legacy Server Shop catalogs remain readable and compile into immutable normalized offers. Positive buy prices become money acquire options. Positive sell prices become Sell to Shop options. Barter recipes become item acquire options and preserve every required ingredient. A legacy zero price stays disabled and is never treated as free.
+
+Player Shop blocks gain a versioned offer payload. Existing money price, barter item, direction, output bundle, exact NBT, stock source, owner, storage links, and settlement state remain intact. Migration first validates the normalized form. Unsupported or malformed newer offer data is preserved as unavailable instead of being guessed or silently replaced.
+
+The old world remains readable only by a build that understands every schema written into it. Take a complete world and configuration backup before the first 3.1 start. Restoring an older build requires restoring that complete preupgrade snapshot.
 
 ## Newer schema enters read-only recovery
 
@@ -143,7 +178,7 @@ FutureShops state from one consistent snapshot.
 2. Move the current world directory aside (do not delete it — it may hold committed transactions
    newer than your backup, and an aborted restore should be reversible).
 3. Restore the whole world directory from **one** backup snapshot: `data/`,
-   `futureshops/escrow/`, `playerdata/`, and everything else, together.
+   `futureshops/escrow/`, including `offer_replay/`, `playerdata/`, and everything else, together.
 4. Restore or verify the matching `config/` contents if your configuration changed since the
    snapshot.
 5. If you are also changing the mod version, remember: the restored world must not have been

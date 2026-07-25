@@ -13,7 +13,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 public final class PlayerShopIntentCodec {
-    public static final int CURRENT_SCHEMA = 1;
+    public static final int CURRENT_SCHEMA = 2;
     public static final int MAX_ENCODED_BYTES =
             PlayerShopEscrowConstants.MAX_ENCODED_BYTES;
 
@@ -23,12 +23,21 @@ public final class PlayerShopIntentCodec {
     }
 
     public static byte[] encode(PlayerShopEscrowIntent intent) {
+        int schema = intent.offerSelection().isPresent()
+                ? CURRENT_SCHEMA : 1;
+        return encode(intent, schema);
+    }
+
+    private static byte[] encode(
+            PlayerShopEscrowIntent intent,
+            int schema
+    ) {
         Objects.requireNonNull(intent, "intent");
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             DataOutputStream output = new DataOutputStream(bytes);
             output.writeInt(MAGIC);
-            output.writeInt(CURRENT_SCHEMA);
+            output.writeInt(schema);
             writeCore(output, intent.requestId(), intent.actorId(),
                     intent.ownerId(), intent.shopIdentity(),
                     intent.operation(), intent.tradeMethod(),
@@ -36,6 +45,10 @@ public final class PlayerShopIntentCodec {
                     intent.quoteCreatedAt(), intent.listing(),
                     intent.moneyTransfers(), intent.itemTransfers(),
                     intent.claims(), intent.storageMutations());
+            if (schema >= 2) {
+                writeOfferSelection(output,
+                        intent.offerSelection().orElseThrow());
+            }
             output.writeByte(intent.status().ordinal());
             output.writeLong(intent.revision());
             PlayerShopBinarySupport.writeString(output,
@@ -57,10 +70,16 @@ public final class PlayerShopIntentCodec {
             if (input.readInt() != MAGIC) {
                 throw new IllegalArgumentException("Player shop intent magic is invalid");
             }
-            if (input.readInt() != CURRENT_SCHEMA) {
+            int schema = input.readInt();
+            if (schema < 1 || schema > CURRENT_SCHEMA) {
                 throw new IllegalArgumentException("Player shop intent schema is unsupported");
             }
             Core core = readCore(input);
+            java.util.Optional<PlayerShopOfferSelection> selection =
+                    schema >= 2
+                            ? java.util.Optional.of(
+                            readOfferSelection(input))
+                            : java.util.Optional.empty();
             PlayerShopEscrowIntent.Status status = PlayerShopBinarySupport.readEnum(
                     input, PlayerShopEscrowIntent.Status.values(), "intent status");
             long revision = input.readLong();
@@ -73,8 +92,9 @@ public final class PlayerShopIntentCodec {
                     core.paymentSource(), core.requestedUnits(),
                     core.quoteCreatedAt(), core.listing(),
                     core.moneyTransfers(), core.itemTransfers(), core.claims(),
-                    core.storageMutations(), status, revision, fingerprint);
-            if (!java.util.Arrays.equals(copy, encode(intent))) {
+                    core.storageMutations(), selection, status, revision,
+                    fingerprint);
+            if (!java.util.Arrays.equals(copy, encode(intent, schema))) {
                 throw new IllegalArgumentException("Player shop intent is not canonical");
             }
             return intent;
@@ -86,6 +106,82 @@ public final class PlayerShopIntentCodec {
             }
             throw new IllegalArgumentException("Player shop intent is invalid", exception);
         }
+    }
+
+    static void writeOfferSelection(
+            DataOutputStream output,
+            PlayerShopOfferSelection selection
+    ) throws IOException {
+        PlayerShopBinarySupport.writeString(output,
+                selection.listingId(),
+                PlayerShopEscrowConstants.MAX_IDENTIFIER_LENGTH);
+        output.writeLong(selection.offerRevision());
+        PlayerShopBinarySupport.writeString(output,
+                selection.optionId(),
+                PlayerShopEscrowConstants.MAX_IDENTIFIER_LENGTH);
+        output.writeByte(selection.action().ordinal());
+        writeLimits(output, selection.listingLimits());
+        writeLimits(output, selection.optionLimits());
+        output.writeLong(selection.capacity());
+        writeTemplates(output, selection.outputComponents());
+        writeTemplates(output, selection.inputComponents());
+    }
+
+    static PlayerShopOfferSelection readOfferSelection(
+            DataInputStream input
+    ) throws IOException {
+        PlayerShopOfferSelection selection = new PlayerShopOfferSelection(
+                PlayerShopBinarySupport.readString(input,
+                        PlayerShopEscrowConstants.MAX_IDENTIFIER_LENGTH,
+                        "offer listing id"),
+                input.readLong(),
+                PlayerShopBinarySupport.readString(input,
+                        PlayerShopEscrowConstants.MAX_IDENTIFIER_LENGTH,
+                        "offer option id"),
+                PlayerShopBinarySupport.readEnum(input,
+                        com.enviouse.futureshops.catalog.offer.OfferAction
+                                .values(),
+                        "offer action"),
+                readLimits(input), readLimits(input),
+                input.readLong(),
+                readList(input,
+                        PlayerShopEscrowConstants.MAX_LISTING_OUTPUTS,
+                        PlayerShopIntentCodec::readTemplate,
+                        "offer output components"),
+                readList(input,
+                        PlayerShopEscrowConstants.MAX_LISTING_OUTPUTS,
+                        PlayerShopIntentCodec::readTemplate,
+                        "offer input components"));
+        return selection;
+    }
+
+    private static void writeTemplates(
+            DataOutputStream output,
+            List<PlayerShopListingSnapshot.ItemTemplate> templates
+    ) throws IOException {
+        output.writeInt(templates.size());
+        for (PlayerShopListingSnapshot.ItemTemplate template
+                : templates) {
+            PlayerShopListingSnapshot.writeTemplate(output, template);
+        }
+    }
+
+    private static void writeLimits(
+            DataOutputStream output,
+            com.enviouse.futureshops.catalog.offer.OfferLimitPolicy limits
+    ) throws IOException {
+        output.writeInt(limits.maximumPerRequest());
+        output.writeLong(limits.lifetimeLimit());
+        output.writeLong(limits.periodLimit());
+        output.writeLong(limits.periodSeconds());
+        output.writeLong(limits.cooldownSeconds());
+    }
+
+    private static com.enviouse.futureshops.catalog.offer.OfferLimitPolicy
+    readLimits(DataInputStream input) throws IOException {
+        return new com.enviouse.futureshops.catalog.offer.OfferLimitPolicy(
+                input.readInt(), input.readLong(), input.readLong(),
+                input.readLong(), input.readLong());
     }
 
     static void writeCore(

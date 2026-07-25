@@ -4,7 +4,7 @@
 
 FutureShops is a Forge 1.20.1 mod that owns a server authoritative economy, shop catalogs, player shop blocks, physical currency, an escrow protected Auction House, and a Bazaar order book.
 
-The 3.0 implementation is in beta. The ATM deposit recovery and Bazaar refund access blocker in [Section 20 of the FutureShops 3.0 plan](FutureShops3-0Plan.MD#20-release-blocker-atm-deposit-recovery-and-refund-access) is implemented on the active phase branch. The automated suite, build, headless client startup, and dedicated server startup pass. Live multiplayer, reconnect, restart, and recovery fault acceptance remains required before release approval. The [FutureShops 3.1 advanced trade offers plan](FutureShops3-1TradeOffersPlan.MD) is the source of truth for the planned expansion. Current code and tests establish implemented behavior. Focused operator documentation is available in:
+The 3.1 trade offer implementation is in beta on the active phase branch. It extends the durable 3.0 market foundation with one normalized offer contract for Server Shops and Player Shops. The [FutureShops 3.1 advanced trade offers plan](FutureShops3-1TradeOffersPlan.MD) remains the acceptance source of truth. Current code and tests establish implemented behavior. Release approval still requires the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, and recovery acceptance run. Focused operator documentation is available in:
 
 * [Auction House and Bazaar guide](docs/markets-guide.md)
 * [Configuration examples](docs/config-3.0-examples.md)
@@ -12,11 +12,14 @@ The 3.0 implementation is in beta. The ATM deposit recovery and Bazaar refund ac
 * [Backup and restore](docs/backup-restore.md)
 * [Compatibility matrix](docs/compatibility-matrix.md)
 * [Physical currency and ATM](docs/physical-currency-atm.md)
+* [3.1 trade offer configuration](docs/config-3.1-offers.md)
+* [3.1 release notes](docs/release-notes-3.1.md)
 
 ## Runtime and toolchain
 
 | Component | Pinned value |
 | --- | --- |
+| FutureShops | 3.1.0 beta 1 |
 | Java | 17 |
 | Gradle Wrapper | 8.14.4 |
 | Minecraft | 1.20.1 |
@@ -29,7 +32,7 @@ The 3.0 implementation is in beta. The ATM deposit recovery and Bazaar refund ac
 | mclib | 20 |
 | JUnit Jupiter | 5.10.2 |
 | JUnit Platform | 1.10.2 |
-| Network protocol | 52 |
+| Network protocol | 55 |
 
 The repository uses one Gradle module named `futureshops`. Java sources use UTF 8. Runtime and data generation launches are defined in `build.gradle`.
 
@@ -72,7 +75,7 @@ The root package is `com.enviouse.futureshops`.
 | `api` | Public extension points and shared contracts |
 | `init` | Forge registration and mod initialization |
 | `config` | Validated common, escrow, market, and client settings |
-| `catalog` | Server shop catalog loading and item definitions |
+| `catalog` and `catalog/offer` | Server shop loading, immutable normalized offers, validation, migration, pricing comparisons, and atomic administrator writes |
 | `block` and `item` | Shop block entities, interactions, and registered items |
 | `money` | Wallet provider boundary, physical currency, deposits, and withdrawals |
 | `server/economy` | Economy coordination and administrative balance operations |
@@ -82,7 +85,7 @@ The root package is `com.enviouse.futureshops`.
 | `server/session` | Server owned navigation and route validation |
 | `network` and `network/packets` | Protocol registration, packet validation, and client or server dispatch |
 | `client/market` | Client navigation coordinator, capability snapshots, layout models, and response tracking |
-| `client/screen` | Shop, market, profile, history, ATM, and administration screens |
+| `client/editor` and `client/screen` | Persistent offer drafts, validation, shop, offer chooser, visitor preview, market, profile, history, ATM, and administration screens |
 | `compat` | Optional mod integrations, including Refined Storage |
 | `mixin` | Narrow hooks not supplied by Forge events |
 
@@ -96,7 +99,7 @@ During recovery, value mutations fail closed. Claims remain the safety route. Sc
 
 Market capability requests project current server configuration, runtime readiness, module control status, claim counts, branding, currency metadata, and a display balance. The client uses the snapshot to present availability. During recovery, screens retry capability requests. A correlated response with a newer server revision is accepted even if another retry is already outstanding, which prevents a slow response from leaving the client stuck on the recovery snapshot. Equal revision conflicts and older revisions still fail closed. Navigation remains server authoritative because a capability response can become stale immediately after it is sent. The server resolves an attempted route to the requested view, a safe fallback, or claims.
 
-ATM data protocol 52 also projects an optional deposit recovery summary containing the original request UUID, deterministic transaction UUID, amount, and one of `RECOVERY_PENDING`, `MANUAL_REVIEW`, `COMPLETED`, or `REFUNDED`. The client adopts server pending state, blocks retries during manual review, and clears matching local recovery state only after the server proves a terminal result or no active recovery. A recovery check sends only that request and transaction pair. It cannot submit a currency source or amount and therefore cannot create or consume a second deposit. Retryable or blocked deposit recovery does not disable ATM tab navigation or committed cash claim collection. A refunded terminal response reports the exact value and `ORIGINAL_INVENTORY` destination.
+Protocol 55 includes the ATM recovery contract, normalized Server Shop catalogs, Player Shop offer snapshots, typed offer execution, and correlated owner and administrator saves. ATM data projects an optional deposit recovery summary containing the original request UUID, deterministic transaction UUID, amount, and one of `RECOVERY_PENDING`, `MANUAL_REVIEW`, `COMPLETED`, or `REFUNDED`. The client adopts server pending state, blocks retries during manual review, and clears matching local recovery state only after the server proves a terminal result or no active recovery. A recovery check sends only that request and transaction pair. It cannot submit a currency source or amount and therefore cannot create or consume a second deposit. Retryable or blocked deposit recovery does not disable ATM tab navigation or committed cash claim collection. A refunded terminal response reports the exact value and `ORIGINAL_INVENTORY` destination.
 
 If escrow remains in recovery or maintenance, run `/marketadmin status` and inspect `run/logs/latest.log` or the dedicated server log. Do not delete journal, checkpoint, ledger, claim, or custody files.
 
@@ -159,6 +162,24 @@ The server shop catalog is loaded from `config/futureshops/shops/`. Purchases va
 
 Player shop blocks persist owner, name, listings, trade modes, storage link, and promotional settings. Server services validate block existence, dimension, ownership, stock, linked storage, price or barter inputs, settlement, and permissions. Optional Refined Storage access remains behind its compatibility boundary.
 
+## Normalized trade offers
+
+Schema version 2 represents one listing as immutable outputs plus alternative acquire options and alternative Sell to Shop options. Components inside one option are an atomic AND requirement. Options are OR choices. An acquire option can be explicit free, money only, item only, or money plus items. A sell option consumes every configured input component and pays one checked money amount. Listings may contain several outputs, input bundles, both directions, per request and lifetime limits, rolling periods, cooldowns, schedules, permission nodes, stock policy, and validated bundle comparisons.
+
+Free is an explicit trusted flag. Zero legacy prices remain disabled. Client labels, prices, savings, stock hints, and option identifiers never authorize settlement. The server rebinds every request to the live shop, listing, revision, action, option, quantity, permission, schedule, usage state, exact NBT templates, and payment source before creating escrow intent evidence.
+
+Server Shop acquire carts capture the selected listing and option revisions for every line. Free, money, item, and compound lines can share one atomic plan when compatible. Money lines share the selected payment source. Every item input and output is normalized into exact custody evidence. A stale or conflicting request fails without partial fulfillment.
+
+Player Shop normalized offers keep the shop block and linked storage authoritative. Old listing fields migrate in memory into a normalized offer and are written through the versioned block entity codec only after validation. Owner edits use the same persistent draft model as the Server Shop editor, but the save packet is bound to the block position, source listing index, owner, dimension, distance, current listing identity, and expected revision. Visitor option selection uses the typed Player Shop offer packet and the existing player shop escrow journal. Exact owner stock, barter sinks, proceeds, buyback capacity, claims, break protection, and recovery remain enforced.
+
+Interrupted normalized Server Shop single and cart requests are recovered from their exact persisted prepared evidence. A player login attempts at most 16 recoveries. While escrow is ready, a round robin background pass runs every 40 server ticks, attempts at most eight recoveries globally, and attempts at most two for each examined player. The recovery entry point bypasses visitor session, module availability, and ordinary request rate gates only after resolving trusted persisted evidence. It does not rebuild price, option, quantity, stock, or payment identity from the client. Disabled modules therefore cannot strand already prepared value, while new trades remain disabled.
+
+Normalized Server Shop and Player Shop settlement preserves the public `ShopTransactionEvent` and `BarterTradeEvent` integration points when `events.transaction_events` is enabled. Pre events run only while creating a new prepared request. Cancellation prevents preparation. A positive trusted money leg may be changed only to another positive value, explicit free remains zero, and item only barter retains an absent money leg. Item and compound acquire options report every required item component through the barter event. The legacy event fields expose the first output or input item for compatibility; exact bundle and option identity remains in durable evidence and transaction history. Post events run after the first durable outer commit and do not repeat during request replay. Transaction history uses idempotency markers per component and records every exact bundle output, barter input, Sell to Shop input, selected option, and validated bundle comparison revision.
+
+The editor supports explicit templates, category and item pickers, multiple outputs, multiple item costs, alternative acquire and sell options, limits, schedules, permissions, exact NBT, stock controls, bundle comparisons, visitor preview, and structured validation. Every editor and picker action uses the FutureShops Nocturne button renderer while retaining standard focus, keyboard activation, narration, tooltips, and disabled state behavior. Button labels clip to their assigned bounds, and the template chooser reserves the visitor preview column at full width. Apply waits for the matching successful acknowledgement and stays open. Save and Close waits for the same acknowledgement before returning. Stale revisions must be reviewed or reloaded and cannot silently overwrite a newer listing. Catalog saves validate the complete candidate, write a temporary sibling, preserve a bounded backup, atomically replace the target when supported, and restore the last valid file if reload fails.
+
+See [3.1 trade offer configuration](docs/config-3.1-offers.md) for the schema and administrator workflow.
+
 ## Configuration
 
 | File | Responsibility |
@@ -195,6 +216,14 @@ The packet channel is a strict client and server compatibility boundary. Every s
 
 Never trust a client capability snapshot, displayed balance, selected item, price, or enabled control. Rate limits and bounded serialization protect server memory and disk.
 
+Normalized catalog packets have both per listing and aggregate byte limits. Offer packets bound identifier lengths, quantity, action, revision, payment source presence, request UUID, and response token before server dispatch. Rate limiting runs before replay lookup and expensive storage work. Economic retries reuse the original request UUID. Reuse with different listing, revision, option, action, quantity, actor, shop, or payment source is a conflict.
+
+Successful normalized Server Shop requests write one immutable receipt to `<world>/futureshops/escrow/offer_replay/`. Receipt files are sharded by the first four hexadecimal request UUID characters and discovered through the forced append only `index.wal`. Each receipt retains the exact request fingerprint, terminal outcome, and usage evidence needed to replay the result, reject conflicting identity reuse, and rebuild limits after restart. Receipt decoding is bounded, existing identities must match exactly, symlinks are rejected, and a new receipt becomes visible through an atomic move.
+
+The prepared and commit SavedData stores keep bounded live windows. Their finite replay archives remain only as migration caches for worlds written before the filesystem ledger. A live prepared or commit row is compacted only after the exact ledger receipt exists. There is no global or per player lifetime cap on successful replay identities. Disk exhaustion, an unsafe path, a conflicting receipt, or corrupt discovery evidence fails closed before a new stock or value mutation.
+
+`futureshops_server_shop_offer_usage` persists its byte cursor into the replay discovery index. Usage recovery consumes at most 1,024 receipts per batch and applies their evidence idempotently. This closes the period between a durable value commit and a failed usage projection without requiring an unbounded startup scan.
+
 Do not log credentials, tokens, private configuration, full player inventories, or unbounded NBT. Do not follow symbolic links when loading administrator product files.
 
 ## Verification by change type
@@ -216,7 +245,7 @@ Also run:
 
 For readiness changes, verify both the recovery window and the ready transition. A screen opened during recovery must refresh without reconnecting. Navigation requests must remain server authorized. Currency and profile reads may use the safe display balance, while mutations remain blocked until ready.
 
-After packaging, inspect the manifest, expanded `META-INF/mods.toml`, mixin configuration and refmap, assets, data, dependency metadata, and the complete Git diff. Build output, run directories, logs, crash reports, local configs, caches, IDE files, and `AGENTS.md` must not be committed.
+After packaging, inspect the manifest, expanded `META-INF/mods.toml`, mixin configuration and refmap, assets, data, dependency metadata, and the complete Git diff. Version `3.1.0-beta.1` must expand into the mod metadata, and `logoFile = "futureshops.png"` must resolve to the 400 by 400 project logo at the jar root. Build output, run directories, logs, crash reports, local configs, caches, IDE files, and `AGENTS.md` must not be committed.
 
 ## Troubleshooting
 

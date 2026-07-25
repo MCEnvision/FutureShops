@@ -2,9 +2,9 @@
 
 ## Status
 
-Planning is complete enough to begin implementation after owner approval.
+Owner approval was granted and the 3.1 implementation is present on the active beta phase branch. The implementation is undergoing its final plan audit and acceptance run. It is not approved for release until the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, and injected recovery gates in this plan pass.
 
-This document describes planned behavior. It does not claim that the features are implemented. The [FutureShops 3.0 plan](FutureShops3-0Plan.MD) remains the source of truth for unfinished 3.0 work. This plan is the source of truth for the 3.1 trade offer expansion.
+This document remains the acceptance source of truth for the 3.1 trade offer expansion. Requirements use plan language so an unverified gate is never mistaken for a passed gate. The audited current behavior section records the 3.0 baseline that motivated the work, not the current 3.1 beta behavior. Current code, tests, and the final verification record determine which requirements are implemented. The [FutureShops 3.0 plan](FutureShops3-0Plan.MD) remains the source of truth for unfinished 3.0 work.
 
 ## Purpose
 
@@ -1087,12 +1087,12 @@ Visual acceptance sizes include the supplied 1640 by 1350 detail screen, 568 by 
 
 Run applicable checks in this order:
 
-1. `./gradlew test`
-2. `./gradlew runData` when generated resources change
-3. `./gradlew runGameTestServer` when GameTests are added
-4. `./gradlew build`
-5. `./gradlew runServer` for dedicated server smoke testing
-6. `./gradlew runClient` for client and interface smoke testing
+1. `bash ./gradlew test`
+2. `bash ./gradlew runData` when generated resources change
+3. `bash ./gradlew runGameTestServer` when GameTests are added
+4. `bash ./gradlew build`
+5. `bash ./gradlew runServer` for dedicated server smoke testing
+6. `bash ./gradlew runClient` for client and interface smoke testing
 
 Multiplayer and reconnect scenarios require a real client connected to the dedicated server.
 
@@ -1106,11 +1106,11 @@ Implementation must update:
 * `docs/compatibility-matrix.md` for protocol and save compatibility.
 * Administrator tooltips and translations for every new action and validation error.
 
-Planned features must not be described as implemented before their phase gate passes.
+Unverified features must not be described as accepted before their phase gate passes.
 
 ## Approval decisions
 
-The following defaults are part of this plan unless the owner changes them before implementation:
+The following owner approved defaults are part of this plan:
 
 * Legacy zero prices remain disabled, not free.
 * Free requires an explicit option.

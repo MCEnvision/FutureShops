@@ -2,8 +2,15 @@ package com.enviouse.futureshops.server.shop;
 
 import com.enviouse.futureshops.Config;
 import com.enviouse.futureshops.block.ShopBlockEntity;
+import com.enviouse.futureshops.catalog.offer.AcquireOfferOption;
+import com.enviouse.futureshops.catalog.offer.OfferAction;
+import com.enviouse.futureshops.catalog.offer.OfferItemComponent;
+import com.enviouse.futureshops.catalog.offer.OfferLimitPolicy;
+import com.enviouse.futureshops.catalog.offer.SellOfferOption;
+import com.enviouse.futureshops.catalog.offer.ServerShopOfferListing;
 import com.enviouse.futureshops.money.ItemStackSnapshotCodec;
 import com.enviouse.futureshops.money.PaymentSource;
+import com.enviouse.futureshops.network.packets.C2SPlayerShopOfferPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopSellPacket;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
@@ -18,19 +25,28 @@ import com.enviouse.futureshops.server.escrow.playershop.PlayerShopItemTransfer;
 import com.enviouse.futureshops.server.escrow.playershop.PlayerShopListingSnapshot;
 import com.enviouse.futureshops.server.escrow.playershop.PlayerShopMoneyTransfer;
 import com.enviouse.futureshops.server.escrow.playershop.PlayerShopOperation;
+import com.enviouse.futureshops.server.escrow.playershop.PlayerShopOfferSelection;
 import com.enviouse.futureshops.server.escrow.playershop.PlayerShopPaymentSource;
 import com.enviouse.futureshops.server.escrow.playershop.PlayerShopStorageEndpoint;
 import com.enviouse.futureshops.server.escrow.playershop.PlayerShopStorageMutationPlan;
 import com.enviouse.futureshops.server.escrow.playershop.PlayerShopTradeMethod;
 import com.enviouse.futureshops.server.escrow.runtime.PlayerShopLiveEscrowService;
+import com.enviouse.futureshops.server.escrow.runtime.PlayerShopEscrowSavedData;
 import com.enviouse.futureshops.server.transaction.NbtMatchUtil;
+import com.enviouse.futureshops.server.transaction.NormalizedOfferTransactionEvents;
+import com.enviouse.futureshops.server.transaction.ServerShopOfferPermissionPolicy;
+import com.enviouse.futureshops.server.transaction.ServerShopOfferUsageSavedData;
 import com.enviouse.futureshops.server.transaction.ShopTransactionUtil;
 import com.enviouse.futureshops.server.transaction.TransactionHistoryService;
+import com.enviouse.futureshops.server.security.ServerRequestAction;
+import com.enviouse.futureshops.server.security.ServerRequestSecurityManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.TagParser;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -43,17 +59,26 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HexFormat;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.WeakHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 final class PlayerShopEscrowTransactionService {
     private static final UUID ZERO_UUID = new UUID(0L, 0L);
+    private static final UUID GLOBAL_CAPACITY_SCOPE =
+            UUID.nameUUIDFromBytes(
+                    "futureshops.player.shop.capacity".getBytes(
+                            StandardCharsets.UTF_8));
+    private static final Map<MinecraftServer, Long>
+            USAGE_RECONCILED_REVISIONS = new WeakHashMap<>();
 
     private PlayerShopEscrowTransactionService() {
     }
@@ -148,6 +173,125 @@ final class PlayerShopEscrowTransactionService {
         } finally {
             lock.unlock();
         }
+    }
+
+    static void offer(
+            ServerPlayer actor,
+            C2SPlayerShopOfferPacket packet
+    ) {
+        if (actor.getServer() == null
+                || ZERO_UUID.equals(packet.requestId())) {
+            PlayerShopBlockService.sendResult(actor, false,
+                    ShopResultCode.INVALID_REQUEST);
+            return;
+        }
+        ServerRequestSecurityManager.GateDecision gate =
+                ServerRequestSecurityManager.tryAcquire(
+                        actor,
+                        ServerRequestAction.PLAYER_SHOP_OFFER);
+        if (!gate.allowed()) {
+            PlayerShopBlockService.sendResult(
+                    actor, false,
+                    gate.status()
+                            == ServerRequestSecurityManager
+                            .GateStatus.RATE_LIMITED
+                            ? ShopResultCode.COOLDOWN
+                            : ShopResultCode.SERVER_ERROR);
+            return;
+        }
+        ReentrantLock lock = PlayerShopBlockService.transactionLock(
+                packet.shopPos());
+        lock.lock();
+        try {
+            Optional<PlayerShopEscrowIntent> existing =
+                    PlayerShopLiveEscrowService.existingIntent(
+                            actor, packet.requestId());
+            if (existing.isPresent()) {
+                resumeExistingOffer(actor, packet,
+                        existing.orElseThrow());
+                return;
+            }
+            NormalizedQuote quote = quoteOffer(actor, packet);
+            PlayerShopEscrowOrchestrator.Result result =
+                    PlayerShopLiveEscrowService.execute(
+                            actor, quote.intent(),
+                            packet.responseToken(), quote.storage());
+            finishOffer(actor, packet.shopPos(), quote, result);
+        } catch (QuoteFailure failure) {
+            failure.send(actor);
+        } catch (RuntimeException exception) {
+            PlayerShopBlockService.sendResult(actor, false,
+                    ShopResultCode.SERVER_ERROR);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private static void resumeExistingOffer(
+            ServerPlayer actor,
+            C2SPlayerShopOfferPacket packet,
+            PlayerShopEscrowIntent intent
+    ) {
+        if (!replayRequestMatches(packet, intent)
+                || !samePosition(intent.shopIdentity(), actor,
+                packet.shopPos())
+                || intent.listing() == null) {
+            PlayerShopBlockService.sendResult(actor, false,
+                    ShopResultCode.INVALID_REQUEST);
+            return;
+        }
+        if (!(actor.level().getBlockEntity(packet.shopPos())
+                instanceof ShopBlockEntity shop)) {
+            PlayerShopBlockService.sendResult(actor, false,
+                    ShopResultCode.INVALID_TARGET);
+            return;
+        }
+        int listingIndex =
+                PlayerShopBlockService.resolveVisitorListingIndex(
+                        shop, actor, packet.listingIndex());
+        if (listingIndex != intent.listing().listingIndex()) {
+            PlayerShopBlockService.sendResult(actor, false,
+                    ShopResultCode.INVALID_REQUEST);
+            return;
+        }
+        LiveStorageAccess storage = new LiveStorageAccess(
+                actor, packet.shopPos(), listingIndex, intent);
+        PlayerShopEscrowOrchestrator.Result result =
+                PlayerShopLiveEscrowService.execute(
+                        actor, intent, packet.responseToken(), storage);
+        recordOfferUsage(actor, packet.shopPos(), intent, result);
+        recordOfferHistory(actor, intent, result);
+        finishExistingOffer(actor, packet.shopPos(),
+                packet.action(), result);
+    }
+
+    static boolean replayRequestMatches(
+            C2SPlayerShopOfferPacket packet,
+            PlayerShopEscrowIntent intent
+    ) {
+        Optional<PlayerShopOfferSelection> stored =
+                intent.offerSelection();
+        PlayerShopPaymentSource requestedSource =
+                packet.paymentSource().map(value ->
+                        value == PaymentSource.PHYSICAL
+                                ? PlayerShopPaymentSource.INVENTORY_CASH
+                                : PlayerShopPaymentSource.WALLET)
+                        .orElse(PlayerShopPaymentSource.NONE);
+        PlayerShopOperation expectedOperation =
+                packet.action() == OfferAction.ACQUIRE_FROM_SHOP
+                        ? PlayerShopOperation.PLAYER_SHOP_OFFER_ACQUIRE
+                        : PlayerShopOperation.PLAYER_SHOP_OFFER_SELL;
+        return intent.operation() == expectedOperation
+                && stored.isPresent()
+                && stored.orElseThrow().listingId().equals(
+                packet.listingId())
+                && stored.orElseThrow().offerRevision()
+                == packet.expectedOfferRevision()
+                && stored.orElseThrow().optionId().equals(
+                packet.optionId())
+                && stored.orElseThrow().action() == packet.action()
+                && intent.requestedUnits() == packet.quantity()
+                && intent.paymentSource() == requestedSource;
     }
 
     private static void resumeExisting(
@@ -468,6 +612,320 @@ final class PlayerShopEscrowTransactionService {
                 shopIdForEvent);
     }
 
+    private static NormalizedQuote quoteOffer(
+            ServerPlayer actor,
+            C2SPlayerShopOfferPacket packet
+    ) {
+        if (!(actor.level().getBlockEntity(packet.shopPos())
+                instanceof ShopBlockEntity shop)) {
+            throw failure(ShopResultCode.INVALID_TARGET);
+        }
+        int listingIndex =
+                PlayerShopBlockService.resolveVisitorListingIndex(
+                        shop, actor, packet.listingIndex());
+        ShopBlockEntity.Listing physical =
+                shop.getListing(listingIndex);
+        if (physical == null) {
+            throw failure(ShopResultCode.UNCONFIGURED);
+        }
+        ServerShopOfferListing offer = physical.normalizedOffer()
+                .orElseThrow(() -> failure(
+                        ShopResultCode.UNCONFIGURED));
+        if (!offer.listingId().equals(packet.listingId())
+                || offer.revision()
+                != packet.expectedOfferRevision()) {
+            throw failure(ShopResultCode.INVALID_REQUEST);
+        }
+        long now = Instant.now().getEpochSecond();
+        requireAvailable(actor, offer, now);
+        PlayerShopIdentity identity = captureIdentity(
+                actor, shop, packet.shopPos());
+        reconcileOfferUsage(actor.getServer());
+        requireUsage(actor, usageShopKey(identity), offer,
+                packet.optionId(), packet.action(),
+                packet.quantity(), now);
+        return packet.action() == OfferAction.ACQUIRE_FROM_SHOP
+                ? quoteAcquireOffer(actor, packet, shop, physical,
+                offer, identity, listingIndex, now)
+                : quoteSellOffer(actor, packet, shop, physical,
+                offer, identity, listingIndex, now);
+    }
+
+    private static NormalizedQuote quoteAcquireOffer(
+            ServerPlayer actor,
+            C2SPlayerShopOfferPacket packet,
+            ShopBlockEntity shop,
+            ShopBlockEntity.Listing physical,
+            ServerShopOfferListing offer,
+            PlayerShopIdentity identity,
+            int listingIndex,
+            long now
+    ) {
+        AcquireOfferOption option = offer.acquireOptions().stream()
+                .filter(value -> value.optionId().equals(
+                        packet.optionId()))
+                .findFirst().orElseThrow(() ->
+                        failure(ShopResultCode.INVALID_REQUEST));
+        requireAvailable(actor, option.schedule().activeAt(now),
+                option.permissionNode());
+        PlayerShopTradeMethod method = option.free()
+                ? PlayerShopTradeMethod.FREE
+                : option.compound()
+                ? PlayerShopTradeMethod.MONEY_AND_BARTER
+                : option.moneyCostPresent()
+                ? PlayerShopTradeMethod.MONEY
+                : PlayerShopTradeMethod.BARTER;
+        boolean needsMoney = option.moneyCostPresent();
+        boolean needsItems = option.hasItemCosts();
+        if (needsMoney != packet.paymentSource().isPresent()) {
+            throw failure(ShopResultCode.INVALID_REQUEST);
+        }
+        PlayerShopPaymentSource source = packet.paymentSource()
+                .map(value -> value == PaymentSource.PHYSICAL
+                        ? PlayerShopPaymentSource.INVENTORY_CASH
+                        : PlayerShopPaymentSource.WALLET)
+                .orElse(PlayerShopPaymentSource.NONE);
+        long moneyTotal;
+        try {
+            moneyTotal = needsMoney
+                    ? Math.multiplyExact(
+                    option.moneyCostMinorUnits(),
+                    (long) packet.quantity())
+                    : 0L;
+        } catch (ArithmeticException exception) {
+            throw failure(ShopResultCode.INVALID_AMOUNT);
+        }
+        if (Config.eventsTransactionEnabled) {
+            NormalizedOfferTransactionEvents.Decision event =
+                    NormalizedOfferTransactionEvents.fireAcquirePre(
+                            actor,
+                            "player_shop:" + packet.shopPos().asLong(),
+                            offer, option, packet.quantity(),
+                            moneyTotal);
+            if (event.status()
+                    == NormalizedOfferTransactionEvents.Status.CANCELLED) {
+                throw failure(ShopResultCode.CANCELLED_BY_EVENT);
+            }
+            if (event.status()
+                    != NormalizedOfferTransactionEvents.Status.ACCEPTED) {
+                throw failure(ShopResultCode.INVALID_AMOUNT);
+            }
+            moneyTotal = event.authorizedMoneyMinorUnits();
+        }
+        List<OfferItemComponent> outputs = scaleComponents(
+                offer.outputs(), option.outputMultiplier());
+        PlayerShopListingSnapshot snapshot =
+                captureOfferListing(shop, offer, listingIndex,
+                        outputs, option, 0L,
+                        PlayerShopListingSnapshot.Direction.SELL);
+        PlayerShopOfferSelection selection =
+                new PlayerShopOfferSelection(
+                        offer.listingId(), offer.revision(),
+                        option.optionId(),
+                        OfferAction.ACQUIRE_FROM_SHOP,
+                        offer.limits(), option.limits(), 0L,
+                        snapshot.outputs(),
+                        option.itemCosts().stream()
+                                .map(PlayerShopEscrowTransactionService
+                                        ::template)
+                                .toList());
+        IntentAssembly assembly = new IntentAssembly(
+                packet.requestId(), actor.getUUID(),
+                shop.getOwnerUuid(), identity,
+                PlayerShopOperation.PLAYER_SHOP_OFFER_ACQUIRE,
+                method, source, packet.quantity(), snapshot,
+                Optional.of(selection));
+        LiveStorageAccess storage = new LiveStorageAccess(
+                actor, packet.shopPos(), listingIndex,
+                assembly.previewIntent());
+        for (int index = 0; index < outputs.size(); index++) {
+            OfferItemComponent component = outputs.get(index);
+            int total = checkedTotal(component.count(),
+                    packet.quantity());
+            ItemStack prototype = exactStack(component);
+            List<ItemStack> exact = shop.isAdminShopMode()
+                    ? splitExact(prototype.getItem(), total,
+                    prototype.getTag())
+                    : PlayerShopBlockService.previewExtractComposite(
+                    storage.stockStorages(), prototype.getItem(), total,
+                    component.exactMatch(), prototype.getTag());
+            if (exact.isEmpty()) {
+                throw failure(ShopResultCode.OUT_OF_STOCK);
+            }
+            assembly.addPurchaseOutputs(captureLots(
+                    packet.requestId(),
+                    "offer.output." + index, exact,
+                    snapshot.outputs().get(index)), storage,
+                    shop.isAdminShopMode());
+        }
+        List<ItemStack> allCosts = new ArrayList<>();
+        List<List<ItemStack>> selectedCosts =
+                selectInventoryComponents(
+                        actor, option.itemCosts(),
+                        packet.quantity());
+        if (needsItems && selectedCosts.isEmpty()) {
+            throw failureWithChat(
+                    ShopResultCode.MISSING_BARTER_ITEMS,
+                    "command.futureshops.shop.barter_not_enough");
+        }
+        for (int index = 0;
+             index < option.itemCosts().size(); index++) {
+            OfferItemComponent component =
+                    option.itemCosts().get(index);
+            List<ItemStack> selected =
+                    selectedCosts.get(index);
+            allCosts.addAll(selected);
+            assembly.addPurchaseInputs(captureLots(
+                    packet.requestId(),
+                    "offer.input." + index, selected,
+                    template(component)), storage,
+                    shop.isAdminShopMode());
+        }
+        if (needsItems && !shop.isAdminShopMode()
+                && !storage.canInsertBarter(allCosts)) {
+            throw failureWithChat(ShopResultCode.STORAGE_FULL,
+                    "command.futureshops.shop.barter_storage_full");
+        }
+        if (needsMoney) {
+            long balance = BalanceManager.getProvider().getBalance(
+                    actor.getUUID());
+            if (source == PlayerShopPaymentSource.WALLET
+                    && balance < moneyTotal) {
+                throw failure(ShopResultCode.INSUFFICIENT_FUNDS);
+            }
+            long sourceBefore =
+                    source == PlayerShopPaymentSource.WALLET
+                            ? balance
+                            : PlayerShopMoneyTransfer
+                            .BALANCE_NOT_APPLICABLE;
+            assembly.addPurchaseMoney(moneyTotal, sourceBefore,
+                    shop.isAdminShopMode());
+        }
+        PlayerShopEscrowIntent intent = assembly.build();
+        storage.bind(intent);
+        return new NormalizedQuote(intent, storage, physical, offer,
+                option, null, now, moneyTotal);
+    }
+
+    private static NormalizedQuote quoteSellOffer(
+            ServerPlayer actor,
+            C2SPlayerShopOfferPacket packet,
+            ShopBlockEntity shop,
+            ShopBlockEntity.Listing physical,
+            ServerShopOfferListing offer,
+            PlayerShopIdentity identity,
+            int listingIndex,
+            long now
+    ) {
+        SellOfferOption option = offer.sellOptions().stream()
+                .filter(value -> value.optionId().equals(
+                        packet.optionId()))
+                .findFirst().orElseThrow(() ->
+                        failure(ShopResultCode.INVALID_REQUEST));
+        requireAvailable(actor, option.schedule().activeAt(now),
+                option.permissionNode());
+        requireCapacity(actor, usageShopKey(identity), offer, option,
+                physical.legacyBuybackConsumedBaseline(),
+                packet.quantity(), now);
+        long payout;
+        try {
+            payout = Math.multiplyExact(
+                    option.moneyPayoutMinorUnits(),
+                    (long) packet.quantity());
+        } catch (ArithmeticException exception) {
+            throw failure(ShopResultCode.INVALID_AMOUNT);
+        }
+        if (Config.eventsTransactionEnabled) {
+            NormalizedOfferTransactionEvents.Decision event =
+                    NormalizedOfferTransactionEvents.fireSellPre(
+                            actor,
+                            "player_shop:" + packet.shopPos().asLong(),
+                            offer, option, packet.quantity(), payout);
+            if (event.status()
+                    == NormalizedOfferTransactionEvents.Status.CANCELLED) {
+                throw failure(ShopResultCode.CANCELLED_BY_EVENT);
+            }
+            if (event.status()
+                    != NormalizedOfferTransactionEvents.Status.ACCEPTED) {
+                throw failure(ShopResultCode.INVALID_AMOUNT);
+            }
+            payout = event.authorizedMoneyMinorUnits();
+        }
+        EconomyProvider economy = BalanceManager.getProvider();
+        long actorBalance = economy.getBalance(actor.getUUID());
+        try {
+            if (Math.addExact(actorBalance, payout)
+                    > Config.economyMaxBalanceMinorUnits) {
+                throw failure(ShopResultCode.MAX_BALANCE_EXCEEDED);
+            }
+        } catch (ArithmeticException exception) {
+            throw failure(ShopResultCode.MAX_BALANCE_EXCEEDED);
+        }
+        long ownerBalance =
+                PlayerShopMoneyTransfer.BALANCE_NOT_APPLICABLE;
+        if (!shop.isAdminShopMode()) {
+            ownerBalance = economy.getBalance(shop.getOwnerUuid());
+            if (ownerBalance < payout) {
+                throw failureWithChat(
+                        ShopResultCode.SHOP_OUT_OF_MONEY,
+                        "command.futureshops.shop.shop_out_of_money");
+            }
+        }
+        PlayerShopListingSnapshot snapshot =
+                captureOfferListing(shop, offer, listingIndex,
+                        option.itemInputs(), null,
+                        option.moneyPayoutMinorUnits(),
+                        PlayerShopListingSnapshot.Direction.BUY);
+        PlayerShopOfferSelection selection =
+                new PlayerShopOfferSelection(
+                        offer.listingId(), offer.revision(),
+                        option.optionId(), OfferAction.SELL_TO_SHOP,
+                        offer.limits(), option.limits(),
+                        option.capacity(), List.of(),
+                        snapshot.outputs());
+        IntentAssembly assembly = new IntentAssembly(
+                packet.requestId(), actor.getUUID(),
+                shop.getOwnerUuid(), identity,
+                PlayerShopOperation.PLAYER_SHOP_OFFER_SELL,
+                PlayerShopTradeMethod.BUYBACK,
+                PlayerShopPaymentSource.NONE, packet.quantity(),
+                snapshot, Optional.of(selection));
+        LiveStorageAccess storage = new LiveStorageAccess(
+                actor, packet.shopPos(), listingIndex,
+                assembly.previewIntent());
+        List<ItemStack> allInputs = new ArrayList<>();
+        List<List<ItemStack>> selectedInputs =
+                selectInventoryComponents(
+                        actor, option.itemInputs(),
+                        packet.quantity());
+        if (selectedInputs.isEmpty()) {
+            throw failureWithChat(ShopResultCode.MISSING_ITEMS,
+                    "command.futureshops.shop.missing_items");
+        }
+        for (List<ItemStack> selected : selectedInputs) {
+            allInputs.addAll(selected);
+        }
+        if (!shop.isAdminShopMode()
+                && !storage.canInsertStock(allInputs)) {
+            throw failureWithChat(ShopResultCode.STORAGE_FULL,
+                    "command.futureshops.shop.storage_full_sell");
+        }
+        for (int index = 0;
+             index < option.itemInputs().size(); index++) {
+            assembly.addBuybackInputs(captureLots(
+                    packet.requestId(), "offer.sell.input." + index,
+                    selectedInputs.get(index),
+                    snapshot.outputs().get(index)), storage,
+                    shop.isAdminShopMode());
+        }
+        assembly.addBuybackMoney(payout, ownerBalance,
+                shop.isAdminShopMode());
+        PlayerShopEscrowIntent intent = assembly.build();
+        storage.bind(intent);
+        return new NormalizedQuote(intent, storage, physical, offer,
+                null, option, now, payout);
+    }
+
     private static void finishPurchase(
             ServerPlayer buyer,
             BlockPos pos,
@@ -596,6 +1054,246 @@ final class PlayerShopEscrowTransactionService {
         }
     }
 
+    private static void finishOffer(
+            ServerPlayer actor,
+            BlockPos pos,
+            NormalizedQuote quote,
+            PlayerShopEscrowOrchestrator.Result result
+    ) {
+        recordOfferUsage(actor, pos, quote.intent(), result);
+        recordOfferHistory(actor, quote.intent(), result);
+        if (Config.eventsTransactionEnabled
+                && result.status()
+                != PlayerShopEscrowOrchestrator.Status.REPLAYED
+                && (result.status()
+                == PlayerShopEscrowOrchestrator.Status.COMMITTED
+                || result.status()
+                == PlayerShopEscrowOrchestrator.Status
+                .COMMITTED_WITH_PENDING_DELIVERY)) {
+            fireOfferPost(actor, pos, quote);
+        }
+        finishExistingOffer(actor, pos,
+                quote.intent().offerSelection()
+                        .orElseThrow().action(), result);
+    }
+
+    private static void recordOfferHistory(
+            ServerPlayer actor,
+            PlayerShopEscrowIntent intent,
+            PlayerShopEscrowOrchestrator.Result result
+    ) {
+        if (actor.getServer() == null
+                || result.status()
+                != PlayerShopEscrowOrchestrator.Status.COMMITTED
+                && result.status()
+                != PlayerShopEscrowOrchestrator.Status.REPLAYED
+                && result.status()
+                != PlayerShopEscrowOrchestrator.Status
+                .COMMITTED_WITH_PENDING_DELIVERY
+                || intent.offerSelection().isEmpty()) {
+            return;
+        }
+        PlayerShopOfferSelection selection =
+                intent.offerSelection().orElseThrow();
+        List<TransactionHistoryService.ServerOfferComponent>
+                components = new ArrayList<>();
+        for (int index = 0;
+             index < selection.outputComponents().size(); index++) {
+            components.add(historyComponent(
+                    TransactionHistoryService.ComponentRole.OUTPUT,
+                    "output." + index,
+                    selection.outputComponents().get(index)));
+        }
+        for (int index = 0;
+             index < selection.inputComponents().size(); index++) {
+            components.add(historyComponent(
+                    TransactionHistoryService.ComponentRole.INPUT,
+                    "input." + index,
+                    selection.inputComponents().get(index)));
+        }
+        String type = selection.action()
+                == OfferAction.SELL_TO_SHOP
+                ? "SELL"
+                : switch (intent.tradeMethod()) {
+                    case FREE -> "FREE";
+                    case BARTER -> "BARTER";
+                    case MONEY_AND_BARTER -> "MONEY_AND_BARTER";
+                    default -> "BUY";
+                };
+        TransactionHistoryService.recordServerOfferComponents(
+                actor.getServer(), actor.getUUID(),
+                intent.shopIdentity().shopId(),
+                intent.requestId(), selection.listingId(), type,
+                intent.requestedUnits(), offerMoneyTotal(intent),
+                selection.optionId(), components, Optional.empty(),
+                intent.quoteCreatedAt());
+    }
+
+    private static TransactionHistoryService.ServerOfferComponent
+    historyComponent(
+            TransactionHistoryService.ComponentRole role,
+            String componentId,
+            PlayerShopListingSnapshot.ItemTemplate template
+    ) {
+        ItemStack exact = ItemStackSnapshotCodec.decode(
+                template.canonicalOneCountTemplate());
+        exact.setCount(1);
+        return new TransactionHistoryService.ServerOfferComponent(
+                role, componentId, template.itemId(),
+                template.unitsPerPurchase(),
+                exact.getTag() == null ? "" : exact.getTag().toString());
+    }
+
+    private static long offerMoneyTotal(
+            PlayerShopEscrowIntent intent
+    ) {
+        long total = 0L;
+        for (PlayerShopMoneyTransfer transfer
+                : intent.moneyTransfers()) {
+            total = Math.addExact(
+                    total, transfer.amountMinorUnits());
+        }
+        return total;
+    }
+
+    private static void fireOfferPost(
+            ServerPlayer actor,
+            BlockPos pos,
+            NormalizedQuote quote
+    ) {
+        try {
+            long balance = BalanceManager.getProvider().getBalance(
+                    actor.getUUID());
+            if (quote.intent().offerSelection().orElseThrow().action()
+                    == OfferAction.ACQUIRE_FROM_SHOP) {
+                NormalizedOfferTransactionEvents.fireAcquirePost(
+                        actor, "player_shop:" + pos.asLong(),
+                        quote.offer(), quote.acquireOption(),
+                        quote.intent().requestedUnits(),
+                        quote.moneyTotal(), balance);
+            } else {
+                NormalizedOfferTransactionEvents.fireSellPost(
+                        actor, "player_shop:" + pos.asLong(),
+                        quote.offer(), quote.sellOption(),
+                        quote.intent().requestedUnits(),
+                        quote.moneyTotal(), balance);
+            }
+        } catch (RuntimeException exception) {
+            com.mojang.logging.LogUtils.getLogger().error(
+                    "Player shop offer post event failed for request {}",
+                    quote.intent().requestId(), exception);
+        }
+    }
+
+    private static void finishExistingOffer(
+            ServerPlayer actor,
+            BlockPos pos,
+            OfferAction action,
+            PlayerShopEscrowOrchestrator.Result result
+    ) {
+        switch (result.status()) {
+            case COMMITTED, REPLAYED,
+                    COMMITTED_WITH_PENDING_DELIVERY -> {
+                PlayerShopBlockService.openFor(actor, pos, false);
+                PlayerShopBlockService.sendResult(actor, true,
+                        action == OfferAction.ACQUIRE_FROM_SHOP
+                                ? ShopResultCode.BOUGHT
+                                : ShopResultCode.SOLD);
+            }
+            case REJECTED -> PlayerShopBlockService.sendResult(
+                    actor, false, mapRejected(result.detail(),
+                            action == OfferAction.SELL_TO_SHOP));
+            case CONFLICT -> PlayerShopBlockService.sendResult(
+                    actor, false, ShopResultCode.INVALID_REQUEST);
+            case RECOVERY_REQUIRED, QUARANTINED ->
+                    PlayerShopBlockService.sendResult(
+                            actor, false, ShopResultCode.SERVER_ERROR);
+        }
+    }
+
+    private static void recordOfferUsage(
+            ServerPlayer actor,
+            BlockPos pos,
+            PlayerShopEscrowIntent intent,
+            PlayerShopEscrowOrchestrator.Result result
+    ) {
+        if (actor.getServer() == null
+                || result.status()
+                != PlayerShopEscrowOrchestrator.Status.COMMITTED
+                && result.status()
+                != PlayerShopEscrowOrchestrator.Status.REPLAYED
+                && result.status()
+                != PlayerShopEscrowOrchestrator.Status
+                .COMMITTED_WITH_PENDING_DELIVERY
+                || intent.offerSelection().isEmpty()) {
+            return;
+        }
+        recordIntentUsage(actor.getServer(), intent);
+    }
+
+    private static void reconcileOfferUsage(
+            MinecraftServer server
+    ) {
+        PlayerShopEscrowSavedData escrow =
+                PlayerShopEscrowSavedData.get(server);
+        long revision = escrow.mutationRevision();
+        synchronized (USAGE_RECONCILED_REVISIONS) {
+            if (USAGE_RECONCILED_REVISIONS.getOrDefault(
+                    server, Long.MIN_VALUE) == revision) {
+                return;
+            }
+            for (PlayerShopEscrowSavedData.Entry entry
+                    : escrow.entries()) {
+                if (entry.snapshot().commit() != null) {
+                    recordIntentUsage(server,
+                            entry.snapshot().commit()
+                                    .committedIntent());
+                }
+            }
+            USAGE_RECONCILED_REVISIONS.put(server, revision);
+        }
+    }
+
+    private static void recordIntentUsage(
+            MinecraftServer server,
+            PlayerShopEscrowIntent intent
+    ) {
+        if (intent.offerSelection().isEmpty()
+                || intent.operation()
+                != PlayerShopOperation.PLAYER_SHOP_OFFER_ACQUIRE
+                && intent.operation()
+                != PlayerShopOperation.PLAYER_SHOP_OFFER_SELL) {
+            return;
+        }
+        PlayerShopOfferSelection selection =
+                intent.offerSelection().orElseThrow();
+        long now = Math.max(0L,
+                intent.quoteCreatedAt().getEpochSecond());
+        ServerShopOfferUsageSavedData usage =
+                ServerShopOfferUsageSavedData.get(
+                        server);
+        String shopKey = usageShopKey(intent.shopIdentity());
+        if (selection.action() == OfferAction.SELL_TO_SHOP
+                && selection.capacity() > 0L) {
+                usage.recordOption(intent.requestId(),
+                        GLOBAL_CAPACITY_SCOPE,
+                        shopKey,
+                        selection.listingId(),
+                        selection.optionId(),
+                        selection.action(), intent.requestedUnits(),
+                        capacityLimits(selection.capacity()), now);
+        }
+        usage.record(intent.requestId(), intent.actorId(),
+                shopKey, selection.listingId(),
+                selection.optionId(), selection.action(),
+                intent.requestedUnits(), selection.listingLimits(),
+                selection.optionLimits(), now);
+    }
+
+    static String usageShopKey(PlayerShopIdentity identity) {
+        return "player_shop." + identity.registryShopId();
+    }
+
     private static void firePurchasePost(
             ServerPlayer buyer, PurchaseQuote quote) {
         if (!Config.eventsTransactionEnabled) return;
@@ -625,6 +1323,213 @@ final class PlayerShopEscrowTransactionService {
                                     quote.listing().barterItemId(),
                                     quote.barterAmount()))));
         }
+    }
+
+    private static void requireAvailable(
+            ServerPlayer actor,
+            ServerShopOfferListing offer,
+            long now
+    ) {
+        boolean active = offer.active()
+                && (offer.expiresAtEpoch() == 0L
+                || now < offer.expiresAtEpoch())
+                && offer.schedule().activeAt(now);
+        requireAvailable(actor, active, offer.permissionNode());
+    }
+
+    private static void requireAvailable(
+            ServerPlayer actor,
+            boolean active,
+            String permission
+    ) {
+        if (!active) {
+            throw failure(ShopResultCode.SHOP_CLOSED);
+        }
+        if (!ServerShopOfferPermissionPolicy.allowed(
+                actor, permission)) {
+            throw failure(ShopResultCode.INVALID_REQUEST);
+        }
+    }
+
+    private static void requireUsage(
+            ServerPlayer actor,
+            String shopId,
+            ServerShopOfferListing offer,
+            String optionId,
+            OfferAction action,
+            int quantity,
+            long now
+    ) {
+        OfferLimitPolicy optionLimits =
+                action == OfferAction.ACQUIRE_FROM_SHOP
+                        ? offer.acquireOptions().stream()
+                        .filter(value -> value.optionId().equals(optionId))
+                        .map(AcquireOfferOption::limits)
+                        .findFirst().orElseThrow(() ->
+                                failure(ShopResultCode.INVALID_REQUEST))
+                        : offer.sellOptions().stream()
+                        .filter(value -> value.optionId().equals(optionId))
+                        .map(SellOfferOption::limits)
+                        .findFirst().orElseThrow(() ->
+                                failure(ShopResultCode.INVALID_REQUEST));
+        ServerShopOfferUsageSavedData.Decision decision =
+                ServerShopOfferUsageSavedData.get(
+                        actor.getServer()).check(
+                        actor.getUUID(), shopId, offer.listingId(),
+                        optionId, action, quantity, offer.limits(),
+                        optionLimits, now);
+        if (decision == ServerShopOfferUsageSavedData.Decision.COOLDOWN) {
+            throw failure(ShopResultCode.COOLDOWN);
+        }
+        if (decision
+                != ServerShopOfferUsageSavedData.Decision.ALLOWED) {
+            throw failure(ShopResultCode.INVALID_AMOUNT);
+        }
+    }
+
+    private static void requireCapacity(
+            ServerPlayer actor,
+            String shopId,
+            ServerShopOfferListing offer,
+            SellOfferOption option,
+            long consumedBaseline,
+            int quantity,
+            long now
+    ) {
+        long capacity = remainingCapacity(
+                option.capacity(), consumedBaseline);
+        if (option.capacity() <= 0L) return;
+        if (capacity == 0L) {
+            throw failure(ShopResultCode.BUYBACK_CAP_REACHED);
+        }
+        ServerShopOfferUsageSavedData.Decision decision =
+                ServerShopOfferUsageSavedData.get(actor.getServer())
+                        .checkOption(GLOBAL_CAPACITY_SCOPE,
+                                shopId, offer.listingId(),
+                                option.optionId(),
+                                OfferAction.SELL_TO_SHOP,
+                                quantity,
+                                capacityLimits(capacity), now);
+        if (decision
+                != ServerShopOfferUsageSavedData.Decision.ALLOWED) {
+            throw failure(ShopResultCode.BUYBACK_CAP_REACHED);
+        }
+    }
+
+    static long remainingCapacity(
+            long configuredCapacity,
+            long consumedBaseline
+    ) {
+        if (configuredCapacity <= 0L) {
+            return configuredCapacity;
+        }
+        long consumed = Math.max(0L, consumedBaseline);
+        return configuredCapacity
+                - Math.min(configuredCapacity, consumed);
+    }
+
+    private static OfferLimitPolicy capacityLimits(long capacity) {
+        return new OfferLimitPolicy(
+                OfferLimitPolicy.DEFAULT_MAXIMUM_PER_REQUEST,
+                capacity, 0L, 0L, 0L);
+    }
+
+    private static int checkedTotal(int count, int quantity) {
+        try {
+            int total = Math.multiplyExact(count, quantity);
+            if (total <= 0) {
+                throw new ArithmeticException();
+            }
+            return total;
+        } catch (ArithmeticException exception) {
+            throw failure(ShopResultCode.INVALID_AMOUNT);
+        }
+    }
+
+    private static List<OfferItemComponent> scaleComponents(
+            List<OfferItemComponent> components,
+            int multiplier
+    ) {
+        List<OfferItemComponent> scaled =
+                new ArrayList<>(components.size());
+        for (OfferItemComponent component : components) {
+            scaled.add(new OfferItemComponent(
+                    component.componentId(), component.itemId(),
+                    checkedTotal(component.count(), multiplier),
+                    component.exactNbt()));
+        }
+        return List.copyOf(scaled);
+    }
+
+    private static ItemStack exactStack(
+            OfferItemComponent component
+    ) {
+        ItemStack stack = new ItemStack(
+                resolveItem(component.itemId()), 1);
+        if (component.exactMatch()) {
+            try {
+                stack.setTag(TagParser.parseTag(
+                        component.exactNbt()));
+            } catch (Exception exception) {
+                throw failure(ShopResultCode.INVALID_ITEM);
+            }
+        }
+        return stack;
+    }
+
+    private static PlayerShopListingSnapshot.ItemTemplate template(
+            OfferItemComponent component
+    ) {
+        ItemStack stack = exactStack(component);
+        return new PlayerShopListingSnapshot.ItemTemplate(
+                component.itemId(), component.count(),
+                component.exactMatch()
+                        ? PlayerShopItemMatchMode.EXACT
+                        : PlayerShopItemMatchMode.ITEM_ONLY,
+                ItemStackSnapshotCodec.encode(stack));
+    }
+
+    private static PlayerShopListingSnapshot captureOfferListing(
+            ShopBlockEntity shop,
+            ServerShopOfferListing offer,
+            int listingIndex,
+            List<OfferItemComponent> transferComponents,
+            @Nullable AcquireOfferOption acquire,
+            long payout,
+            PlayerShopListingSnapshot.Direction direction
+    ) {
+        List<PlayerShopListingSnapshot.ItemTemplate> outputs =
+                transferComponents.stream()
+                        .map(PlayerShopEscrowTransactionService::template)
+                        .toList();
+        PlayerShopListingSnapshot.ItemTemplate barter =
+                acquire != null && acquire.hasItemCosts()
+                        ? template(acquire.itemCosts().get(0))
+                        : null;
+        PlayerShopListingSnapshot.ConfiguredTradeMode mode =
+                acquire == null
+                        ? PlayerShopListingSnapshot
+                        .ConfiguredTradeMode.MONEY
+                        : acquire.hasItemCosts()
+                        ? acquire.moneyCostPresent()
+                        ? PlayerShopListingSnapshot
+                        .ConfiguredTradeMode.MONEY_AND_BARTER
+                        : PlayerShopListingSnapshot
+                        .ConfiguredTradeMode.BARTER
+                        : PlayerShopListingSnapshot
+                        .ConfiguredTradeMode.MONEY;
+        long price = acquire != null
+                && acquire.moneyCostPresent()
+                ? acquire.moneyCostMinorUnits() : 0L;
+        return PlayerShopListingSnapshot.capture(
+                offer.listingId(), listingIndex, direction, mode,
+                outputs.get(0).unitsPerPurchase(), price, barter,
+                barter == null ? 0 : barter.unitsPerPurchase(),
+                payout, 0, 0, outputs,
+                new PlayerShopListingSnapshot.PromotionSnapshot(
+                        "", 0.0D, 0, 0, 0L, 0L,
+                        false, false),
+                !offer.active(), false, shop.isAdminShopMode());
     }
 
     private static PlayerShopListingSnapshot captureListing(
@@ -792,6 +1697,69 @@ final class PlayerShopEscrowTransactionService {
             }
         }
         return remaining == 0 ? List.copyOf(selected) : List.of();
+    }
+
+    private static List<List<ItemStack>> selectInventoryComponents(
+            ServerPlayer player,
+            List<OfferItemComponent> components,
+            int quantity
+    ) {
+        if (components.isEmpty()) return List.of();
+        List<List<ItemStack>> selected = new ArrayList<>(
+                Collections.nCopies(components.size(), null));
+        IdentityHashMap<ItemStack, Integer> reserved =
+                new IdentityHashMap<>();
+        for (boolean exactPass : new boolean[]{true, false}) {
+            for (int index = 0; index < components.size(); index++) {
+                OfferItemComponent component = components.get(index);
+                if (component.exactMatch() != exactPass) continue;
+                ItemStack prototype = exactStack(component);
+                int remaining = checkedTotal(
+                        component.count(), quantity);
+                List<ItemStack> portions = new ArrayList<>();
+                remaining = reserveInventory(
+                        player.getInventory().items, portions,
+                        prototype, component.exactMatch(),
+                        remaining, reserved);
+                if (remaining > 0) {
+                    remaining = reserveInventory(
+                            player.getInventory().offhand,
+                            portions, prototype,
+                            component.exactMatch(),
+                            remaining, reserved);
+                }
+                if (remaining != 0) return List.of();
+                selected.set(index, List.copyOf(portions));
+            }
+        }
+        return List.copyOf(selected);
+    }
+
+    private static int reserveInventory(
+            List<ItemStack> inventory,
+            List<ItemStack> selected,
+            ItemStack prototype,
+            boolean exact,
+            int remaining,
+            IdentityHashMap<ItemStack, Integer> reserved
+    ) {
+        for (ItemStack stack : inventory) {
+            if (remaining == 0) break;
+            if (!NbtMatchUtil.matches(stack, prototype.getItem(),
+                    exact, prototype.getTag())) {
+                continue;
+            }
+            int available = stack.getCount()
+                    - reserved.getOrDefault(stack, 0);
+            if (available <= 0) continue;
+            int take = Math.min(available, remaining);
+            ItemStack copy = stack.copy();
+            copy.setCount(take);
+            selected.add(copy);
+            reserved.merge(stack, take, Math::addExact);
+            remaining -= take;
+        }
+        return remaining;
     }
 
     private static int selectFromStack(
@@ -968,6 +1936,18 @@ final class PlayerShopEscrowTransactionService {
     ) {
     }
 
+    private record NormalizedQuote(
+            PlayerShopEscrowIntent intent,
+            LiveStorageAccess storage,
+            ShopBlockEntity.Listing physicalListing,
+            ServerShopOfferListing offer,
+            @Nullable AcquireOfferOption acquireOption,
+            @Nullable SellOfferOption sellOption,
+            long quotedAtEpoch,
+            long moneyTotal
+    ) {
+    }
+
     private record TradeSelection(
             PlayerShopTradeMethod method,
             boolean needsMoney,
@@ -1007,6 +1987,7 @@ final class PlayerShopEscrowTransactionService {
         private final PlayerShopPaymentSource paymentSource;
         private final int units;
         private final PlayerShopListingSnapshot listing;
+        private final Optional<PlayerShopOfferSelection> offerSelection;
         private final Instant quotedAt = Instant.now();
         private final List<PlayerShopMoneyTransfer> money =
                 new ArrayList<>();
@@ -1028,6 +2009,23 @@ final class PlayerShopEscrowTransactionService {
                 int units,
                 PlayerShopListingSnapshot listing
         ) {
+            this(requestId, actorId, ownerId, identity, operation,
+                    tradeMethod, paymentSource, units, listing,
+                    Optional.empty());
+        }
+
+        private IntentAssembly(
+                UUID requestId,
+                UUID actorId,
+                UUID ownerId,
+                PlayerShopIdentity identity,
+                PlayerShopOperation operation,
+                PlayerShopTradeMethod tradeMethod,
+                PlayerShopPaymentSource paymentSource,
+                int units,
+                PlayerShopListingSnapshot listing,
+                Optional<PlayerShopOfferSelection> offerSelection
+        ) {
             this.requestId = requestId;
             this.actorId = actorId;
             this.ownerId = ownerId;
@@ -1037,13 +2035,14 @@ final class PlayerShopEscrowTransactionService {
             this.paymentSource = paymentSource;
             this.units = units;
             this.listing = listing;
+            this.offerSelection = offerSelection;
         }
 
         private PlayerShopEscrowIntent previewIntent() {
             return PlayerShopEscrowIntent.prepared(requestId, actorId,
                     ownerId, identity, operation, tradeMethod,
                     paymentSource, units, quotedAt, listing, money, items,
-                    claims, storage);
+                    claims, storage, offerSelection);
         }
 
         private void addPurchaseOutputs(
@@ -1219,7 +2218,7 @@ final class PlayerShopEscrowTransactionService {
             return PlayerShopEscrowIntent.prepared(requestId, actorId,
                     ownerId, identity, operation, tradeMethod,
                     paymentSource, units, quotedAt, listing, money, items,
-                    claims, storage);
+                    claims, storage, offerSelection);
         }
     }
 
@@ -1378,6 +2377,10 @@ final class PlayerShopEscrowTransactionService {
             if (current == null || expectedIntent.listing() == null) {
                 return false;
             }
+            if (expectedIntent.offerSelection().isPresent()) {
+                return revalidateOffer(
+                        shop, current, expectedIntent);
+            }
             PlayerShopListingSnapshot quoted = expectedIntent.listing();
             try {
                 PlayerShopListingSnapshot currentSnapshot = captureListing(
@@ -1425,6 +2428,77 @@ final class PlayerShopEscrowTransactionService {
                 return actual == before || actual >= target;
             }
             return current.buybackBought() == quoted.buybackBought();
+        }
+
+        private boolean revalidateOffer(
+                ShopBlockEntity shop,
+                ShopBlockEntity.Listing current,
+                PlayerShopEscrowIntent expectedIntent
+        ) {
+            ServerShopOfferListing offer = current.normalizedOffer()
+                    .orElse(null);
+            PlayerShopOfferSelection selection =
+                    expectedIntent.offerSelection().orElseThrow();
+            if (offer == null
+                    || !offer.listingId().equals(
+                    selection.listingId())
+                    || offer.revision()
+                    != selection.offerRevision()) {
+                return false;
+            }
+            long now = Instant.now().getEpochSecond();
+            if (!offer.active()
+                    || offer.expiresAtEpoch() > 0L
+                    && now >= offer.expiresAtEpoch()
+                    || !offer.schedule().activeAt(now)
+                    || !ServerShopOfferPermissionPolicy.allowed(
+                    actor, offer.permissionNode())) {
+                return false;
+            }
+            try {
+                PlayerShopListingSnapshot currentSnapshot;
+                if (selection.action()
+                        == OfferAction.ACQUIRE_FROM_SHOP) {
+                    AcquireOfferOption option =
+                            offer.acquireOptions().stream()
+                            .filter(value -> value.optionId().equals(
+                                    selection.optionId()))
+                            .findFirst().orElse(null);
+                    if (option == null
+                            || !option.schedule().activeAt(now)
+                            || !ServerShopOfferPermissionPolicy.allowed(
+                            actor, option.permissionNode())) {
+                        return false;
+                    }
+                    currentSnapshot = captureOfferListing(
+                            shop, offer, listingIndex,
+                            scaleComponents(offer.outputs(),
+                                    option.outputMultiplier()),
+                            option, 0L,
+                            PlayerShopListingSnapshot.Direction.SELL);
+                } else {
+                    SellOfferOption option =
+                            offer.sellOptions().stream()
+                            .filter(value -> value.optionId().equals(
+                                    selection.optionId()))
+                            .findFirst().orElse(null);
+                    if (option == null
+                            || !option.schedule().activeAt(now)
+                            || !ServerShopOfferPermissionPolicy.allowed(
+                            actor, option.permissionNode())) {
+                        return false;
+                    }
+                    currentSnapshot = captureOfferListing(
+                            shop, offer, listingIndex,
+                            option.itemInputs(), null,
+                            option.moneyPayoutMinorUnits(),
+                            PlayerShopListingSnapshot.Direction.BUY);
+                }
+                return currentSnapshot.equals(
+                        expectedIntent.listing());
+            } catch (RuntimeException exception) {
+                return false;
+            }
         }
 
         @Override

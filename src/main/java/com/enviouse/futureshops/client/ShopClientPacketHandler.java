@@ -20,6 +20,7 @@ import com.enviouse.futureshops.client.screen.PlayerShopCartScreen;
 import com.enviouse.futureshops.client.screen.PlayerStorefrontScreen;
 import com.enviouse.futureshops.client.screen.BalTopOverviewScreen;
 import com.enviouse.futureshops.client.screen.AtmScreen;
+import com.enviouse.futureshops.client.screen.AdminOfferEditorScreen;
 import com.enviouse.futureshops.client.screen.BalanceOverviewScreen;
 import com.enviouse.futureshops.client.screen.ShopMainScreen;
 import com.enviouse.futureshops.client.screen.MarketModuleScreen;
@@ -27,6 +28,7 @@ import com.enviouse.futureshops.client.screen.ShopScreenMarker;
 import com.enviouse.futureshops.client.screen.ShopUiUtil;
 import com.enviouse.futureshops.client.screen.TransactionHistoryScreen;
 import com.enviouse.futureshops.network.packets.S2CAdminEditAckPacket;
+import com.enviouse.futureshops.network.packets.S2CAdminOfferSaveResultPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmWithdrawPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmCollectCashPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
@@ -35,6 +37,7 @@ import com.enviouse.futureshops.network.packets.C2SCloseMarketSessionPacket;
 import com.enviouse.futureshops.network.packets.C2SMarketCapabilitiesPacket;
 import com.enviouse.futureshops.network.packets.C2SMarketProfileMutationPacket;
 import com.enviouse.futureshops.network.packets.C2SOpenMarketModulePacket;
+import com.enviouse.futureshops.network.packets.C2SServerShopOfferPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmDataPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmResultPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmCollectCashResultPacket;
@@ -57,6 +60,8 @@ import com.enviouse.futureshops.network.packets.S2CMarketProfileMutationPacket;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopDataPacket;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopResultPacket;
 import com.enviouse.futureshops.network.packets.S2CSettlementHistoryPacket;
+import com.enviouse.futureshops.network.packets.S2CServerShopOfferResultPacket;
+import com.enviouse.futureshops.network.packets.S2CServerShopOfferCartResultPacket;
 import com.enviouse.futureshops.network.packets.S2CSellResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CShopDataPacket;
 import com.enviouse.futureshops.network.packets.S2CVerifyCartResponsePacket;
@@ -84,6 +89,13 @@ public final class ShopClientPacketHandler {
             new AtmDepositTracker();
     private static final PlayerShopResponseTracker PLAYER_SHOP_RESPONSES =
             new PlayerShopResponseTracker();
+    private static final ServerShopOfferResponseTracker
+            SERVER_SHOP_OFFER_RESPONSES =
+            new ServerShopOfferResponseTracker();
+    private static final com.enviouse.futureshops.client.editor
+            .AdminOfferSaveResultTracker ADMIN_OFFER_SAVE_RESULTS =
+            new com.enviouse.futureshops.client.editor
+                    .AdminOfferSaveResultTracker();
     private static volatile S2CAtmResultPacket lastRetryableAtmResult;
     private static volatile S2CAtmDepositResultPacket
             lastRetryableAtmDepositResult;
@@ -94,6 +106,33 @@ public final class ShopClientPacketHandler {
     private static MarketClientNavigationCoordinator marketNavigation;
 
     private ShopClientPacketHandler() {
+    }
+
+    public static Optional<ServerShopOfferResponseTracker.PendingRequest>
+    submitServerShopOffer(
+            String shopId,
+            String listingId,
+            String optionId,
+            com.enviouse.futureshops.catalog.offer.OfferAction action,
+            int quantity,
+            long revision,
+            Optional<com.enviouse.futureshops.money.PaymentSource> source
+    ) {
+        try {
+            C2SServerShopOfferPacket packet =
+                    SERVER_SHOP_OFFER_RESPONSES.begin(
+                            shopId, listingId, optionId, action,
+                            quantity, revision, source);
+            ShopPackets.CHANNEL.sendToServer(packet);
+            return SERVER_SHOP_OFFER_RESPONSES.pending();
+        } catch (RuntimeException exception) {
+            return Optional.empty();
+        }
+    }
+
+    public static Optional<ServerShopOfferResponseTracker.PendingRequest>
+    pendingServerShopOffer() {
+        return SERVER_SHOP_OFFER_RESPONSES.pending();
     }
 
     public static PlayerShopResponseTracker.PendingRequest
@@ -639,6 +678,7 @@ public final class ShopClientPacketHandler {
         clearAtmWithdrawalState();
         ClientRouteGuard.clear();
         PLAYER_SHOP_RESPONSES.clear();
+        SERVER_SHOP_OFFER_RESPONSES.clear();
         MarketCapabilityClientState.clear();
         MarketProfileMutationClientState.clear();
         ShopClientState.clearMarketWalletSnapshot();
@@ -684,7 +724,8 @@ public final class ShopClientPacketHandler {
                     packet.barterRecipes(),
                     packet.adminShopEnabled(),
                     packet.nearbyShops(),
-                    packet.canEdit());
+                    packet.canEdit(),
+                    packet.offers());
             ShopPackets.CHANNEL.sendToServer(new com.enviouse.futureshops.network.packets.C2SInventorySyncPacket(packet.shopId()));
             if (shopMainOpen) {
                 // Update in-place — preserves nearbyMode, scroll, tabs.
@@ -837,11 +878,15 @@ public final class ShopClientPacketHandler {
                     packet.floatingIconMode(),
                     packet.floatingIconItem(),
                     packet.linkedStorages(),
-                    packet.savedConfigNames());
+                    packet.savedConfigNames(),
+                    packet.normalizedOffers());
             if (packet.owner()) {
                 // Owner MANAGE view is unchanged (Phase 5 rebuild). Data resends (buy/config acks)
                 // update an already-open block screen in place; it reads live client state.
-                if (!(mc.screen instanceof PlayerShopBlockScreen)) {
+                if (!(mc.screen instanceof PlayerShopBlockScreen)
+                        && !(mc.screen
+                        instanceof AdminOfferEditorScreen editor
+                        && editor.isPlayerShopEditor())) {
                     // Pass current screen as parent for back-button navigation (Items 4, 9)
                     mc.setScreen(new PlayerShopBlockScreen(mc.screen));
                 }
@@ -977,6 +1022,103 @@ public final class ShopClientPacketHandler {
                         packet.success(), buildSellMessage(packet).getString());
             }
         });
+    }
+
+    public static void handleServerShopOfferResult(
+            S2CServerShopOfferResultPacket packet
+    ) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            if (!SERVER_SHOP_OFFER_RESPONSES.accept(packet)) {
+                return;
+            }
+            ShopClientState.setCurrentBalanceMinorUnits(
+                    packet.resultingBalanceMinorUnits());
+            boolean success = packet.status().success();
+            Component message = Component.translatable(
+                    "gui.futureshops.offer.result."
+                            + packet.status().name()
+                            .toLowerCase(java.util.Locale.ROOT));
+            ShopClientState.setStatus(message, success);
+            if (mc.screen instanceof ItemDetailScreen detailScreen) {
+                detailScreen.onOfferTransactionResult(
+                        packet.requestId(), success,
+                        message.getString(), packet.status());
+            }
+        });
+    }
+
+    public static void handleServerShopOfferCartResult(
+            S2CServerShopOfferCartResultPacket packet
+    ) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            if (!ShopClientState.hasTrackedCartCheckout()) {
+                return;
+            }
+            CartResponsePolicy.ResponseResult response =
+                    ShopClientState.applyCartCheckoutResponse(
+                            packet.requestId(),
+                            packet.status().success(),
+                            packet.status()
+                                    != com.enviouse.futureshops.server
+                                    .escrow.runtime.ServerShopOfferService
+                                    .Status.RECOVERY_REQUIRED
+                                    && packet.status()
+                                    != com.enviouse.futureshops.server
+                                    .escrow.runtime.ServerShopOfferService
+                                    .Status.QUARANTINED);
+            if (!response.matched()) {
+                return;
+            }
+            ShopClientState.setCurrentBalanceMinorUnits(
+                    packet.resultingBalanceMinorUnits());
+            Component message = Component.translatable(
+                    "gui.futureshops.offer.result."
+                            + packet.status().name()
+                            .toLowerCase(java.util.Locale.ROOT));
+            ShopClientState.setStatus(
+                    message, packet.status().success());
+            if (mc.screen instanceof CartScreen cartScreen) {
+                cartScreen.onTransactionResult(
+                        packet.status().success(),
+                        message.getString());
+            }
+        });
+    }
+
+    public static void handleAdminOfferSaveResult(
+            S2CAdminOfferSaveResultPacket packet
+    ) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            if (mc.screen instanceof AdminOfferEditorScreen editor) {
+                editor.applySaveResult(packet);
+            } else {
+                ADMIN_OFFER_SAVE_RESULTS.record(packet);
+            }
+        });
+    }
+
+    public static void handlePlayerShopOfferSaveResult(
+            com.enviouse.futureshops.network.packets
+                    .S2CPlayerShopOfferSaveResultPacket packet
+    ) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            if (mc.screen instanceof AdminOfferEditorScreen editor
+                    && editor.isPlayerShopEditor()) {
+                editor.applyPlayerShopSaveResult(packet);
+            } else {
+                ADMIN_OFFER_SAVE_RESULTS.record(
+                        packet.asAdminResult());
+            }
+        });
+    }
+
+    public static Optional<S2CAdminOfferSaveResultPacket>
+    takeAdminOfferSaveResult(UUID requestId) {
+        return ADMIN_OFFER_SAVE_RESULTS.take(requestId);
     }
 
     public static void handleBarterResponse(S2CBarterResponsePacket packet) {

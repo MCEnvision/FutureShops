@@ -33,10 +33,10 @@ reconciliation contract, but FutureShops cannot prove how the foreign mod create
 
 ## Deposit recovery
 
-Protocol 52 includes an optional server authoritative recovery summary whenever the player has
-active deposit evidence. It contains the original request UUID, deterministic transaction UUID,
-amount, and recovery state. Reopening the ATM or reconnecting adopts this identity before another
-deposit can be enabled.
+Protocol 55 retains the server authoritative ATM recovery summary introduced by protocol 52
+whenever the player has active deposit evidence. It contains the original request UUID,
+deterministic transaction UUID, amount, and recovery state. Reopening the ATM or reconnecting
+adopts this identity before another deposit can be enabled.
 
 - **Check recovery** sends only the original request and transaction UUID. It cannot submit an
   amount or currency source and cannot consume a second deposit.

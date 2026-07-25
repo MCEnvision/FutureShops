@@ -50,6 +50,10 @@ public record ServerRequestSecuritySettings(
                 atmCashCollection);
         limits.put(ServerRequestAction.ATM_DEPOSIT, atmDeposit);
         limits.put(ServerRequestAction.PAY, pay);
+        limits.put(ServerRequestAction.PLAYER_SHOP_OFFER, pay);
+        limits.put(ServerRequestAction.PLAYER_SHOP_OFFER_ADMIN, pay);
+        limits.put(ServerRequestAction.SERVER_SHOP_OFFER, pay);
+        limits.put(ServerRequestAction.SERVER_SHOP_OFFER_ADMIN, pay);
         return Collections.unmodifiableMap(limits);
     }
 

@@ -2,6 +2,7 @@ package com.enviouse.futureshops.server.shop;
 
 import com.enviouse.futureshops.block.ShopBlockEntity;
 import com.enviouse.futureshops.data.PlayerShopListingData;
+import com.enviouse.futureshops.data.PlayerShopNormalizedOfferData;
 import com.enviouse.futureshops.data.PlayerShopPromoData;
 import com.enviouse.futureshops.data.SettlementHistoryRow;
 import com.enviouse.futureshops.money.PaymentSource;
@@ -102,22 +103,30 @@ public final class PlayerShopBlockService {
 
         // In single-item mode, visitors see only the visible listing; owners see all with visibility flag
         List<PlayerShopListingData> listings;
+        List<PlayerShopNormalizedOfferData> normalizedOffers;
         if (shop.isSingleItemMode() && !owner) {
             int visIdx = shop.getVisibleListingIndex();
             ShopBlockEntity.Listing vis = shop.getListing(visIdx);
             if (vis != null) {
                 listings = List.of(toData(player.level(), shop, pos, vis, true));
+                normalizedOffers = List.of(toNormalizedOfferData(
+                        0, visIdx, vis));
             } else {
                 listings = List.of();
+                normalizedOffers = List.of();
             }
         } else {
             int visIdx = shop.getVisibleListingIndex();
             listings = new ArrayList<>();
+            normalizedOffers = new ArrayList<>();
             for (int i = 0; i < shop.getListings().size(); i++) {
                 boolean visible = !shop.isSingleItemMode() || i == visIdx;
                 listings.add(toData(player.level(), shop, pos, shop.getListings().get(i), visible));
+                normalizedOffers.add(toNormalizedOfferData(
+                        i, i, shop.getListings().get(i)));
             }
             listings = List.copyOf(listings);
+            normalizedOffers = List.copyOf(normalizedOffers);
         }
 
         // Resolve franchise name for display
@@ -147,7 +156,8 @@ public final class PlayerShopBlockService {
                 owner ? buildStorageEntries(player.level(), shop, pos) : List.of(),
                 owner && player.getServer() != null
                         ? PlayerShopSavedConfigs.get(player.getServer()).names(player.getUUID())
-                        : List.of()));
+                        : List.of(),
+                normalizedOffers));
     }
 
     /**
@@ -1025,6 +1035,16 @@ public final class PlayerShopBlockService {
                 listing.showcase());
     }
 
+    private static PlayerShopNormalizedOfferData toNormalizedOfferData(
+            int clientListingIndex,
+            int sourceListingIndex,
+            ShopBlockEntity.Listing listing
+    ) {
+        return new PlayerShopNormalizedOfferData(
+                clientListingIndex, sourceListingIndex,
+                listing.offerUnavailable(), listing.normalizedOffer());
+    }
+
     /** The listing's SNBT for history/settlement rows; "" when the listing carries no tag. */
     static String listingNbtJson(ShopBlockEntity.Listing listing) {
         CompoundTag tag = listing == null ? null : listing.nbtTag();
@@ -1628,6 +1648,17 @@ public final class PlayerShopBlockService {
                 packet.responseToken(), () ->
                         PlayerShopEscrowTransactionService.sell(
                                 seller, packet));
+    }
+
+    public static void handleOffer(
+            ServerPlayer player,
+            com.enviouse.futureshops.network.packets
+                    .C2SPlayerShopOfferPacket packet
+    ) {
+        withResponseContext(player, packet.requestId(),
+                packet.responseToken(), () ->
+                        PlayerShopEscrowTransactionService.offer(
+                                player, packet));
     }
 
     public static void claimSettlement(

@@ -1,11 +1,14 @@
 package com.enviouse.futureshops.catalog;
 
+import com.enviouse.futureshops.catalog.offer.LegacyServerShopOfferCompiler;
+import com.enviouse.futureshops.catalog.offer.ServerShopOfferListing;
 import com.enviouse.futureshops.data.CatalogCategory;
 import com.enviouse.futureshops.data.CatalogItem;
 import com.enviouse.futureshops.data.CatalogPromo;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -15,12 +18,43 @@ import java.util.stream.Collectors;
  * that populate {@link com.enviouse.futureshops.network.packets.S2CShopDataPacket}.
  */
 public record ShopDefinition(
+        int schemaVersion,
         String shopId,
         String displayName,
         List<CategoryDef> categories,
         List<ItemDef> items,
         List<PromoDef> promos,
-        List<BarterRecipeDef> barterRecipes) {
+        List<BarterRecipeDef> barterRecipes,
+        List<ServerShopOfferListing> offers) {
+
+    public ShopDefinition {
+        if (schemaVersion < 1 || schemaVersion > 2) {
+            throw new IllegalArgumentException(
+                    "Unsupported server shop schema version");
+        }
+        shopId = Objects.requireNonNull(shopId, "shopId");
+        displayName = Objects.requireNonNull(displayName, "displayName");
+        categories = List.copyOf(Objects.requireNonNull(categories,
+                "categories"));
+        items = List.copyOf(Objects.requireNonNull(items, "items"));
+        promos = List.copyOf(Objects.requireNonNull(promos, "promos"));
+        barterRecipes = List.copyOf(Objects.requireNonNull(barterRecipes,
+                "barterRecipes"));
+        offers = List.copyOf(Objects.requireNonNull(offers, "offers"));
+    }
+
+    public ShopDefinition(
+            String shopId,
+            String displayName,
+            List<CategoryDef> categories,
+            List<ItemDef> items,
+            List<PromoDef> promos,
+            List<BarterRecipeDef> barterRecipes
+    ) {
+        this(1, shopId, displayName, categories, items, promos,
+                barterRecipes, LegacyServerShopOfferCompiler.compile(
+                        items, barterRecipes));
+    }
 
     // -------------------------------------------------------------------------
     // Conversion to packet DTOs
@@ -83,4 +117,3 @@ public record ShopDefinition(
         };
     }
 }
-

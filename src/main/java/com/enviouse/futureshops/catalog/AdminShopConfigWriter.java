@@ -13,8 +13,13 @@ import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -26,9 +31,11 @@ import java.util.Locale;
  * for active sessions.
  */
 public final class AdminShopConfigWriter {
+    private static final long MAX_ADMIN_JSON_BYTES = 8L * 1024L * 1024L;
 
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson PRETTY = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+    private static final int BACKUP_COUNT = 3;
 
     private AdminShopConfigWriter() {
     }
@@ -986,7 +993,13 @@ public final class AdminShopConfigWriter {
                 root.add("barterRecipes", new JsonArray());
                 return root;
             }
-            String content = Files.readString(path);
+            if (!safeRegularFile(path)) {
+                LOGGER.error(
+                        "[FutureShops] Refused unsafe admin shop catalog at '{}'",
+                        path);
+                return null;
+            }
+            String content = readBounded(path);
             JsonElement parsed = JsonParser.parseString(content);
             if (!parsed.isJsonObject()) {
                 LOGGER.error("[FutureShops] admin.json root is not an object");
@@ -999,14 +1012,179 @@ public final class AdminShopConfigWriter {
         }
     }
 
+    static JsonObject readRoot(Path path) {
+        return readOrInit(path);
+    }
+
+    static boolean writeValidatedRoot(Path path, JsonObject root) {
+        return writeJson(path, root);
+    }
+
+    static boolean restoreLatestBackup(Path path) {
+        Path latest = backup(path, 1);
+        if (!safeRegularFile(latest)
+                || Files.exists(path) && !safeRegularFile(path)) {
+            LOGGER.error(
+                    "[FutureShops] Cannot restore admin shop catalog from unsafe or missing backup at '{}'",
+                    latest);
+            return false;
+        }
+        Path temporary = path.resolveSibling(
+                "." + path.getFileName() + "."
+                        + java.util.UUID.randomUUID() + ".restore.tmp");
+        try {
+            String content = readBounded(latest);
+            if (!ShopDefinitionLoader.validCandidate(
+                    content, latest.getFileName().toString())) {
+                LOGGER.error(
+                        "[FutureShops] Refused invalid admin shop backup at '{}'",
+                        latest);
+                return false;
+            }
+            try (FileChannel channel = FileChannel.open(
+                    temporary, StandardOpenOption.CREATE_NEW,
+                    StandardOpenOption.WRITE)) {
+                ByteBuffer bytes = StandardCharsets.UTF_8.encode(content);
+                while (bytes.hasRemaining()) {
+                    channel.write(bytes);
+                }
+                channel.force(true);
+            }
+            replace(temporary, path);
+            return true;
+        } catch (IOException exception) {
+            LOGGER.error(
+                    "[FutureShops] Failed to restore admin shop backup from '{}'",
+                    latest, exception);
+            return false;
+        } finally {
+            try {
+                Files.deleteIfExists(temporary);
+            } catch (IOException exception) {
+                LOGGER.warn(
+                        "[FutureShops] Failed to remove temporary admin shop restore file '{}'",
+                        temporary, exception);
+            }
+        }
+    }
+
     private static boolean writeJson(Path path, JsonObject root) {
+        String content = PRETTY.toJson(root);
+        if (content.getBytes(StandardCharsets.UTF_8).length
+                > MAX_ADMIN_JSON_BYTES
+                || Files.exists(path) && !safeRegularFile(path)) {
+            LOGGER.error(
+                    "[FutureShops] Refused oversized or unsafe admin shop candidate at '{}'",
+                    path);
+            return false;
+        }
+        if (!ShopDefinitionLoader.validCandidate(
+                content, path.getFileName().toString())) {
+            LOGGER.error(
+                    "[FutureShops] Refused invalid admin shop candidate at '{}'",
+                    path);
+            return false;
+        }
+        Path temporary = path.resolveSibling(
+                "." + path.getFileName() + "."
+                        + java.util.UUID.randomUUID() + ".tmp");
         try {
             Files.createDirectories(path.getParent());
-            Files.writeString(path, PRETTY.toJson(root));
+            try (FileChannel channel = FileChannel.open(
+                    temporary, StandardOpenOption.CREATE_NEW,
+                    StandardOpenOption.WRITE)) {
+                ByteBuffer bytes = StandardCharsets.UTF_8.encode(content);
+                while (bytes.hasRemaining()) {
+                    channel.write(bytes);
+                }
+                channel.force(true);
+            }
+            String persisted = Files.readString(temporary);
+            if (!ShopDefinitionLoader.validCandidate(
+                    persisted, temporary.getFileName().toString())) {
+                throw new IOException(
+                        "Temporary admin shop validation failed");
+            }
+            rotateBackups(path);
+            replace(temporary, path);
             return true;
         } catch (IOException e) {
             LOGGER.error("[FutureShops] Failed to write admin.json at '{}': {}", path, e.getMessage());
             return false;
+        } finally {
+            try {
+                Files.deleteIfExists(temporary);
+            } catch (IOException exception) {
+                LOGGER.warn(
+                        "[FutureShops] Failed to remove temporary admin shop file '{}'",
+                        temporary, exception);
+            }
+        }
+    }
+
+    private static void rotateBackups(Path path) throws IOException {
+        if (!Files.exists(path)) {
+            return;
+        }
+        if (!safeRegularFile(path)) {
+            throw new IOException("Admin shop catalog is unsafe");
+        }
+        for (int index = BACKUP_COUNT; index >= 2; index--) {
+            Path previous = backup(path, index - 1);
+            if (Files.exists(previous)) {
+                if (!safeRegularFile(previous)) {
+                    throw new IOException("Admin shop backup is unsafe");
+                }
+                Files.move(previous, backup(path, index),
+                        StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+        Path temporaryBackup = path.resolveSibling(
+                "." + path.getFileName() + "."
+                        + java.util.UUID.randomUUID() + ".backup.tmp");
+        try {
+            Files.copy(path, temporaryBackup);
+            try (FileChannel channel = FileChannel.open(
+                    temporaryBackup, StandardOpenOption.WRITE)) {
+                channel.force(true);
+            }
+            Files.move(temporaryBackup, backup(path, 1),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.nio.file.AtomicMoveNotSupportedException exception) {
+            Files.move(temporaryBackup, backup(path, 1),
+                    StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            Files.deleteIfExists(temporaryBackup);
+        }
+    }
+
+    private static Path backup(Path path, int index) {
+        return path.resolveSibling(path.getFileName() + ".bak." + index);
+    }
+
+    private static boolean safeRegularFile(Path path) {
+        return Files.exists(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                && !Files.isSymbolicLink(path)
+                && Files.isRegularFile(path,
+                java.nio.file.LinkOption.NOFOLLOW_LINKS);
+    }
+
+    private static String readBounded(Path path) throws IOException {
+        if (Files.size(path) > MAX_ADMIN_JSON_BYTES) {
+            throw new IOException("Admin shop catalog is too large");
+        }
+        return Files.readString(path);
+    }
+
+    private static void replace(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.nio.file.AtomicMoveNotSupportedException exception) {
+            Files.move(source, target,
+                    StandardCopyOption.REPLACE_EXISTING);
         }
     }
 }

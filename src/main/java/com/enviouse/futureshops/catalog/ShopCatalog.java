@@ -426,6 +426,19 @@ public final class ShopCatalog {
         return Optional.ofNullable(CATALOG.get(shopId));
     }
 
+    public static Optional<com.enviouse.futureshops.catalog.offer
+            .ServerShopOfferListing> getOffer(
+            String shopId,
+            String listingId
+    ) {
+        if (listingId == null || listingId.isBlank()) {
+            return Optional.empty();
+        }
+        return get(shopId).flatMap(definition ->
+                definition.offers().stream().filter(offer ->
+                        offer.listingId().equals(listingId)).findFirst());
+    }
+
     /** Live view of all loaded shop definitions. Read-only — do not mutate. */
     public static Collection<ShopDefinition> getAllDefinitions() {
         return Collections.unmodifiableCollection(CATALOG.values());
@@ -1011,27 +1024,23 @@ public final class ShopCatalog {
                     if (promoPrice > 0) unit = promoPrice;
                 }
             }
-            return unit <= 0L ? 0L : unit * quantity;
+            return unit <= 0L ? 0L : Math.multiplyExact(unit, quantity);
         }
 
         String type = config.promoType();
         if ("BUY_X_GET_Y".equals(type) && config.buyX() > 0 && config.buyY() > 0) {
-            int group = config.buyX() + config.buyY();
+            int group = Math.addExact(config.buyX(), config.buyY());
             int fullGroups = quantity / group;
             int remainder = quantity % group;
-            int payable = fullGroups * config.buyX() + Math.min(remainder, config.buyX());
-            return basePrice * payable;
+            int payable = Math.addExact(
+                    Math.multiplyExact(fullGroups, config.buyX()),
+                    Math.min(remainder, config.buyX()));
+            return Math.multiplyExact(basePrice, payable);
         }
 
-        long discounted = switch (type) {
-            case "PERCENTAGE", "FLASH" -> Math.max(0L, Math.round(basePrice * (1.0 - config.discountValue() / 100.0)));
-            case "FLAT" -> {
-                long flatMinor = Math.round(config.discountValue() * Math.pow(10, com.enviouse.futureshops.Config.economyCurrencyDecimals));
-                yield Math.max(0L, basePrice - flatMinor);
-            }
-            default -> basePrice;
-        };
-        return discounted * quantity;
+        long discounted = applyDiscount(
+                basePrice, type, config.discountValue());
+        return Math.multiplyExact(discounted, quantity);
     }
 
     /**
@@ -1136,12 +1145,42 @@ public final class ShopCatalog {
     }
 
     private static long applyPromo(long basePriceMinorUnits, PromoDef promo) {
-        return switch (promo.promoType()) {
-            case "PERCENTAGE", "FLASH" ->
-                    Math.max(0L, Math.round(basePriceMinorUnits * (1.0 - promo.discountValue() / 100.0)));
+        return applyDiscount(basePriceMinorUnits, promo.promoType(),
+                promo.discountValue());
+    }
+
+    static long applyDiscount(
+            long basePriceMinorUnits,
+            String promotionType,
+            double discountValue
+    ) {
+        if (basePriceMinorUnits < 0L || !Double.isFinite(discountValue)) {
+            throw new IllegalArgumentException("Promotion price is invalid");
+        }
+        java.math.BigDecimal discount =
+                java.math.BigDecimal.valueOf(discountValue);
+        if (discount.signum() < 0) {
+            throw new IllegalArgumentException("Promotion discount is invalid");
+        }
+        return switch (promotionType) {
+            case "PERCENTAGE", "FLASH" -> {
+                java.math.BigDecimal multiplier = java.math.BigDecimal.ONE
+                        .subtract(discount.movePointLeft(2));
+                long discounted = java.math.BigDecimal
+                        .valueOf(basePriceMinorUnits)
+                        .multiply(multiplier)
+                        .setScale(0, java.math.RoundingMode.HALF_UP)
+                        .longValueExact();
+                yield Math.max(0L, discounted);
+            }
             case "FLAT" -> {
-                long flatMinor = Math.round(promo.discountValue() * Math.pow(10, com.enviouse.futureshops.Config.economyCurrencyDecimals));
-                yield Math.max(0L, basePriceMinorUnits - flatMinor);
+                long flatMinor = discount.movePointRight(
+                                com.enviouse.futureshops.Config
+                                        .economyCurrencyDecimals)
+                        .setScale(0, java.math.RoundingMode.HALF_UP)
+                        .longValueExact();
+                yield Math.max(0L,
+                        Math.subtractExact(basePriceMinorUnits, flatMinor));
             }
             default -> basePriceMinorUnits;
         };
