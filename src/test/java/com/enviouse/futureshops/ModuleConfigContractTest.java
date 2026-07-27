@@ -43,6 +43,8 @@ class ModuleConfigContractTest {
         assertTrue(source.contains("AuctionHouseConfig.SPEC, AuctionHouseConfig.FILE_NAME"));
         assertTrue(source.contains("BazaarConfig.SPEC, BazaarConfig.FILE_NAME"));
         assertTrue(source.contains("ClientConfig.SPEC, \"futureshops-client.toml\""));
+        assertTrue(source.contains(
+                "event.enqueueWork(ShopDefinitionLoader::prepareStorage)"));
     }
 
     @Test

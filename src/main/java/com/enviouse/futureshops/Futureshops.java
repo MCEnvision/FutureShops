@@ -1,6 +1,7 @@
 package com.enviouse.futureshops;
 
 import com.enviouse.futureshops.catalog.ShopCatalog;
+import com.enviouse.futureshops.catalog.ShopDefinitionLoader;
 import com.enviouse.futureshops.compat.rs2.RefinedStorage2Compat;
 import com.enviouse.futureshops.config.AuctionHouseConfig;
 import com.enviouse.futureshops.config.BazaarConfig;
@@ -92,6 +93,7 @@ public class Futureshops {
 
     private void commonSetup(final FMLCommonSetupEvent event) {
         event.enqueueWork(ShopPackets::register);
+        event.enqueueWork(ShopDefinitionLoader::prepareStorage);
         // Register default Forge capability storage adapter
         ExternalStorageRegistry.register(ForgeCapabilityStorageAdapter.INSTANCE);
         // Attempt RS2 soft-dependency integration

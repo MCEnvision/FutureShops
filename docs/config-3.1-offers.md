@@ -12,6 +12,8 @@ The loader validates the complete candidate catalog before it becomes live. Admi
 
 Do not edit a catalog while an in game administrator save is pending. Back up the complete `config/futureshops/shops/` directory with the world and escrow state.
 
+The directory and default `admin.json` are prepared during common mod setup, before a client opens a singleplayer world. Modpack developers can launch the client once, edit the generated catalog, and include `config/futureshops/` in the pack. Singleplayer uses that global client catalog through its integrated server. Multiplayer uses the remote server's catalog and never trusts the client's local copy.
+
 ## In game editor workflow
 
 Open the Server Shop as an administrator and choose the offer editor for a listing. Player Shop owners open Advanced Offer from the listing inspector. Both entry points use the same persistent draft and validation model.

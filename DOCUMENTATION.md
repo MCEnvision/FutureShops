@@ -186,7 +186,9 @@ Edit mode keeps New Offer and Add Items visible in every filter. Add Items first
 
 Every editor and picker action uses the FutureShops Nocturne button renderer while retaining standard focus, keyboard activation, narration, tooltips, and disabled state behavior. Fields reserve a dedicated label row and scrolling clips content above the persistent footer. Apply waits for the matching successful acknowledgement and stays open. Save and Close waits for the same acknowledgement before returning. Stale revisions must be reviewed or reloaded and cannot silently overwrite a newer listing. Catalog saves validate the complete candidate, write a temporary sibling, preserve a bounded backup, atomically replace the target when supported, and restore the last valid file if reload fails.
 
-When `config/futureshops/shops/admin.json` is absent, the generated schema version 2 catalog includes a one claim free cookie, a Sell Only rotten flesh example, and an iron tool bundle priced below its three standalone offers. Generation never replaces an existing operator catalog.
+During common mod setup on both physical clients and dedicated servers, FutureShops creates `config/futureshops/shops/` and writes `admin.json` when it is absent. This happens before a singleplayer world opens, allowing a modpack developer to prepare the global client catalog and include it in the pack. The integrated server reads this global catalog. A remote server never reads the client's catalog and remains authoritative from its own installation. Existing `admin.json` files are never replaced. A legacy `default.json` is moved to `admin.json` only when the new path is absent.
+
+The generated schema version 2 catalog includes a one claim free cookie, a Sell Only rotten flesh example, and an iron tool bundle priced below its three standalone offers. The Forge managed TOML files remain directly under `config/` to preserve existing paths and configuration compatibility.
 
 See [3.1 trade offer configuration](docs/config-3.1-offers.md) for the schema and administrator workflow.
 

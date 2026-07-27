@@ -37,7 +37,7 @@ FutureShops currently assumes one authoritative server and world. It does not pr
 2. Install a compatible GeckoLib 4.x build.
 3. Place the same FutureShops jar in the client and server `mods/` directories.
 4. Back up the complete world and configuration before upgrading an existing server.
-5. Start the server once to create the TOML files and product directories.
+5. Start the game or dedicated server once to create the TOML files and editable catalog directories.
 6. Review module, economy, escrow, Auction House, and Bazaar settings before opening the server.
 
 The Bazaar and Auction House are disabled on a new installation. Enable either module in `futureshops-common.toml` after reviewing its rules. Existing configuration files keep their configured values. Disabled modules are omitted from the marketplace header. An accepted server configuration change appears on an open marketplace screen within five seconds without requiring a reconnect.
@@ -83,6 +83,8 @@ FutureShops creates these files:
 * `config/futureshops-client.toml` for presentation and accessibility.
 
 Server shop catalogs live in `config/futureshops/shops/`. Bazaar products live in `config/futureshops/bazaar/products/`.
+
+FutureShops creates `config/futureshops/shops/admin.json` during common mod setup, before a client opens a singleplayer world. Modpack developers can start the client once, edit that file, and ship the complete `config/futureshops/` directory as the pack's singleplayer Server Shop template. An integrated server reads this global client configuration. A remote multiplayer server ignores the client's copy and uses its own authoritative `config/futureshops/shops/` directory. The Forge managed TOML files remain directly under `config/` for compatibility with existing installations.
 
 See [3.1 trade offer configuration](docs/config-3.1-offers.md), [Configuration examples](docs/config-3.0-examples.md), and [Bazaar product definitions](docs/bazaar-products.md).
 

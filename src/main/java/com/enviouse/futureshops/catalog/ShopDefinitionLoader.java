@@ -29,10 +29,14 @@ import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
 import java.io.IOException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Reads shop definitions from {@code config/futureshops/shops/*.json}.
@@ -58,7 +62,67 @@ public final class ShopDefinitionLoader {
      * Returns the absolute path to the admin shop config file. Does not create the file.
      */
     public static Path adminShopPath() {
-        return FMLPaths.CONFIGDIR.get().resolve("futureshops").resolve("shops").resolve(ADMIN_SHOP_FILENAME);
+        return shopsDirectory().resolve(ADMIN_SHOP_FILENAME);
+    }
+
+    public static Path shopsDirectory() {
+        return shopsDirectory(FMLPaths.CONFIGDIR.get());
+    }
+
+    public static boolean prepareStorage() {
+        return prepareStorage(FMLPaths.CONFIGDIR.get());
+    }
+
+    static synchronized boolean prepareStorage(Path configDirectory) {
+        Path shopsDir = shopsDirectory(configDirectory);
+        try {
+            Files.createDirectories(shopsDir);
+        } catch (IOException exception) {
+            LOGGER.error(
+                    "[FutureShops] Could not create shops config directory '{}': {}",
+                    shopsDir, exception.getMessage());
+            return false;
+        }
+
+        Path adminFile = shopsDir.resolve(ADMIN_SHOP_FILENAME);
+        if (Files.exists(adminFile, LinkOption.NOFOLLOW_LINKS)) {
+            if (Files.isRegularFile(adminFile, LinkOption.NOFOLLOW_LINKS)) {
+                return true;
+            }
+            LOGGER.error(
+                    "[FutureShops] Admin shop path is not a regular file '{}'.",
+                    adminFile);
+            return false;
+        }
+
+        Path legacyFile = shopsDir.resolve(LEGACY_DEFAULT_FILENAME);
+        if (Files.exists(legacyFile, LinkOption.NOFOLLOW_LINKS)) {
+            if (!Files.isRegularFile(
+                    legacyFile, LinkOption.NOFOLLOW_LINKS)) {
+                LOGGER.error(
+                        "[FutureShops] Legacy shop path is not a regular file '{}'.",
+                        legacyFile);
+                return false;
+            }
+            try {
+                Files.move(legacyFile, adminFile);
+                LOGGER.info(
+                        "[FutureShops] Migrated '{}' to '{}'.",
+                        LEGACY_DEFAULT_FILENAME, ADMIN_SHOP_FILENAME);
+                return true;
+            } catch (FileAlreadyExistsException exception) {
+                return Files.isRegularFile(
+                        adminFile, LinkOption.NOFOLLOW_LINKS);
+            } catch (IOException exception) {
+                LOGGER.error(
+                        "[FutureShops] Could not migrate '{}' to '{}': {}",
+                        LEGACY_DEFAULT_FILENAME, ADMIN_SHOP_FILENAME,
+                        exception.getMessage());
+                return true;
+            }
+        }
+
+        return writeFile(adminFile, defaultShopJson());
     }
 
     // -------------------------------------------------------------------------
@@ -70,31 +134,9 @@ public final class ShopDefinitionLoader {
      * Never returns null; falls back to the hardcoded default if loading fails entirely.
      */
     public static List<ShopDefinition> loadAll() {
-        Path shopsDir = FMLPaths.CONFIGDIR.get().resolve("futureshops").resolve("shops");
-
-        try {
-            Files.createDirectories(shopsDir);
-        } catch (IOException e) {
-            LOGGER.error("[FutureShops] Could not create shops config directory '{}': {}", shopsDir, e.getMessage());
+        Path shopsDir = shopsDirectory();
+        if (!prepareStorage()) {
             return List.of(buildDefaultShop());
-        }
-
-        // Migrate legacy default.json → admin.json (only if admin.json doesn't already exist).
-        Path adminFile  = shopsDir.resolve(ADMIN_SHOP_FILENAME);
-        Path legacyFile = shopsDir.resolve(LEGACY_DEFAULT_FILENAME);
-        if (!Files.exists(adminFile) && Files.exists(legacyFile)) {
-            try {
-                Files.move(legacyFile, adminFile);
-                LOGGER.info("[FutureShops] Migrated '{}' → '{}'.", LEGACY_DEFAULT_FILENAME, ADMIN_SHOP_FILENAME);
-            } catch (IOException e) {
-                LOGGER.error("[FutureShops] Could not migrate '{}' to '{}': {}",
-                        LEGACY_DEFAULT_FILENAME, ADMIN_SHOP_FILENAME, e.getMessage());
-            }
-        }
-
-        // Regenerate admin.json on every load if it's missing (operator deleted/moved it).
-        if (!Files.exists(adminFile)) {
-            writeFile(adminFile, defaultShopJson());
         }
 
         // Collect .json files
@@ -323,13 +365,26 @@ public final class ShopDefinitionLoader {
     // File write helper
     // -------------------------------------------------------------------------
 
-    private static void writeFile(Path path, String content) {
+    private static boolean writeFile(Path path, String content) {
         try {
-            Files.writeString(path, content);
+            Files.writeString(path, content,
+                    StandardOpenOption.CREATE_NEW,
+                    StandardOpenOption.WRITE);
             LOGGER.info("[FutureShops] Wrote admin shop config to {}", path);
-        } catch (IOException e) {
-            LOGGER.error("[FutureShops] Failed to write admin shop to '{}': {}", path, e.getMessage());
+            return true;
+        } catch (FileAlreadyExistsException exception) {
+            return Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS);
+        } catch (IOException exception) {
+            LOGGER.error(
+                    "[FutureShops] Failed to write admin shop to '{}': {}",
+                    path, exception.getMessage());
+            return false;
         }
+    }
+
+    private static Path shopsDirectory(Path configDirectory) {
+        return Objects.requireNonNull(configDirectory, "configDirectory")
+                .resolve("futureshops").resolve("shops");
     }
 
     // -------------------------------------------------------------------------
