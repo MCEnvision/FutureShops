@@ -1,0 +1,30 @@
+name: quality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "master"
+      - "envy/**"
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+  security-events: write
+
+jobs:
+  quality:
+    uses: EnVisione/.github/.github/workflows/quality.yml@main
+    with:
+      java-version: "17"
+      gradle-enabled: true
+      gradle-tasks: "check build"
+      gametest-tasks: ""
+      node-enabled: false
+      node-version: "22"
+      codeql-languages: '["java-kotlin","python"]'
+      native-security: true
+      enforce-docs-layout: false
