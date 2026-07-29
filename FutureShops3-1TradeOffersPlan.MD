@@ -1086,6 +1086,10 @@ Gate:
 * Returning from any picker preserves every draft value, section, scroll position, and focus target.
 * Invalid values remain visible and are never silently converted to another value.
 * A rejected save keeps the editor open and identifies the exact field.
+* Server validation paths scoped through the catalog are reduced to the edited listing before display. Internal listing, option, and component identifier failures are never mislabeled as Display Name failures.
+* Editing a rejected draft clears stale save feedback immediately. Reapplying or changing a trade mode never requires closing and reopening the editor.
+* Every simple trade mode remains selectable for every supported item. The current mode uses a selected visual style instead of the disabled control style.
+* Apply and Save and Close remain visible at all times. A disabled action reports one exact blocking issue and uses grammatically correct remaining issue text without reporting zero additional issues.
 * A successful Apply keeps the editor open with a new acknowledged baseline.
 * Save and Close waits for the matching successful acknowledgement.
 * Stale edits cannot overwrite a newer listing without review.
@@ -1094,7 +1098,7 @@ Gate:
 * Invalid partial offers cannot replace the live catalog.
 * Reload failures preserve the last valid catalog.
 
-Branch implementation status on July 29, 2026: contextual quick add now uses a responsive grid capped at 21 columns by 8 visible rows. Buy and Sell support direct creation from one selected item and an exact Base Price. Barter and Bundle preserve their selected outputs when opening the Simple Editor, and the Simple Editor links to the Advanced Editor. Bulk selling now quotes without requiring an existing shop session and matches general item requirements across damage and NBT variants while reserving exact requirements first. Enabled Bazaar and Auction House modules now remain visible as recovering when escrow is not ready instead of being reported as disabled. Local verification passed 1,871 unit and contract tests, all five required GameTests, data generation, the full build, dedicated server startup with both market modules enabled, virtual display client startup, and two protocol 57 multiplayer connections with a disconnect and reconnect. The phase remains in review until the branch is approved and merged.
+Branch implementation status on July 29, 2026: contextual quick add now uses a responsive grid capped at 21 columns by 8 visible rows. Buy and Sell support direct creation from one selected item and an exact Base Price. Barter and Bundle preserve their selected outputs when opening the Simple Editor, and the Simple Editor links to the Advanced Editor. Bulk selling now quotes without requiring an existing shop session and matches general item requirements across damage and NBT variants while reserving exact requirements first. Enabled Bazaar and Auction House modules now remain visible as recovering when escrow is not ready instead of being reported as disabled. Rejected editor feedback is cleared as soon as the draft changes, catalog validation issues are scoped to the edited listing, identifier errors target the correct field, every trade mode remains selectable, and the selected mode uses a distinct active style instead of appearing unavailable. Local verification passed 1,874 unit and contract tests, all five required GameTests from the phase verification run, data generation, the full build, dedicated server startup, virtual display client startup, and the packaged JAR inspection. The phase remains in review until the branch is approved and merged.
 
 ### Phase 5, Player Shop convergence
 

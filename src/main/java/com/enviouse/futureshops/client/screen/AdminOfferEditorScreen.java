@@ -66,6 +66,8 @@ public final class AdminOfferEditorScreen extends Screen
     private boolean closeAfterSave;
     private Component resultMessage;
     private boolean resultSuccess;
+    private boolean saveFeedbackVisible;
+    private boolean validationFeedbackVisible;
     private ServerShopOfferListing staleSnapshot;
     private boolean staleReviewing;
     private ConfirmationModal confirmation;
@@ -184,6 +186,10 @@ public final class AdminOfferEditorScreen extends Screen
 
     @Override
     protected void init() {
+        if (validationFeedbackVisible
+                && draft.serverIssues().isEmpty()) {
+            clearSaveFeedback();
+        }
         clearWidgets();
         bindings.clear();
         simpleFieldLabels.clear();
@@ -522,13 +528,18 @@ public final class AdminOfferEditorScreen extends Screen
             int x = contentLeft + index % columns
                     * (buttonWidth + gap);
             int y = simpleY(42 + index / columns * 28);
+            Component label = Component.translatable(
+                    "gui.futureshops.offer_editor.simple.mode."
+                            + mode.key());
             Button button = FutureShopsButton.styled(
-                    Component.translatable(
-                            "gui.futureshops.offer_editor.simple.mode."
-                                    + mode.key()),
+                    label,
                     ignored -> applySimpleMode(mode))
-                    .bounds(x, y, buttonWidth, 22).build();
-            button.active = current != mode;
+                    .bounds(x, y, buttonWidth, 22)
+                    .style(current == mode
+                            ? ShopUiUtil.ButtonStyle.PRIMARY
+                            : ShopUiUtil.ButtonStyle.SECONDARY)
+                    .build();
+            button.active = pendingRequestId == null;
             button.setTooltip(Tooltip.create(Component.translatable(
                     "gui.futureshops.offer_editor.simple.help.mode."
                             + mode.key())));
@@ -709,6 +720,7 @@ public final class AdminOfferEditorScreen extends Screen
             OfferEditorSimpleMode.Mode mode
     ) {
         flushFields();
+        clearSaveFeedback();
         draft.replace("simple.mode." + mode.key(),
                 OfferEditorSimpleMode.apply(
                         draft.candidate(), mode));
@@ -2231,7 +2243,7 @@ public final class AdminOfferEditorScreen extends Screen
         addRenderableWidget(field);
         bindings.add(new EditBinding(path, registeredPath, field, save,
                 numericField(registeredPath)
-                        && !moneyField(registeredPath)));
+                        && !moneyField(registeredPath), field.getValue()));
     }
 
     private void switchSection(OfferEditorDraft.Section section) {
@@ -2249,6 +2261,7 @@ public final class AdminOfferEditorScreen extends Screen
 
     private void mutateAndRebuild(Runnable mutation) {
         flushFields();
+        clearSaveFeedback();
         mutation.run();
         if (minecraft != null) {
             rebuildWidgets();
@@ -2261,6 +2274,7 @@ public final class AdminOfferEditorScreen extends Screen
     ) {
         flushFields();
         if (!blockStructuralEdit(pathPrefix)) {
+            clearSaveFeedback();
             mutation.run();
         }
         if (minecraft != null) {
@@ -2280,10 +2294,18 @@ public final class AdminOfferEditorScreen extends Screen
         resultMessage = Component.translatable(
                 "gui.futureshops.offer_editor.fix_invalid_before_structure");
         resultSuccess = false;
+        saveFeedbackVisible = false;
+        validationFeedbackVisible = false;
         return true;
     }
 
     private void flushFields() {
+        boolean edited = bindings.stream().anyMatch(binding ->
+                !binding.initialValue().equals(
+                        binding.field().getValue()));
+        if (edited) {
+            clearSaveFeedback();
+        }
         for (EditBinding binding : bindings) {
             if (binding.field().isFocused()) {
                 draft.focusedPath(binding.path());
@@ -2356,6 +2378,8 @@ public final class AdminOfferEditorScreen extends Screen
         }
         pendingRequestId = null;
         resultSuccess = result.success();
+        saveFeedbackVisible = true;
+        validationFeedbackVisible = !result.issues().isEmpty();
         resultMessage = Component.translatable(
                 "gui.futureshops.offer_editor.result."
                         + result.status().name()
@@ -5045,6 +5069,9 @@ public final class AdminOfferEditorScreen extends Screen
             return Component.translatable(
                     OfferEditorControlRegistry.helpKey(action));
         }
+        if (issues.size() == 1) {
+            return validationMessage(issues.get(0));
+        }
         return Component.translatable(
                 "gui.futureshops.offer_editor.save_blocked",
                 validationMessage(issues.get(0)), issues.size() - 1);
@@ -5087,7 +5114,14 @@ public final class AdminOfferEditorScreen extends Screen
     }
 
     private static String registeredFieldPath(String path) {
+        path = listingRelativePath(path);
+        if (path.equals("outputs")) {
+            return "outputs";
+        }
         if (path.startsWith("outputs.")) {
+            if (path.endsWith(".componentId")) {
+                return "outputs.componentId";
+            }
             if (path.endsWith(".itemId")) {
                 return "outputs.itemId";
             }
@@ -5099,7 +5133,14 @@ public final class AdminOfferEditorScreen extends Screen
             }
         }
         if (path.startsWith("acquireOptions.")) {
+            if (path.matches("acquireOptions\\.[0-9]+")
+                    || path.endsWith(".itemCosts")) {
+                return "acquireOptions.cost";
+            }
             if (path.contains(".itemCosts.")) {
+                if (path.endsWith(".componentId")) {
+                    return "acquireOptions.itemCosts.componentId";
+                }
                 if (path.endsWith(".itemId")) {
                     return "acquireOptions.itemCosts.itemId";
                 }
@@ -5107,6 +5148,9 @@ public final class AdminOfferEditorScreen extends Screen
                     return "acquireOptions.itemCosts.count";
                 }
                 return "acquireOptions.itemCosts.exactNbt";
+            }
+            if (path.endsWith(".optionId")) {
+                return "acquireOptions.optionId";
             }
             if (path.endsWith(".label")) {
                 return "acquireOptions.label";
@@ -5141,7 +5185,13 @@ public final class AdminOfferEditorScreen extends Screen
             return "acquireOptions.moneyCost";
         }
         if (path.startsWith("sellOptions.")) {
+            if (path.endsWith(".itemInputs")) {
+                return "sellOptions.itemInputs";
+            }
             if (path.contains(".itemInputs.")) {
+                if (path.endsWith(".componentId")) {
+                    return "sellOptions.itemInputs.componentId";
+                }
                 if (path.endsWith(".itemId")) {
                     return "sellOptions.itemInputs.itemId";
                 }
@@ -5149,6 +5199,9 @@ public final class AdminOfferEditorScreen extends Screen
                     return "sellOptions.itemInputs.count";
                 }
                 return "sellOptions.itemInputs.exactNbt";
+            }
+            if (path.endsWith(".optionId")) {
+                return "sellOptions.optionId";
             }
             if (path.endsWith(".label")) {
                 return "sellOptions.label";
@@ -5185,6 +5238,12 @@ public final class AdminOfferEditorScreen extends Screen
         if (path.startsWith("bundleComparisons")) {
             return "bundleComparisons";
         }
+        if (path.equals("catalog")) {
+            return "catalog";
+        }
+        if (path.equals("listingId")) {
+            return "listingId";
+        }
         if (path.equals("general")) {
             return "displayName";
         }
@@ -5194,11 +5253,30 @@ public final class AdminOfferEditorScreen extends Screen
         if (path.startsWith("options")) {
             return "acquireOptions.label";
         }
-        if (path.startsWith("revision")
-                || path.startsWith("listing")) {
-            return "displayName";
+        if (path.startsWith("revision")) {
+            return "listingId";
         }
         return "displayName";
+    }
+
+    private static String listingRelativePath(String path) {
+        if (!path.startsWith("listings.")) {
+            return path;
+        }
+        int indexEnd = path.indexOf('.', "listings.".length());
+        return indexEnd < 0 || indexEnd + 1 >= path.length()
+                ? "catalog" : path.substring(indexEnd + 1);
+    }
+
+    private void clearSaveFeedback() {
+        if (!saveFeedbackVisible) {
+            return;
+        }
+        saveFeedbackVisible = false;
+        validationFeedbackVisible = false;
+        resultMessage = null;
+        resultSuccess = false;
+        draft.clearServerIssues();
     }
 
     private record EditBinding(
@@ -5206,7 +5284,8 @@ public final class AdminOfferEditorScreen extends Screen
             String registeredPath,
             EditBox field,
             Consumer<String> save,
-            boolean numeric
+            boolean numeric,
+            String initialValue
     ) {
     }
 

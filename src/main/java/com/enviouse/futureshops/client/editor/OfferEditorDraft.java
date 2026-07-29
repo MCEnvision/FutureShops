@@ -69,6 +69,7 @@ public final class OfferEditorDraft {
             String path,
             ServerShopOfferListing replacement
     ) {
+        serverIssues = List.of();
         update(path, ignored -> replacement);
         rawFieldValues.clear();
         invalidNumberPaths.clear();
@@ -241,6 +242,10 @@ public final class OfferEditorDraft {
 
     public synchronized List<OfferValidationIssue> serverIssues() {
         return serverIssues;
+    }
+
+    public synchronized void clearServerIssues() {
+        serverIssues = List.of();
     }
 
     public synchronized Section section() {

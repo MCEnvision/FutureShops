@@ -122,9 +122,14 @@ public final class AdminShopOfferConfigWriter {
                                 .OfferEscrowFanout
                                 ::registeredMaximumStackSize);
         if (!validation.valid()) {
+            int editedIndex = switch (operation) {
+                case CREATE, DUPLICATE -> current.size() - 1;
+                case UPDATE -> currentIndex;
+                case REMOVE -> -1;
+            };
             return SaveResult.failure(Status.INVALID,
                     normalized == null ? 0L : normalized.revision(),
-                    validation.issues());
+                    editorIssues(validation.issues(), editedIndex));
         }
         Path path = ShopDefinitionLoader.adminShopPath();
         JsonObject root = AdminShopConfigWriter.readRoot(path);
@@ -372,6 +377,33 @@ public final class AdminShopOfferConfigWriter {
         }
         return java.util.Objects.requireNonNullElse(
                 requestedListingId, "").strip();
+    }
+
+    static List<OfferValidationIssue> editorIssues(
+            List<OfferValidationIssue> issues,
+            int editedIndex
+    ) {
+        List<OfferValidationIssue> scoped = new ArrayList<>();
+        String prefix = editedIndex < 0
+                ? "" : "listings." + editedIndex + ".";
+        boolean otherListingInvalid = false;
+        for (OfferValidationIssue issue : issues) {
+            if (!prefix.isEmpty() && issue.path().startsWith(prefix)) {
+                scoped.add(new OfferValidationIssue(
+                        issue.severity(),
+                        issue.path().substring(prefix.length()),
+                        issue.code()));
+            } else if (issue.severity()
+                    == OfferValidationIssue.Severity.ERROR) {
+                otherListingInvalid = true;
+            }
+        }
+        if (otherListingInvalid) {
+            scoped.add(new OfferValidationIssue(
+                    OfferValidationIssue.Severity.ERROR,
+                    "catalog", "offer.catalog.existing_invalid"));
+        }
+        return List.copyOf(scoped);
     }
 
     private static boolean knownItem(String itemId) {

@@ -161,6 +161,19 @@ class OfferEditorDraftTest {
                 draft.fieldValue("outputs.0.count", "1"));
     }
 
+    @Test
+    void reapplyingASimpleShapeClearsRejectedSaveIssues() {
+        OfferEditorDraft draft = new OfferEditorDraft(listing());
+        draft.reject(List.of(new OfferValidationIssue(
+                OfferValidationIssue.Severity.ERROR,
+                "listingId", "offer.identifier.invalid")));
+
+        draft.replace("simple.mode.money", draft.candidate());
+
+        assertTrue(draft.serverIssues().isEmpty());
+        assertTrue(draft.valid());
+    }
+
     private static ServerShopOfferListing listing() {
         ServerShopOfferListing listing = new ServerShopOfferListing(
                 "test_offer", 0L, "Test", "", "all",

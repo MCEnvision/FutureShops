@@ -5,6 +5,7 @@ import com.enviouse.futureshops.catalog.offer.OfferItemComponent;
 import com.enviouse.futureshops.catalog.offer.OfferLimitPolicy;
 import com.enviouse.futureshops.catalog.offer.OfferSchedule;
 import com.enviouse.futureshops.catalog.offer.OfferStockPolicy;
+import com.enviouse.futureshops.catalog.offer.OfferValidationIssue;
 import com.enviouse.futureshops.catalog.offer.ServerShopOfferListing;
 import com.enviouse.futureshops.catalog.offer.ServerShopOfferRevision;
 import com.google.gson.JsonArray;
@@ -30,6 +31,26 @@ class AdminShopOfferDurableReceiptTest {
                 AdminShopOfferConfigWriter.mutationTargetId(
                         AdminShopOfferConfigWriter.Operation.UPDATE,
                         "existing_offer", listing));
+    }
+
+    @Test
+    void catalogValidationIssuesAreScopedToTheEditedListing() {
+        List<OfferValidationIssue> scoped =
+                AdminShopOfferConfigWriter.editorIssues(List.of(
+                        new OfferValidationIssue(
+                                OfferValidationIssue.Severity.ERROR,
+                                "listings.2.outputs.0.componentId",
+                                "offer.identifier.invalid"),
+                        new OfferValidationIssue(
+                                OfferValidationIssue.Severity.ERROR,
+                                "listings.0.listingId",
+                                "offer.identifier.invalid")), 2);
+
+        assertEquals("outputs.0.componentId",
+                scoped.get(0).path());
+        assertEquals("catalog", scoped.get(1).path());
+        assertEquals("offer.catalog.existing_invalid",
+                scoped.get(1).code());
     }
 
     @Test

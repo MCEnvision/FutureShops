@@ -172,6 +172,23 @@ class AdminOfferEditorPhaseFourSourceTest {
     }
 
     @Test
+    void simpleTradeModesStaySelectableAndValidationFeedbackRecovers()
+            throws IOException {
+        String source = read("AdminOfferEditorScreen.java");
+
+        assertTrue(source.contains(
+                "button.active = pendingRequestId == null"));
+        assertTrue(source.contains(
+                "ShopUiUtil.ButtonStyle.PRIMARY"));
+        assertTrue(source.contains("selected_mode"));
+        assertTrue(source.contains("clearSaveFeedback"));
+        assertTrue(source.contains("listingRelativePath"));
+        assertTrue(source.contains("if (issues.size() == 1)"));
+        assertTrue(source.contains(
+                "return validationMessage(issues.get(0))"));
+    }
+
+    @Test
     void editorFieldsReserveLabelSpace()
             throws IOException {
         String source = read("AdminOfferEditorScreen.java");
