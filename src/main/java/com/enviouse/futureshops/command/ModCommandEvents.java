@@ -27,5 +27,6 @@ public final class ModCommandEvents {
         LinkCommand.register(event.getDispatcher());
         FranchiseCommand.register(event.getDispatcher());
         DescCommand.register(event.getDispatcher());
+        SellAllCommand.register(event.getDispatcher());
     }
 }

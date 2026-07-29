@@ -9,6 +9,9 @@ import com.enviouse.futureshops.network.packets.C2SAtmCollectCashPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmDepositRecoveryPacket;
 import com.enviouse.futureshops.network.packets.C2SBarterRequestPacket;
+import com.enviouse.futureshops.network.packets.C2SBulkSellCancelPacket;
+import com.enviouse.futureshops.network.packets.C2SBulkSellCommitPacket;
+import com.enviouse.futureshops.network.packets.C2SBulkSellQuotePacket;
 import com.enviouse.futureshops.network.packets.C2SCloseMarketSessionPacket;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SFetchDepartmentsPacket;
@@ -60,6 +63,8 @@ import com.enviouse.futureshops.network.packets.S2CAtmCollectCashResultPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmDepositResultPacket;
 import com.enviouse.futureshops.network.packets.S2CBalTopUiPacket;
 import com.enviouse.futureshops.network.packets.S2CBarterResponsePacket;
+import com.enviouse.futureshops.network.packets.S2CBulkSellQuotePacket;
+import com.enviouse.futureshops.network.packets.S2CBulkSellResultPacket;
 import com.enviouse.futureshops.network.packets.S2CBalanceUiPacket;
 import com.enviouse.futureshops.network.packets.S2CBuyResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CDepartmentListPacket;
@@ -91,7 +96,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ShopPackets {
-    // protocol 55 adds normalized player shop owner editing.
+    // protocol 56 adds server authoritative bulk sell quotes and commits.
     // protocol 54 adds normalized player shop offer execution.
     // protocol 53 adds normalized server shop offers and atomic mixed offer carts.
     // Protocol 39 binds ATM deposits to currency catalog signatures.
@@ -127,7 +132,7 @@ public final class ShopPackets {
     // Protocol 49 adds market department counts.
     // protocol 52 synchronizes atm deposit recovery.
     // protocol 53 adds normalized server shop offers.
-    public static final String PROTOCOL_VERSION = "55";
+    public static final String PROTOCOL_VERSION = "56";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))
@@ -668,6 +673,41 @@ public final class ShopPackets {
             .encoder(S2CPlayerShopOfferSaveResultPacket::encode)
             .consumerMainThread(
                     S2CPlayerShopOfferSaveResultPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SBulkSellQuotePacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SBulkSellQuotePacket::decode)
+            .encoder(C2SBulkSellQuotePacket::encode)
+            .consumerMainThread(C2SBulkSellQuotePacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CBulkSellQuotePacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CBulkSellQuotePacket::decode)
+            .encoder(S2CBulkSellQuotePacket::encode)
+            .consumerMainThread(S2CBulkSellQuotePacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SBulkSellCommitPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SBulkSellCommitPacket::decode)
+            .encoder(C2SBulkSellCommitPacket::encode)
+            .consumerMainThread(C2SBulkSellCommitPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CBulkSellResultPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CBulkSellResultPacket::decode)
+            .encoder(S2CBulkSellResultPacket::encode)
+            .consumerMainThread(S2CBulkSellResultPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SBulkSellCancelPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SBulkSellCancelPacket::decode)
+            .encoder(C2SBulkSellCancelPacket::encode)
+            .consumerMainThread(C2SBulkSellCancelPacket::handle)
             .add();
     }
 

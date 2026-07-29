@@ -8,6 +8,7 @@ import com.enviouse.futureshops.client.market.MarketCapabilityClientState;
 import com.enviouse.futureshops.client.market.MarketModule;
 import com.enviouse.futureshops.catalog.offer.AcquireOfferOption;
 import com.enviouse.futureshops.catalog.offer.ServerShopOfferListing;
+import com.enviouse.futureshops.data.BulkSellTarget;
 import com.enviouse.futureshops.data.CatalogCategory;
 import com.enviouse.futureshops.data.CatalogItem;
 import com.enviouse.futureshops.data.LocalShopOwnerEntry;
@@ -60,6 +61,8 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
     private static final int EDIT_GRID_HEADER_H = 24;
     /** Vertical room reserved at the sidebar bottom for edit-mode category management. */
     private static final int EDIT_SIDEBAR_RESERVED = 66;
+    /** Vertical room reserved at the sidebar bottom for the visitor bulk sell action. */
+    private static final int SELL_SIDEBAR_RESERVED = 28;
     private static final long CAPABILITY_RETRY_INTERVAL_MILLIS = 1_000L;
 
     private int guiLeft;
@@ -722,7 +725,9 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         graphics.drawString(this.font, Component.translatable("gui.futureshops.shop_main.departments"),
                 x + 12, y + 8, ShopColors.NEUTRAL_500, false);
 
-        int reserved = editMode ? EDIT_SIDEBAR_RESERVED : 0;
+        int reserved = editMode
+                ? EDIT_SIDEBAR_RESERVED
+                : SELL_SIDEBAR_RESERVED;
         int rowH = 20;
         int listY = y + 22;
         int listH = h - 22 - reserved;
@@ -742,6 +747,23 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
 
         if (editMode) {
             ShopUiUtil.renderFadingRule(graphics, x + 6, y + h - reserved + 2, sidebarW - 12);
+        } else {
+            int buttonY = y + h - SELL_SIDEBAR_RESERVED + 4;
+            ShopUiUtil.renderFadingRule(
+                    graphics, x + 6, buttonY - 4, sidebarW - 12);
+            ShopUiUtil.button(
+                    graphics, this.font, clickZones,
+                    mouseX, mouseY,
+                    x + 6, buttonY, sidebarW - 12, 18,
+                    Component.translatable(
+                            "gui.futureshops.bulk_sell.open"),
+                    ShopUiUtil.ButtonStyle.PRIMARY,
+                    ShopClientState.isAdminShopEnabled(),
+                    () -> this.minecraft.setScreen(
+                            new BulkSellModeScreen(
+                                    this,
+                                    BulkSellTarget.ADMIN_SHOP,
+                                    ShopClientState.getActiveShopId())));
         }
     }
 
@@ -1555,7 +1577,9 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         int sidebarY = contentY();
         int sidebarH = contentH();
         if (mouseX >= sidebarX && mouseX <= sidebarX + sidebarW && mouseY >= sidebarY + 22 && mouseY <= sidebarY + sidebarH) {
-            int reserved = editMode ? EDIT_SIDEBAR_RESERVED : 0;
+            int reserved = editMode
+                    ? EDIT_SIDEBAR_RESERVED
+                    : SELL_SIDEBAR_RESERVED;
             int rowH = 20;
             int listY = sidebarY + 22;
             int listH = sidebarH - 22 - reserved;

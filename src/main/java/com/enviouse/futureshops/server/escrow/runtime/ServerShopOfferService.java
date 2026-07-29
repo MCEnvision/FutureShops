@@ -62,6 +62,55 @@ public final class ServerShopOfferService {
             ServerPlayer player,
             Request request
     ) {
+        return executeInternal(player, request, true, 0L);
+    }
+
+    public static Result executeBulkLine(
+            ServerPlayer player,
+            Request request,
+            long minimumPayoutMinorUnits
+    ) {
+        if (minimumPayoutMinorUnits < 1L) {
+            return Result.failure(
+                    Status.INVALID_REQUEST, request.requestId());
+        }
+        return executeInternal(
+                player, request, false, minimumPayoutMinorUnits);
+    }
+
+    public static boolean canExecuteBulkLine(
+            ServerPlayer player,
+            Request request
+    ) {
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(request, "request");
+        if (request.action() != OfferAction.SELL_TO_SHOP
+                || !player.getUUID().equals(request.playerId())
+                || player.getServer() == null
+                || !AdminShopToggleSavedData.get(player.getServer())
+                .isAdminShopEnabled()
+                || ShopSessionManager.get(player.getUUID())
+                .filter(session -> session.shopId().equals(
+                        request.shopId())).isEmpty()) {
+            return false;
+        }
+        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
+        if (runtime == null || !runtime.isReady()) {
+            return false;
+        }
+        try {
+            return quote(player, request, runtime).failure() == null;
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    private static Result executeInternal(
+            ServerPlayer player,
+            Request request,
+            boolean acquireRequestGate,
+            long minimumPayoutMinorUnits
+    ) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(request, "request");
         if (!player.getUUID().equals(request.playerId())) {
@@ -81,7 +130,8 @@ public final class ServerShopOfferService {
             return Result.failure(Status.UNAVAILABLE, request.requestId());
         }
         try {
-            if (!ServerRequestSecurityManager.tryAcquire(
+            if (acquireRequestGate
+                    && !ServerRequestSecurityManager.tryAcquire(
                     player, ServerRequestAction.SERVER_SHOP_OFFER)
                     .allowed()) {
                 return Result.failure(Status.UNAVAILABLE,
@@ -311,6 +361,13 @@ public final class ServerShopOfferService {
                     quote.listing(), quote.option(), quote.stock(),
                     quote.quotedAt(),
                     event.authorizedMoneyMinorUnits(), null);
+            if (request.action() == OfferAction.SELL_TO_SHOP
+                    && minimumPayoutMinorUnits > 0L
+                    && quote.moneyTotalMinorUnits()
+                    < minimumPayoutMinorUnits) {
+                return failAcceptedRequest(
+                        player, request, Status.STALE_REVISION);
+            }
             ServerShopOfferIntentFactory.Prepared prepared =
                     prepareIntent(player, request, quote);
             StockMutationCommand.ReserveBatch reserve =
@@ -1327,6 +1384,17 @@ public final class ServerShopOfferService {
                         .PlayerShopAtomicCommit value
         ) {
             return new Result(status, requestId, null, value, false);
+        }
+
+        public long settledMoneyMinorUnits() {
+            if (commit == null) {
+                return 0L;
+            }
+            return commit.valueCommit().committedIntent()
+                    .moneyTransfers().stream()
+                    .mapToLong(transfer ->
+                            transfer.amountMinorUnits())
+                    .reduce(0L, Math::addExact);
         }
     }
 

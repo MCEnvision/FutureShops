@@ -155,6 +155,8 @@ public class Futureshops {
     public void onServerStopping(ServerStoppingEvent event) {
         MarketModuleService.clearSessions();
         MarketCapabilityProjectionService.clearRevisionState();
+        com.enviouse.futureshops.server.shop.BulkSellService
+                .clearServer(event.getServer());
         ServerRequestSecurityManager.shutdown(event.getServer());
         // Force-close every open shop session so clients can dismiss their GUIs.
         ShopSessionManager.closeAllAndForceClose(event.getServer(), "SERVER_STOPPING");
@@ -240,6 +242,8 @@ public class Futureshops {
                 instanceof net.minecraft.server.level.ServerPlayer player) {
             ServerRequestSecurityManager.removePlayer(player);
             MarketModuleService.close(player.getUUID());
+            com.enviouse.futureshops.server.shop.BulkSellService
+                    .clearPlayer(player);
         }
     }
 

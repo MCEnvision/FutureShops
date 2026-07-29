@@ -419,11 +419,11 @@ The server merges only identical listing and option pairs. It recalculates all t
 
 Acquire cart checkout may combine free, money, barter, and compound lines in one atomic plan when all selected options are compatible. Money components share one selected payment source. Item components are normalized into one custody batch.
 
-Sell to Shop transactions remain outside the acquire cart for 3.1. A future sell basket may reuse the offer batch planner after single sell option recovery is proven.
+Sell to Shop transactions remain outside the acquire cart. The 3.1 bulk sell workflow is a separate quoted batch with its own inventory reservation, confirmation, replay, and result model. It must not reuse acquire cart state or make Sell to Shop options appear in the acquire cart.
 
 ## Networking
 
-The network protocol must move from 51 to the next available value, currently 52 if no earlier change consumes it.
+The network protocol is currently 55. Bulk sell packets append at the end of the registration order and move the protocol to 56.
 
 New packet registrations are appended. Existing discriminator positions are never reordered.
 
@@ -439,6 +439,8 @@ Offer requests contain only:
 * Payment source when required.
 
 Catalog packets contain bounded immutable offer summaries and detail payloads. All list counts, strings, NBT payloads, output components, options, and cost components have explicit codec limits.
+
+Bulk sell adds bounded quote request, quote response, commit request, and result packets. The same packet and service contracts serve command opened and shop opened flows.
 
 Packets reject unknown actions, unknown option identifiers, zero UUIDs, invalid quantities, oversized collections, invalid identifiers, and arithmetic overflow before scheduling work.
 
@@ -481,6 +483,39 @@ Listings with several acquire options open an option chooser. Each option card s
 The confirmation screen shows the exact selected option, all inputs, all outputs, quantity, limits, current stock, payment source, and final effective amounts.
 
 Bundle details show each output component, the verified individual total when available, the bundle price, and savings.
+
+### Bulk sell workflow
+
+GitHub issue 2 tracks the visitor bulk sell addition.
+
+Branch implementation status on July 29, 2026: the bulk sell command, shared quote and commit service, Server Shop entry flow, confirmation interface, packet protocol, localization, tests, and operator documentation are implemented on the active phase branch. Local verification passed 1,861 unit and contract tests, all five required GameTests, the full build, dedicated server startup, virtual display client startup, and a protocol 56 multiplayer disconnect and reconnect cycle. The phase remains in review until the branch is approved and merged.
+
+The command surface is:
+
+* `/sellall adminshop` quotes the `default` Server Shop and opens the bulk sell confirmation screen.
+* `/sellall adminshop confirm` creates the same server authoritative quote and immediately submits every eligible line without opening a screen.
+* `/sellall playershops` searches the Player Shops visible through the configured local listings scan radius and opens the same confirmation screen.
+* `/sellall playershops confirm` creates the same server authoritative quote and immediately submits every eligible line without opening a screen.
+
+The active Server Shop also exposes a `Sell Inventory` action. It uses the active shop identifier instead of forcing `default`. The action opens a short choice between selecting inventory items and starting with every eligible item selected. Both choices continue into the same confirmation screen. The existing Sell filter, detail action, and option chooser remain the one listing workflow.
+
+The server creates every quote from the current main inventory and offhand. Worn armor is excluded so bulk actions never remove equipped gear. Empty slots are ignored. Exact NBT variants remain separate. Every carried stack group is represented in the confirmation screen. Accepted groups begin selected. Unaccepted groups are disabled with a localized reason instead of disappearing.
+
+A quoted line contains a server generated stable line identifier, exact input components, maximum executable quantity, destination label, shop identity, listing and option identity, observed revision, unit payout, line payout, and eligibility state. Input bundles appear as one line with all required components. The planner reserves inventory components across lines so one stack cannot contribute to two quoted exchanges.
+
+The client sends only the quote identifier and selected line identifiers. It never supplies item identities, quantities, prices, destinations, revisions, totals, or transaction outcomes. Quotes are player bound, single use, memory only, bounded, and short lived. Disconnect, expiration, catalog reload, and explicit cancellation discard an uncommitted quote without mutating inventory or money.
+
+Server Shop quoting considers only active money payout Sell to Shop options in the requested shop. Player Shop quoting considers only active money payout Sell to Shop options in the current dimension, loaded chunks, and the same configured radius used by the Player Shops browser. Candidates that require unavailable storage, exceeded buyback capacity, an insolvent shop, an inaccessible permission, or an inactive schedule are ineligible.
+
+For Player Shops, candidates that compete for the same inventory are ranked by highest effective payout per required input, then highest total payout for one complete exchange, shortest distance, and stable shop, listing, and option identifiers. A lower ranked offer is never selected while a higher ranked offer remains executable. Distinct input signatures remain distinct confirmation lines. Scan count, candidate count, quote lines, component count, strings, and encoded NBT are bounded.
+
+Confirmation shows each item or input bundle, quantity, destination, unit payout, line payout, selection control, and selected total. It provides Select All, Clear All, Confirm Sale, and Cancel. Mouse, keyboard, narration, hover help, and focus help expose the same information. Escape returns once to the originating shop screen, or closes the command opened screen once, without stacking duplicate parent screens.
+
+Commit revalidates the player, quote ownership, quote lifetime, exact inventory, offer revision, permission, schedule, limits, capacity, storage, shop balance, player maximum balance, and escrow readiness. The batch has one parent request UUID and deterministic child request UUIDs derived from the parent and stable line identifiers. Each child executes through the existing authoritative Sell to Shop escrow path.
+
+Bulk sell is intentionally best effort across independent destinations rather than falsely claiming cross shop atomicity. A line succeeds once, fails once, or enters the existing durable recovery path. A failed line leaves its exact inputs in inventory or recoverable custody. Successful lines are not repeated when the parent request is retried. The final result reports sold lines, skipped or changed lines, recovery lines, and the authoritative paid total. A stale quote returns to a refreshed confirmation state instead of silently accepting a changed price.
+
+This phase does not add item payouts, sell worn armor, scan unloaded chunks, bypass the configured Player Shops radius, or merge bulk sell state into the acquire cart.
 
 ### Accessibility and error behavior
 
@@ -915,6 +950,7 @@ Deliver:
 * Dynamic detail actions.
 * Option chooser.
 * Sell only flow.
+* Shared bulk sell quote, confirmation, deselection, command, and Server Shop entry flow.
 * All, Buy, Sell, Barter, and Bundles filters.
 * Mixed acquire cart.
 * Bundle component and savings presentation.
@@ -925,6 +961,10 @@ Gate:
 * Every required trade combination is usable without commands or manual JSON requests.
 * Free never opens a payment chooser.
 * Sell only never exposes Buy or Cart.
+* `/sellall adminshop` and `/sellall playershops` show the same authoritative confirmation used by `Sell Inventory`.
+* The `confirm` suffix skips only the screen, never server quoting, validation, escrow, replay, or recovery.
+* Every selected bulk line is paid at its authoritative committed value or retains recoverable exact inputs.
+* Player Shop selection prefers the highest effective valid payout within the configured browse radius and uses deterministic tie breaking.
 * AND and OR requirements are visually unambiguous.
 
 ### Phase 4, administrator offer builder
@@ -1018,6 +1058,10 @@ Add focused tests for:
 * Promotion interactions.
 * Limits, cooldowns, schedules, and permissions.
 * Packet round trips and malformed packet rejection.
+* Bulk sell target parsing, quote ownership, expiry, single use, bounds, and deterministic child request identities.
+* Bulk sell inventory grouping, exact NBT separation, input bundle reservation, deselection, and authoritative total calculation.
+* Player Shop payout ordering, distance tie breaking, configured radius enforcement, and unloaded chunk exclusion.
+* Bulk sell stale revision refresh, duplicate commit replay, partial failure summaries, and arithmetic overflow.
 * Old and new commit codec round trips.
 * `OfferEditorDraft` creation, dirty tracking, section reset, revert, and acknowledged baseline updates.
 * Draft preservation through picker, preview, resize, and section transitions.
@@ -1055,6 +1099,9 @@ Verify:
 * Reusing a request UUID with another option or quantity returns a conflict.
 * Full inventories leave exact pending claims.
 * Concurrent stock races produce one valid winner without oversell.
+* Bulk sell never reserves one inventory component for two lines.
+* A failed bulk line leaves exact inputs in inventory or the existing durable recovery path.
+* Replaying a bulk parent request never repeats a successful child transaction.
 
 ### Game and interface tests
 
@@ -1072,6 +1119,9 @@ Test at minimum:
 * Finite and unlimited stock.
 * Expiry and promotion changes during confirmation.
 * Basic money, free, barter, compound, sell only, two way, and bundle administrator workflows.
+* `/sellall adminshop`, `/sellall adminshop confirm`, `/sellall playershops`, and `/sellall playershops confirm`.
+* Server Shop `Sell Inventory`, inventory selection, Select All, Clear All, line deselection, confirmation, and one step Escape return.
+* Player Shop best payout selection with two competing shops and one shop becoming invalid after quote.
 * Item selection from held item, inventory, and registry search.
 * Picker cancellation and return with an unchanged draft.
 * Client validation failure and server validation failure.
@@ -1105,6 +1155,7 @@ Implementation must update:
 * `docs/config-3.0-examples.md` or its versioned successor with complete offer examples.
 * `docs/compatibility-matrix.md` for protocol and save compatibility.
 * Administrator tooltips and translations for every new action and validation error.
+* Command help, bulk sell confirmation help, target rules, best effort behavior, and recovery troubleshooting.
 
 Unverified features must not be described as accepted before their phase gate passes.
 
@@ -1120,6 +1171,9 @@ The following owner approved defaults are part of this plan:
 * Sell to Shop pays money in 3.1.
 * Acquire cart supports mixed option types.
 * Sell to Shop stays outside the acquire cart in 3.1.
+* Bulk sell is a separate quoted batch shared by commands and the Server Shop interface.
+* Player Shop bulk sell searches only the configured local listings radius and prefers the highest effective valid payout.
+* Bulk sell excludes worn armor and preserves exact NBT variants.
 * Server Shop is implemented before Player Shop convergence.
 * Old transaction codecs remain readable.
 * Administrator editing uses one persistent draft rather than immediate component mutations.

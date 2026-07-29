@@ -24,7 +24,7 @@ class MarketProfileMutationIntegrationSourceTest {
         assertTrue(request > capability);
         assertTrue(response > request);
         assertTrue(source.contains(
-                "public static final String PROTOCOL_VERSION = \"55\""));
+                "public static final String PROTOCOL_VERSION = \"56\""));
     }
 
     @Test

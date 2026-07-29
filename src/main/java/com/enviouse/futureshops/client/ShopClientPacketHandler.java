@@ -22,6 +22,8 @@ import com.enviouse.futureshops.client.screen.BalTopOverviewScreen;
 import com.enviouse.futureshops.client.screen.AtmScreen;
 import com.enviouse.futureshops.client.screen.AdminOfferEditorScreen;
 import com.enviouse.futureshops.client.screen.BalanceOverviewScreen;
+import com.enviouse.futureshops.client.screen.BulkSellConfirmationScreen;
+import com.enviouse.futureshops.client.screen.BulkSellModeScreen;
 import com.enviouse.futureshops.client.screen.ShopMainScreen;
 import com.enviouse.futureshops.client.screen.MarketModuleScreen;
 import com.enviouse.futureshops.client.screen.ShopScreenMarker;
@@ -46,6 +48,8 @@ import com.enviouse.futureshops.network.packets.S2CBalTopUiPacket;
 import com.enviouse.futureshops.network.packets.S2CBalanceUiPacket;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.S2CBarterResponsePacket;
+import com.enviouse.futureshops.network.packets.S2CBulkSellQuotePacket;
+import com.enviouse.futureshops.network.packets.S2CBulkSellResultPacket;
 import com.enviouse.futureshops.network.packets.S2CBuyResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CForceClosePacket;
 import com.enviouse.futureshops.network.packets.S2CFranchiseDataPacket;
@@ -1234,6 +1238,75 @@ public final class ShopClientPacketHandler {
                             "gui.futureshops.admin_edit.result." + packet.code().toLowerCase(java.util.Locale.ROOT),
                             packet.arg()),
                     packet.success());
+        });
+    }
+
+    public static void handleBulkSellQuote(
+            S2CBulkSellQuotePacket packet
+    ) {
+        Minecraft client = Minecraft.getInstance();
+        client.execute(() -> {
+            if (packet.quote() == null) {
+                if (client.screen
+                        instanceof BulkSellModeScreen mode) {
+                    mode.onQuoteRejected();
+                } else if (client.screen
+                        instanceof BulkSellConfirmationScreen screen) {
+                    screen.onQuoteRejected();
+                }
+                Component message = Component.translatable(
+                        "gui.futureshops.bulk_sell.result."
+                                + packet.status().name()
+                                .toLowerCase(java.util.Locale.ROOT),
+                        0, 0, 0, "0");
+                ShopClientState.setStatus(message, false);
+                if (client.player != null) {
+                    client.player.displayClientMessage(
+                            message, false);
+                }
+                return;
+            }
+            net.minecraft.client.gui.screens.Screen parent =
+                    client.screen instanceof BulkSellModeScreen mode
+                            ? mode.returnScreen()
+                            : client.screen
+                            instanceof BulkSellConfirmationScreen screen
+                            ? screen.returnScreen()
+                            : client.screen;
+            client.setScreen(new BulkSellConfirmationScreen(
+                    parent, packet.quote()));
+        });
+    }
+
+    public static void handleBulkSellResult(
+            S2CBulkSellResultPacket packet
+    ) {
+        Minecraft client = Minecraft.getInstance();
+        client.execute(() -> {
+            String paid = java.math.BigDecimal.valueOf(
+                            packet.paidMinorUnits(),
+                            packet.currencyDecimals())
+                    .toPlainString() + " " + packet.currencyName();
+            Component message = Component.translatable(
+                    "gui.futureshops.bulk_sell.result."
+                            + packet.status().name()
+                            .toLowerCase(java.util.Locale.ROOT),
+                    packet.soldLines(), packet.failedLines(),
+                    packet.recoveryLines(), paid);
+            boolean success = packet.status()
+                    == com.enviouse.futureshops.server.shop
+                    .BulkSellService.Status.SUCCESS
+                    || packet.status()
+                    == com.enviouse.futureshops.server.shop
+                    .BulkSellService.Status.PARTIAL;
+            ShopClientState.setStatus(message, success);
+            if (client.screen
+                    instanceof BulkSellConfirmationScreen screen) {
+                screen.onResult(packet);
+            } else if (client.player != null) {
+                client.player.displayClientMessage(
+                        message, false);
+            }
         });
     }
 

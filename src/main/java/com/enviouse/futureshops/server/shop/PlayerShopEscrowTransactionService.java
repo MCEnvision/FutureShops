@@ -227,6 +227,136 @@ final class PlayerShopEscrowTransactionService {
         }
     }
 
+    static BulkOfferResult executeBulkOffer(
+            ServerPlayer actor,
+            C2SPlayerShopOfferPacket packet,
+            long minimumPayoutMinorUnits
+    ) {
+        if (actor.getServer() == null
+                || ZERO_UUID.equals(packet.requestId())
+                || minimumPayoutMinorUnits < 1L) {
+            return BulkOfferResult.failure(
+                    ShopResultCode.INVALID_REQUEST);
+        }
+        ReentrantLock lock = PlayerShopBlockService.transactionLock(
+                packet.shopPos());
+        lock.lock();
+        try {
+            Optional<PlayerShopEscrowIntent> existing =
+                    PlayerShopLiveEscrowService.existingIntent(
+                            actor, packet.requestId());
+            if (existing.isPresent()) {
+                PlayerShopEscrowIntent intent = existing.orElseThrow();
+                if (!replayRequestMatches(packet, intent)
+                        || !samePosition(intent.shopIdentity(), actor,
+                        packet.shopPos())
+                        || intent.listing() == null
+                        || !(actor.level().getBlockEntity(
+                        packet.shopPos()) instanceof ShopBlockEntity shop)) {
+                    return BulkOfferResult.failure(
+                            ShopResultCode.INVALID_REQUEST);
+                }
+                int listingIndex =
+                        PlayerShopBlockService.resolveVisitorListingIndex(
+                                shop, actor, packet.listingIndex());
+                if (listingIndex != intent.listing().listingIndex()) {
+                    return BulkOfferResult.failure(
+                            ShopResultCode.INVALID_REQUEST);
+                }
+                LiveStorageAccess storage = new LiveStorageAccess(
+                        actor, packet.shopPos(), listingIndex, intent);
+                PlayerShopEscrowOrchestrator.Result result =
+                        PlayerShopLiveEscrowService.execute(
+                                actor, intent, packet.responseToken(),
+                                storage);
+                recordOfferUsage(actor, packet.shopPos(), intent,
+                        result);
+                recordOfferHistory(actor, intent, result);
+                return bulkResult(result);
+            }
+            NormalizedQuote quote = quoteOffer(actor, packet);
+            if (quote.moneyTotal() < minimumPayoutMinorUnits) {
+                return BulkOfferResult.failure(
+                        ShopResultCode.INVALID_AMOUNT);
+            }
+            PlayerShopEscrowOrchestrator.Result result =
+                    PlayerShopLiveEscrowService.execute(
+                            actor, quote.intent(),
+                            packet.responseToken(), quote.storage());
+            recordOfferUsage(actor, packet.shopPos(), quote.intent(),
+                    result);
+            recordOfferHistory(actor, quote.intent(), result);
+            if (Config.eventsTransactionEnabled
+                    && result.status()
+                    != PlayerShopEscrowOrchestrator.Status.REPLAYED
+                    && (result.status()
+                    == PlayerShopEscrowOrchestrator.Status.COMMITTED
+                    || result.status()
+                    == PlayerShopEscrowOrchestrator.Status
+                    .COMMITTED_WITH_PENDING_DELIVERY)) {
+                fireOfferPost(actor, packet.shopPos(), quote);
+            }
+            return bulkResult(result);
+        } catch (QuoteFailure failure) {
+            return BulkOfferResult.failure(failure.code);
+        } catch (RuntimeException exception) {
+            return PlayerShopLiveEscrowService.existingIntent(
+                    actor, packet.requestId()).isPresent()
+                    ? BulkOfferResult.recovery()
+                    : BulkOfferResult.failure(
+                    ShopResultCode.SERVER_ERROR);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    static boolean canExecuteBulkOffer(
+            ServerPlayer actor,
+            C2SPlayerShopOfferPacket packet
+    ) {
+        if (actor.getServer() == null
+                || ZERO_UUID.equals(packet.requestId())
+                || packet.action() != OfferAction.SELL_TO_SHOP) {
+            return false;
+        }
+        ReentrantLock lock = PlayerShopBlockService.transactionLock(
+                packet.shopPos());
+        lock.lock();
+        try {
+            quoteOffer(actor, packet, false);
+            return true;
+        } catch (RuntimeException exception) {
+            return false;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private static BulkOfferResult bulkResult(
+            PlayerShopEscrowOrchestrator.Result result
+    ) {
+        return switch (result.status()) {
+            case COMMITTED, REPLAYED,
+                    COMMITTED_WITH_PENDING_DELIVERY ->
+                    BulkOfferResult.success(
+                            result.status()
+                                    == PlayerShopEscrowOrchestrator
+                                    .Status.REPLAYED,
+                            result.committedValue().orElseThrow()
+                                    .committedIntent()
+                                    .moneyTransfers().stream()
+                                    .mapToLong(transfer ->
+                                            transfer.amountMinorUnits())
+                                    .reduce(0L, Math::addExact));
+            case REJECTED -> BulkOfferResult.failure(
+                    mapRejected(result.detail(), true));
+            case CONFLICT -> BulkOfferResult.failure(
+                    ShopResultCode.INVALID_REQUEST);
+            case RECOVERY_REQUIRED, QUARANTINED ->
+                    BulkOfferResult.recovery();
+        };
+    }
+
     private static void resumeExistingOffer(
             ServerPlayer actor,
             C2SPlayerShopOfferPacket packet,
@@ -616,6 +746,14 @@ final class PlayerShopEscrowTransactionService {
             ServerPlayer actor,
             C2SPlayerShopOfferPacket packet
     ) {
+        return quoteOffer(actor, packet, true);
+    }
+
+    private static NormalizedQuote quoteOffer(
+            ServerPlayer actor,
+            C2SPlayerShopOfferPacket packet,
+            boolean fireEvents
+    ) {
         if (!(actor.level().getBlockEntity(packet.shopPos())
                 instanceof ShopBlockEntity shop)) {
             throw failure(ShopResultCode.INVALID_TARGET);
@@ -648,7 +786,7 @@ final class PlayerShopEscrowTransactionService {
                 ? quoteAcquireOffer(actor, packet, shop, physical,
                 offer, identity, listingIndex, now)
                 : quoteSellOffer(actor, packet, shop, physical,
-                offer, identity, listingIndex, now);
+                offer, identity, listingIndex, now, fireEvents);
     }
 
     private static NormalizedQuote quoteAcquireOffer(
@@ -815,7 +953,8 @@ final class PlayerShopEscrowTransactionService {
             ServerShopOfferListing offer,
             PlayerShopIdentity identity,
             int listingIndex,
-            long now
+            long now,
+            boolean fireEvents
     ) {
         SellOfferOption option = offer.sellOptions().stream()
                 .filter(value -> value.optionId().equals(
@@ -835,7 +974,7 @@ final class PlayerShopEscrowTransactionService {
         } catch (ArithmeticException exception) {
             throw failure(ShopResultCode.INVALID_AMOUNT);
         }
-        if (Config.eventsTransactionEnabled) {
+        if (fireEvents && Config.eventsTransactionEnabled) {
             NormalizedOfferTransactionEvents.Decision event =
                     NormalizedOfferTransactionEvents.fireSellPre(
                             actor,
@@ -1946,6 +2085,44 @@ final class PlayerShopEscrowTransactionService {
             long quotedAtEpoch,
             long moneyTotal
     ) {
+    }
+
+    record BulkOfferResult(
+            boolean success,
+            boolean recoveryRequired,
+            boolean replayed,
+            long paidMinorUnits,
+            ShopResultCode code
+    ) {
+        BulkOfferResult {
+            Objects.requireNonNull(code, "code");
+            if (success && recoveryRequired
+                    || replayed && !success
+                    || success != (paidMinorUnits > 0L)) {
+                throw new IllegalArgumentException(
+                        "Bulk player shop result is invalid");
+            }
+        }
+
+        private static BulkOfferResult success(
+                boolean replayed,
+                long paidMinorUnits
+        ) {
+            return new BulkOfferResult(
+                    true, false, replayed,
+                    paidMinorUnits, ShopResultCode.SOLD);
+        }
+
+        private static BulkOfferResult failure(ShopResultCode code) {
+            return new BulkOfferResult(
+                    false, false, false, 0L, code);
+        }
+
+        private static BulkOfferResult recovery() {
+            return new BulkOfferResult(
+                    false, true, false, 0L,
+                    ShopResultCode.SERVER_ERROR);
+        }
     }
 
     private record TradeSelection(

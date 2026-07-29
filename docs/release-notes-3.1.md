@@ -1,6 +1,6 @@
 # FutureShops 3.1 beta release notes
 
-FutureShops 3.1 replaces separate special case shop trades with one clear offer model. This is a beta build for Minecraft 1.20.1 and Forge 47.4.20. Client and server must use the same build because the network protocol is now 55.
+FutureShops 3.1 replaces separate special case shop trades with one clear offer model. This is a beta build for Minecraft 1.20.1 and Forge 47.4.20. Client and server must use the same build because the network protocol is now 56.
 
 ## Player changes
 
@@ -14,6 +14,9 @@ FutureShops 3.1 replaces separate special case shop trades with one clear offer 
 * All, Buy, Sell, Barter, and Bundles filters use the normalized offer data.
 * Player Shop visitors use the same option wording and explicit free behavior as Server Shops.
 * Missing required visitor items disable that option before confirmation. The server still performs the authoritative validation.
+* Sell Inventory in the Server Shop opens a clear review screen showing every eligible line, its destination, its payout, and the selected total.
+* `/sellall adminshop` and `/sellall playershops` open the same review. Adding `confirm` submits every eligible line immediately.
+* Nearby Player Shop bulk selling stays inside the configured browse radius and prefers the best valid payout before distance.
 
 ## Administrator changes
 

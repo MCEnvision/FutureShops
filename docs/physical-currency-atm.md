@@ -33,7 +33,7 @@ reconciliation contract, but FutureShops cannot prove how the foreign mod create
 
 ## Deposit recovery
 
-Protocol 55 retains the server authoritative ATM recovery summary introduced by protocol 52
+Protocol 56 retains the server authoritative ATM recovery summary introduced by protocol 52
 whenever the player has active deposit evidence. It contains the original request UUID,
 deterministic transaction UUID, amount, and recovery state. Reopening the ATM or reconnecting
 adopts this identity before another deposit can be enabled.

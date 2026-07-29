@@ -35,6 +35,16 @@ Returning from category, held item, inventory, or registry pickers preserves raw
 
 If `admin.json` is missing, FutureShops creates a schema version 2 example catalog with a one claim free cookie, a Sell Only rotten flesh offer, and an iron tool bundle with verified savings against its three standalone tool offers. Existing operator catalogs are never replaced.
 
+## Bulk inventory selling
+
+The Server Shop sidebar includes Sell Inventory. Choose Items opens the quote with nothing selected. Sell All opens the same quote with every eligible line selected. The player may toggle any line before confirming. The ordinary Sell filter and item detail flow remain available for one item at a time.
+
+`/sellall adminshop` opens the review for the default Server Shop. `/sellall playershops` opens the review for shops inside the configured nearby Player Shops radius. Append `confirm` to either command to submit every eligible line without opening the review.
+
+Bulk selling reads the main inventory and offhand and never sells worn armor. Exact NBT offers remain exact. A general item offer is intentionally limited to untagged inventory stacks in the bulk planner so an enchanted, named, or otherwise tagged item cannot be consumed under a generic preview. Configure an exact NBT Sell to Shop option when a tagged variant should be eligible.
+
+The quote lasts 60 seconds. The client sends only selected line identifiers. The server revalidates the offer revision, permissions, schedule, usage limits, capacity, inventory, shop funds, and storage before each independent escrow transaction. A line cannot settle below its displayed quote. Changed quote identity refreshes the confirmation instead of silently accepting a lower payout.
+
 ## Minimal schema version 2 catalog
 
 ```json

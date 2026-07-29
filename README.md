@@ -15,12 +15,13 @@ Supported runtime:
 | Forge | 47.4.20 |
 | Java | 17 |
 | GeckoLib | 4.8.3 or newer compatible 4.x release |
-| Network protocol | 55 |
+| Network protocol | 56 |
 
 ## Features
 
 * Server shops with explicit free offers, money, barter, money plus barter, alternative payments, Sell to Shop, multi item bundles, validated savings, categories, search, mixed carts, and transaction history.
 * Player shop blocks with versioned offers, legacy listing migration, physical storage, free and paid acquisition, multiple barter components, alternative options, Sell to Shop input bundles, promotions, stock alerts, and owner settlement tools.
+* Server authoritative bulk inventory selling to the active Server Shop or nearby Player Shops, with exact quotes, item deselection, total payout confirmation, and a fast confirmed command path.
 * A guided four step offer editor opened after item selection or through Edit, then New Offer, for money, free, barter, Sell Only, Buy and Sell, and bundles, with advanced settings available when needed.
 * New generated Server Shop catalogs include working free, Sell Only, and discounted bundle examples without replacing an existing `admin.json`.
 * Wallet balances, payments, leaderboards, deposits, withdrawals, ATM controls, and protected FutureShops currency.
@@ -60,6 +61,10 @@ Common commands include:
 | --- | --- |
 | `/shop` | Open the server shop |
 | `/playershops` | Browse player shops |
+| `/sellall adminshop` | Review eligible inventory sales to the Server Shop |
+| `/sellall adminshop confirm` | Sell every eligible inventory item to the Server Shop immediately |
+| `/sellall playershops` | Review eligible inventory sales to nearby Player Shops |
+| `/sellall playershops confirm` | Sell every eligible inventory item to nearby Player Shops immediately |
 | `/ah` | Open the Auction House |
 | `/bz` | Open the Bazaar |
 | `/claims` | Open durable market claims |
@@ -70,7 +75,7 @@ Common commands include:
 | `/marketadmin` | Inspect and control market runtime state |
 | `/marketadmin inspect <transactionId>` | Inspect one escrow recovery handle without changing it |
 
-See [Auction House and Bazaar guide](docs/markets-guide.md) for player and administrator workflows.
+See [Bulk inventory selling](docs/bulk-selling.md) and the [Auction House and Bazaar guide](docs/markets-guide.md) for player and administrator workflows.
 
 ## Configuration
 
