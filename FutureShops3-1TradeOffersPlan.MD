@@ -2,7 +2,7 @@
 
 ## Status
 
-Owner approval was granted and the 3.1 implementation is present on the active beta phase branch. The implementation is undergoing its final plan audit and acceptance run. It is not approved for release until the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, and injected recovery gates in this plan pass.
+Owner approval was granted and the verified 3.1 implementation was merged into `master` through pull request 7 on July 29, 2026. The automated, GameTest, build, dedicated server, client, multiplayer reconnect, migration, recovery, and packaged JAR gates recorded below passed. Release publication remains a separate action that requires explicit owner authorization.
 
 This document remains the acceptance source of truth for the 3.1 trade offer expansion. Requirements use plan language so an unverified gate is never mistaken for a passed gate. The audited current behavior section records the 3.0 baseline that motivated the work, not the current 3.1 beta behavior. Current code, tests, and the final verification record determine which requirements are implemented. The [FutureShops 3.0 plan](FutureShops3-0Plan.MD) remains the source of truth for unfinished 3.0 work.
 
@@ -389,7 +389,7 @@ Acceptance requires:
 
 ### Implementation status
 
-This configuration hardening is implemented and locally verified on the active phase branch as of July 29, 2026. It remains in review until the phase change is merged.
+This configuration hardening was implemented, verified, and merged into `master` through pull request 7 on July 29, 2026.
 
 * All five Forge managed specifications register below `config/futureshops/`.
 * The migration preserves active files and numbered Forge backups, archives conflicts without overwriting either copy, rejects unsafe paths, and is idempotent.
@@ -544,7 +544,7 @@ Bundle details show each output component, the verified individual total when av
 
 GitHub issue 2 tracks the visitor bulk sell addition.
 
-Branch implementation status on July 29, 2026: the bulk sell command, shared quote and commit service, Server Shop entry flow, confirmation interface, packet protocol, localization, tests, and operator documentation are implemented on the active phase branch. Local verification passed 1,861 unit and contract tests, all five required GameTests, the full build, dedicated server startup, virtual display client startup, and a protocol 56 multiplayer disconnect and reconnect cycle. The phase remains in review until the branch is approved and merged.
+Merged implementation status on July 29, 2026: the bulk sell command, shared quote and commit service, Server Shop entry flow, confirmation interface, packet protocol, localization, tests, and operator documentation are implemented on `master`. Local verification passed 1,861 unit and contract tests, all five required GameTests, the full build, dedicated server startup, virtual display client startup, and a protocol 56 multiplayer disconnect and reconnect cycle. Pull request 7 completed the phase merge.
 
 The command surface is:
 
@@ -1098,7 +1098,7 @@ Gate:
 * Invalid partial offers cannot replace the live catalog.
 * Reload failures preserve the last valid catalog.
 
-Branch implementation status on July 29, 2026: contextual quick add now uses a responsive grid capped at 21 columns by 8 visible rows. Buy and Sell support direct creation from one selected item and an exact Base Price. Barter and Bundle preserve their selected outputs when opening the Simple Editor, and the Simple Editor links to the Advanced Editor. Bulk selling now quotes without requiring an existing shop session and matches general item requirements across damage and NBT variants while reserving exact requirements first. Enabled Bazaar and Auction House modules now remain visible as recovering when escrow is not ready instead of being reported as disabled. Rejected editor feedback is cleared as soon as the draft changes, catalog validation issues are scoped to the edited listing, identifier errors target the correct field, every trade mode remains selectable, and the selected mode uses a distinct active style instead of appearing unavailable. Local verification passed 1,874 unit and contract tests, all five required GameTests from the phase verification run, data generation, the full build, dedicated server startup, virtual display client startup, and the packaged JAR inspection. The phase remains in review until the branch is approved and merged.
+Merged implementation status on July 29, 2026: contextual quick add now uses a responsive grid capped at 21 columns by 8 visible rows. Buy and Sell support direct creation from one selected item and an exact Base Price. Barter and Bundle preserve their selected outputs when opening the Simple Editor, and the Simple Editor links to the Advanced Editor. Bulk selling now quotes without requiring an existing shop session and matches general item requirements across damage and NBT variants while reserving exact requirements first. Enabled Bazaar and Auction House modules now remain visible as recovering when escrow is not ready instead of being reported as disabled. Rejected editor feedback is cleared as soon as the draft changes, catalog validation issues are scoped to the edited listing, identifier errors target the correct field, every trade mode remains selectable, and the selected mode uses a distinct active style instead of appearing unavailable. Local verification passed 1,874 unit and contract tests, all five required GameTests from the phase verification run, data generation, the full build, dedicated server startup, virtual display client startup, and the packaged JAR inspection. Pull request 7 merged this verified tree into `master`.
 
 ### Phase 5, Player Shop convergence
 
