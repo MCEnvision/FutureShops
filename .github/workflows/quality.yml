@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - "master"
-      - "envy/**"
   schedule:
     - cron: "17 4 * * 1"
   workflow_dispatch:
