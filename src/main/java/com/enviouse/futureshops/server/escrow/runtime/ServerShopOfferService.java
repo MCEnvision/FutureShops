@@ -88,10 +88,7 @@ public final class ServerShopOfferService {
                 || !player.getUUID().equals(request.playerId())
                 || player.getServer() == null
                 || !AdminShopToggleSavedData.get(player.getServer())
-                .isAdminShopEnabled()
-                || ShopSessionManager.get(player.getUUID())
-                .filter(session -> session.shopId().equals(
-                        request.shopId())).isEmpty()) {
+                .isAdminShopEnabled()) {
             return false;
         }
         EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();

@@ -91,14 +91,18 @@ class MarketModuleAccessPolicyTest {
         assertFalse(missingControl.allowed());
         assertEquals("MODULE_CONTROL_UNAVAILABLE",
                 missingControl.denialCode());
-        assertEquals(MarketModuleAvailability.CLAIMS_ONLY,
+        assertEquals(MarketModuleAvailability.RECOVERING,
                 MarketModuleAccessPolicy.capability(
                         MarketModule.BAZAAR, true, false,
                         Optional.of(enabled), 2L));
-        assertEquals(MarketModuleAvailability.DISABLED,
+        assertEquals(MarketModuleAvailability.RECOVERING,
                 MarketModuleAccessPolicy.capability(
                         MarketModule.BAZAAR, true, true,
                         Optional.empty(), 0L));
+        assertTrue(MarketModuleAvailability.RECOVERING.visible());
+        assertTrue(MarketModuleAvailability.RECOVERING.allowsClaims());
+        assertFalse(MarketModuleAvailability.RECOVERING
+                .allowsNewValueOperations());
     }
 
     @Test

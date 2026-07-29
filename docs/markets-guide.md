@@ -208,6 +208,8 @@ recommended behavior is **freeze**:
 `lifecycle.disable_mode` can instead be set to `drain` or `cancel_and_refund` per module, but a
 config reload never silently mass-cancels contracts.
 
+An enabled module that is waiting for escrow or lifecycle control recovery is different from a disabled module. It remains in the top navigation, keeps claims available, and reports recovery while new market mutations are blocked. Bazaar and Auction House enable flags live only in `config/futureshops/futureshops-common.toml`. Their module specific TOML files configure rules but do not enable the module.
+
 ## Administration
 
 ### What exists in this build

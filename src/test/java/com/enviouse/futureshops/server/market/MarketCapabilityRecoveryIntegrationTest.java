@@ -43,9 +43,11 @@ class MarketCapabilityRecoveryIntegrationTest {
         assertFalse(recovering.escrowReady());
         assertTrue(recovering.walletBalanceKnown());
         assertEquals(4250L, recovering.walletBalanceMinorUnits());
-        assertEquals(MarketModuleAvailability.DISABLED,
+        assertEquals(MarketModuleAvailability.RECOVERING,
                 recovering.byModule().get(MarketModule.BAZAAR)
                         .availability());
+        assertTrue(recovering.byModule().get(MarketModule.BAZAAR)
+                .availability().visible());
 
         responses.begin(readyRequest);
         responses.begin(overlappingRetry);

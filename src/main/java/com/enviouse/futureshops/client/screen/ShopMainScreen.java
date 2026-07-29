@@ -319,41 +319,25 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         int addW = Math.min(84, Math.max(48,
                 (gridW() - 2 * ShopUiUtil.PAD_XS - 62) / 3));
         int newOfferColumn = 2;
-        if (tradeFilter == 3) {
-            ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY, rowX, rowY, addW, 16,
-                    Component.translatable("gui.futureshops.admin_edit.add_barter_items"),
-                    ShopUiUtil.ButtonStyle.PRIMARY, true,
-                    () -> this.minecraft.setScreen(new AdminItemPickerScreen(this, activeCategoryId(), true)));
-            ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
-                    rowX + addW + ShopUiUtil.PAD_XS, rowY, addW, 16,
-                    Component.translatable("gui.futureshops.admin_edit.add_barter_held"),
-                    ShopUiUtil.ButtonStyle.PRIMARY, true,
-                    () -> ShopPackets.CHANNEL.sendToServer(new C2SAdminShopEditPacket(
-                            "ADD_BARTER_TARGET_HELD", "", "", activeCategoryId(), 1L, 0L, 0L)));
-            newOfferColumn = 2;
-        } else {
-            ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY, rowX, rowY, addW, 16,
-                    Component.translatable("gui.futureshops.admin_edit.add_items"),
-                    ShopUiUtil.ButtonStyle.PRIMARY, true,
-                    () -> this.minecraft.setScreen(
-                            OfferEditorItemPickerScreen.forNewOffer(
-                                    this, activeCategoryId())));
-            if (tradeFilter == 0) {
-                ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
-                        rowX + addW + ShopUiUtil.PAD_XS, rowY, addW, 16,
-                        Component.translatable("gui.futureshops.admin_edit.add_barter_items"),
-                        ShopUiUtil.ButtonStyle.PRIMARY, true,
-                        () -> this.minecraft.setScreen(new AdminItemPickerScreen(
-                                this, activeCategoryId(), true)));
-            } else {
-                ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
-                        rowX + addW + ShopUiUtil.PAD_XS, rowY, addW, 16,
-                        Component.translatable("gui.futureshops.admin_edit.add_held"),
-                        ShopUiUtil.ButtonStyle.PRIMARY, true,
-                        () -> this.minecraft.setScreen(
-                                AdminOfferEditorScreen.create(this)));
-            }
-        }
+        AdminItemPickerScreen.QuickAddMode quickMode =
+                quickAddMode();
+        ShopUiUtil.button(
+                graphics, this.font, clickZones, mouseX, mouseY,
+                rowX, rowY, addW, 16,
+                Component.translatable(
+                        "gui.futureshops.admin_edit.add_items"),
+                ShopUiUtil.ButtonStyle.PRIMARY, true,
+                () -> this.minecraft.setScreen(
+                        AdminItemPickerScreen.forQuickAdd(
+                                this, activeCategoryId(), quickMode)));
+        ShopUiUtil.button(
+                graphics, this.font, clickZones, mouseX, mouseY,
+                rowX + addW + ShopUiUtil.PAD_XS, rowY, addW, 16,
+                Component.translatable(
+                        "gui.futureshops.admin_edit.add_held"),
+                ShopUiUtil.ButtonStyle.PRIMARY, true,
+                () -> this.minecraft.setScreen(
+                        AdminOfferEditorScreen.create(this)));
         int newOfferX = rowX
                 + newOfferColumn * (addW + ShopUiUtil.PAD_XS);
         if (selectMode) {
@@ -435,6 +419,15 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         } else if (delHover) {
             pendingButtonTooltip = Component.translatable("gui.futureshops.admin_edit.category_delete");
         }
+    }
+
+    private AdminItemPickerScreen.QuickAddMode quickAddMode() {
+        return switch (tradeFilter) {
+            case 2 -> AdminItemPickerScreen.QuickAddMode.SELL;
+            case 3 -> AdminItemPickerScreen.QuickAddMode.BARTER;
+            case 4 -> AdminItemPickerScreen.QuickAddMode.BUNDLE;
+            default -> AdminItemPickerScreen.QuickAddMode.BUY;
+        };
     }
 
     private void sendSelectedCategoryMove(long delta) {

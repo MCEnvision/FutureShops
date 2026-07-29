@@ -2,7 +2,7 @@
 
 FutureShops 3.1 compiles legacy Server Shop entries and schema version 2 entries into one immutable offer model. Schema version 2 is required for explicit free offers, alternative payments, compound payments, multiple item bundles, Sell to Shop input bundles, limits, schedules, permissions, and verified bundle comparisons.
 
-Money values are integer minor units. With two currency decimals, `1000` means `10.00`.
+Catalog JSON stores money as integer minor units. With two currency decimals, `1000` means `10.00`. The in game Base Price field displays major units directly, so entering `1` or `1.00` creates a price of `1.00`.
 
 ## File location and reload safety
 
@@ -16,16 +16,16 @@ The directory and default `admin.json` are prepared during common mod setup, bef
 
 ## In game editor workflow
 
-Open the Server Shop as an administrator and choose the offer editor for a listing. Player Shop owners open Advanced Offer from the listing inspector. Both entry points use the same persistent draft and validation model.
+Open the Server Shop as an administrator and enter edit mode. Player Shop owners open Advanced Offer from the listing inspector. Both entry points use the same persistent draft and validation model.
 
 The quickest common workflow is:
 
-1. In Basics, choose Money, Free, Sell Only, Buy and Sell, Barter, Money or Barter, Money and Barter, or Bundle.
-2. In Items, add what the player receives or what the shop buys from a held item, inventory, or the registry list. Several outputs become one bundle automatically.
-3. In Trade, select the trade type and enter the price, payout, or barter items.
-4. In Review, inspect the visitor view, optionally match standalone bundle prices, and save.
+1. Select All or Buy, Sell, Barter, or Bundles before choosing Add Items.
+2. Select items from the searchable grid. Wide screens show up to 21 columns by 8 rows.
+3. For Buy or Sell, enter Base Price and choose Add Buy Offer or Add Sell Offer. This is a complete save for one selected item.
+4. For Barter or Bundles, choose Open Simple Editor to finish the required barter cost or bundle details.
 
-Use Advanced Settings only for stock, limits, schedules, permissions, exact NBT, arbitrary option structures, or manual bundle comparisons. Adding several components to one advanced option means every component is required. Adding several advanced options creates alternatives.
+All uses the Buy quick path. Sell creates a Sell to Shop option instead of an acquire option. Barter preserves the selected output and Bundle preserves every selected output. Open Simple Editor also remains available for Buy and Sell when the administrator wants more than the quick fields. From the Simple Editor, choose Advanced Editor only for stock details, limits, schedules, permissions, exact NBT, arbitrary option structures, or manual bundle comparisons. Adding several components to one advanced option means every component is required. Adding several advanced options creates alternatives.
 
 Every administrator field and icon control has contextual help by hover or keyboard focus. Help mode keeps descriptions visible. Invalid controls receive an outline and short message. Section badges count unresolved issues, and selecting a validation summary entry returns focus to the affected control. Save actions remain disabled while settlement would be ambiguous or unsafe.
 
@@ -41,7 +41,7 @@ The Server Shop sidebar includes Sell Inventory. Choose Items opens the quote wi
 
 `/sellall adminshop` opens the review for the default Server Shop. `/sellall playershops` opens the review for shops inside the configured nearby Player Shops radius. Append `confirm` to either command to submit every eligible line without opening the review.
 
-Bulk selling reads the main inventory and offhand and never sells worn armor. Exact NBT offers remain exact. A general item offer is intentionally limited to untagged inventory stacks in the bulk planner so an enchanted, named, or otherwise tagged item cannot be consumed under a generic preview. Configure an exact NBT Sell to Shop option when a tagged variant should be eligible.
+Bulk selling reads the main inventory and offhand and never sells worn armor. Exact NBT offers remain exact. A general item offer accepts matching tagged, named, enchanted, or damaged stacks because its item identity is intentionally not exact. Configure an exact NBT Sell to Shop option when only one specific variant should be eligible.
 
 The quote lasts 60 seconds. The client sends only selected line identifiers. The server revalidates the offer revision, permissions, schedule, usage limits, capacity, inventory, shop funds, and storage before each independent escrow transaction. A line cannot settle below its displayed quote. Changed quote identity refreshes the confirmation instead of silently accepting a lower payout.
 

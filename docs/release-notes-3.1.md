@@ -1,6 +1,6 @@
 # FutureShops 3.1 beta release notes
 
-FutureShops 3.1 replaces separate special case shop trades with one clear offer model. This is a beta build for Minecraft 1.20.1 and Forge 47.4.20. Client and server must use the same build because the network protocol is now 56.
+FutureShops 3.1 replaces separate special case shop trades with one clear offer model. This is a beta build for Minecraft 1.20.1 and Forge 47.4.20. Client and server must use the same build because the network protocol is now 57.
 
 ## Player changes
 
@@ -20,6 +20,9 @@ FutureShops 3.1 replaces separate special case shop trades with one clear offer 
 
 ## Administrator changes
 
+* Add Items uses the selected Buy, Sell, Barter, or Bundles filter and opens a searchable grid with up to 21 columns by 8 rows.
+* Buy and Sell can save one selected item directly with Base Price. Entering `1` or `1.00` means one major currency unit.
+* Open Simple Editor preserves the quick selection and common values. Advanced Editor exposes uncommon limits, schedules, exact NBT, permissions, and option structures.
 * The in game offer editor supports templates for money, free, barter, compound, alternative, Sell to Shop, two way, and bundle listings.
 * Outputs, acquire item costs, and sell inputs can contain several components.
 * Category and item pickers preserve the complete draft while switching screens.
@@ -44,6 +47,8 @@ Offer requests carry a stable request UUID and trusted listing revision. Replays
 Interrupted normalized Server Shop single and cart requests retry automatically from exact persisted evidence when the player logs in and through bounded background recovery while escrow is ready. Recovery does not depend on an open screen or a currently enabled shop module, and it cannot substitute current client state for the original request.
 
 Packet identifiers, collection counts, exact NBT, individual listings, and aggregate catalogs are bounded. Server rate limiting runs before replay lookup and storage work. Prices, savings, permissions, stock, schedules, and item identity are always rebound to server state.
+
+An enabled Bazaar or Auction House remains visible while its escrow or lifecycle control is recovering and reports recovery instead of module disabled. A module disabled in the common server configuration is omitted from ordinary navigation.
 
 ## Known boundaries
 

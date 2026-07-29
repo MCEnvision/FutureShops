@@ -44,15 +44,18 @@ class AdminOfferEditorPhaseFourSourceTest {
     }
 
     @Test
-    void addingAListingOpensTheGuidedOfferBuilder()
+    void addingAListingOpensTheContextualQuickAddGrid()
             throws IOException {
         String shop = read("ShopMainScreen.java");
-        String picker = read("OfferEditorItemPickerScreen.java");
+        String picker = read("AdminItemPickerScreen.java");
 
         assertTrue(shop.contains(
-                "OfferEditorItemPickerScreen.forNewOffer"));
+                "AdminItemPickerScreen.forQuickAdd"));
+        assertTrue(shop.contains("quickAddMode()"));
         assertTrue(picker.contains(
-                "AdminOfferEditorScreen.create"));
+                "AdminOfferEditorScreen.createQuickAdd"));
+        assertTrue(picker.contains("sendQuickAdd"));
+        assertTrue(picker.contains("openSimpleEditor"));
     }
 
     @Test

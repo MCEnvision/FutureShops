@@ -15,14 +15,14 @@ Supported runtime:
 | Forge | 47.4.20 |
 | Java | 17 |
 | GeckoLib | 4.8.3 or newer compatible 4.x release |
-| Network protocol | 56 |
+| Network protocol | 57 |
 
 ## Features
 
 * Server shops with explicit free offers, money, barter, money plus barter, alternative payments, Sell to Shop, multi item bundles, validated savings, categories, search, mixed carts, and transaction history.
 * Player shop blocks with versioned offers, legacy listing migration, physical storage, free and paid acquisition, multiple barter components, alternative options, Sell to Shop input bundles, promotions, stock alerts, and owner settlement tools.
-* Server authoritative bulk inventory selling to the active Server Shop or nearby Player Shops, with exact quotes, item deselection, total payout confirmation, and a fast confirmed command path.
-* A guided four step offer editor opened after item selection or through Edit, then New Offer, for money, free, barter, Sell Only, Buy and Sell, and bundles, with advanced settings available when needed.
+* Server authoritative bulk inventory selling to the active Server Shop or nearby Player Shops, with exact quotes, item deselection, total payout confirmation, tagged and damaged item support for general offers, and a fast confirmed command path.
+* A contextual Server Shop quick add grid for Buy, Sell, Barter, and Bundles, with one Base Price field, direct Buy and Sell creation, and progressively disclosed Simple and Advanced editors.
 * New generated Server Shop catalogs include working free, Sell Only, and discounted bundle examples without replacing an existing `admin.json`.
 * Wallet balances, payments, leaderboards, deposits, withdrawals, ATM controls, and protected FutureShops currency.
 * Auction House listings, bids, buy now sales, watchlists, history, anti sniping rules, and exact item custody.
@@ -41,7 +41,7 @@ FutureShops currently assumes one authoritative server and world. It does not pr
 5. Start the game or dedicated server once to create the TOML files and editable catalog directories.
 6. Review module, economy, escrow, Auction House, and Bazaar settings before opening the server.
 
-The Bazaar and Auction House are disabled on a new installation. Enable either module in `config/futureshops/futureshops-common.toml` after reviewing its rules. Existing configuration files keep their configured values. Disabled modules are omitted from the marketplace header. An accepted server configuration change appears on an open marketplace screen within five seconds without requiring a reconnect.
+The Bazaar and Auction House are disabled on a new installation. Enable either module in `config/futureshops/futureshops-common.toml` after reviewing its rules. Existing configuration files keep their configured values. Disabled modules are omitted from the marketplace header. An enabled module remains visible while escrow or its lifecycle control is recovering and shows a recovery state instead of claiming that the module is disabled. An accepted server configuration change appears on an open marketplace screen within five seconds without requiring a reconnect.
 
 For 3.0 or 3.1 upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
 

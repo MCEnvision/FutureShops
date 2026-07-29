@@ -4,8 +4,10 @@ import com.enviouse.futureshops.catalog.offer.AcquireOfferOption;
 import com.enviouse.futureshops.catalog.offer.OfferItemComponent;
 import com.enviouse.futureshops.catalog.offer.OfferLimitPolicy;
 import com.enviouse.futureshops.catalog.offer.OfferSchedule;
+import com.enviouse.futureshops.catalog.offer.OfferStockPolicy;
 import com.enviouse.futureshops.catalog.offer.SellOfferOption;
 import com.enviouse.futureshops.catalog.offer.ServerShopOfferListing;
+import com.enviouse.futureshops.catalog.offer.ServerShopOfferRevision;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,6 +61,68 @@ public final class OfferEditorTemplates {
                 base.permissionNode(), outputs, acquire, sell,
                 base.stockPolicy(), base.limits(), base.schedule(),
                 List.of());
+    }
+
+    public static ServerShopOfferListing quickAdd(
+            ServerShopOfferListing base,
+            Template template,
+            List<OfferItemComponent> selectedComponents,
+            String displayName,
+            long basePriceMinor,
+            long stock
+    ) {
+        Objects.requireNonNull(base, "base");
+        Objects.requireNonNull(template, "template");
+        List<OfferItemComponent> components = List.copyOf(
+                Objects.requireNonNull(selectedComponents,
+                        "selectedComponents"));
+        if (components.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Quick add requires at least one item");
+        }
+        if (template != Template.MONEY
+                && template != Template.SELL
+                && template != Template.BARTER
+                && template != Template.BUNDLE) {
+            throw new IllegalArgumentException(
+                    "Quick add template is unsupported");
+        }
+        if (template != Template.BARTER && basePriceMinor <= 0L) {
+            throw new IllegalArgumentException(
+                    "Quick add price must be positive");
+        }
+
+        OfferItemComponent icon = components.get(0);
+        List<OfferItemComponent> outputs =
+                template == Template.SELL ? List.of() : components;
+        List<AcquireOfferOption> acquire = switch (template) {
+            case MONEY, BUNDLE -> List.of(
+                    AcquireOfferOption.money(
+                            "get_money", basePriceMinor));
+            case BARTER -> List.of(items());
+            default -> List.of();
+        };
+        long capacity = stock < 0L ? 0L : stock;
+        List<SellOfferOption> sell = template == Template.SELL
+                ? List.of(new SellOfferOption(
+                "sell_money", "Sell to Shop", components,
+                basePriceMinor, capacity, OfferLimitPolicy.defaults(),
+                OfferSchedule.always(), ""))
+                : List.of();
+        OfferStockPolicy stockPolicy = template == Template.SELL
+                || stock < 0L
+                ? OfferStockPolicy.unlimited()
+                : OfferStockPolicy.limited(stock, 0L);
+        ServerShopOfferListing listing = new ServerShopOfferListing(
+                base.listingId(), base.revision(),
+                Objects.requireNonNullElse(displayName, ""),
+                base.description(), base.categoryId(),
+                icon.itemId(), icon.exactNbt(), base.active(),
+                base.expiresAtEpoch(), base.permissionNode(),
+                outputs, acquire, sell, stockPolicy,
+                base.limits(), base.schedule(), List.of());
+        return listing.withRevision(
+                ServerShopOfferRevision.compute(listing));
     }
 
     private static List<OfferItemComponent> outputComponents(

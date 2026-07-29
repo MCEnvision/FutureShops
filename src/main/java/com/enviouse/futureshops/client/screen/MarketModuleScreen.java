@@ -977,10 +977,8 @@ public final class MarketModuleScreen extends Screen
         graphics.fill(toolbar.x(), toolbar.y(), toolbar.right(),
                 toolbar.bottom(), SURFACE);
         MarketModuleAvailability availability = currentAvailability();
-        boolean recovering = (availability
-                == MarketModuleAvailability.CLAIMS_ONLY
-                || availability == MarketModuleAvailability.DISABLED)
-                && packet.enabled() && !packet.escrowReady();
+        boolean recovering = availability
+                == MarketModuleAvailability.RECOVERING;
         String statusKey = recovering
                 ? "gui.futureshops.market.status.recovering"
                 : switch (availability) {
@@ -993,6 +991,8 @@ public final class MarketModuleScreen extends Screen
                             "gui.futureshops.market.status.cancelling";
                     case CLAIMS_ONLY ->
                             "gui.futureshops.market.status.claims_only";
+                    case RECOVERING ->
+                            "gui.futureshops.market.status.recovering";
                     case DISABLED, HIDDEN ->
                             "gui.futureshops.market.status.disabled";
                 };
@@ -4890,10 +4890,23 @@ public final class MarketModuleScreen extends Screen
     private MarketModuleAvailability currentAvailability() {
         return moduleCapability(module)
                 .map(MarketModuleCapability::availability)
-                .orElseGet(() -> packet.enabled()
-                        && packet.escrowReady()
-                        ? MarketModuleAvailability.ENABLED
-                        : MarketModuleAvailability.DISABLED);
+                .orElseGet(() -> {
+                    if (packetConfigured(module)
+                            && !packet.escrowReady()) {
+                        return MarketModuleAvailability.RECOVERING;
+                    }
+                    return packet.enabled()
+                            ? MarketModuleAvailability.ENABLED
+                            : MarketModuleAvailability.DISABLED;
+                });
+    }
+
+    private boolean packetConfigured(MarketModule target) {
+        return switch (target) {
+            case SHOP -> true;
+            case BAZAAR -> packet.bazaarEnabled();
+            case AUCTION_HOUSE -> packet.auctionHouseEnabled();
+        };
     }
 
     private boolean moduleVisible(MarketModule target) {

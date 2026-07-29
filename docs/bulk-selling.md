@@ -25,7 +25,9 @@ When several nearby destinations accept the same inventory, FutureShops prefers 
 
 Quote planning checks current offer limits, buyback capacity, stock insertion space, shop funds, player balance limits, permissions, and schedules. If a destination cannot accept the full inventory quantity, the planner finds the largest currently executable quantity. Accepted items with no current capacity remain visible and disabled instead of appearing sellable.
 
-Exact NBT offers match only that exact variant. General item offers are limited to untagged stacks during bulk planning. This prevents a generic preview from consuming an enchanted, renamed, damaged, or otherwise tagged stack. Operators can add an exact NBT Sell to Shop option for a tagged variant that should be bulk sellable.
+Exact NBT offers match only that exact variant. General item offers accept matching tagged, renamed, enchanted, damaged, or otherwise modified stacks. Exact requirements reserve first, then general requirements may consume the remaining matching variants. Operators should use exact NBT when a Sell to Shop offer must accept only one specific variant.
+
+Building the quote is a read only operation and does not require an interactive shop session to exist first. Confirming a line opens and validates the short lived authoritative session required by the actual transaction.
 
 ## Confirmation and settlement
 

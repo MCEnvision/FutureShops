@@ -132,7 +132,8 @@ public final class ShopPackets {
     // Protocol 49 adds market department counts.
     // protocol 52 synchronizes atm deposit recovery.
     // protocol 53 adds normalized server shop offers.
-    public static final String PROTOCOL_VERSION = "56";
+    // protocol 57 adds the recovering market module capability.
+    public static final String PROTOCOL_VERSION = "57";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))

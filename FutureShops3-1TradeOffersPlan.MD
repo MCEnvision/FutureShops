@@ -400,6 +400,21 @@ This configuration hardening is implemented and locally verified on the active p
 * Documentation and examples contain only the canonical nested paths.
 * No implementation deviation or unresolved configuration migration risk remains. Merge and release approval remain outside this work item.
 
+### Module configuration authority and recovery presentation
+
+The common server configuration remains authoritative for whether Bazaar and Auction House are enabled. The module specific TOML files configure behavior inside those modules and do not independently enable them. A full restart must apply the values from `config/futureshops/futureshops-common.toml` in integrated and dedicated server environments.
+
+An enabled module that is temporarily waiting for escrow or module control recovery is not disabled. Capability projection, direct command responses, navigation, and screen copy must preserve that distinction:
+
+* A module with its common enable flag set to false is hidden from normal top navigation. Existing claims remain reachable through recovery surfaces.
+* A module with its common enable flag set to true remains visible while escrow is recovering.
+* A recovering module rejects new market mutations with an escrow recovery reason and keeps claims reachable. It must not report `MODULE_DISABLED` or display “Module disabled.”
+* Capability refresh after escrow reaches ready must promote the same visible module to its persisted lifecycle state without requiring a client restart.
+* An enabled module with missing or unreadable lifecycle control reports a control recovery error rather than silently pretending its configuration flag is false.
+* Windows directory creation and durability fallbacks must not leave the escrow runtime permanently recovering when the directory already exists and is usable through normal file operations.
+
+Acceptance requires a dedicated server and a connected client to distinguish configured off, configured on and recovering, and configured on and ready states. `/bazaar`, `/ah`, top navigation, capability refresh, and claims access must agree in every state.
+
 ## Escrow and transaction architecture
 
 ### New offer transaction
@@ -464,7 +479,7 @@ Sell to Shop transactions remain outside the acquire cart. The 3.1 bulk sell wor
 
 ## Networking
 
-The network protocol is currently 55. Bulk sell packets append at the end of the registration order and move the protocol to 56.
+Bulk sell packets moved the network protocol from 55 to 56. The appended `RECOVERING` market capability changes the shared capability wire enum and moves the protocol to 57. Existing packet discriminators remain unchanged.
 
 New packet registrations are appended. Existing discriminator positions are never reordered.
 
@@ -547,6 +562,8 @@ A quoted line contains a server generated stable line identifier, exact input co
 The client sends only the quote identifier and selected line identifiers. It never supplies item identities, quantities, prices, destinations, revisions, totals, or transaction outcomes. Quotes are player bound, single use, memory only, bounded, and short lived. Disconnect, expiration, catalog reload, and explicit cancellation discard an uncommitted quote without mutating inventory or money.
 
 Server Shop quoting considers only active money payout Sell to Shop options in the requested shop. Player Shop quoting considers only active money payout Sell to Shop options in the current dimension, loaded chunks, and the same configured radius used by the Player Shops browser. Candidates that require unavailable storage, exceeded buyback capacity, an insolvent shop, an inaccessible permission, or an inactive schedule are ineligible.
+
+Quote construction is a read only preview and must not require a preexisting interactive shop session. The commit path opens and validates its own short lived authoritative session before mutation. This keeps command opened bulk selling and the Server Shop button equivalent while preserving the normal session requirement for actual offer execution.
 
 For Player Shops, candidates that compete for the same inventory are ranked by highest effective payout per required input, then highest total payout for one complete exchange, shortest distance, and stable shop, listing, and option identifiers. A lower ranked offer is never selected while a higher ranked offer remains executable. Distinct input signatures remain distinct confirmation lines. Scan count, candidate count, quote lines, component count, strings, and encoded NBT are bounded.
 
@@ -647,6 +664,35 @@ A basic money listing from a held item requires only:
 2. Choose Money Only.
 3. Enter the price.
 4. Save.
+
+### Contextual quick add grid
+
+The Server Shop Add Item action uses the current trade filter as its intent and opens the searchable registry grid instead of a text list. At an ordinary wide resolution the grid exposes up to 21 columns and 8 rows at once. Smaller windows reduce the visible rows and columns without clipping, overlap, or requiring a GUI scale change.
+
+The quick add surface contains:
+
+* Search by item name, identifier, or namespace.
+* The existing category selector.
+* Clear item selection and selected count.
+* One Base Price field for money bearing modes, with decimal currency wording where `1.00` means one major currency unit. Barter labels the next step instead of showing an unused money field.
+* Stock using the existing finite or unlimited control.
+* A primary action that completes the valid common path.
+* An `Open Simple Editor` action for more control.
+* Cancel, which returns to the shop once.
+
+The selected Server Shop filter determines the draft:
+
+* Buy creates an acquire offer for the selected item at Base Price.
+* Sell creates a Sell to Shop offer for the selected item at Base Price.
+* Barter selects the offered output, then continues to the simple editor to select the required payment item because an empty barter cost is invalid.
+* Bundles may select several outputs, then continue to the simple editor for one shared price and comparison value.
+* All uses the ordinary Buy quick path and labels that action explicitly. It never guesses between several hidden field meanings.
+
+Buy and Sell support direct creation from the grid when exactly one item and a valid Base Price are selected. Barter and Bundle use the same selected output data but continue instead of writing an invalid partial offer. `Open Simple Editor` initializes the same normalized draft and preserves every applicable selected item, category, price, stock, and active trade direction. Inside the simple editor the progressive disclosure action is named `Advanced Editor`.
+
+Prices are parsed directly into checked integer minor units. Floating point conversion is forbidden. Invalid or excessive values remain visible, identify the Base Price field, and create no catalog mutation. The quick path and both editor levels save through the same typed, correlated, revision checked server writer.
+
+The legacy barter ingredient picker may retain its specialized count controls, but the top level Add Item action must not reuse one input field for price, output count, or ingredient count based on an invisible entry mode.
 
 The screen must not ask for barter, sell, schedule, comparison, or permission values unless the administrator enables those sections.
 
@@ -1020,6 +1066,7 @@ Deliver:
 * Limits, schedule, and permission editing.
 * Explicit stock, free, direction, and component role controls.
 * Searchable category and item selectors.
+* Contextual 21 by 8 quick add grid with Base Price and direct Buy or Sell creation.
 * Contextual tooltips, visible help mode, and translation coverage.
 * Inline field and section validation.
 * Typed, correlated save packets with expected revisions.
@@ -1033,6 +1080,9 @@ Gate:
 * Every required combination can be created, edited, reloaded, and removed in game.
 * No field changes meaning because of the screen entry path.
 * A basic held item money listing uses the four step common flow.
+* A basic filtered Buy or Sell listing can be created from the quick add grid with item, Base Price, and one confirmation.
+* Barter and Bundle selection continue with their chosen outputs into the simple editor and cannot save an empty partial offer.
+* `Open Simple Editor` and `Advanced Editor` expose progressively more control without losing quick add values.
 * Returning from any picker preserves every draft value, section, scroll position, and focus target.
 * Invalid values remain visible and are never silently converted to another value.
 * A rejected save keeps the editor open and identifies the exact field.
@@ -1043,6 +1093,8 @@ Gate:
 * Keyboard only editing reaches every control in a predictable order.
 * Invalid partial offers cannot replace the live catalog.
 * Reload failures preserve the last valid catalog.
+
+Branch implementation status on July 29, 2026: contextual quick add now uses a responsive grid capped at 21 columns by 8 visible rows. Buy and Sell support direct creation from one selected item and an exact Base Price. Barter and Bundle preserve their selected outputs when opening the Simple Editor, and the Simple Editor links to the Advanced Editor. Bulk selling now quotes without requiring an existing shop session and matches general item requirements across damage and NBT variants while reserving exact requirements first. Enabled Bazaar and Auction House modules now remain visible as recovering when escrow is not ready instead of being reported as disabled. Local verification passed 1,871 unit and contract tests, all five required GameTests, data generation, the full build, dedicated server startup with both market modules enabled, virtual display client startup, and two protocol 57 multiplayer connections with a disconnect and reconnect. The phase remains in review until the branch is approved and merged.
 
 ### Phase 5, Player Shop convergence
 

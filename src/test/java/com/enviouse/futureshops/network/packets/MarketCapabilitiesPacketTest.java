@@ -72,6 +72,7 @@ class MarketCapabilitiesPacketTest {
         assertEquals(5, MarketModuleAvailability.DRAINING.ordinal());
         assertEquals(6, MarketModuleAvailability
                 .CANCEL_AND_REFUND.ordinal());
+        assertEquals(7, MarketModuleAvailability.RECOVERING.ordinal());
         MarketCapabilitiesSnapshot lifecycle =
                 new MarketCapabilitiesSnapshot(UUID.randomUUID(), 8L,
                         true, MarketModule.BAZAAR, List.of(

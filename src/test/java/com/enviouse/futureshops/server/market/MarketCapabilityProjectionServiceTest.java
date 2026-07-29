@@ -180,7 +180,7 @@ class MarketCapabilityProjectionServiceTest {
         assertEquals(MarketModuleAvailability.ENABLED,
                 snapshot.byModule().get(MarketModule.SHOP)
                         .availability());
-        assertEquals(MarketModuleAvailability.DISABLED,
+        assertEquals(MarketModuleAvailability.RECOVERING,
                 snapshot.byModule().get(MarketModule.BAZAAR)
                         .availability());
         assertEquals(MarketModule.SHOP, snapshot.defaultModule());

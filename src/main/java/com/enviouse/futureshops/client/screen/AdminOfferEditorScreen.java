@@ -119,6 +119,41 @@ public final class AdminOfferEditorScreen extends Screen
         return editor;
     }
 
+    public static AdminOfferEditorScreen createQuickAdd(
+            Screen parent,
+            List<OfferItemComponent> components,
+            String categoryId,
+            OfferEditorTemplates.Template template,
+            String displayName,
+            long basePriceMinor,
+            long stock
+    ) {
+        ServerShopOfferListing listing = buildQuickAddListing(
+                components, categoryId, template, displayName,
+                basePriceMinor, stock);
+        AdminOfferEditorScreen editor = new AdminOfferEditorScreen(
+                parent, listing, true, null);
+        editor.templateChosen = true;
+        editor.simpleStep = template == OfferEditorTemplates.Template.BUNDLE
+                ? SimpleStep.ITEMS : SimpleStep.TRADE;
+        return editor;
+    }
+
+    public static ServerShopOfferListing buildQuickAddListing(
+            List<OfferItemComponent> components,
+            String categoryId,
+            OfferEditorTemplates.Template template,
+            String displayName,
+            long basePriceMinor,
+            long stock
+    ) {
+        ServerShopOfferListing base = withCategory(
+                blankListing(), categoryId);
+        return OfferEditorTemplates.quickAdd(
+                base, template, components, displayName,
+                basePriceMinor, stock);
+    }
+
     public static AdminOfferEditorScreen createPlayerShop(
             Screen parent,
             BlockPos shopPos,

@@ -20,6 +20,7 @@ import com.enviouse.futureshops.client.screen.PlayerShopCartScreen;
 import com.enviouse.futureshops.client.screen.PlayerStorefrontScreen;
 import com.enviouse.futureshops.client.screen.BalTopOverviewScreen;
 import com.enviouse.futureshops.client.screen.AtmScreen;
+import com.enviouse.futureshops.client.screen.AdminItemPickerScreen;
 import com.enviouse.futureshops.client.screen.AdminOfferEditorScreen;
 import com.enviouse.futureshops.client.screen.BalanceOverviewScreen;
 import com.enviouse.futureshops.client.screen.BulkSellConfirmationScreen;
@@ -1098,6 +1099,9 @@ public final class ShopClientPacketHandler {
         mc.execute(() -> {
             if (mc.screen instanceof AdminOfferEditorScreen editor) {
                 editor.applySaveResult(packet);
+            } else if (mc.screen
+                    instanceof AdminItemPickerScreen picker) {
+                picker.applySaveResult(packet);
             } else {
                 ADMIN_OFFER_SAVE_RESULTS.record(packet);
             }

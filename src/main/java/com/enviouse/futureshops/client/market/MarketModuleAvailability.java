@@ -7,11 +7,13 @@ public enum MarketModuleAvailability {
     HIDDEN,
     FROZEN,
     DRAINING,
-    CANCEL_AND_REFUND;
+    CANCEL_AND_REFUND,
+    RECOVERING;
 
     public boolean visible() {
         return this == ENABLED || this == FROZEN
-                || this == DRAINING || this == CANCEL_AND_REFUND;
+                || this == DRAINING || this == CANCEL_AND_REFUND
+                || this == RECOVERING;
     }
 
     public boolean allowsBrowse() {
@@ -22,7 +24,8 @@ public enum MarketModuleAvailability {
     public boolean allowsClaims() {
         return this == ENABLED || this == CLAIMS_ONLY
                 || this == FROZEN || this == DRAINING
-                || this == CANCEL_AND_REFUND;
+                || this == CANCEL_AND_REFUND
+                || this == RECOVERING;
     }
 
     public boolean allowsNewValueOperations() {
@@ -36,7 +39,8 @@ public enum MarketModuleAvailability {
 
     public boolean readOnly() {
         return this == FROZEN || this == DRAINING
-                || this == CANCEL_AND_REFUND;
+                || this == CANCEL_AND_REFUND
+                || this == RECOVERING;
     }
 
     public boolean canOpenView(MarketModule module, String viewId) {

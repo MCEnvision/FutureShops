@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BulkSellIntegrationSourceTest {
@@ -56,6 +57,16 @@ class BulkSellIntegrationSourceTest {
                 "quoteOffer(actor, packet, false)"));
         assertTrue(player.contains(
                 "fireEvents && Config.eventsTransactionEnabled"));
+        int previewStart = admin.indexOf(
+                "public static boolean canExecuteBulkLine");
+        int previewEnd = admin.indexOf(
+                "private static Result executeInternal", previewStart);
+        assertFalse(admin.substring(previewStart, previewEnd)
+                .contains("ShopSessionManager"));
+        assertTrue(service.contains(
+                "candidate.option.itemInputs(), remaining, quantity"));
+        assertTrue(service.contains(
+                "if (!component.exactMatch())"));
     }
 
     @Test

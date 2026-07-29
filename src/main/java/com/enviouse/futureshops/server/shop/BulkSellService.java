@@ -84,7 +84,6 @@ public final class BulkSellService {
                     || ShopCatalog.get(shopId).isEmpty()) {
                 return QuoteResult.failure(Status.NOT_AVAILABLE);
             }
-            ShopSessionManager.open(player.getUUID(), shopId);
         }
         try {
             return QuoteResult.success(buildQuote(
@@ -298,17 +297,6 @@ public final class BulkSellService {
                 ? adminCandidates(player, shopId)
                 : playerShopCandidates(player);
         candidates.sort(Candidate.ORDER);
-        Set<InventoryKey> recognized = new LinkedHashSet<>();
-        for (Candidate candidate : candidates) {
-            for (OfferItemComponent component
-                    : candidate.option.itemInputs()) {
-                InventoryKey key = inventoryKey(component);
-                if (key != null) {
-                    recognized.add(key);
-                }
-            }
-        }
-
         Map<InventoryKey, Integer> remaining =
                 new LinkedHashMap<>(inventory);
         List<BulkSellQuote.Line> lines = new ArrayList<>();
@@ -368,7 +356,7 @@ public final class BulkSellService {
                             entry.getValue(),
                             entry.getKey().exactNbt)),
                     1, 0L, 0L, false,
-                    recognized.contains(entry.getKey())
+                    recognized(candidates, entry.getKey())
                             ? "gui.futureshops.bulk_sell.reason.unavailable"
                             : "gui.futureshops.bulk_sell.reason.not_accepted"));
         }
@@ -496,15 +484,13 @@ public final class BulkSellService {
         if (candidate.option.capacity() > 0L) {
             quantity = Math.min(quantity, candidate.option.capacity());
         }
-        for (Map.Entry<InventoryKey, Integer> requirement
-                : requirements(candidate).entrySet()) {
-            quantity = Math.min(quantity,
-                    remaining.getOrDefault(
-                            requirement.getKey(), 0)
-                            / requirement.getValue());
-        }
-        int inventoryQuantity = (int) Math.max(
+        int maximumQuantity = (int) Math.max(
                 0L, Math.min(2304L, quantity));
+        int inventoryQuantity =
+                BulkSellPlanning.maximumExecutableQuantity(
+                        maximumQuantity,
+                        value -> canReserve(
+                                candidate, remaining, value));
         return BulkSellPlanning.maximumExecutableQuantity(
                 inventoryQuantity,
                 value -> canExecute(player, candidate, value));
@@ -608,31 +594,87 @@ public final class BulkSellService {
             Map<InventoryKey, Integer> remaining,
             int quantity
     ) {
-        for (Map.Entry<InventoryKey, Integer> requirement
-                : requirements(candidate).entrySet()) {
-            int amount = Math.multiplyExact(
-                    requirement.getValue(), quantity);
-            remaining.compute(
-                    requirement.getKey(), (ignored, current) ->
-                    Math.subtractExact(
-                            Objects.requireNonNullElse(current, 0),
-                            amount));
+        if (!reserveRequirements(
+                candidate.option.itemInputs(), remaining, quantity)) {
+            throw new IllegalStateException(
+                    "Bulk sell inventory reservation changed");
         }
     }
 
-    private static Map<InventoryKey, Integer> requirements(
-            Candidate candidate
+    private static boolean canReserve(
+            Candidate candidate,
+            Map<InventoryKey, Integer> remaining,
+            int quantity
     ) {
-        Map<InventoryKey, Integer> requirements =
-                new LinkedHashMap<>();
-        for (OfferItemComponent component
-                : candidate.option.itemInputs()) {
-            InventoryKey key = Objects.requireNonNull(
-                    inventoryKey(component));
-            requirements.merge(
-                    key, component.count(), Math::addExact);
+        if (quantity < 1) {
+            return false;
         }
-        return requirements;
+        return reserveRequirements(
+                candidate.option.itemInputs(),
+                new LinkedHashMap<>(remaining), quantity);
+    }
+
+    static boolean reserveRequirements(
+            List<OfferItemComponent> components,
+            Map<InventoryKey, Integer> remaining,
+            int quantity
+    ) {
+        List<OfferItemComponent> ordered =
+                components.stream()
+                        .sorted(Comparator.comparing(
+                                OfferItemComponent::exactMatch)
+                                .reversed())
+                        .toList();
+        for (OfferItemComponent component : ordered) {
+            int required = Math.multiplyExact(
+                    component.count(), quantity);
+            if (component.exactMatch()) {
+                InventoryKey key = inventoryKey(component);
+                if (key == null
+                        || remaining.getOrDefault(key, 0) < required) {
+                    return false;
+                }
+                remaining.put(key,
+                        remaining.getOrDefault(key, 0) - required);
+                continue;
+            }
+            for (Map.Entry<InventoryKey, Integer> entry
+                    : remaining.entrySet()) {
+                if (required == 0) {
+                    break;
+                }
+                if (!entry.getKey().itemId.equals(component.itemId())
+                        || entry.getValue() <= 0) {
+                    continue;
+                }
+                int consumed = Math.min(required, entry.getValue());
+                entry.setValue(entry.getValue() - consumed);
+                required -= consumed;
+            }
+            if (required != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean recognized(
+            List<Candidate> candidates,
+            InventoryKey inventory
+    ) {
+        return candidates.stream()
+                .flatMap(candidate ->
+                        candidate.option.itemInputs().stream())
+                .anyMatch(component -> {
+                    if (!component.itemId().equals(inventory.itemId)) {
+                        return false;
+                    }
+                    if (!component.exactMatch()) {
+                        return true;
+                    }
+                    InventoryKey required = inventoryKey(component);
+                    return inventory.equals(required);
+                });
     }
 
     private static int compareCandidates(
@@ -983,7 +1025,7 @@ public final class BulkSellService {
                 BulkSellService::compareCandidates;
     }
 
-    private record InventoryKey(
+    record InventoryKey(
             String itemId,
             String exactNbt
     ) {
