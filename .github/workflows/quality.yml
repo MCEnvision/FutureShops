@@ -17,9 +17,9 @@ jobs:
     permissions:
       actions: read
       contents: read
-    uses: MCEnvision/.github/.github/workflows/quality.yml@e6c466f88edb57af854f597e1ce3788881d49b21
+    uses: MCEnvision/.github/.github/workflows/quality.yml@d731214d860ad2422ab8956a5d337dfaec51f64a
     with:
-      shared-ref: "e6c466f88edb57af854f597e1ce3788881d49b21"
+      shared-ref: "d731214d860ad2422ab8956a5d337dfaec51f64a"
       java-version: "17"
       gradle-enabled: true
       native-security: true
@@ -30,9 +30,9 @@ jobs:
       actions: read
       contents: read
       security-events: write
-    uses: MCEnvision/.github/.github/workflows/codeql.yml@e6c466f88edb57af854f597e1ce3788881d49b21
+    uses: MCEnvision/.github/.github/workflows/codeql.yml@d731214d860ad2422ab8956a5d337dfaec51f64a
     with:
-      shared-ref: "e6c466f88edb57af854f597e1ce3788881d49b21"
+      shared-ref: "d731214d860ad2422ab8956a5d337dfaec51f64a"
       languages: '["java-kotlin","python"]'
       java-version: "17"
       gradle-enabled: true
@@ -51,6 +51,6 @@ jobs:
       }}
     permissions:
       contents: write
-    uses: MCEnvision/.github/.github/workflows/dependency-submission.yml@e6c466f88edb57af854f597e1ce3788881d49b21
+    uses: MCEnvision/.github/.github/workflows/dependency-submission.yml@d731214d860ad2422ab8956a5d337dfaec51f64a
     with:
       java-version: "17"
