@@ -340,7 +340,9 @@ public final class AuctionHouseBook {
             return remember(fingerprint, rejected(command.requestId(), command.listingId(),
                 AuctionOperationType.CANCEL, AuctionOperationStatus.NOT_SELLER, listing));
         }
-        if (!listing.rules().allowSellerCancelBeforeBid() || listing.highestBid().isPresent()) {
+        if (!command.forced()
+                && (!listing.rules().allowSellerCancelBeforeBid()
+                || listing.highestBid().isPresent())) {
             return remember(fingerprint, rejected(command.requestId(), command.listingId(),
                 AuctionOperationType.CANCEL, AuctionOperationStatus.CANCELLATION_DENIED, listing));
         }
@@ -371,9 +373,15 @@ public final class AuctionHouseBook {
         }
         identities.claimListing(updated);
         listings.put(updated.listingId(), updated);
+        Optional<AuctionBidStanding> displaced = command.forced()
+                ? listing.highestBid() : Optional.empty();
+        long refund = displaced.map(AuctionBidStanding::amountMinor)
+                .orElse(0L);
+        Optional<UUID> refundPlayer = displaced.map(
+                AuctionBidStanding::bidderId);
         return remember(fingerprint, applied(
             command.requestId(), updated, AuctionOperationType.CANCEL,
-            0L, 0L, 0L, Optional.empty(), Optional.empty()));
+            0L, refund, 0L, refundPlayer, displaced));
     }
 
     public synchronized AuctionOperationResult expire(ExpireAuctionCommand command) {

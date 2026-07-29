@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.network.packets;
 
+import com.enviouse.futureshops.client.market.MarketModule;
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.FriendlyByteBuf;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,34 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MarketModulePacketTest {
+    @Test
+    void marketModuleRootsAreValidOpenPacketViews() {
+        for (MarketModule module : new MarketModule[]{
+                MarketModule.BAZAAR, MarketModule.AUCTION_HOUSE}) {
+            C2SOpenMarketModulePacket packet =
+                    new C2SOpenMarketModulePacket(UUID.randomUUID(),
+                            module.id(), module.rootView());
+            FriendlyByteBuf buffer = new FriendlyByteBuf(
+                    Unpooled.buffer());
+            C2SOpenMarketModulePacket.encode(packet, buffer);
+
+            assertEquals(packet,
+                    C2SOpenMarketModulePacket.decode(buffer));
+        }
+    }
+
+    @Test
+    void blankMarketViewsFallBackToModuleRoots() {
+        for (MarketModule module : new MarketModule[]{
+                MarketModule.BAZAAR, MarketModule.AUCTION_HOUSE}) {
+            C2SOpenMarketModulePacket packet =
+                    new C2SOpenMarketModulePacket(UUID.randomUUID(),
+                            module.id(), "  ");
+
+            assertEquals(module.rootView(), packet.view());
+        }
+    }
+
     @Test
     void marketOpenPacketsValidateModuleIdentityAndBranding() {
         UUID requestId = UUID.fromString(

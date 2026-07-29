@@ -101,6 +101,30 @@ class MarketClientNavigationCoordinatorTest {
     }
 
     @Test
+    void topLevelTabsReplaceHistorySoEscapeClosesOnce() {
+        MarketClientNavigationCoordinator coordinator = coordinator(
+            MarketRoute.root(MarketModule.AUCTION_HOUSE,
+                UUID.randomUUID()), false, preferences());
+        UUID claimsRequest = UUID.randomUUID();
+        coordinator.beginTab(claimsRequest, "claims");
+        coordinator.acceptOpenResponse(claimsRequest,
+            MarketModule.AUCTION_HOUSE, "claims",
+            UUID.randomUUID());
+        UUID historyRequest = UUID.randomUUID();
+        coordinator.beginTab(historyRequest, "history");
+        coordinator.acceptOpenResponse(historyRequest,
+            MarketModule.AUCTION_HOUSE, "history",
+            UUID.randomUUID());
+
+        assertEquals(0, coordinator.historyDepth());
+        MarketClientNavigationCoordinator.Command command =
+            coordinator.escape(UUID.randomUUID());
+        assertTrue(command.openRequest().isEmpty());
+        assertEquals(MarketNavigationState.Action.CLOSE,
+            command.transition().orElseThrow().action());
+    }
+
+    @Test
     void moduleSwitchUsesRememberedEntryAndClearsHistory() {
         MarketSessionPreferences preferences = preferences();
         MarketRoute remembered = route(MarketModule.BAZAAR,

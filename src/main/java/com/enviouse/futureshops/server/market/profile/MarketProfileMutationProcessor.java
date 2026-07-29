@@ -71,6 +71,12 @@ public final class MarketProfileMutationProcessor {
                             .REPLAY_UNAVAILABLE,
                     data.snapshot(player), 0, false);
         }
+        if (request.expectedReplayEpoch()
+                != data.snapshot(player).replayEpoch()) {
+            return result(request,
+                    MarketProfileMutationResultCode.STALE_REPLAY_EPOCH,
+                    data.snapshot(player), 0, false);
+        }
         MarketSessionDecision decision = sessions.accept(player,
                 request.routeNonce(), request.module(), request.view(),
                 request.requestId(), fingerprint, nowMillis);
@@ -144,6 +150,12 @@ public final class MarketProfileMutationProcessor {
         synchronized (profiles) {
             MarketProfileSavedData.Snapshot before =
                     profiles.snapshot(playerId);
+            if (before.replayEpoch()
+                    != command.expectedReplayEpoch()) {
+                return completeLocked(playerId, command, fingerprint,
+                        MarketProfileMutationResultCode.STALE_REPLAY_EPOCH,
+                        before, 0, profiles);
+            }
             if (before.revision()
                     != command.expectedProfileRevision()) {
                 return completeLocked(playerId, command, fingerprint,
@@ -313,8 +325,10 @@ public final class MarketProfileMutationProcessor {
             int affectedCount,
             MarketProfileSavedData profiles
     ) {
+        MarketProfileSavedData.Snapshot current =
+                profiles.prepareMutationReceipt(playerId);
         MarketProfileMutationResult response = result(command, code,
-                snapshot, affectedCount, false);
+                current, affectedCount, false);
         profiles.recordMutationReceipt(playerId,
                 new MarketProfileMutationReceipt(playerId,
                         fingerprint, response));

@@ -31,15 +31,18 @@ final class ServerShopPhysicalFundingBridge {
         if (amountMinorUnits <= 0L) {
             return Result.failure(Status.INVALID);
         }
-        try (CurrencyManager.ConfigurationReadLease ignored =
-                     CurrencyManager.acquireConfigurationReadLease()) {
-            PhysicalCurrencyAdapter adapter = CurrencyManager.get();
-            AtmCurrencyCatalog catalog = AtmCurrencyCatalog.capture(
-                    adapter, BalanceManager.getProvider());
+        try {
+            String currencySignature;
+            try (CurrencyManager.ConfigurationReadLease ignored =
+                         CurrencyManager.acquireConfigurationReadLease()) {
+                PhysicalCurrencyAdapter adapter = CurrencyManager.get();
+                currencySignature = AtmCurrencyCatalog.capture(
+                        adapter, BalanceManager.getProvider()).signature();
+            }
             EscrowCashDepositService.DepositRequest request =
                     new EscrowCashDepositService.DepositRequest(
                             fundingRequestId(purchaseRequestId),
-                            catalog.signature(),
+                            currencySignature,
                             EscrowCashDepositService.Source.INVENTORY,
                             OptionalLong.of(amountMinorUnits),
                             CashDepositMode.INTERNAL_ESCROW,

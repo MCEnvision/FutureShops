@@ -207,6 +207,44 @@ class PlayerShopEscrowOrchestratorTest {
     }
 
     @Test
+    void deliveryRecoveryAndQuarantineKeepTheDurableCommit() {
+        for (PlayerShopEscrowBackend.DeliveryStatus deliveryStatus
+                : List.of(
+                PlayerShopEscrowBackend.DeliveryStatus.RECOVERY_REQUIRED,
+                PlayerShopEscrowBackend.DeliveryStatus.QUARANTINED)) {
+            PlayerShopEscrowFoundationTest.Fixture fixture =
+                    PlayerShopEscrowFoundationTest.purchase(
+                            id("delivery " + deliveryStatus),
+                            PlayerShopTradeMethod.MONEY,
+                            PlayerShopPaymentSource.WALLET, false);
+            FakeBackend backend = new FakeBackend();
+            backend.deliveryStatus = deliveryStatus;
+
+            PlayerShopEscrowOrchestrator.Result result =
+                    orchestrator(backend).execute(
+                            PlayerShopEscrowOrchestrator.Command.of(
+                                    fixture.intent(), 6));
+
+            PlayerShopEscrowOrchestrator.Status expected =
+                    deliveryStatus
+                            == PlayerShopEscrowBackend.DeliveryStatus
+                            .RECOVERY_REQUIRED
+                            ? PlayerShopEscrowOrchestrator.Status
+                            .RECOVERY_REQUIRED
+                            : PlayerShopEscrowOrchestrator.Status.QUARANTINED;
+            checkEquals(expected, result.status(),
+                    deliveryStatus + " status");
+            check(result.commit() != null,
+                    deliveryStatus + " durable commit");
+            checkEquals(fixture.intent().requestId(),
+                    result.commit().commitId(),
+                    deliveryStatus + " commit identity");
+            check(before(backend.calls, "persist commit", "deliver claims"),
+                    deliveryStatus + " persisted before delivery");
+        }
+    }
+
+    @Test
     void requestAndResponseIdentitiesRejectZeroAndOutOfRangeValues() {
         PlayerShopEscrowFoundationTest.Fixture fixture =
                 PlayerShopEscrowFoundationTest.purchase(id("identity"),

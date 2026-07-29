@@ -79,7 +79,7 @@ class PaymentSourceRegressionTest {
         assertTrue(live.contains("LedgerAccountType.PLAYER_CLAIM"));
         assertTrue(live.contains("overflowClaimMinorUnits() != total"));
         assertTrue(deposit.contains(
-                "return claimOnly ? currentBalanceMinorUnits"));
+                "return claimOnly ? 0L"));
     }
 
     @Test

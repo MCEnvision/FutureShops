@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -27,6 +28,7 @@ public record PlayerShopEscrowIntent(
         List<PlayerShopItemTransfer> itemTransfers,
         List<PlayerShopClaimPlan> claims,
         List<PlayerShopStorageMutationPlan> storageMutations,
+        Optional<PlayerShopOfferSelection> offerSelection,
         Status status,
         long revision,
         String intentFingerprint
@@ -55,17 +57,21 @@ public record PlayerShopEscrowIntent(
         storageMutations = boundedCopy(storageMutations,
                 PlayerShopEscrowConstants.MAX_STORAGE_MUTATIONS,
                 "storage mutations");
+        offerSelection = Objects.requireNonNull(
+                offerSelection, "offerSelection");
         status = Objects.requireNonNull(status, "status");
         intentFingerprint = PlayerShopBinarySupport.requireString(
                 intentFingerprint, 64, "intent fingerprint");
         validateOperation(operation, tradeMethod, paymentSource, listing);
+        validateOfferSelection(operation, offerSelection);
         validateState(status, revision);
         validateReferences(requestId, moneyTransfers, itemTransfers, claims,
                 storageMutations);
         if (!computedFingerprint(requestId, actorId, ownerId, shopIdentity,
                 operation, tradeMethod, paymentSource, requestedUnits,
                 quoteCreatedAt, listing, moneyTransfers, itemTransfers,
-                claims, storageMutations).equals(intentFingerprint)) {
+                claims, storageMutations, offerSelection)
+                .equals(intentFingerprint)) {
             throw new IllegalArgumentException("Player shop intent fingerprint is invalid");
         }
     }
@@ -86,15 +92,64 @@ public record PlayerShopEscrowIntent(
             List<PlayerShopClaimPlan> claims,
             List<PlayerShopStorageMutationPlan> storageMutations
     ) {
+        return prepared(requestId, actorId, ownerId, shopIdentity,
+                operation, tradeMethod, paymentSource, requestedUnits,
+                quoteCreatedAt, listing, moneyTransfers, itemTransfers,
+                claims, storageMutations, Optional.empty());
+    }
+
+    public static PlayerShopEscrowIntent prepared(
+            UUID requestId,
+            UUID actorId,
+            UUID ownerId,
+            PlayerShopIdentity shopIdentity,
+            PlayerShopOperation operation,
+            PlayerShopTradeMethod tradeMethod,
+            PlayerShopPaymentSource paymentSource,
+            int requestedUnits,
+            Instant quoteCreatedAt,
+            PlayerShopListingSnapshot listing,
+            List<PlayerShopMoneyTransfer> moneyTransfers,
+            List<PlayerShopItemTransfer> itemTransfers,
+            List<PlayerShopClaimPlan> claims,
+            List<PlayerShopStorageMutationPlan> storageMutations,
+            Optional<PlayerShopOfferSelection> offerSelection
+    ) {
         String fingerprint = computedFingerprint(requestId, actorId, ownerId,
                 shopIdentity, operation, tradeMethod, paymentSource,
                 requestedUnits, quoteCreatedAt, listing, moneyTransfers,
-                itemTransfers, claims, storageMutations);
+                itemTransfers, claims, storageMutations, offerSelection);
         return new PlayerShopEscrowIntent(requestId, actorId, ownerId,
                 shopIdentity, operation, tradeMethod, paymentSource,
                 requestedUnits, quoteCreatedAt, listing, moneyTransfers,
-                itemTransfers, claims, storageMutations, Status.PREPARED, 0L,
-                fingerprint);
+                itemTransfers, claims, storageMutations, offerSelection,
+                Status.PREPARED, 0L, fingerprint);
+    }
+
+    public PlayerShopEscrowIntent(
+            UUID requestId,
+            UUID actorId,
+            UUID ownerId,
+            PlayerShopIdentity shopIdentity,
+            PlayerShopOperation operation,
+            PlayerShopTradeMethod tradeMethod,
+            PlayerShopPaymentSource paymentSource,
+            int requestedUnits,
+            Instant quoteCreatedAt,
+            PlayerShopListingSnapshot listing,
+            List<PlayerShopMoneyTransfer> moneyTransfers,
+            List<PlayerShopItemTransfer> itemTransfers,
+            List<PlayerShopClaimPlan> claims,
+            List<PlayerShopStorageMutationPlan> storageMutations,
+            Status status,
+            long revision,
+            String intentFingerprint
+    ) {
+        this(requestId, actorId, ownerId, shopIdentity, operation,
+                tradeMethod, paymentSource, requestedUnits, quoteCreatedAt,
+                listing, moneyTransfers, itemTransfers, claims,
+                storageMutations, Optional.empty(), status, revision,
+                intentFingerprint);
     }
 
     public PlayerShopEscrowIntent complete() {
@@ -122,8 +177,8 @@ public record PlayerShopEscrowIntent(
         return new PlayerShopEscrowIntent(requestId, actorId, ownerId,
                 shopIdentity, operation, tradeMethod, paymentSource,
                 requestedUnits, quoteCreatedAt, listing, moneyTransfers,
-                itemTransfers, claims, storageMutations, next, 1L,
-                intentFingerprint);
+                itemTransfers, claims, storageMutations, offerSelection,
+                next, 1L, intentFingerprint);
     }
 
     private static void validateOperation(
@@ -155,7 +210,79 @@ public record PlayerShopEscrowIntent(
                     throw new IllegalArgumentException("Player shop settlement mode is invalid");
                 }
             }
+            case SERVER_SHOP_OFFER_ACQUIRE -> {
+                boolean noPaymentSource =
+                        method == PlayerShopTradeMethod.FREE
+                                || method == PlayerShopTradeMethod.BARTER;
+                if (listing == null || !listing.adminShop()
+                        || method == PlayerShopTradeMethod.BUYBACK
+                        || method == PlayerShopTradeMethod.SETTLEMENT
+                        || noPaymentSource
+                        != (source == PlayerShopPaymentSource.NONE)) {
+                    throw new IllegalArgumentException(
+                            "Server shop acquire offer mode is invalid");
+                }
+            }
+            case SERVER_SHOP_OFFER_SELL -> {
+                if (listing == null || !listing.adminShop()
+                        || method != PlayerShopTradeMethod.BUYBACK
+                        || source != PlayerShopPaymentSource.NONE) {
+                    throw new IllegalArgumentException(
+                            "Server shop sell offer mode is invalid");
+                }
+            }
+            case PLAYER_SHOP_OFFER_ACQUIRE -> {
+                boolean noPaymentSource =
+                        method == PlayerShopTradeMethod.FREE
+                                || method == PlayerShopTradeMethod.BARTER;
+                if (listing == null
+                        || method == PlayerShopTradeMethod.BUYBACK
+                        || method == PlayerShopTradeMethod.SETTLEMENT
+                        || noPaymentSource
+                        != (source == PlayerShopPaymentSource.NONE)) {
+                    throw new IllegalArgumentException(
+                            "Player shop acquire offer mode is invalid");
+                }
+            }
+            case PLAYER_SHOP_OFFER_SELL -> {
+                if (listing == null
+                        || method != PlayerShopTradeMethod.BUYBACK
+                        || source != PlayerShopPaymentSource.NONE) {
+                    throw new IllegalArgumentException(
+                            "Player shop sell offer mode is invalid");
+                }
+            }
         }
+    }
+
+    private static void validateOfferSelection(
+            PlayerShopOperation operation,
+            Optional<PlayerShopOfferSelection> selection
+    ) {
+        boolean playerOffer = operation
+                == PlayerShopOperation.PLAYER_SHOP_OFFER_ACQUIRE
+                || operation == PlayerShopOperation.PLAYER_SHOP_OFFER_SELL;
+        boolean serverOffer = operation
+                == PlayerShopOperation.SERVER_SHOP_OFFER_ACQUIRE
+                || operation == PlayerShopOperation.SERVER_SHOP_OFFER_SELL;
+        if (playerOffer && selection.isEmpty()
+                || !playerOffer && !serverOffer
+                && selection.isPresent()) {
+            throw new IllegalArgumentException(
+                    "Player shop offer selection is invalid");
+        }
+        selection.ifPresent(value -> {
+            boolean acquire = operation
+                    == PlayerShopOperation.PLAYER_SHOP_OFFER_ACQUIRE
+                    || operation
+                    == PlayerShopOperation.SERVER_SHOP_OFFER_ACQUIRE;
+            if (acquire != (value.action()
+                    == com.enviouse.futureshops.catalog.offer.OfferAction
+                    .ACQUIRE_FROM_SHOP)) {
+                throw new IllegalArgumentException(
+                        "Player shop offer action is invalid");
+            }
+        });
     }
 
     private static void validateState(Status status, long revision) {
@@ -306,16 +433,23 @@ public record PlayerShopEscrowIntent(
             List<PlayerShopMoneyTransfer> moneyTransfers,
             List<PlayerShopItemTransfer> itemTransfers,
             List<PlayerShopClaimPlan> claims,
-            List<PlayerShopStorageMutationPlan> storageMutations
+            List<PlayerShopStorageMutationPlan> storageMutations,
+            Optional<PlayerShopOfferSelection> offerSelection
     ) {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             DataOutputStream output = new DataOutputStream(bytes);
-            output.writeUTF("futureshops player shop intent v1");
+            output.writeUTF(offerSelection.isPresent()
+                    ? "futureshops player shop intent v2"
+                    : "futureshops player shop intent v1");
             PlayerShopIntentCodec.writeCore(output, requestId, actorId,
                     ownerId, shopIdentity, operation, tradeMethod,
                     paymentSource, requestedUnits, quoteCreatedAt, listing,
                     moneyTransfers, itemTransfers, claims, storageMutations);
+            if (offerSelection.isPresent()) {
+                PlayerShopIntentCodec.writeOfferSelection(
+                        output, offerSelection.orElseThrow());
+            }
             output.flush();
             return PlayerShopBinarySupport.sha256(bytes.toByteArray());
         } catch (IOException exception) {

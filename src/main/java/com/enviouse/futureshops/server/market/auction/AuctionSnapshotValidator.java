@@ -316,9 +316,7 @@ final class AuctionSnapshotValidator {
         if ((previous.state() != AuctionListingState.ACTIVE
             && previous.state() != AuctionListingState.FROZEN)
             || next.state() != AuctionListingState.CANCELLED
-            || previous.highestBid().isPresent()
-            || !previous.rules().allowSellerCancelBeforeBid()
-            || next.highestBid().isPresent()
+            || !next.highestBid().equals(previous.highestBid())
             || next.sale().isPresent()
             || next.terminalTransactionId().isEmpty()
             || next.deadlineMillis() != previous.deadlineMillis()
@@ -328,7 +326,20 @@ final class AuctionSnapshotValidator {
             || next.acceptedBidCount() != previous.acceptedBidCount()) {
             throw invalid("Auction cancellation receipt does not match its state transition.");
         }
-        requireNoValueMovement(result);
+        if (previous.highestBid().isPresent()) {
+            AuctionBidStanding bid = previous.highestBid().orElseThrow();
+            if (result.refundMinor() != bid.amountMinor()
+                    || !result.refundPlayerId().equals(
+                    Optional.of(bid.bidderId()))
+                    || !result.displacedBid().equals(Optional.of(bid))
+                    || result.requiredHoldDeltaMinor() != 0L
+                    || result.antiSnipeAddedMillis() != 0L) {
+                throw invalid(
+                        "Auction forced cancellation refund is invalid.");
+            }
+        } else {
+            requireNoValueMovement(result);
+        }
     }
 
     private static void validateExpire(

@@ -34,6 +34,15 @@ class ServerRequestSecurityPolicyTest {
                 2, 1, Duration.ofSeconds(2L));
         assertLimit(defaults, ServerRequestAction.PAY,
                 4, 1, Duration.ofSeconds(1L));
+        assertLimit(defaults, ServerRequestAction.SERVER_SHOP_OFFER,
+                4, 1, Duration.ofSeconds(1L));
+        assertLimit(defaults,
+                ServerRequestAction.SERVER_SHOP_OFFER_ADMIN,
+                4, 1, Duration.ofSeconds(1L));
+        assertEquals("server_shop.offer",
+                ServerRequestAction.SERVER_SHOP_OFFER.code());
+        assertEquals("server_shop.offer_admin",
+                ServerRequestAction.SERVER_SHOP_OFFER_ADMIN.code());
     }
 
     @Test
@@ -58,6 +67,11 @@ class ServerRequestSecurityPolicyTest {
                 ServerRequestAction.ATM_DEPOSIT.code()).allowed());
         assertTrue(limiter.tryAcquire(PLAYER,
                 ServerRequestAction.PAY.code()).allowed());
+        assertTrue(limiter.tryAcquire(PLAYER,
+                ServerRequestAction.SERVER_SHOP_OFFER.code()).allowed());
+        assertTrue(limiter.tryAcquire(PLAYER,
+                ServerRequestAction.SERVER_SHOP_OFFER_ADMIN.code())
+                .allowed());
 
         clock.now = Duration.ofSeconds(2L).toNanos();
         assertTrue(limiter.tryAcquire(PLAYER,

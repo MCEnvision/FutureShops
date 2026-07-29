@@ -192,17 +192,22 @@ public final class AuctionEscrowLifecyclePlanner {
         MutationPlan plan = cancelMutation(snapshot, command);
         AuctionListing listing = plan.firstResult().listing()
                 .orElseThrow();
-        List<EscrowClaim> claims = itemClaims(command.requestId(),
-                listing, listing.sellerId(), custody, decidedAt);
+        AuctionOperationResult result = plan.firstResult();
+        List<EscrowClaim> claims = new ArrayList<>(itemClaims(
+                command.requestId(), listing, listing.sellerId(),
+                custody, decidedAt));
+        List<LedgerLeg> legs = new ArrayList<>();
+        addRefund(result, command.requestId(), decidedAt, claims, legs);
         EscrowTransaction transaction = transaction(command.requestId(),
                 EscrowOperation.AUCTION_SETTLEMENT, listing, currencyId,
                 decidedAt, listing.sellerId(), custody,
-                Optional.empty(), 0L, 0L);
+                result.refundPlayerId(), result.refundMinor(), 0L);
         return new AuctionEscrowCommit(command.requestId(),
                 command.listingId(), AuctionOperationType.CANCEL,
                 plan.mutations(), Optional.empty(), Optional.of(custody),
                 List.of(), currencyId, decidedAt,
-                Optional.of(transaction), Optional.empty(), claims);
+                Optional.of(transaction), ledger(command.requestId(),
+                "Auction forced cancellation refund", legs), claims);
     }
 
     public static AuctionEscrowCommit expire(

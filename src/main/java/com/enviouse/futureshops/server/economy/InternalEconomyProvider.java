@@ -4,7 +4,10 @@ import com.enviouse.futureshops.Config;
 import com.enviouse.futureshops.event.BalanceChangeEvent;
 import com.enviouse.futureshops.server.economy.migration.LegacyBalanceMigrationManager;
 import com.enviouse.futureshops.server.economy.migration.WalletInitializationIds;
+import com.enviouse.futureshops.server.escrow.ledger.LedgerSavedData;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeException;
+import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeManager;
+import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowWalletService;
 import com.enviouse.futureshops.server.escrow.runtime.WalletMutationResult;
 import com.enviouse.futureshops.server.escrow.runtime.WalletMutationStatus;
@@ -23,8 +26,10 @@ import java.util.function.Supplier;
 
 public class InternalEconomyProvider implements EconomyProvider {
     private static final Logger LOGGER = LogUtils.getLogger();
+    private final MinecraftServer server;
+
     public InternalEconomyProvider(MinecraftServer server) {
-        Objects.requireNonNull(server, "server");
+        this.server = Objects.requireNonNull(server, "server");
     }
 
     @Override
@@ -32,6 +37,22 @@ public class InternalEconomyProvider implements EconomyProvider {
         Objects.requireNonNull(playerUUID, "playerUUID");
         LegacyBalanceMigrationManager.requireComplete();
         return initializedBalance(EscrowWalletService.live(), playerUUID);
+    }
+
+    public long getDisplayBalance(UUID playerUUID) {
+        Objects.requireNonNull(playerUUID, "playerUUID");
+        if (!LegacyBalanceMigrationManager.isComplete()) {
+            return LegacyBalanceMigrationManager.displayBalance(
+                    server, playerUUID,
+                    Config.economyStartingBalanceMinorUnits);
+        }
+        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
+        if (runtime != null && runtime.isReady()) {
+            return getBalance(playerUUID);
+        }
+        return EscrowWalletService.storedBalance(
+                        LedgerSavedData.get(server), playerUUID)
+                .orElse(Config.economyStartingBalanceMinorUnits);
     }
 
     @Override

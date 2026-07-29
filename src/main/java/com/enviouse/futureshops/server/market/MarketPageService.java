@@ -17,12 +17,22 @@ import com.enviouse.futureshops.server.market.control.MarketModuleControl;
 import com.enviouse.futureshops.server.market.profile.MarketProfileSavedData;
 import com.enviouse.futureshops.server.market.query.MarketPageQuery;
 import com.enviouse.futureshops.server.market.query.MarketPageProjector;
+import com.enviouse.futureshops.server.market.query.MarketPageEnricher;
 import com.enviouse.futureshops.server.market.query.MarketPageSnapshot;
+import com.enviouse.futureshops.server.market.query.MarketCardInsights;
+import com.enviouse.futureshops.server.market.query.MarketPageCardKind;
+import com.enviouse.futureshops.server.market.auction.AuctionOperationType;
+import com.enviouse.futureshops.money.ItemStackSnapshotCodec;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.nbt.CompoundTag;
 import com.enviouse.futureshops.server.market.session.MarketSessionDecision;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -50,6 +60,11 @@ public final class MarketPageService {
         MinecraftServer server = Objects.requireNonNull(
                 player.getServer(), "server");
         MarketPageQuery query = packet.toQuery(now);
+        if (!"claims".equals(query.view())
+                && !MarketPermissions.canUse(player, module)) {
+            send(player, "PERMISSION_DENIED", query, null);
+            return;
+        }
         EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
         MarketModuleAccessPolicy.PageAccess access =
                 MarketModuleAccessPolicy.pageAccess(module,
@@ -88,9 +103,70 @@ public final class MarketPageService {
                     player.getUUID(), AuctionHouseSavedData.get(server)
                     .snapshot(), profile, List.of());
         }
-        MarketPageSnapshot page = MarketModuleAccessPolicy
-                .applyPageActions(projected, access.availability());
+        if (!"claims".equals(query.view())) {
+            projected = module == MarketModule.BAZAAR
+                    ? MarketPageEnricher.bazaar(projected,
+                    BazaarSavedData.get(server).snapshot(),
+                    id -> playerName(server, id))
+                    : MarketPageEnricher.auction(projected,
+                    AuctionHouseSavedData.get(server).snapshot(),
+                    id -> playerName(server, id),
+                    auctionItemSnapshots(runtime, projected));
+        }
+        MarketPageSnapshot page = MarketModuleAccessPolicy.applyPageActions(
+                projected, access.availability());
         send(player, "OK", query, page);
+    }
+
+    private static String playerName(MinecraftServer server, UUID playerId) {
+        ServerPlayer online = server.getPlayerList().getPlayer(playerId);
+        if (online != null) {
+            return online.getGameProfile().getName();
+        }
+        return server.getProfileCache().get(playerId)
+                .map(profile -> profile.getName())
+                .filter(value -> !value.isBlank())
+                .orElse("Unknown Player");
+    }
+
+    private static Map<UUID, String> auctionItemSnapshots(
+            EscrowRuntimeService runtime,
+            MarketPageSnapshot page
+    ) {
+        if (runtime == null) {
+            return Map.of();
+        }
+        java.util.Set<UUID> wanted = page.cards().stream()
+                .filter(card -> card.kind()
+                        == MarketPageCardKind.AUCTION)
+                .map(card -> {
+                    try {
+                        return UUID.fromString(card.identity());
+                    } catch (IllegalArgumentException exception) {
+                        return null;
+                    }
+                }).filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        Map<UUID, String> snapshots = new LinkedHashMap<>();
+        runtime.auctionEscrowLifecycleState().commits().values().stream()
+                .filter(commit -> commit.operation()
+                        == AuctionOperationType.CREATE)
+                .filter(commit -> wanted.contains(commit.listingId()))
+                .flatMap(commit -> commit.itemCustody().stream())
+                .forEach(custody -> {
+                    try {
+                        ItemStack stack = ItemStackSnapshotCodec.decode(
+                                custody.exactItems().get(0)
+                                        .serializedStackSnapshot());
+                        String snbt = stack.save(new CompoundTag()).toString();
+                        if (snbt.length()
+                                <= MarketCardInsights.MAXIMUM_STACK_SNBT) {
+                            snapshots.put(custody.listingId(), snbt);
+                        }
+                    } catch (RuntimeException ignored) {
+                    }
+                });
+        return Map.copyOf(snapshots);
     }
 
     private static boolean configured(MarketModule module) {

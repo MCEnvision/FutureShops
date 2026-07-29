@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -32,7 +33,8 @@ public record S2CAtmDataPacket(
         String availabilityCode,
         boolean openScreen,
         int pendingCashClaimCount,
-        List<CashClaimSummary> collectibleCashClaims
+        List<CashClaimSummary> collectibleCashClaims,
+        Optional<DepositRecoverySummary> depositRecovery
 ) {
     public static final int MAX_COLLECTIBLE_CASH_CLAIMS = 4;
     public static final int MAX_PENDING_CASH_CLAIMS = 1_000_000;
@@ -46,6 +48,8 @@ public record S2CAtmDataPacket(
     private static final Pattern CODE = Pattern.compile("[A-Z][A-Z0-9_]{0,63}");
     private static final Set<String> ROUTES = Set.of(
             ROUTE_PROTECTED, ROUTE_FOREIGN);
+    private static final Set<String> DEPOSIT_RECOVERY_STATUSES = Set.of(
+            "RECOVERY_PENDING", "MANUAL_REVIEW", "COMPLETED", "REFUNDED");
 
     public S2CAtmDataPacket {
         currencyName = requireText(currencyName, 256, "currencyName");
@@ -59,6 +63,8 @@ public record S2CAtmDataPacket(
                 denominations, "denominations"));
         collectibleCashClaims = List.copyOf(Objects.requireNonNull(
                 collectibleCashClaims, "collectibleCashClaims"));
+        depositRecovery = Objects.requireNonNull(
+                depositRecovery, "depositRecovery");
         if (!balanceKnown && balanceMinor != 0L
                 || currencyDecimals < 0 || currencyDecimals > 6
                 || !ROUTES.contains(route)
@@ -118,7 +124,30 @@ public record S2CAtmDataPacket(
         this(balanceMinor, balanceKnown, currencyName, currencyDecimals,
                 providerId, route, protectedMinting, currencySignature,
                 denominations, serviceAvailable, availabilityCode,
-                openScreen, 0, List.of());
+                openScreen, 0, List.of(), Optional.empty());
+    }
+
+    public S2CAtmDataPacket(
+            long balanceMinor,
+            boolean balanceKnown,
+            String currencyName,
+            int currencyDecimals,
+            String providerId,
+            String route,
+            boolean protectedMinting,
+            String currencySignature,
+            List<AtmDenominationData> denominations,
+            boolean serviceAvailable,
+            String availabilityCode,
+            boolean openScreen,
+            int pendingCashClaimCount,
+            List<CashClaimSummary> collectibleCashClaims
+    ) {
+        this(balanceMinor, balanceKnown, currencyName, currencyDecimals,
+                providerId, route, protectedMinting, currencySignature,
+                denominations, serviceAvailable, availabilityCode,
+                openScreen, pendingCashClaimCount, collectibleCashClaims,
+                Optional.empty());
     }
 
     public static void encode(S2CAtmDataPacket packet,
@@ -146,6 +175,15 @@ public record S2CAtmDataPacket(
             buffer.writeUUID(claim.claimId());
             buffer.writeUtf(claim.kind(), 16);
             buffer.writeVarInt(claim.billCount());
+        }
+        buffer.writeBoolean(packet.depositRecovery().isPresent());
+        if (packet.depositRecovery().isPresent()) {
+            DepositRecoverySummary recovery =
+                    packet.depositRecovery().orElseThrow();
+            buffer.writeUUID(recovery.requestId());
+            buffer.writeUUID(recovery.transactionId());
+            buffer.writeUtf(recovery.status(), 32);
+            buffer.writeLong(recovery.amountMinorUnits());
         }
     }
 
@@ -190,11 +228,18 @@ public record S2CAtmDataPacket(
                 cashClaims.add(new CashClaimSummary(buffer.readUUID(),
                         buffer.readUtf(16), buffer.readVarInt()));
             }
+            Optional<DepositRecoverySummary> depositRecovery =
+                    buffer.readBoolean()
+                            ? Optional.of(new DepositRecoverySummary(
+                            buffer.readUUID(), buffer.readUUID(),
+                            buffer.readUtf(32), buffer.readLong()))
+                            : Optional.empty();
             return new S2CAtmDataPacket(
                     balance, balanceKnown, currencyName, decimals,
                     providerId, route, protectedMinting, signature,
                     denominations, serviceAvailable, availabilityCode,
-                    openScreen, pendingCashClaimCount, cashClaims);
+                    openScreen, pendingCashClaimCount, cashClaims,
+                    depositRecovery);
         } catch (DecoderException exception) {
             throw exception;
         } catch (RuntimeException exception) {
@@ -237,6 +282,26 @@ public record S2CAtmDataPacket(
                     || billCount < 0 || billCount > 4096) {
                 throw new IllegalArgumentException(
                         "ATM cash claim summary is invalid");
+            }
+        }
+    }
+
+    public record DepositRecoverySummary(
+            UUID requestId,
+            UUID transactionId,
+            String status,
+            long amountMinorUnits
+    ) {
+        public DepositRecoverySummary {
+            Objects.requireNonNull(requestId, "requestId");
+            Objects.requireNonNull(transactionId, "transactionId");
+            status = Objects.requireNonNull(status, "status");
+            if (requestId.equals(new UUID(0L, 0L))
+                    || transactionId.equals(new UUID(0L, 0L))
+                    || !DEPOSIT_RECOVERY_STATUSES.contains(status)
+                    || amountMinorUnits <= 0L) {
+                throw new IllegalArgumentException(
+                        "ATM deposit recovery summary is invalid");
             }
         }
     }

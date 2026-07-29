@@ -35,6 +35,7 @@ public record S2CMarketProfileMutationPacket(
         buffer.writeEnum(result.type());
         buffer.writeEnum(result.resultCode());
         buffer.writeLong(result.profileRevision());
+        buffer.writeLong(result.replayEpoch());
         buffer.writeVarInt(result.watchedAuctionCount());
         buffer.writeVarInt(result.favoriteProductCount());
         buffer.writeVarInt(result.priceAlertCount());
@@ -61,7 +62,8 @@ public record S2CMarketProfileMutationPacket(
             MarketProfileMutationResult result =
                     new MarketProfileMutationResult(requestId,
                             routeNonce, module, type, resultCode,
-                            buffer.readLong(), buffer.readVarInt(),
+                            buffer.readLong(), buffer.readLong(),
+                            buffer.readVarInt(),
                             buffer.readVarInt(), buffer.readVarInt(),
                             buffer.readVarInt(), buffer.readVarInt(),
                             buffer.readVarInt(), buffer.readBoolean(),

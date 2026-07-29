@@ -5,6 +5,7 @@ import com.enviouse.futureshops.server.escrow.item.ExactItemClaimPayloadCodec;
 import com.enviouse.futureshops.server.escrow.item.ItemInventoryAllocation;
 import com.enviouse.futureshops.server.escrow.item.ItemInventoryMutationDirection;
 import com.enviouse.futureshops.server.escrow.item.ItemInventoryMutationReceipt;
+import com.enviouse.futureshops.money.ItemStackSnapshotCodec;
 import com.enviouse.futureshops.server.market.bazaar.BazaarProduct;
 import com.enviouse.futureshops.server.market.bazaar.CreateBazaarOrderCommand;
 
@@ -156,7 +157,7 @@ public record BazaarSellItemCustody(
                 + BazaarEscrowIds.requireId(orderId, "orderId");
     }
 
-    private static boolean matchesIdentity(
+    static boolean matchesIdentity(
             String exactIdentity,
             byte[] canonicalTemplate
     ) {
@@ -164,10 +165,14 @@ public record BazaarSellItemCustody(
             return true;
         }
         try {
+            var stack = ItemStackSnapshotCodec.decode(canonicalTemplate);
+            String canonicalTag = stack.getTag() == null ? ""
+                    : stack.getTag().toString();
             String digest = HexFormat.of().formatHex(
                     MessageDigest.getInstance("SHA-256")
                             .digest(canonicalTemplate));
-            return exactIdentity.equals(digest)
+            return exactIdentity.equals(canonicalTag)
+                    || exactIdentity.equals(digest)
                     || exactIdentity.equals("sha256:" + digest);
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is unavailable",

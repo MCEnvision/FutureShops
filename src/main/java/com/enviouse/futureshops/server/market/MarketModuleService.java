@@ -50,6 +50,10 @@ public final class MarketModuleService {
         boolean configured = module == MarketModule.BAZAAR
                 ? Config.bazaarEnabled() : Config.auctionHouseEnabled();
         String view = normalizeView(module, requestedView);
+        if (!"claims".equals(view)
+                && !MarketPermissions.canUse(player, module)) {
+            view = "claims";
+        }
         String displayName;
         String accent;
         if (module == MarketModule.BAZAAR) {
@@ -114,6 +118,20 @@ public final class MarketModuleService {
 
     static MarketServerSessionRegistry sessions() {
         return SESSIONS;
+    }
+
+    /**
+     * Whether {@code routeNonce} is the player's CURRENT open market route (plan §12: every
+     * mutation carries a session/route nonce; a nonce from a closed or superseded session is
+     * rejected so delayed or forged packets cannot act on a dismissed interface).
+     */
+    public static boolean routeValid(UUID playerId, UUID routeNonce) {
+        if (playerId == null || routeNonce == null) {
+            return false;
+        }
+        return SESSIONS.session(playerId)
+                .filter(session -> session.routeNonce().equals(routeNonce))
+                .isPresent();
     }
 
     public static void close(UUID playerId) {

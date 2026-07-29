@@ -128,7 +128,7 @@ public record BazaarProductReconciliationPlan(
                 + sourceBookFingerprint + "." + catalogFingerprint + "."
                 + index + "." + action.type().name() + "."
                 + action.product().map(product -> product.productId() + "."
-                + product.version()).orElse(action.productId() + "."
+                + product.version()).orElseGet(() -> action.productId() + "."
                 + action.status().orElseThrow().name());
         return UUID.nameUUIDFromBytes(identity.getBytes(
                 StandardCharsets.UTF_8));

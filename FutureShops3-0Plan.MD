@@ -1,6 +1,6 @@
 # FutureShops 3.0 Plan
 
-Status. Approved for implementation.
+Status. The ATM deposit recovery and Bazaar refund access blocker in Section 20 is implemented on the active 3.0 beta branch. Automated tests, the build, headless client startup, and dedicated server startup pass. Release approval still requires the remaining live multiplayer, reconnect, restart, and recovery fault acceptance checks.
 
 This document is the implementation contract for FutureShops 3.0. It covers the shared escrow foundation, migration of all existing value moving features, the Auction House, the Bazaar, the shared market interface, configuration, recovery, abuse controls, testing, and release sequencing.
 
@@ -402,7 +402,7 @@ Sources.
 - Wallet balance.
 - Inventory cash using the active provider.
 - Optional automatic priority policy.
-- Optional mixed wallet and physical payment in a later phase.
+- Configurable wallet or physical payment with an explicit per-purchase choice.
 
 The confirmation displays.
 
@@ -513,7 +513,10 @@ Commands include the short and long Auction House commands plus create, mine, bi
 
 ### Screens
 
-The Auction House uses the red themed shared shell.
+The Auction House uses the exact shared Nocturne shell used by `/shop`. Server Shop, Player Shops,
+Bazaar, and Auction House remain in one stable top navigation row with the same blurple palette,
+logo, wordmark, search, balance, profile, and close controls. A client theme override recolors the
+whole marketplace consistently instead of assigning a different color to each module.
 
 Tabs.
 
@@ -526,7 +529,12 @@ Tabs.
 
 Categories and saved filters live in the left rail. Sorting includes ending soon, newest, lowest price, highest current bid, most bids, seller, price range, enchantment, exact variant, mod ID, and category.
 
-Listing cards show exact item, seller, buy now or current bid, minimum next bid, bid count, remaining time, watched state, and listing status.
+Listing cards show the exact item, seller name and skin head, buy now or current bid, minimum next
+bid, bid count, remaining time, watched state, listing status, live listing count, and recent market
+activity. Hovering the item shows the complete vanilla tooltip from the escrowed item snapshot,
+including enchantments, lore, damage, custom names, and other NBT. Hovering a seller shows their
+UUID and transaction participant context. Details show the top bidder or buyer, hourly and daily
+activity, average price, units sold, and a bounded recent price graph.
 
 The footer shows Create Listing, active listing count, active bid holds, outbid notifications, and claim count.
 
@@ -625,7 +633,9 @@ Commands include the short and long Bazaar commands plus orders and claims route
 
 ### Screens
 
-The Bazaar uses the green themed shared shell.
+The Bazaar uses the same exact shared Nocturne shell and stable top navigation as `/shop` and the
+Auction House. A theme choice applies to the entire marketplace so switching modules never changes
+the navigation language or visual identity.
 
 Tabs.
 
@@ -636,7 +646,10 @@ Tabs.
 - Claims.
 - History.
 
-Product cards show item, instant buy, instant sell, spread, recent volume, trend, and market status.
+Product cards show item, instant buy, instant sell, spread, recent volume, trend, market status,
+live buy and sell order counts, hourly trades, daily units, average price, and recent price history.
+Player owned order and fill views resolve display names instead of exposing UUIDs as labels. UUIDs
+remain available in identity tooltips for administrators and players who need exact diagnostics.
 
 Product detail shows identity, order books, recent trades, quantity presets, price, total, fees, slippage, availability, payment source, average execution estimate, worst allowed execution, and claimable fills.
 
@@ -895,6 +908,10 @@ The following behaviors are checked before escrow work and after every major int
 - ATM planning works for internal and external providers.
 - Internal ATM minting registers protected bills.
 - Foreign ATM minting does not claim internal protection.
+- A retryable ATM deposit recovery can be resumed with the original request identity and never asks the player to create a new economic request.
+- Pending ATM deposit recovery never blocks collection of an already committed cash claim.
+- Closing, reopening, reconnecting, and restarting reconcile ATM recovery from server state without duplicating consumption or credit.
+- Bazaar cancellation reports the exact unfilled refund amount, identifies Claims as its destination, refreshes the claim count, and provides a direct route to collection.
 
 ## 17. Testing strategy
 
@@ -915,6 +932,10 @@ Network tests cover round trips, protocol constant, invalid enums, oversized fie
 Interface tests cover the regression gate, GUI scale 2, 3, and 4, wide and narrow layouts, keyboard use, long translations, both time formats, themes, accessibility, Back, X, Escape, resize, and stale response handling.
 
 Performance tests cover thousands of auctions, tens of thousands of orders, large partial fill counts, claim queues, startup rebuild, recovery, search, pagination, and expiration spikes. Matching, expiry, and recovery use bounded work per tick.
+
+ATM recovery tests inject failures before and after intent persistence, reservation, inventory removal, settlement, evidence cleanup, and recovery enqueue. Each test repeats the original request, reopens the ATM, reconnects, and restarts the server. The assertions prove that bills are consumed at most once, wallet value is credited at most once, exact terminal state is reported, stale evidence is durably removed only when it is proven safe, and unrelated cash claims remain collectible.
+
+Bazaar cancellation tests cover unfilled and partially filled buy orders funded by wallet and Inventory Cash. The response, refreshed claim count, Claims route, exact pending amount, collection, maximum wallet handling, module disable behavior, reconnect, and restart must agree with the durable `BUYER_REFUND_CLAIM`.
 
 ## 18. Implementation phases
 
@@ -1023,6 +1044,7 @@ Branch. envy slash markets hardening.
 - Permission examples.
 - API events.
 - Compatibility matrix.
+- ATM deposit recovery and claim access release blocker from Section 20.
 - Final complete regression pass.
 
 ## 19. Recommended defaults
@@ -1049,6 +1071,150 @@ Branch. envy slash markets hardening.
 - Bazaar executes at maker price.
 - Claims do not expire automatically.
 - Initial release is single server.
-- Shop is blurple, Bazaar green, and Auction House red with theme overrides.
+- Shop, Player Shops, Bazaar, and Auction House share one blurple Nocturne schema. Optional client
+  theme and accessibility overrides recolor the entire marketplace consistently.
 
 These defaults maximize safety while retaining server and client customization. FutureShops does not claim control over foreign currency supply or arbitrary third party storage behavior that it cannot technically enforce.
+
+## 20. Release blocker. ATM deposit recovery and refund access
+
+Issue status. Fixed in the active 3.0 implementation. Live acceptance remains pending.
+
+The pre fix audit reproduced the reported single player deposit failure from the former control flow. The ATM showed `RECOVERY_REQUIRED`, retained the original deposit request, and offered Retry deposit. The retry correctly reused the same request UUID, but a stored nonterminal transaction or active player evidence was classified as `RECOVERY_REQUIRED` again without a client visible reconciliation result. This could become an endless status loop even though creating a new request was correctly forbidden.
+
+The former screen could display an already committed cash claim while making it unreachable. `AtmScreen` enabled Collect cash only while no deposit request was pending and while withdrawal mode was selected. It also prevented switching between Deposit and Withdrawal while that request was pending. A retryable deposit recovery could therefore disable Collect cash and prevent the player from entering the mode that would enable it. Back remained available, but reopening restored the static client tracker, so leaving the screen did not resolve the dead end.
+
+The former recovery enqueue path contained a confirmed false success result. `ProtectedCashRedemptionWorkflow.enqueueIntentRecovery` caught a runtime failure from the runtime queue and returned `true`. `ForeignCashDepositWorkflow.enqueueIntentRecovery` had the same behavior. Their callers interpreted `true` as successfully queued recovery, so a failed enqueue could leave live evidence attached to the player while no recovery work was accepted. Future deposits then detected that evidence and returned `RECOVERY_REQUIRED`.
+
+Bazaar cancellation was a related discoverability problem, not the same claim type as the ATM screenshot. Canceling an unfilled or partially filled buy order releases the remaining hold into a durable `BUYER_REFUND_CLAIM`. `BazaarEscrowLifecyclePlanner` stores it as a pending `ClaimKind.MONEY` claim labeled `Bazaar buyer refund`. This is a Claims balance, not an ATM physical cash claim, including when Inventory Cash first funded the order under the current refund policy. The former success text said that remaining value returned through Claims, but it did not report the exact amount, open Claims, or guarantee that the refreshed claim badge made the refund obvious. The screenshot's Collect cash count represents a separate cash claim and must not be presented as proof that the Bazaar refund is available there.
+
+The implementation now preserves and synchronizes the exact request and transaction identity, uses explicit recovery enqueue results, performs bounded exact recovery checks, fails ambiguous evidence into manual review, keeps unrelated ATM navigation and cash claim collection available, and exposes `/marketadmin inspect <transactionId>`. Bazaar buy order cancellation reports the exact durable refund, refreshes capabilities, and opens Claims directly. Network protocol 52 carries the authoritative ATM recovery snapshot used after open and reconnect.
+
+### 20.1 Server recovery contract
+
+1. Preserve the original deposit request UUID and deterministic recovery transaction UUID. Retry, screen reopen, reconnect, and restart must inspect or resume that exact transaction. They must never create a replacement economic request.
+2. Replace the boolean recovery enqueue result with an explicit result such as `QUEUED`, `NO_DURABLE_EVIDENCE`, or `FAILED`. A thrown enqueue operation can never be reported as queued.
+3. Apply the same result contract to protected FutureShops bills and foreign currency deposits.
+4. Distinguish a safe orphaned intent from evidence recorded after reservation or inventory mutation. An intent may be discarded only when the exact evidence matches, no reservation or transaction exists, and the live inventory still matches the recorded state before mutation.
+5. Make safe orphan cleanup durable. Remove only the matching evidence and force the player data save before reporting that the recovery block is gone.
+6. Never discard evidence after a reservation, physical removal, settlement decision, or ambiguous failure. Queue exact recovery or enter explicit manual review.
+7. Make a recovery check actively inspect, enqueue, or resume the exact transaction before responding. Repeated checks must converge on a terminal result or an actionable manual review state instead of returning an undifferentiated recovery result forever.
+8. Expose explicit server authoritative states for completed credit, refunded value, cash claim ready, recovery pending, manual review, and request conflict. Every terminal result includes the credited or returned amount and its destination.
+9. Include active ATM recovery identity and state in the ATM data snapshot. Opening the ATM or reconnecting must adopt server state and clear stale client tracking after the server proves a terminal result.
+10. Keep new deposits blocked while earlier evidence is genuinely nonterminal, but do not block unrelated claim collection, navigation, inspection, or administrative recovery.
+11. Add an administrator inspection path keyed by the full recovery transaction UUID. It reports the request, player, currency provider, evidence stage, reservation, inventory mutation, settlement, claim, last recovery attempt, and safe next action without exposing unrelated player data.
+
+### 20.2 ATM interface requirements
+
+1. Replace Retry deposit with Check recovery or Resume recovery while the server owns a nonterminal recovery. The action reuses the original request and explains that it cannot charge or consume again.
+2. Keep Deposit and Withdrawal navigation usable while recovery is pending. Disable only actions that would create a conflicting ATM value mutation.
+3. Keep Collect cash available whenever a committed cash claim can be delivered and no cash collection request is already awaiting a response. Deposit recovery state alone cannot disable it.
+4. When returned cash is ready, make Collect returned cash the primary recovery action and show the exact amount and claim count.
+5. Wrap recovery messages inside the available panel. Show the full recovery handle and provide a copy action so the player can give an administrator an exact identifier.
+6. On open, reopen, reconnect, and server restart, reconcile the local tracker against the server snapshot before enabling Deposit, Retry, or Check recovery.
+7. After a terminal result, clear the pending tracker, refresh balance and claims, preserve a concise receipt, and return normal controls without requiring logout.
+
+### 20.3 Bazaar refund requirements
+
+1. A successful buy order cancellation response reports the exact unfilled refund amount and says that it is pending in Claims.
+2. The client immediately refreshes capabilities, open claim count, and the Claims page after the durable cancel commit.
+3. The success notice provides a direct View refund action. It must remain available when Bazaar is frozen or disabled because claims and cancellation are resolution actions.
+4. The Claims row identifies `Bazaar buyer refund`, the order, the amount, the original payment source, and whether collection credited the wallet or left a remainder because of the maximum balance.
+5. Wallet funded and Inventory Cash funded orders use the configured refund policy consistently. The interface must not imply that a money claim is collectible from the ATM as physical cash.
+6. Partial fill cancellation reports only the remaining reserve. Filled quantity, fees, price improvement, and earlier claims remain separate and conserve exactly.
+
+### 20.4 Required verification matrix
+
+- Normal protected bill deposit in single player and on a dedicated server.
+- Normal foreign currency deposit with every supported provider.
+- Failure before and after intent persistence, reservation, inventory removal, settlement persistence, settlement commit, and evidence cleanup.
+- Recovery queue rejection and thrown recovery enqueue for protected and foreign deposits.
+- Safe orphan cleanup followed by an immediate player save and restart.
+- Ambiguous post mutation evidence entering recovery or manual review without evidence deletion.
+- Same request replay before and after every recovery state transition.
+- Close and reopen, logout and reconnect, client restart, and server restart.
+- Full inventory, maximum wallet, partial wallet capacity, and a cash claim ready during deposit recovery.
+- Recovery started from Deposit mode and Withdrawal mode at every supported GUI scale.
+- Corrupt, mismatched, and unknown evidence with a complete administrator recovery handle.
+- Two rapid retry packets, delayed duplicate responses, packet loss, and request conflict.
+- No double bill consumption, no double wallet credit, no duplicate claim, and no silent value loss.
+- Bazaar cancel before any fill, after a partial fill, after full fill, and concurrent with a fill boundary.
+- Bazaar refunds funded by wallet and Inventory Cash, collected normally and at maximum wallet balance.
+- Bazaar disabled after order placement with cancellation and Claims still available.
+
+The source blockers described above are implemented. Automated recovery, packet, interface policy, refund detail, and architecture coverage passes. The headless client reaches FutureShops client setup and the render thread, and the dedicated server reaches ready state with FutureShops loaded. Release approval still requires the remaining live multiplayer reconnect, restart, and fault drills from the matrix above.
+
+## 21. Completion record
+
+The record below describes the implemented 3.0 scope together with the completed Section 20 source fixes. The active phase remains a beta until the remaining live acceptance checks are complete.
+
+The implementation covers the escrow foundation, migrated shop and currency flows, shared market
+shell, independently configurable Auction House and Bazaar modules, wallet and inventory cash
+funding, protected and foreign currency handling, claims, administrative recovery, permissions,
+module lifecycle controls, analytics, alerts, API events, migrations, backup guidance, and bounded
+performance tests described above.
+
+Release verification includes the complete automated regression suite, packet round trips,
+durability and replay fixtures, corruption and recovery drills, module disable and re enable tests,
+exact item identity tests, administrative cancellation with standing bid refunds, and restore
+soaks with 2000 auctions and 10000 Bazaar orders. The supported platform and integration boundaries
+are documented in [docs/compatibility-matrix.md](docs/compatibility-matrix.md).
+
+The post release market usability pass adds `bazaar_control` with admin and players modes. Admin
+mode keeps the curated JSON product registry and reconciliation rules. Players mode preserves the
+durable registry and provides a complete registered item browser without a per player catalog
+quota. Search covers localized item names, registry identifiers, predictive mod filters, and
+predictive item tag filters. A player can select an item they do not possess, create or reuse its
+market, and fund a buy order entirely through escrow. Every sell still requires matching inventory
+items to enter custody. Both modes retain escrow, versioning, circuit breakers, request rate limits,
+and history.
+
+Auction listing creation now presents the exact server listing fee before payment selection and
+reconciles the result against the durable escrow commit before showing a recovery warning. The
+shared market shell now calls the exact `/shop` header renderer for its logo, wordmark, Server Shop,
+Player Shops, Bazaar and Auction House tabs, search, balance, profile, and close controls. All market
+surfaces use one Nocturne theme, contain empty states inside the content region, and use responsive
+detail panels for exact item data, seller identity and skin, bidder or buyer status, price, timing,
+state, live supply, hourly activity, daily volume, average price, recent price graphs, and actions.
+
+The market body now mirrors the Server Shop structure as well as its header. Bazaar and Auction
+House routes use the shared segmented control for their local views and the shared Departments
+panel for All and category rows, including market wide category counts and the same selection,
+hover, scrolling, spacing, and accent treatment. Routine escrow ready banners are intentionally
+hidden. Escrow remains mandatory, while a temporary readiness or recovery failure produces a
+deduplicated chat warning and an explicit Retry control that resubmits only the safe read request
+or invites the player to repeat an economic action only after the server confirms that nothing
+changed.
+
+The Auction House creation route now exposes Create Listing both in the route content and in the
+footer, so the listing wizard remains discoverable even when the route has no cards. Auction detail
+pages use the available space for exact item condition and data, listing type, bid count, buyout
+distance, abbreviated identity, seller context, live activity, and a black chart surface. Recorded
+price history is drawn with gold, green, and red movement segments. When recorded history is not
+available, the chart is explicitly labeled as a bid ladder and displays only the current bid, next
+bid, and buyout. Market prices and fees use a configurable currency symbol, with the dollar sign as
+the default, and gold price text across cards, details, payment prompts, and creation fees.
+
+The community navigation and presentation followup keeps parent navigation visible on both owner
+and visitor player shop block screens while the close control still closes the complete interface.
+The shared marketplace header uses the player skin for the compact profile control and identifies
+Marketplace Profile and Transaction History on hover. Bazaar and Auction House breadcrumbs use the
+same Marketplace path formatting as the Server Shop, and Back appears only on detail routes instead
+of replaying ordinary local tab history. Auction creation owns a complete market workspace so
+underlying department and toolbar surfaces do not show through it. ATM deposit safety guidance wraps
+inside the available panel. The Bazaar footer identifies admin JSON catalog control or player catalog
+control and explains where Browse Items is available. Admin item tag search matches both registry
+namespaces and normalized Forge mod display names, including aliases such as Applied Energistics and
+Macaw mod families.
+
+The Player Shops skin followup keeps every rendered face bound to the same UUID and player name
+shown by its card or selected shop block. Franchise cards resolve the franchise leader identity so
+the displayed name and head cannot refer to different members, while offline owners retain their
+last known block identity as a fallback.
+
+The compatibility warning followup uses the FutureShops network protocol for the multiplayer server
+list instead of requiring identical release labels. Compatible builds therefore remain joinable
+without a false warning. A failed handshake now distinguishes a missing client installation, a
+missing server installation, an older client protocol, an older server protocol, and an unknown
+incompatible protocol. Each case explains the correct recovery action without assuming that the
+client always needs an update.

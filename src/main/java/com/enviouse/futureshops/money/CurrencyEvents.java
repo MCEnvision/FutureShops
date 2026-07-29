@@ -115,9 +115,12 @@ public final class CurrencyEvents {
             case RATE_LIMITED -> Component.translatable(
                     "command.futureshops.deposit.rate_limited",
                     result.retryAfterSeconds());
-            case ESCROW_UNAVAILABLE, RECOVERY_REQUIRED ->
+            case ESCROW_UNAVAILABLE, RECOVERY_REQUIRED,
+                    RECOVERY_PENDING, MANUAL_REVIEW ->
                     Component.translatable(
                             "command.futureshops.deposit.recovery_required");
+            case REFUNDED -> Component.translatable(
+                    "command.futureshops.deposit.cancelled");
             case NO_CURRENCY, INVALID_AMOUNT, NOT_ENOUGH_CURRENCY,
                     INVALID_DENOMINATION, WRONG_PROVIDER,
                     LEGACY_MIGRATION_REQUIRED, INVALID_CURRENCY ->

@@ -219,6 +219,9 @@ public record ForeignCashDepositSettlement(
             throw new IllegalArgumentException(
                     "Foreign cash deposit reserved balance is invalid");
         }
+        if (reservation.depositMode() == CashDepositMode.INTERNAL_ESCROW) {
+            return 0L;
+        }
         java.math.BigInteger capacity = java.math.BigInteger.valueOf(
                         reservation.walletBalanceLimitMinorUnits())
                 .subtract(java.math.BigInteger.valueOf(walletBefore))

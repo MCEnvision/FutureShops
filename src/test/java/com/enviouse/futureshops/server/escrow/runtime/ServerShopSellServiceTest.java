@@ -340,6 +340,7 @@ class ServerShopSellServiceTest {
                     == ServerShopSellService.CommitDisposition.APPLIED
                     || commitDisposition
                     == ServerShopSellService.CommitDisposition.REPLAYED) {
+                intent = intent.map(ServerShopSellIntent::complete);
                 materialize(commit);
             }
             return commitDisposition;

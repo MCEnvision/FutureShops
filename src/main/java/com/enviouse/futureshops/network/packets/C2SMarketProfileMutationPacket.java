@@ -36,6 +36,7 @@ public record C2SMarketProfileMutationPacket(
         buffer.writeUtf(command.module().id(), 32);
         buffer.writeUtf(command.view(), 32);
         buffer.writeLong(command.expectedProfileRevision());
+        buffer.writeLong(command.expectedReplayEpoch());
         buffer.writeEnum(command.mutation().type());
         writeMutation(buffer, command.mutation());
     }
@@ -50,6 +51,7 @@ public record C2SMarketProfileMutationPacket(
                     buffer.readUtf(32));
             String view = buffer.readUtf(32);
             long expectedRevision = buffer.readLong();
+            long expectedReplayEpoch = buffer.readLong();
             MarketProfileMutationType type = buffer.readEnum(
                     MarketProfileMutationType.class);
             MarketProfileMutation mutation = readMutation(buffer, type);
@@ -57,7 +59,8 @@ public record C2SMarketProfileMutationPacket(
                     new C2SMarketProfileMutationPacket(
                             new MarketProfileMutationCommand(requestId,
                                     routeNonce, module, view,
-                                    expectedRevision, mutation));
+                                    expectedRevision,
+                                    expectedReplayEpoch, mutation));
             requireFullyRead(buffer);
             return result;
         } catch (RuntimeException exception) {

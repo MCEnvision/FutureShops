@@ -54,6 +54,7 @@ class MarketPageProjectorTest {
         assertEquals("iron@1", page.cards().get(0).identity());
         assertTrue(page.cards().get(0).watched());
         assertEquals(List.of("metals"), page.categories());
+        assertEquals(List.of(2), page.categoryCounts());
     }
 
     @Test
@@ -174,6 +175,7 @@ class MarketPageProjectorTest {
                 .applyPageActions(page,
                         MarketModuleAvailability.CLAIMS_ONLY);
         assertEquals(271, claimsOnly.totalResults());
+        assertEquals(page.categoryCounts(), claimsOnly.categoryCounts());
         assertEquals(71, claimsOnly.cards().size());
         assertTrue(claimsOnly.cards().get(0).primaryAction());
         assertFalse(claimsOnly.cards().get(70).primaryAction());

@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -51,10 +52,7 @@ public final class MarketPageProjector {
         Objects.requireNonNull(profile, "profile");
         claims = ownedClaims(playerId, claims, "auction.");
         Set<UUID> watched = Set.copyOf(profile.watchedAuctions());
-        List<String> categories = snapshot.listings().values().stream()
-                .map(value -> value.itemLot().categoryId())
-                .filter(value -> !value.isEmpty())
-                .distinct().sorted().limit(256).toList();
+        CategoryIndex categoryIndex = auctionCategories(snapshot);
         List<MarketPageCard> cards;
         int total;
         int pages;
@@ -78,8 +76,10 @@ public final class MarketPageProjector {
                 query.routeNonce(), query.module(), query.view(),
                 query.pageIndex(), query.pageSize(), total, pages,
                 snapshot.nextAcceptedSequence(),
+                profile.revision(), profile.replayEpoch(),
                 query.serverTimeMillis(), profile.unreadNotifications(),
-                sumPrimary(cards), sumQuantity(cards), categories, cards);
+                sumPrimary(cards), sumQuantity(cards),
+                categoryIndex.categories(), categoryIndex.counts(), cards);
     }
 
     public static MarketPageSnapshot auction(
@@ -92,13 +92,10 @@ public final class MarketPageProjector {
         requireModule(query, "auction_house");
         Objects.requireNonNull(snapshot, "snapshot");
         Objects.requireNonNull(profile, "profile");
-        List<String> categories = snapshot.listings().values().stream()
-                .map(value -> value.itemLot().categoryId())
-                .filter(value -> !value.isEmpty())
-                .distinct().sorted().limit(256).toList();
+        CategoryIndex categoryIndex = auctionCategories(snapshot);
         return claimPage(query, playerId, profile, claims,
                 "auction.", snapshot.nextAcceptedSequence(),
-                categories);
+                categoryIndex);
     }
 
     public static MarketPageSnapshot bazaar(
@@ -119,11 +116,10 @@ public final class MarketPageProjector {
             watched.add(new BazaarProductVersionKey(
                     key.productId(), key.version()));
         }
-        List<String> categories = latestProducts(snapshot).values()
-                .stream().map(BazaarProduct::categoryId)
-                .filter(value -> !value.isEmpty())
-                .distinct().sorted().limit(256).toList();
+        CategoryIndex categoryIndex = bazaarCategories(snapshot);
         List<MarketPageCard> cards;
+        Map<BazaarProductVersionKey, BazaarProduct> productVersions =
+                productVersions(snapshot);
         int total;
         int pages;
         if ("products".equals(query.view())
@@ -149,7 +145,8 @@ public final class MarketPageProjector {
             PageSlice<BazaarFill> slice = slice(fills, query);
             Map<UUID, BazaarOrder> orders = orders(snapshot);
             cards = slice.values().stream().map(value ->
-                    bazaarFillCard(value, orders, playerId)).toList();
+                    bazaarFillCard(value, orders, productVersions,
+                            playerId)).toList();
             total = slice.total();
             pages = slice.pages();
         } else if ("portfolio".equals(query.view())) {
@@ -163,17 +160,19 @@ public final class MarketPageProjector {
             List<BazaarOrder> selected = ownedOrders(query, playerId,
                     snapshot);
             PageSlice<BazaarOrder> slice = slice(selected, query);
-            cards = slice.values().stream().map(
-                    MarketPageProjector::bazaarOrderCard).toList();
+            cards = slice.values().stream().map(value ->
+                    bazaarOrderCard(value, productVersions)).toList();
             total = slice.total();
             pages = slice.pages();
         }
         return new MarketPageSnapshot(query.requestId(),
                 query.routeNonce(), query.module(), query.view(),
                 query.pageIndex(), query.pageSize(), total, pages,
-                snapshot.nextSequence(), query.serverTimeMillis(),
+                snapshot.nextSequence(), profile.revision(),
+                profile.replayEpoch(), query.serverTimeMillis(),
                 profile.unreadNotifications(), sumPrimary(cards),
-                sumQuantity(cards), categories, cards);
+                sumQuantity(cards), categoryIndex.categories(),
+                categoryIndex.counts(), cards);
     }
 
     public static MarketPageSnapshot bazaar(
@@ -186,12 +185,9 @@ public final class MarketPageProjector {
         requireModule(query, "bazaar");
         Objects.requireNonNull(snapshot, "snapshot");
         Objects.requireNonNull(profile, "profile");
-        List<String> categories = latestProducts(snapshot).values()
-                .stream().map(BazaarProduct::categoryId)
-                .filter(value -> !value.isEmpty())
-                .distinct().sorted().limit(256).toList();
+        CategoryIndex categoryIndex = bazaarCategories(snapshot);
         return claimPage(query, playerId, profile, claims,
-                "bazaar.", snapshot.nextSequence(), categories);
+                "bazaar.", snapshot.nextSequence(), categoryIndex);
     }
 
     private static List<AuctionListing> auctionListings(
@@ -274,7 +270,11 @@ public final class MarketPageProjector {
                 listing.revision(), auctionPrice(listing), minimum,
                 listing.acceptedBidCount(),
                 auctionRemaining(listing, nowMillis), watched,
-                active && !own, own && active);
+                active && !own, own && active,
+                // tertiary = buyout price of a BIDDING listing that also allows buy-now
+                // (AUCTION_WITH_BUYOUT). Pure BUY_NOW keeps its price in primary/secondary and
+                // signals type via the MAX_VALUE remaining sentinel; 0 = no buy-now on a bid lot.
+                listing.type().acceptsBids() ? listing.buyoutMinor() : 0L);
     }
 
     private static long auctionPrice(AuctionListing listing) {
@@ -357,7 +357,7 @@ public final class MarketPageProjector {
         long ask = summary.bestAskMinor().orElse(0L);
         long bid = summary.bestBidMinor().orElse(0L);
         return new MarketPageCard(MarketPageCardKind.BAZAAR_PRODUCT,
-                productIdentity(card.product()), Optional.of(viewerId),
+                productIdentity(card.product()), Optional.empty(),
                 card.registryId(), card.lotSize(),
                 card.product().productId(), card.categoryId(),
                 card.status().name(), card.product().version(), ask, bid,
@@ -388,10 +388,18 @@ public final class MarketPageProjector {
                 .toList();
     }
 
-    private static MarketPageCard bazaarOrderCard(BazaarOrder order) {
+    private static MarketPageCard bazaarOrderCard(
+            BazaarOrder order,
+            Map<BazaarProductVersionKey, BazaarProduct> products
+    ) {
+        BazaarProduct product = products.get(new BazaarProductVersionKey(
+                order.productId(), order.productVersion()));
         return new MarketPageCard(MarketPageCardKind.BAZAAR_ORDER,
                 order.orderId().toString(), Optional.of(order.ownerId()),
-                "", 0, order.productId(), "", order.state().name(),
+                product == null ? "" : product.registryId(),
+                product == null ? 0 : product.lotSize(), order.productId(),
+                product == null ? "" : product.categoryId(),
+                order.state().name(),
                 order.revision(), order.limitPriceMinor(),
                 order.reservedMoneyMinor(), order.remainingQuantity(),
                 order.expiresAtMillis() == 0L ? 0L
@@ -424,13 +432,18 @@ public final class MarketPageProjector {
     private static MarketPageCard bazaarFillCard(
             BazaarFill fill,
             Map<UUID, BazaarOrder> orders,
+            Map<BazaarProductVersionKey, BazaarProduct> products,
             UUID playerId
     ) {
         BazaarOrder buy = orders.get(fill.buyOrderId());
         boolean buyer = owned(buy, playerId);
+        BazaarProduct product = products.get(new BazaarProductVersionKey(
+                fill.productId(), fill.productVersion()));
         return new MarketPageCard(MarketPageCardKind.BAZAAR_FILL,
-                fill.fillId().toString(), Optional.of(playerId), "", 0,
-                fill.productId(), buyer ? "buy" : "sell", "FILLED",
+                fill.fillId().toString(), Optional.of(playerId),
+                product == null ? "" : product.registryId(),
+                product == null ? 0 : product.lotSize(), fill.productId(),
+                buyer ? "buy" : "sell", "FILLED",
                 fill.sequence(), fill.priceMinor(), fill.grossMinor(),
                 fill.quantity(), 0L, false, false, false);
     }
@@ -510,7 +523,7 @@ public final class MarketPageProjector {
             OpenClaimPage page,
             String sourcePrefix,
             long publicRevision,
-            List<String> categories
+            CategoryIndex categoryIndex
     ) {
         UUID ownerId = Objects.requireNonNull(playerId, "playerId");
         OpenClaimPage claims = Objects.requireNonNull(page, "claims");
@@ -528,9 +541,48 @@ public final class MarketPageProjector {
                 query.routeNonce(), query.module(), query.view(),
                 query.pageIndex(), query.pageSize(),
                 claims.totalResults(), claims.pageCount(),
-                publicRevision, query.serverTimeMillis(),
+                publicRevision, profile.revision(),
+                profile.replayEpoch(), query.serverTimeMillis(),
                 profile.unreadNotifications(), sumPrimary(cards),
-                sumQuantity(cards), categories, cards);
+                sumQuantity(cards), categoryIndex.categories(),
+                categoryIndex.counts(), cards);
+    }
+
+    private static CategoryIndex auctionCategories(
+            AuctionHouseSnapshot snapshot
+    ) {
+        Map<String, Integer> counts = new TreeMap<>();
+        for (AuctionListing listing : snapshot.listings().values()) {
+            String category = listing.itemLot().categoryId();
+            if (listing.state() == AuctionListingState.ACTIVE
+                    && !category.isEmpty()) {
+                counts.merge(category, 1, Integer::sum);
+            }
+        }
+        return categoryIndex(counts);
+    }
+
+    private static CategoryIndex bazaarCategories(
+            BazaarOrderBookSnapshot snapshot
+    ) {
+        Map<String, Integer> counts = new TreeMap<>();
+        for (BazaarProduct product : latestProducts(snapshot).values()) {
+            String category = product.categoryId();
+            if (product.status() != BazaarProductStatus.RETIRED
+                    && !category.isEmpty()) {
+                counts.merge(category, 1, Integer::sum);
+            }
+        }
+        return categoryIndex(counts);
+    }
+
+    private static CategoryIndex categoryIndex(
+            Map<String, Integer> counts
+    ) {
+        List<String> categories = counts.keySet().stream()
+                .limit(256).toList();
+        return new CategoryIndex(categories, categories.stream()
+                .map(counts::get).toList());
     }
 
     private static List<EscrowClaim> ownedClaims(
@@ -563,6 +615,12 @@ public final class MarketPageProjector {
             }
         }
         return latest;
+    }
+
+    private record CategoryIndex(
+            List<String> categories,
+            List<Integer> counts
+    ) {
     }
 
     private static Map<BazaarProductVersionKey, BazaarProduct>
