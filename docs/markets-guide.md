@@ -118,7 +118,7 @@ Auctions run on real time by default and expire on schedule whether or not anyon
 
 ## Bazaar
 
-The Bazaar catalog is controlled by `bazaar_control` in `futureshops-bazaar.toml`. In the default
+The Bazaar catalog is controlled by `bazaar_control` in `config/futureshops/futureshops-bazaar.toml`. In the default
 `admin` mode it trades only server defined products, like the curated Hypixel SkyBlock catalog.
 In `players` mode the Products screen has a **Browse Items** control. It opens every registered base
 item from Minecraft and installed mods. Players can search by localized item name, registry item
@@ -194,7 +194,7 @@ full inventory or maximum wallet balance could not accept. Open them with `/ah c
 
 ## When a module is disabled
 
-Disabling a module in `futureshops-common.toml` does not delete anything. The default and
+Disabling a module in `config/futureshops/futureshops-common.toml` does not delete anything. The default and
 recommended behavior is **freeze**:
 
 - No new listings, bids, orders, or trades; the interface reports "This module is disabled" or
@@ -212,7 +212,7 @@ config reload never silently mass-cancels contracts.
 
 ### What exists in this build
 
-- **Module control** — enable/disable per module in `futureshops-common.toml`; all market rules in
+- **Module control** — enable/disable per module in `config/futureshops/futureshops-common.toml`; all market rules in
   the per-module TOMLs. Config hot-reloads; rule changes apply to new contracts only.
 **Bazaar catalog.** `bazaar_control = "admin"` uses product JSON files under
 `config/futureshops/bazaar/products/`. `bazaar_control = "players"` exposes Browse Items and

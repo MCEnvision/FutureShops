@@ -97,7 +97,7 @@ Forge registers blocks, items, menus, packets, commands, configurations, and eve
 
 During recovery, value mutations fail closed. Claims remain the safety route. Screens may render read only information, but no client snapshot can authorize a mutation.
 
-Market capability requests project current server configuration, runtime readiness, module control status, claim counts, branding, currency metadata, and a display balance. The client uses the snapshot to present availability. During recovery, screens retry capability requests every second. Ready screens refresh capabilities every five seconds so an accepted module configuration change appears without reconnecting. A module disabled in `futureshops-common.toml` is omitted from the marketplace header. Claims only and unavailable module states are also omitted, while their durable claims remain reachable through the shared claims route. A correlated response with a newer server revision is accepted even if another retry is already outstanding, which prevents a slow response from leaving the client stuck on the recovery snapshot. Equal revision conflicts and older revisions still fail closed. Navigation remains server authoritative because a capability response can become stale immediately after it is sent. The server resolves an attempted route to the requested view, a safe fallback, or claims.
+Market capability requests project current server configuration, runtime readiness, module control status, claim counts, branding, currency metadata, and a display balance. The client uses the snapshot to present availability. During recovery, screens retry capability requests every second. Ready screens refresh capabilities every five seconds so an accepted module configuration change appears without reconnecting. A module disabled in `config/futureshops/futureshops-common.toml` is omitted from the marketplace header. Claims only and unavailable module states are also omitted, while their durable claims remain reachable through the shared claims route. A correlated response with a newer server revision is accepted even if another retry is already outstanding, which prevents a slow response from leaving the client stuck on the recovery snapshot. Equal revision conflicts and older revisions still fail closed. Navigation remains server authoritative because a capability response can become stale immediately after it is sent. The server resolves an attempted route to the requested view, a safe fallback, or claims.
 
 Protocol 56 includes the ATM recovery contract, normalized Server Shop catalogs, Player Shop offer snapshots, typed offer execution, correlated owner and administrator saves, and the bulk sell quote and commit contract. Before sending authoritative ATM data, the server attempts bounded reconciliation of safe persisted deposit evidence and then reads the resulting balance. The same reconciliation runs before a different new deposit is accepted. This removes completed evidence, resumes an interrupted transaction, or follows its durable refund path without asking a multiplayer user to create another request. Conflicting identities, corrupt evidence, and transactions already in manual review are never guessed or discarded. ATM data projects any remaining deposit recovery summary containing the original request UUID, deterministic transaction UUID, amount, and one of `RECOVERY_PENDING`, `MANUAL_REVIEW`, `COMPLETED`, or `REFUNDED`. The client adopts server pending state, blocks retries during manual review, and clears matching local recovery state only after the server proves a terminal result or no active recovery. A recovery check sends only that request and transaction pair. It cannot submit a currency source or amount and therefore cannot create or consume a second deposit. Retryable or blocked deposit recovery does not disable ATM tab navigation or committed cash claim collection. A refunded terminal response reports the exact value and `ORIGINAL_INVENTORY` destination.
 
@@ -194,7 +194,7 @@ Every editor and picker action uses the FutureShops Nocturne button renderer whi
 
 During common mod setup on both physical clients and dedicated servers, FutureShops creates `config/futureshops/shops/` and writes `admin.json` when it is absent. This happens before a singleplayer world opens, allowing a modpack developer to prepare the global client catalog and include it in the pack. The integrated server reads this global catalog. A remote server never reads the client's catalog and remains authoritative from its own installation. Existing `admin.json` files are never replaced. A legacy `default.json` is moved to `admin.json` only when the new path is absent.
 
-The generated schema version 2 catalog includes a one claim free cookie, a Sell Only rotten flesh example, and an iron tool bundle priced below its three standalone offers. The Forge managed TOML files remain directly under `config/` to preserve existing paths and configuration compatibility.
+The generated schema version 2 catalog includes a one claim free cookie, a Sell Only rotten flesh example, and an iron tool bundle priced below its three standalone offers. Every FutureShops managed TOML file and catalog lives below `config/futureshops/`.
 
 See [3.1 trade offer configuration](docs/config-3.1-offers.md) for the schema and administrator workflow.
 
@@ -202,13 +202,22 @@ See [3.1 trade offer configuration](docs/config-3.1-offers.md) for the schema an
 
 | File | Responsibility |
 | --- | --- |
-| `futureshops-common.toml` | Modules, navigation, economy, currency, permissions, and shop behavior |
-| `futureshops-escrow.toml` | Recovery, checkpoints, claims, request limits, and asset bounds |
-| `futureshops-auction-house.toml` | Listing, bidding, settlement, fee, duration, and lifecycle rules |
-| `futureshops-bazaar.toml` | Catalog control, matching, order, fee, limit, and lifecycle rules |
-| `futureshops-client.toml` | Layout, scale, density, accessibility, theme, and presentation |
+| `config/futureshops/futureshops-common.toml` | Modules, navigation, economy, currency, permissions, and shop behavior |
+| `config/futureshops/futureshops-escrow.toml` | Recovery, checkpoints, claims, request limits, and asset bounds |
+| `config/futureshops/futureshops-auction-house.toml` | Listing, bidding, settlement, fee, duration, and lifecycle rules |
+| `config/futureshops/futureshops-bazaar.toml` | Catalog control, matching, order, fee, limit, and lifecycle rules |
+| `config/futureshops/futureshops-client.toml` | Layout, scale, density, accessibility, theme, and presentation |
 
-Module enablement lives only in `futureshops-common.toml`. Escrow has no disable switch. A disabled module is not projected as a header tab. Enabling a module projects it as soon as the server accepts the setting, escrow is ready, and its persisted control state permits browsing. Open marketplace screens poll the server supplied projection every five seconds. Some validated settings reload immediately, contract rules apply only to new contracts, and identity or persistence settings require restart or migration. An invalid reload preserves the last valid snapshot and logs the rejected field.
+The mod creates `config/futureshops/` before Forge registers any FutureShops specification.
+Recognized loose `futureshops-*.toml` files and Forge generated backups are moved into the directory
+without rewriting their contents. The migration runs on clients, integrated servers, and dedicated
+servers and is idempotent. When a canonical nested file already exists, it remains authoritative and
+the conflicting loose file is preserved under `config/futureshops/migration-backups/` with a unique
+name. Unsafe symbolic links, directories using a recognized file name, and incomplete moves stop
+configuration startup instead of silently replacing operator settings with defaults. Forge owned
+files such as `fml.toml` and `forge-client.toml` remain at the configuration root.
+
+Module enablement lives only in `config/futureshops/futureshops-common.toml`. Escrow has no disable switch. A disabled module is not projected as a header tab. Enabling a module projects it as soon as the server accepts the setting, escrow is ready, and its persisted control state permits browsing. Open marketplace screens poll the server supplied projection every five seconds. Some validated settings reload immediately, contract rules apply only to new contracts, and identity or persistence settings require restart or migration. An invalid reload preserves the last valid snapshot and logs the rejected field.
 
 Exact defaults, examples, validation behavior, and reload boundaries are documented in [Configuration examples](docs/config-3.0-examples.md).
 
@@ -271,7 +280,7 @@ After packaging, inspect the manifest, expanded `META-INF/mods.toml`, mixin conf
 
 Run `/marketadmin status`. Confirm the configured toggle, market control status, and escrow runtime state separately. A configured module can still be claims only, frozen, draining, recovering, or in maintenance.
 
-Check that the value was changed in the server copy of `config/futureshops-common.toml`, then check the server log for an accepted reload or a rejected field. Also check for checkpoint, journal, migration, catalog, or market control failures. Open screens refresh the server projection every second during recovery and every five seconds while ready. Reopening the screen should not be required.
+Check that the value was changed in the server copy of `config/futureshops/futureshops-common.toml`, then check the server log for an accepted reload or a rejected field. Also check for checkpoint, journal, migration, catalog, or market control failures. Open screens refresh the server projection every second during recovery and every five seconds while ready. Reopening the screen should not be required.
 
 ### Marketplace profile does not open
 

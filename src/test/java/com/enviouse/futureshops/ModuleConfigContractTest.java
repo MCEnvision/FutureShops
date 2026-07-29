@@ -38,11 +38,21 @@ class ModuleConfigContractTest {
     @Test
     void everyDedicatedSpecIsRegisteredWithAnExplicitFile() throws Exception {
         String source = read("src/main/java/com/enviouse/futureshops/Futureshops.java");
-        assertTrue(source.contains("Config.SPEC, \"futureshops-common.toml\""));
-        assertTrue(source.contains("EscrowConfig.SPEC, EscrowConfig.FILE_NAME"));
-        assertTrue(source.contains("AuctionHouseConfig.SPEC, AuctionHouseConfig.FILE_NAME"));
-        assertTrue(source.contains("BazaarConfig.SPEC, BazaarConfig.FILE_NAME"));
-        assertTrue(source.contains("ClientConfig.SPEC, \"futureshops-client.toml\""));
+        int migration = source.indexOf(
+                "FutureShopsConfigPaths.prepareAndMigrateLegacyFiles();");
+        int registration = source.indexOf("context.registerConfig(");
+        assertTrue(migration >= 0);
+        assertTrue(registration > migration);
+        assertTrue(source.contains(
+                "FutureShopsConfigPaths.registeredFile(Config.FILE_NAME)"));
+        assertTrue(source.contains(
+                "FutureShopsConfigPaths.registeredFile(EscrowConfig.FILE_NAME)"));
+        assertTrue(source.contains(
+                "FutureShopsConfigPaths.registeredFile(AuctionHouseConfig.FILE_NAME)"));
+        assertTrue(source.contains(
+                "FutureShopsConfigPaths.registeredFile(BazaarConfig.FILE_NAME)"));
+        assertTrue(source.contains(
+                "FutureShopsConfigPaths.registeredFile(ClientConfig.FILE_NAME)"));
         assertTrue(source.contains(
                 "event.enqueueWork(ShopDefinitionLoader::prepareStorage)"));
     }

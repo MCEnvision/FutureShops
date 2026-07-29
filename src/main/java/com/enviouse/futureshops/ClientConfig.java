@@ -13,6 +13,8 @@ import java.util.Set;
 
 @Mod.EventBusSubscriber(modid = Futureshops.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
 public final class ClientConfig {
+    public static final String FILE_NAME = "futureshops-client.toml";
+
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Set<String> DENSITIES = Set.of("compact", "normal", "comfortable");
     private static final Set<String> CARD_SIZES = Set.of("small", "medium", "large");

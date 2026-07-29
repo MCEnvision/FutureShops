@@ -5,11 +5,11 @@ registered unconditionally, so a disabled module can be configured before it is 
 
 | File | Owns |
 |---|---|
-| `config/futureshops-common.toml` | Module toggles, economy, currency provider, shop behavior |
-| `config/futureshops-escrow.toml` | Recovery, checkpoints, claims, asset bounds, request security |
-| `config/futureshops-auction-house.toml` | Auction House rules |
-| `config/futureshops-bazaar.toml` | Bazaar market rules |
-| `config/futureshops-client.toml` | Client-only presentation and accessibility |
+| `config/futureshops/futureshops-common.toml` | Module toggles, economy, currency provider, shop behavior |
+| `config/futureshops/futureshops-escrow.toml` | Recovery, checkpoints, claims, asset bounds, request security |
+| `config/futureshops/futureshops-auction-house.toml` | Auction House rules |
+| `config/futureshops/futureshops-bazaar.toml` | Bazaar market rules |
+| `config/futureshops/futureshops-client.toml` | Client-only presentation and accessibility |
 
 Bazaar product definitions live in `config/futureshops/bazaar/products/*.json` (see
 [bazaar-products.md](bazaar-products.md) and the examples at the end of this document). Server shop
@@ -20,7 +20,7 @@ Two rules to keep in mind before editing anything:
 - **Escrow has no enable toggle.** Escrow protects every operation that moves money, items, stock,
   or claims, and cannot be disabled while those features are available. The escrow TOML tunes how
   escrow works; nothing in it turns escrow off.
-- **Module toggles live only in the main config.** `futureshops-common.toml` `[modules]` is the
+- **Module toggles live only in the main config.** `config/futureshops/futureshops-common.toml` `[modules]` is the
   single source of module enablement. The per-module TOMLs contain no enabled flag.
 
 All money values are integer minor units: with the default two `economy.currency_decimals`,
@@ -52,7 +52,7 @@ If a reloaded file contains an invalid value, the whole reload for that file is 
 valid settings snapshot stays active and the server log reports the rejected field, for example
 `Rejected FutureShops Bazaar configuration. ...`.
 
-## futureshops-common.toml
+## config/futureshops/futureshops-common.toml
 
 ```toml
 [modules]
@@ -132,7 +132,7 @@ valid settings snapshot stays active and the server log reports the rejected fie
 	scan_radius_blocks = 64
 ```
 
-## futureshops-escrow.toml
+## config/futureshops/futureshops-escrow.toml
 
 Escrow cannot be disabled; these settings tune throughput, durability, and recovery. The journal
 and checkpoints these settings govern live in `<world>/futureshops/escrow/` — see
@@ -228,7 +228,7 @@ and checkpoints these settings govern live in `<world>/futureshops/escrow/` — 
 	require_confirmation = true
 ```
 
-## futureshops-auction-house.toml
+## config/futureshops/futureshops-auction-house.toml
 
 ```toml
 [branding]
@@ -327,7 +327,7 @@ and checkpoints these settings govern live in `<world>/futureshops/escrow/` — 
 	page_size = 28
 ```
 
-## futureshops-bazaar.toml
+## config/futureshops/futureshops-bazaar.toml
 
 Global market rules only — individual products are defined in
 `config/futureshops/bazaar/products/*.json` (below).
@@ -426,7 +426,7 @@ bazaar_control = "admin"
 	order_book_depth = 20
 ```
 
-## futureshops-client.toml
+## config/futureshops/futureshops-client.toml
 
 Client-only presentation. Accessibility settings always win over server branding.
 

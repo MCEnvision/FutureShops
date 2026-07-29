@@ -11,6 +11,7 @@ import net.minecraftforge.fml.event.config.ModConfigEvent;
 
 @Mod.EventBusSubscriber(modid = Futureshops.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
 public class Config {
+    public static final String FILE_NAME = "futureshops-common.toml";
     public static final String FOREIGN_CURRENCY_WARNING = "WARNING. Changing the currency provider from futureshops disables all FutureShops physical currency duplication protection. Currency items from other mods are spawned and accepted without mint ids, checksums, or spent mint tracking.";
 
     private static final Set<String> MODULE_IDS = Set.of("shop", "bazaar", "auction_house");
@@ -92,7 +93,7 @@ public class Config {
             "Pick values so no crafting recipe in the source mod can combine cheap items into a dearer one",
             "at a profit, or players get a money printer."
         )
-        .defineList("currency.items", List.of(), o -> o instanceof String s && s.contains("="));
+        .defineListAllowEmpty("currency.items", List.of(), o -> o instanceof String s && s.contains("="));
 
     private static final ForgeConfigSpec.ConfigValue<List<? extends String>> CURRENCY_ACCEPT_ONLY_ITEMS = BUILDER
         .comment(
@@ -101,7 +102,8 @@ public class Config {
             "Setting this OR currency.items non-empty replaces the ENTIRE \"apocalypsenow\" preset",
             "(both lists), so keep the two lists consistent with each other."
         )
-        .defineList("currency.accept_only_items", List.of(), o -> o instanceof String s && s.contains("="));
+        .defineListAllowEmpty("currency.accept_only_items", List.of(),
+            o -> o instanceof String s && s.contains("="));
 
     private static final ForgeConfigSpec.ConfigValue<String> MONEY_CHECKSUM_SALT = BUILDER
         .comment("Server-side salt used for MoneyItem checksum generation")

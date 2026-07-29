@@ -1,7 +1,7 @@
 # Physical currency and ATM
 
 FutureShops keeps the account balance separate from the physical item used as cash. The active
-physical provider is configured in `futureshops-common.toml` with `currency.provider`.
+physical provider is configured in `config/futureshops/futureshops-common.toml` with `currency.provider`.
 
 ## Opening the ATM
 

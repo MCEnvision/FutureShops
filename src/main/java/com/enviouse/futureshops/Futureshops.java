@@ -6,6 +6,7 @@ import com.enviouse.futureshops.compat.rs2.RefinedStorage2Compat;
 import com.enviouse.futureshops.config.AuctionHouseConfig;
 import com.enviouse.futureshops.config.BazaarConfig;
 import com.enviouse.futureshops.config.EscrowConfig;
+import com.enviouse.futureshops.config.FutureShopsConfigPaths;
 import com.enviouse.futureshops.init.ModBlockEntities;
 import com.enviouse.futureshops.init.ModBlocks;
 import com.enviouse.futureshops.init.ModCreativeTabs;
@@ -84,11 +85,17 @@ public class Futureshops {
         context.registerDisplayTest(ShopPackets.PROTOCOL_VERSION,
                 (remoteProtocol, fromServer) ->
                         ShopPackets.PROTOCOL_VERSION.equals(remoteProtocol));
-        context.registerConfig(ModConfig.Type.COMMON, Config.SPEC, "futureshops-common.toml");
-        context.registerConfig(ModConfig.Type.COMMON, EscrowConfig.SPEC, EscrowConfig.FILE_NAME);
-        context.registerConfig(ModConfig.Type.COMMON, AuctionHouseConfig.SPEC, AuctionHouseConfig.FILE_NAME);
-        context.registerConfig(ModConfig.Type.COMMON, BazaarConfig.SPEC, BazaarConfig.FILE_NAME);
-        context.registerConfig(ModConfig.Type.CLIENT, ClientConfig.SPEC, "futureshops-client.toml");
+        FutureShopsConfigPaths.prepareAndMigrateLegacyFiles();
+        context.registerConfig(ModConfig.Type.COMMON, Config.SPEC,
+                FutureShopsConfigPaths.registeredFile(Config.FILE_NAME));
+        context.registerConfig(ModConfig.Type.COMMON, EscrowConfig.SPEC,
+                FutureShopsConfigPaths.registeredFile(EscrowConfig.FILE_NAME));
+        context.registerConfig(ModConfig.Type.COMMON, AuctionHouseConfig.SPEC,
+                FutureShopsConfigPaths.registeredFile(AuctionHouseConfig.FILE_NAME));
+        context.registerConfig(ModConfig.Type.COMMON, BazaarConfig.SPEC,
+                FutureShopsConfigPaths.registeredFile(BazaarConfig.FILE_NAME));
+        context.registerConfig(ModConfig.Type.CLIENT, ClientConfig.SPEC,
+                FutureShopsConfigPaths.registeredFile(ClientConfig.FILE_NAME));
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {

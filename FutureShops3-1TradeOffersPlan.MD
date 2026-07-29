@@ -359,6 +359,47 @@ The administrator writer must:
 * Preserve the prior live catalog when any step fails.
 * Fail closed on a newer unknown schema.
 
+## Configuration layout and migration
+
+All FutureShops owned configuration must live below the single `config/futureshops/` directory. This includes the common, client, escrow, Auction House, and Bazaar TOML files, Server Shop catalogs, Bazaar product catalogs, migration backups, and any future module configuration. Forge owned files such as `fml.toml` and `forge-client.toml` remain in the configuration root.
+
+Existing installations may contain loose FutureShops TOML files and Forge generated backups in the configuration root. Startup must migrate every recognized FutureShops file before Forge registers the specifications:
+
+* Move each recognized loose active file into `config/futureshops/` without changing its bytes.
+* Move recognized loose backup files into the same FutureShops directory so no FutureShops artifact remains at the configuration root.
+* Keep an existing nested active file authoritative when both locations contain a file.
+* Preserve the conflicting loose file under `config/futureshops/migration-backups/` with a unique name instead of overwriting or deleting either copy.
+* Reject symbolic links, directories, unsafe names, and incomplete migrations rather than silently loading defaults over an existing configuration.
+* Make migration idempotent. A second startup must not move, copy, rewrite, or back up anything again.
+* Leave unrelated files and directories untouched.
+
+Optional empty identifier and tag lists must use a Forge specification that accepts empty lists. A valid default configuration must remain correct after load and save, without recurring correction warnings or numbered backup files.
+
+Migration and registration apply in both integrated and dedicated server environments. A clean installation must create `config/futureshops/` before configuration loading, including when a modpack developer opens a singleplayer world to prepare an administrator shop.
+
+Acceptance requires:
+
+* A clean startup creates no `futureshops-*.toml` files at the configuration root.
+* An upgrade preserves exact values from every recognized loose active file.
+* A nested and loose conflict preserves both files and continues with the nested file.
+* Existing `config/futureshops/shops/` and `config/futureshops/bazaar/products/` catalogs remain in place.
+* A second startup reports no correction for valid empty optional lists and creates no new configuration backup.
+* Client, integrated server, and dedicated server startup use the same canonical FutureShops directory.
+* Configuration documentation and examples show only canonical nested paths.
+
+### Implementation status
+
+This configuration hardening is implemented and locally verified on the active phase branch as of July 29, 2026. It remains in review until the phase change is merged.
+
+* All five Forge managed specifications register below `config/futureshops/`.
+* The migration preserves active files and numbered Forge backups, archives conflicts without overwriting either copy, rejects unsafe paths, and is idempotent.
+* Currency item lists and Auction House restriction lists accept valid empty defaults without correction.
+* Focused regression tests, the complete test suite, and the packaged build pass.
+* A dedicated server migrated 17 existing loose files and backups, reached ready, then reached ready again without migration, correction, or backup churn.
+* A client under a virtual display loaded all five canonical TOML paths and reached the render thread without configuration correction.
+* Documentation and examples contain only the canonical nested paths.
+* No implementation deviation or unresolved configuration migration risk remains. Merge and release approval remain outside this work item.
+
 ## Escrow and transaction architecture
 
 ### New offer transaction
@@ -1026,6 +1067,8 @@ Deliver:
 
 * Performance and packet bound review.
 * Security review.
+* Unified `config/futureshops/` registration and safe migration of legacy loose FutureShops files.
+* Stable optional list specifications that do not trigger recurring Forge correction.
 * Client, dedicated server, multiplayer, reconnect, restart, and migration smoke tests.
 * Configuration examples.
 * Administrator and player documentation.
@@ -1036,6 +1079,8 @@ Gate:
 * No unresolved recovery or conservation failure.
 * No misleading savings display.
 * No unsupported old transaction or catalog state.
+* No FutureShops owned configuration remains outside `config/futureshops/`.
+* Valid configuration produces no recurring correction warning or backup churn.
 * The final JAR contains the expected metadata, assets, and no local artifacts.
 
 ## Verification plan
@@ -1069,6 +1114,9 @@ Add focused tests for:
 * Structured server validation issue mapping.
 * Save request correlation, duplicate acknowledgement handling, and stale revision behavior.
 * Exact minor unit price parsing without floating point.
+* Canonical configuration path registration for every FutureShops specification.
+* Legacy active and backup configuration migration, exact content preservation, conflict archival, unsafe path rejection, and idempotent restart.
+* Empty optional currency and Auction House restriction lists remaining valid after Forge correction checks.
 * Tooltip registration and translation key coverage for every administrator control.
 * Removal paths that distinguish listing removal from option or barter removal.
 

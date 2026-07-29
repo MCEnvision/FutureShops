@@ -41,7 +41,7 @@ FutureShops currently assumes one authoritative server and world. It does not pr
 5. Start the game or dedicated server once to create the TOML files and editable catalog directories.
 6. Review module, economy, escrow, Auction House, and Bazaar settings before opening the server.
 
-The Bazaar and Auction House are disabled on a new installation. Enable either module in `futureshops-common.toml` after reviewing its rules. Existing configuration files keep their configured values. Disabled modules are omitted from the marketplace header. An accepted server configuration change appears on an open marketplace screen within five seconds without requiring a reconnect.
+The Bazaar and Auction House are disabled on a new installation. Enable either module in `config/futureshops/futureshops-common.toml` after reviewing its rules. Existing configuration files keep their configured values. Disabled modules are omitted from the marketplace header. An accepted server configuration change appears on an open marketplace screen within five seconds without requiring a reconnect.
 
 For 3.0 or 3.1 upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
 
@@ -81,15 +81,20 @@ See [Bulk inventory selling](docs/bulk-selling.md) and the [Auction House and Ba
 
 FutureShops creates these files:
 
-* `config/futureshops-common.toml` for module toggles, economy, currency, permissions, and shop behavior.
-* `config/futureshops-escrow.toml` for recovery, claims, checkpoints, request protection, and asset limits.
-* `config/futureshops-auction-house.toml` for listing, bid, fee, duration, and lifecycle rules.
-* `config/futureshops-bazaar.toml` for catalog control, order matching, fees, limits, and lifecycle rules.
-* `config/futureshops-client.toml` for presentation and accessibility.
+* `config/futureshops/futureshops-common.toml` for module toggles, economy, currency, permissions, and shop behavior.
+* `config/futureshops/futureshops-escrow.toml` for recovery, claims, checkpoints, request protection, and asset limits.
+* `config/futureshops/futureshops-auction-house.toml` for listing, bid, fee, duration, and lifecycle rules.
+* `config/futureshops/futureshops-bazaar.toml` for catalog control, order matching, fees, limits, and lifecycle rules.
+* `config/futureshops/futureshops-client.toml` for presentation and accessibility.
 
 Server shop catalogs live in `config/futureshops/shops/`. Bazaar products live in `config/futureshops/bazaar/products/`.
 
-FutureShops creates `config/futureshops/shops/admin.json` during common mod setup, before a client opens a singleplayer world. Modpack developers can start the client once, edit that file, and ship the complete `config/futureshops/` directory as the pack's singleplayer Server Shop template. An integrated server reads this global client configuration. A remote multiplayer server ignores the client's copy and uses its own authoritative `config/futureshops/shops/` directory. The Forge managed TOML files remain directly under `config/` for compatibility with existing installations.
+FutureShops creates `config/futureshops/shops/admin.json` during common mod setup, before a client opens a singleplayer world. Modpack developers can start the client once, edit that file, and ship the complete `config/futureshops/` directory as the pack's singleplayer Server Shop template. An integrated server reads this global client configuration. A remote multiplayer server ignores the client's copy and uses its own authoritative `config/futureshops/shops/` directory.
+
+Recognized loose FutureShops TOML files and their Forge backups are moved into
+`config/futureshops/` before configuration loading. Existing nested files remain authoritative, and
+conflicting loose copies are preserved under `config/futureshops/migration-backups/`. The migration
+does not rewrite values or move unrelated Forge and mod configuration.
 
 See [3.1 trade offer configuration](docs/config-3.1-offers.md), [Configuration examples](docs/config-3.0-examples.md), and [Bazaar product definitions](docs/bazaar-products.md).
 

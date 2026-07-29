@@ -1,6 +1,6 @@
 # Bazaar product definitions
 
-The root `bazaar_control` value in `futureshops-bazaar.toml` selects who controls the product
+The root `bazaar_control` value in `config/futureshops/futureshops-bazaar.toml` selects who controls the product
 catalog.
 
 1. `bazaar_control = "admin"` is the default Hypixel style curated mode. Only products in

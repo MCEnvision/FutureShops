@@ -107,8 +107,9 @@ the matching player data can leave deliveries in manual review.
 
 ### Configuration — `config/`
 
-`futureshops-common.toml`, `futureshops-escrow.toml`, `futureshops-auction-house.toml`,
-`futureshops-bazaar.toml`, plus the JSON directories `config/futureshops/shops/` and
+`config/futureshops/futureshops-common.toml`, `config/futureshops/futureshops-escrow.toml`,
+`config/futureshops/futureshops-auction-house.toml`,
+`config/futureshops/futureshops-bazaar.toml`, plus the JSON directories `config/futureshops/shops/` and
 `config/futureshops/bazaar/products/`. Config is not part of the world save, so include the
 `config/` directory in your backup routine. Active listings and orders snapshot their rules, so a
 restored world remains internally consistent even against a newer config, but keeping config and
