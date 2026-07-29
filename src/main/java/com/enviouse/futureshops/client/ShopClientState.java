@@ -1,5 +1,7 @@
 package com.enviouse.futureshops.client;
 
+import com.enviouse.futureshops.catalog.offer.AcquireOfferOption;
+import com.enviouse.futureshops.catalog.offer.ServerShopOfferListing;
 import com.enviouse.futureshops.data.CatalogBarterRecipe;
 import com.enviouse.futureshops.data.CatalogCategory;
 import com.enviouse.futureshops.data.CatalogItem;
@@ -35,6 +37,8 @@ public final class ShopClientState {
     private static volatile List<CatalogItem> catalogItems = List.of();
     private static volatile List<CatalogPromo> catalogPromos = List.of();
     private static volatile List<CatalogBarterRecipe> catalogBarterRecipes = List.of();
+    private static volatile List<ServerShopOfferListing> catalogOffers =
+            List.of();
     private static volatile List<TransactionHistoryEntry> transactionHistory = List.of();
     private static volatile boolean adminShopEnabled = true;
     // Whether the server says this player may use the in-GUI admin editor (permission level 2).
@@ -51,6 +55,8 @@ public final class ShopClientState {
     // variants of one base item are distinct cart lines. ownedItemCounts stays keyed by registry
     // itemId (InventorySyncService reports registry-id counts).
     private static final Map<String, Integer> cart = new LinkedHashMap<>();
+    private static final Map<OfferCartKey, Integer> offerCart =
+            new LinkedHashMap<>();
     private static final CartResponsePolicy cartResponsePolicy = new CartResponsePolicy();
     private static CartCheckoutSubmission trackedCartCheckout;
     private static final Map<String, Integer> ownedItemCounts = new HashMap<>();
@@ -66,7 +72,8 @@ public final class ShopClientState {
     public static void applyShopData(String shopId, long balanceMinorUnits, String currency, int decimals,
                                      List<CatalogCategory> categories, List<CatalogItem> items,
                                      List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes,
-                                     boolean adminEnabled, List<NearbyShopEntry> nearby, boolean canEdit) {
+                                     boolean adminEnabled, List<NearbyShopEntry> nearby, boolean canEdit,
+                                     List<ServerShopOfferListing> offers) {
         activeShopId = shopId;
         currentBalanceMinorUnits = balanceMinorUnits;
         currentBalanceKnown = true;
@@ -76,6 +83,7 @@ public final class ShopClientState {
         catalogItems = List.copyOf(items);
         catalogPromos = List.copyOf(promos);
         catalogBarterRecipes = List.copyOf(barterRecipes);
+        catalogOffers = List.copyOf(offers);
         adminShopEnabled = adminEnabled;
         canEditAdminShop = canEdit;
         nearbyShops = List.copyOf(nearby);
@@ -84,6 +92,15 @@ public final class ShopClientState {
             ownedItemCounts.clear();
         }
         sanitizeCart();
+    }
+
+    public static void applyShopData(String shopId, long balanceMinorUnits, String currency, int decimals,
+                                     List<CatalogCategory> categories, List<CatalogItem> items,
+                                     List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes,
+                                     boolean adminEnabled, List<NearbyShopEntry> nearby, boolean canEdit) {
+        applyShopData(shopId, balanceMinorUnits, currency, decimals,
+                categories, items, promos, barterRecipes, adminEnabled,
+                nearby, canEdit, List.of());
     }
 
     /**
@@ -98,6 +115,7 @@ public final class ShopClientState {
         catalogItems = List.of();
         catalogPromos = List.of();
         catalogBarterRecipes = List.of();
+        catalogOffers = List.of();
         adminShopEnabled = true;
         canEditAdminShop = false;
         nearbyShops = List.of();
@@ -105,6 +123,7 @@ public final class ShopClientState {
         status = null;
         synchronized (cart) {
             cart.clear();
+            offerCart.clear();
             cartNbtSnapshots.clear();
         }
         cartResponsePolicy.reset();
@@ -198,6 +217,54 @@ public final class ShopClientState {
         }
     }
 
+    public static void addOfferToCart(
+            String listingId,
+            String optionId,
+            int quantity,
+            long observedRevision
+    ) {
+        if (cartCheckoutBlocksMutation() || quantity <= 0) {
+            return;
+        }
+        ServerShopOfferListing listing =
+                getCatalogOffer(listingId).orElse(null);
+        if (listing == null || listing.acquireOptions().stream()
+                .noneMatch(option -> option.optionId()
+                        .equals(optionId))) {
+            return;
+        }
+        OfferCartKey key = new OfferCartKey(
+                listingId, optionId, observedRevision);
+        int previous;
+        int current;
+        synchronized (cart) {
+            previous = offerCart.getOrDefault(key, 0);
+            current = Math.min(2304,
+                    Math.addExact(previous, quantity));
+            CatalogItem catalogItem = getCatalogItem(
+                    listingId).orElse(null);
+            if (catalogItem != null && !catalogItem.unlimited()) {
+                current = Math.min(current, catalogItem.stock());
+            }
+            current = Math.min(current,
+                    listing.limits().maximumPerRequest());
+            AcquireOfferOption option = listing.acquireOptions().stream()
+                    .filter(candidate -> candidate.optionId()
+                            .equals(optionId))
+                    .findFirst().orElseThrow();
+            current = Math.min(current,
+                    option.limits().maximumPerRequest());
+            if (current > 0) {
+                offerCart.put(key, current);
+            }
+        }
+        if (current > previous) {
+            setStatus(Component.translatable(
+                    "gui.futureshops.status.cart.added",
+                    current - previous, listing.displayName()), true);
+        }
+    }
+
     /** Listing tag as it looked when first added to the cart; "" when unknown/absent. */
     public static String getCartNbtSnapshot(String listingId) {
         synchronized (cart) {
@@ -219,6 +286,31 @@ public final class ShopClientState {
         }
     }
 
+    public static void setCartQuantity(CartEntry entry, int quantity) {
+        if (!entry.normalized()) {
+            setCartQuantity(entry.listingId(), quantity);
+            return;
+        }
+        if (cartCheckoutBlocksMutation()) {
+            return;
+        }
+        synchronized (cart) {
+            OfferCartKey key = new OfferCartKey(
+                    entry.listingId(), entry.optionId(),
+                    entry.observedRevision());
+            if (quantity <= 0) {
+                offerCart.remove(key);
+            } else {
+                int clamped = clampOfferCartQuantity(key, quantity);
+                if (clamped <= 0) {
+                    offerCart.remove(key);
+                } else {
+                    offerCart.put(key, clamped);
+                }
+            }
+        }
+    }
+
     public static void removeFromCart(String listingId) {
         if (cartCheckoutBlocksMutation()) {
             return;
@@ -229,9 +321,25 @@ public final class ShopClientState {
         }
     }
 
+    public static void removeFromCart(CartEntry entry) {
+        if (!entry.normalized()) {
+            removeFromCart(entry.listingId());
+            return;
+        }
+        if (cartCheckoutBlocksMutation()) {
+            return;
+        }
+        synchronized (cart) {
+            offerCart.remove(new OfferCartKey(
+                    entry.listingId(), entry.optionId(),
+                    entry.observedRevision()));
+        }
+    }
+
     public static void clearCart() {
         synchronized (cart) {
             cart.clear();
+            offerCart.clear();
             cartNbtSnapshots.clear();
         }
         cartResponsePolicy.reset();
@@ -246,7 +354,7 @@ public final class ShopClientState {
     ) {
         List<CartResponsePolicy.Line> lines = entries.stream()
                 .map(entry -> new CartResponsePolicy.Line(
-                        0, entry.listingId(), entry.quantity()))
+                        0, entry.cartKey(), entry.quantity()))
                 .toList();
         CartResponsePolicy.BeginDecision decision = cartResponsePolicy.begin(
                 requestId, lines, nowMillis, CART_CHECKOUT_TIMEOUT_MILLIS);
@@ -269,9 +377,18 @@ public final class ShopClientState {
             UUID requestId,
             boolean success
     ) {
+        return applyCartCheckoutResponse(requestId, success, true);
+    }
+
+    public static CartResponsePolicy.ResponseResult applyCartCheckoutResponse(
+            UUID requestId,
+            boolean success,
+            boolean terminal
+    ) {
         CartResponsePolicy.ResponseResult result =
                 cartResponsePolicy.onResponse(
-                        requestId, 0, success, true, System.currentTimeMillis());
+                        requestId, 0, success, terminal,
+                        System.currentTimeMillis());
         if (!result.linesToClear().isEmpty()) {
             synchronized (cart) {
                 for (CartResponsePolicy.Line line : result.linesToClear()) {
@@ -301,7 +418,22 @@ public final class ShopClientState {
         return cartResponsePolicy.hasTrackedRequest();
     }
 
-    private static void removeAcknowledgedCartQuantityLocked(String listingId, int quantity) {
+    private static void removeAcknowledgedCartQuantityLocked(
+            String listingId,
+            int quantity
+    ) {
+        OfferCartKey normalized = offerCart.keySet().stream()
+                .filter(key -> key.cartKey().equals(listingId))
+                .findFirst().orElse(null);
+        if (normalized != null) {
+            Integer current = offerCart.get(normalized);
+            if (current == null || current <= quantity) {
+                offerCart.remove(normalized);
+            } else {
+                offerCart.put(normalized, current - quantity);
+            }
+            return;
+        }
         Integer current = cart.get(listingId);
         if (current == null) {
             return;
@@ -352,6 +484,17 @@ public final class ShopClientState {
 
     public static List<CatalogBarterRecipe> getCatalogBarterRecipes() {
         return catalogBarterRecipes;
+    }
+
+    public static List<ServerShopOfferListing> getCatalogOffers() {
+        return catalogOffers;
+    }
+
+    public static Optional<ServerShopOfferListing> getCatalogOffer(
+            String listingId
+    ) {
+        return catalogOffers.stream().filter(offer ->
+                offer.listingId().equals(listingId)).findFirst();
     }
 
     public static List<TransactionHistoryEntry> getTransactionHistory() {
@@ -422,21 +565,34 @@ public final class ShopClientState {
 
     public static List<CartEntry> getCartEntries() {
         synchronized (cart) {
-            return cart.entrySet().stream()
+            List<CartEntry> values = new java.util.ArrayList<>();
+            values.addAll(cart.entrySet().stream()
                     .map(entry -> new CartEntry(entry.getKey(), entry.getValue()))
-                    .toList();
+                    .toList());
+            values.addAll(offerCart.entrySet().stream()
+                    .map(entry -> new CartEntry(
+                            entry.getKey().listingId(),
+                            entry.getKey().optionId(),
+                            entry.getValue(),
+                            entry.getKey().observedRevision(), true))
+                    .toList());
+            return List.copyOf(values);
         }
     }
 
     public static int getCartLineCount() {
         synchronized (cart) {
-            return cart.size();
+            return cart.size() + offerCart.size();
         }
     }
 
     public static int getCartTotalQuantity() {
         synchronized (cart) {
-            return cart.values().stream().mapToInt(Integer::intValue).sum();
+            return Math.addExact(
+                    cart.values().stream()
+                            .mapToInt(Integer::intValue).sum(),
+                    offerCart.values().stream()
+                            .mapToInt(Integer::intValue).sum());
         }
     }
 
@@ -450,6 +606,24 @@ public final class ShopClientState {
                 }
                 long unitPrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
                 total += unitPrice * entry.getValue();
+            }
+            for (Map.Entry<OfferCartKey, Integer> entry
+                    : offerCart.entrySet()) {
+                ServerShopOfferListing listing = getCatalogOffer(
+                        entry.getKey().listingId()).orElse(null);
+                if (listing == null) {
+                    continue;
+                }
+                com.enviouse.futureshops.catalog.offer.AcquireOfferOption
+                        option = listing.acquireOptions().stream()
+                        .filter(value -> value.optionId().equals(
+                                entry.getKey().optionId()))
+                        .findFirst().orElse(null);
+                if (option != null && option.moneyCostPresent()) {
+                    total = Math.addExact(total, Math.multiplyExact(
+                            option.moneyCostMinorUnits(),
+                            entry.getValue()));
+                }
             }
             return total;
         }
@@ -484,6 +658,17 @@ public final class ShopClientState {
             return item == null || item.buyPrice() <= 0L || entry.getValue() <= 0;
         });
         cartNbtSnapshots.keySet().retainAll(cart.keySet());
+        var iterator = offerCart.entrySet().iterator();
+        while (iterator.hasNext()) {
+            var entry = iterator.next();
+            int clamped = clampOfferCartQuantity(
+                    entry.getKey(), entry.getValue());
+            if (clamped <= 0) {
+                iterator.remove();
+            } else {
+                entry.setValue(clamped);
+            }
+        }
     }
 
     private static int clampCartQuantity(String listingId, int quantity) {
@@ -499,8 +684,53 @@ public final class ShopClientState {
         return clamped;
     }
 
+    private static int clampOfferCartQuantity(
+            OfferCartKey key,
+            int quantity
+    ) {
+        ServerShopOfferListing listing = getCatalogOffer(
+                key.listingId()).orElse(null);
+        if (listing == null) {
+            return 0;
+        }
+        AcquireOfferOption option = listing.acquireOptions().stream()
+                .filter(candidate -> candidate.optionId()
+                        .equals(key.optionId()))
+                .findFirst().orElse(null);
+        if (option == null) {
+            return 0;
+        }
+        int clamped = Math.max(1, Math.min(2304, quantity));
+        clamped = Math.min(clamped,
+                listing.limits().maximumPerRequest());
+        clamped = Math.min(clamped,
+                option.limits().maximumPerRequest());
+        CatalogItem item = getCatalogItem(key.listingId()).orElse(null);
+        if (item != null && !item.unlimited()) {
+            clamped = Math.min(clamped,
+                    item.stock() / option.outputMultiplier());
+        }
+        return clamped;
+    }
+
     /** {@code listingId} is the catalog resolution key for this cart line (see {@link CatalogItem}). */
-    public record CartEntry(String listingId, int quantity) {
+    public record CartEntry(
+            String listingId,
+            String optionId,
+            int quantity,
+            long observedRevision,
+            boolean normalized
+    ) {
+        public CartEntry(String listingId, int quantity) {
+            this(listingId, "", quantity, 0L, false);
+        }
+
+        public String cartKey() {
+            return normalized
+                    ? "offer\u0000" + listingId + "\u0000"
+                    + optionId + "\u0000" + observedRevision
+                    : listingId;
+        }
     }
 
     public record CartCheckoutSubmission(
@@ -515,6 +745,17 @@ public final class ShopClientState {
     }
 
     public record ShopStatus(Component message, boolean success, long expiresAtMillis) {
+    }
+
+    private record OfferCartKey(
+            String listingId,
+            String optionId,
+            long observedRevision
+    ) {
+        private String cartKey() {
+            return "offer\u0000" + listingId + "\u0000"
+                    + optionId + "\u0000" + observedRevision;
+        }
     }
 
     // -------------------------------------------------------------------------

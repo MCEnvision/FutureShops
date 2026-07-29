@@ -41,6 +41,11 @@ final class ExactItemClaimDeliveryPlanner {
             String requestKey = requestKey(claim.claimId(),
                     receipt.token().requestId());
             Optional<ClaimAttemptResult> prior = claims.attempt(requestKey);
+            if ((claim.status() == ClaimStatus.COMPLETED
+                    || claim.remainingUnits() == 0L)
+                    && prior.isEmpty()) {
+                continue;
+            }
             long remainingBefore = prior.map(value -> Math.addExact(
                     value.deliveredUnits(), value.remainingUnits()))
                     .orElse(claim.remainingUnits());

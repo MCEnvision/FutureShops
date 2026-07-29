@@ -158,23 +158,21 @@ class EscrowCashDepositServiceTest {
     }
 
     @Test
-    void fullWalletInventoryCashUsesClaimOnlyEscrowHeadroom() {
+    void inventoryCashUsesClaimOnlyEscrowHeadroom() {
         long fullWallet = 99_999_999_999L;
-        long purchaseCash = 12_500L;
 
         long custodyLimit = EscrowCashDepositService.walletBalanceLimit(
                 true, fullWallet, fullWallet);
 
-        assertEquals(fullWallet, custodyLimit);
-        assertEquals(0L, Math.subtractExact(custodyLimit, fullWallet));
-        assertEquals(purchaseCash, Math.subtractExact(purchaseCash,
-                Math.subtractExact(custodyLimit, fullWallet)));
+        assertEquals(0L, custodyLimit);
+        assertEquals(0L, EscrowCashDepositService.walletBalanceLimit(
+                true, -500L, fullWallet));
         assertEquals(fullWallet,
                 EscrowCashDepositService.walletBalanceLimit(
                         false, 100L, fullWallet));
         assertThrows(IllegalArgumentException.class,
                 () -> EscrowCashDepositService.walletBalanceLimit(
-                        true, Math.addExact(fullWallet, 1L), fullWallet));
+                        false, Math.addExact(fullWallet, 1L), fullWallet));
     }
 
     @Test

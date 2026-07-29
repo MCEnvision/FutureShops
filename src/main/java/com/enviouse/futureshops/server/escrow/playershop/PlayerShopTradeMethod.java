@@ -5,5 +5,6 @@ public enum PlayerShopTradeMethod {
     BARTER,
     MONEY_AND_BARTER,
     BUYBACK,
-    SETTLEMENT
+    SETTLEMENT,
+    FREE
 }

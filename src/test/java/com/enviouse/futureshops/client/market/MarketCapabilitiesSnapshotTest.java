@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MarketCapabilitiesSnapshotTest {
     @Test
-    void disabledModuleWithClaimsBecomesClaimsOnlyAndVisible() {
+    void disabledModuleWithClaimsKeepsClaimsWithoutNavigation() {
         MarketModuleCapability capability = new MarketModuleCapability(
             MarketModule.AUCTION_HOUSE,
             MarketModuleAvailability.CLAIMS_ONLY,
@@ -22,9 +22,24 @@ class MarketCapabilitiesSnapshotTest {
             4L
         );
 
-        assertTrue(capability.availability().visible());
+        assertFalse(capability.availability().visible());
         assertTrue(capability.canOpenView("claims"));
         assertFalse(capability.canOpenView("browse"));
+    }
+
+    @Test
+    void hiddenClaimsOnlyDefaultFallsBackToShop() {
+        MarketModuleCapability shop = capability(
+                MarketModule.SHOP, MarketModuleAvailability.ENABLED, 0L);
+        MarketModuleCapability bazaar = capability(
+                MarketModule.BAZAAR,
+                MarketModuleAvailability.CLAIMS_ONLY, 2L);
+        MarketCapabilitiesSnapshot snapshot =
+                new MarketCapabilitiesSnapshot(
+                        UUID.randomUUID(), 8L, true,
+                        MarketModule.BAZAAR, List.of(shop, bazaar));
+
+        assertEquals(MarketModule.SHOP, snapshot.defaultModule());
     }
 
     @Test
@@ -106,6 +121,18 @@ class MarketCapabilitiesSnapshotTest {
                 new MarketCapabilitiesSnapshot(UUID.randomUUID(), 1L,
                         true, MarketModule.SHOP, 0L, true,
                         "Credits", -1, modules));
+    }
+
+    @Test
+    void negativeAuctionListingFeeIsRejected() {
+        List<MarketModuleCapability> modules = List.of(
+                capability(MarketModule.SHOP,
+                        MarketModuleAvailability.ENABLED, 0L));
+        assertThrows(IllegalArgumentException.class, () ->
+                new MarketCapabilitiesSnapshot(UUID.randomUUID(), 1L,
+                        true, MarketModule.SHOP, 0L, true,
+                        "Credits", 2, -1L, true,
+                        List.of(3_600L), modules));
     }
 
     private static MarketModuleCapability capability(

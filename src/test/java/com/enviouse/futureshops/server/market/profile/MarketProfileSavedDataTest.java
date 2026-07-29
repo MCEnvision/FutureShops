@@ -162,7 +162,7 @@ class MarketProfileSavedDataTest {
     }
 
     @Test
-    void receiptsAndRetiredFilterRoundTripWithDeterministicEviction() {
+    void receiptsAndReplayEpochRoundTripWithDeterministicRotation() {
         MarketProfileSavedData data = new MarketProfileSavedData();
         UUID route = UUID.randomUUID();
         MarketProfileMutationCommand first = null;
@@ -189,10 +189,11 @@ class MarketProfileSavedDataTest {
         assertEquals(0L, data.snapshot(PLAYER).revision());
         assertTrue(data.mutationReceipt(PLAYER,
                 first.requestId()).isEmpty());
-        assertEquals(MarketProfileSavedData.RetiredMutationRequest.UNKNOWN,
+        assertEquals(1L, data.snapshot(PLAYER).replayEpoch());
+        assertEquals(MarketProfileSavedData.RetiredMutationRequest.NONE,
                 data.retiredMutationRequest(PLAYER, first.requestId(),
                         first.fingerprint()));
-        assertEquals(MarketProfileSavedData.RetiredMutationRequest.EXACT,
+        assertEquals(MarketProfileSavedData.RetiredMutationRequest.NONE,
                 data.retiredMutationRequest(PLAYER, second.requestId(),
                         second.fingerprint()));
         assertTrue(data.mutationReceipt(PLAYER,
@@ -200,10 +201,11 @@ class MarketProfileSavedDataTest {
 
         MarketProfileSavedData restored = MarketProfileSavedData.load(
                 data.save(new CompoundTag()).copy());
-        assertEquals(MarketProfileSavedData.RetiredMutationRequest.UNKNOWN,
+        assertEquals(1L, restored.snapshot(PLAYER).replayEpoch());
+        assertEquals(MarketProfileSavedData.RetiredMutationRequest.NONE,
                 restored.retiredMutationRequest(PLAYER,
                         first.requestId(), first.fingerprint()));
-        assertEquals(MarketProfileSavedData.RetiredMutationRequest.EXACT,
+        assertEquals(MarketProfileSavedData.RetiredMutationRequest.NONE,
                 restored.retiredMutationRequest(PLAYER,
                         second.requestId(), second.fingerprint()));
         assertEquals(data.mutationReceipt(PLAYER, last.requestId()),
@@ -211,24 +213,71 @@ class MarketProfileSavedDataTest {
     }
 
     @Test
-    void replayFilterMetadataAndFixedSizeAreValidated() {
+    void replayEpochIsRequiredAndValidated() {
         MarketProfileSavedData data = new MarketProfileSavedData();
         data.setProductFavorite(PLAYER, PRODUCT, true);
         CompoundTag encoded = data.save(new CompoundTag());
 
-        CompoundTag wrongHashes = encoded.copy();
-        wrongHashes.getList("players", Tag.TAG_COMPOUND)
-                .getCompound(0).putInt(
-                        "mutationReplayFilterHashes", 99);
+        CompoundTag missingEpoch = encoded.copy();
+        missingEpoch.getList("players", Tag.TAG_COMPOUND)
+                .getCompound(0).remove("mutationReplayEpoch");
         assertThrows(IllegalStateException.class, () ->
-                MarketProfileSavedData.load(wrongHashes));
+                MarketProfileSavedData.load(missingEpoch));
 
-        CompoundTag wrongSize = encoded.copy();
-        wrongSize.getList("players", Tag.TAG_COMPOUND)
-                .getCompound(0).putLongArray(
-                        "mutationReplayFilter", new long[1]);
+        CompoundTag negativeEpoch = encoded.copy();
+        negativeEpoch.getList("players", Tag.TAG_COMPOUND)
+                .getCompound(0).putLong("mutationReplayEpoch", -1L);
         assertThrows(IllegalStateException.class, () ->
-                MarketProfileSavedData.load(wrongSize));
+                MarketProfileSavedData.load(negativeEpoch));
+    }
+
+    @Test
+    void schemaTwoBloomStateMigratesToANewExactEpoch() {
+        MarketProfileSavedData data = new MarketProfileSavedData();
+        data.setProductFavorite(PLAYER, PRODUCT, true);
+        CompoundTag encoded = data.save(new CompoundTag());
+        encoded.putInt("schemaVersion", 2);
+        CompoundTag player = encoded.getList("players", Tag.TAG_COMPOUND)
+                .getCompound(0);
+        player.remove("mutationReplayEpoch");
+        player.putInt("mutationReplayFilterVersion", 1);
+        player.putInt("mutationReplayFilterBits", 32768);
+        player.putInt("mutationReplayFilterHashes", 5);
+        player.putLongArray("mutationReplayFilter", new long[512]);
+
+        MarketProfileSavedData restored = MarketProfileSavedData.load(
+                encoded);
+
+        assertEquals(1L, restored.snapshot(PLAYER).replayEpoch());
+        assertEquals(List.of(PRODUCT), restored.snapshot(PLAYER)
+                .favoriteProducts());
+    }
+
+    @Test
+    void tenThousandRetirementsNeverCreateFalseReplayMatches() {
+        MarketProfileSavedData data = new MarketProfileSavedData();
+        UUID route = UUID.randomUUID();
+        for (int index = 1; index <= 10_000; index++) {
+            MarketProfileMutationCommand command =
+                    new MarketProfileMutationCommand(
+                            new UUID(19L, index), route,
+                            MarketModule.BAZAAR, "products", 0L,
+                            data.snapshot(PLAYER).replayEpoch(),
+                            new MarketProfileMutation.BazaarFavorite(
+                                    PRODUCT, true));
+            data.recordMutationReceipt(PLAYER, receipt(command));
+        }
+        MarketProfileMutationCommand unseen =
+                new MarketProfileMutationCommand(new UUID(20L, 1L),
+                        route, MarketModule.BAZAAR, "products", 0L,
+                        data.snapshot(PLAYER).replayEpoch(),
+                        new MarketProfileMutation.BazaarFavorite(
+                                PRODUCT, true));
+
+        assertTrue(data.snapshot(PLAYER).replayEpoch() > 0L);
+        assertEquals(MarketProfileSavedData.RetiredMutationRequest.NONE,
+                data.retiredMutationRequest(PLAYER, unseen.requestId(),
+                        unseen.fingerprint()));
     }
 
     private static MarketProfileSavedData.PriceAlert alert(

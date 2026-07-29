@@ -246,6 +246,29 @@ public final class EscrowRuntimeSavedData extends EscrowManagedSavedData {
                 && maintenanceSnapshot().equals(result);
     }
 
+    synchronized boolean isPristineBootstrap() {
+        return journalLineage != null
+                && lastAppliedSequence == 1L
+                && checkpointId == null
+                && maintenanceRevision == 0L
+                && !maintenanceRequested
+                && lastMaintenanceCommandId == null
+                && maintenanceIncident.isEmpty()
+                && maintenanceVerifiedSequence == -1L
+                && maintenanceVerificationFingerprint.length == 0;
+    }
+
+    synchronized void resetPristineBootstrap() {
+        requireEscrowMutationPermit();
+        if (!isPristineBootstrap()) {
+            throw new EscrowRuntimeException(
+                    "Escrow runtime cursor is not a pristine bootstrap");
+        }
+        journalLineage = null;
+        lastAppliedSequence = 0L;
+        setDirty();
+    }
+
     public synchronized void establishLineage(UUID lineage, long sequence) {
         requireEscrowMutationPermit();
         Objects.requireNonNull(lineage, "lineage");

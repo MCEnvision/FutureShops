@@ -459,6 +459,9 @@ public record ProtectedCashRedemptionSettlement(
             long walletBalanceBefore,
             long walletReservedBefore
     ) {
+        if (reservation.depositMode() == CashDepositMode.INTERNAL_ESCROW) {
+            return 0L;
+        }
         if (reservation.destinationAccount().type()
                 != LedgerAccountType.PLAYER_WALLET) {
             return 0L;

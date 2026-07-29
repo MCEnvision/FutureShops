@@ -20,7 +20,7 @@ class MarketPageServiceClaimPagingSourceTest {
                 "if (\"claims\".equals(query.view()))");
         int nonClaimBranch = source.indexOf("} else {", claimBranch);
         int actionPolicy = source.indexOf(
-                "MarketModuleAccessPolicy\n                .applyPageActions",
+                "MarketModuleAccessPolicy.applyPageActions",
                 nonClaimBranch);
         String claims = source.substring(claimBranch, nonClaimBranch);
         String nonClaims = source.substring(nonClaimBranch,

@@ -24,10 +24,14 @@ class MarketLayoutEngineTest {
         assertTrue(scaleFour.categoryDrawer());
         assertTrue(scaleFour.secondaryTabRow());
         assertTrue(scaleFour.secondaryTabs().height() > 0);
-        assertEquals(0, scaleTwo.secondaryTabs().height());
-        assertEquals(0, scaleThree.secondaryTabs().height());
+        assertTrue(scaleTwo.secondaryTabs().height() > 0);
+        assertTrue(scaleThree.secondaryTabs().height() > 0);
         assertFalse(scaleFour.secondaryTabs().overlaps(
                 scaleFour.toolbar()));
+        assertFalse(scaleTwo.secondaryTabs().overlaps(
+                scaleTwo.categoryRail()));
+        assertEquals(scaleTwo.categoryRail().y(),
+                scaleTwo.secondaryTabs().y());
         assertEquals(1, scaleFour.cardColumns());
     }
 

@@ -31,9 +31,14 @@ public final class MarketModuleAccessPolicy {
             throw new IllegalArgumentException(
                     "Market module claim count is invalid");
         }
+        if (!configuredEnabled) {
+            return openClaims > 0L
+                    ? MarketModuleAvailability.CLAIMS_ONLY
+                    : MarketModuleAvailability.HIDDEN;
+        }
         if (persisted.isEmpty()
                 || module != MarketModule.SHOP && !escrowReady) {
-            return fallback(openClaims);
+            return MarketModuleAvailability.RECOVERING;
         }
         return availability(effectiveStatus(configuredEnabled,
                 persisted.orElseThrow().status()));
@@ -50,11 +55,18 @@ public final class MarketModuleAccessPolicy {
         String requestedView = Objects.requireNonNull(view, "view");
         Optional<MarketModuleControl> persisted = Objects.requireNonNull(
                 control, "control");
+        if (!configuredEnabled) {
+            return "claims".equals(requestedView)
+                    ? PageAccess.allowed(
+                    MarketModuleAvailability.CLAIMS_ONLY)
+                    : PageAccess.denied(MarketModuleAvailability.HIDDEN,
+                    "MODULE_DISABLED");
+        }
         if ("claims".equals(requestedView)
                 || MarketRoute.isDetailView(module, requestedView)) {
             MarketModuleAvailability availability = persisted.isEmpty()
                     || module != MarketModule.SHOP && !escrowReady
-                    ? MarketModuleAvailability.CLAIMS_ONLY
+                    ? MarketModuleAvailability.RECOVERING
                     : availability(effectiveStatus(configuredEnabled,
                     persisted.orElseThrow().status()));
             if ("claims".equals(requestedView)
@@ -66,12 +78,12 @@ public final class MarketModuleAccessPolicy {
         }
         if (persisted.isEmpty()) {
             return PageAccess.denied(
-                    MarketModuleAvailability.DISABLED,
+                    MarketModuleAvailability.RECOVERING,
                     "MODULE_CONTROL_UNAVAILABLE");
         }
         if (module != MarketModule.SHOP && !escrowReady) {
             return PageAccess.denied(
-                    MarketModuleAvailability.DISABLED,
+                    MarketModuleAvailability.RECOVERING,
                     "ESCROW_NOT_READY");
         }
         MarketModuleAvailability availability = availability(
@@ -111,11 +123,12 @@ public final class MarketModuleAccessPolicy {
                 snapshot.view(), snapshot.pageIndex(),
                 snapshot.pageSize(), snapshot.totalResults(),
                 snapshot.pageCount(), snapshot.publicRevision(),
+                snapshot.profileRevision(), snapshot.profileReplayEpoch(),
                 snapshot.serverTimeMillis(),
                 snapshot.unreadNotifications(),
                 snapshot.aggregatePrimaryMinor(),
                 snapshot.aggregateQuantity(), snapshot.categories(),
-                cards);
+                snapshot.categoryCounts(), cards);
     }
 
     public static String preferredView(
@@ -129,7 +142,7 @@ public final class MarketModuleAccessPolicy {
             case CANCEL_AND_REFUND -> market == MarketModule.BAZAAR
                     ? "orders" : market == MarketModule.AUCTION_HOUSE
                     ? "mine" : "claims";
-            case CLAIMS_ONLY, DISABLED, HIDDEN -> "claims";
+            case CLAIMS_ONLY, DISABLED, HIDDEN, RECOVERING -> "claims";
         };
     }
 
@@ -154,20 +167,18 @@ public final class MarketModuleAccessPolicy {
                 card.revision(), card.primaryMinor(),
                 card.secondaryMinor(), card.quantity(),
                 card.remainingMillis(), card.watched(), primary,
-                secondary);
+                secondary, card.tertiaryMinor(), card.insights());
     }
 
     private static MarketModuleStatus effectiveStatus(
             boolean configuredEnabled,
             MarketModuleStatus status
     ) {
-        MarketModuleStatus persisted = Objects.requireNonNull(
-                status, "status");
-        if (!configuredEnabled
-                && persisted == MarketModuleStatus.ENABLED) {
-            return MarketModuleStatus.FROZEN;
+        if (!configuredEnabled) {
+            throw new IllegalArgumentException(
+                    "Disabled module status must not be projected");
         }
-        return persisted;
+        return Objects.requireNonNull(status, "status");
     }
 
     private static MarketModuleAvailability availability(
@@ -182,12 +193,6 @@ public final class MarketModuleAccessPolicy {
         };
     }
 
-    private static MarketModuleAvailability fallback(long openClaims) {
-        return openClaims > 0L
-                ? MarketModuleAvailability.CLAIMS_ONLY
-                : MarketModuleAvailability.DISABLED;
-    }
-
     private static String denialCode(
             MarketModuleAvailability availability
     ) {
@@ -197,6 +202,7 @@ public final class MarketModuleAccessPolicy {
             case CANCEL_AND_REFUND -> "MODULE_CANCEL_AND_REFUND";
             case CLAIMS_ONLY -> "CLAIMS_ONLY";
             case DISABLED, HIDDEN -> "MODULE_DISABLED";
+            case RECOVERING -> "ESCROW_NOT_READY";
             case ENABLED -> "VIEW_DISABLED";
         };
     }

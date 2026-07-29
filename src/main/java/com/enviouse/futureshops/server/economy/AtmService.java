@@ -16,8 +16,10 @@ import com.enviouse.futureshops.server.escrow.runtime.EscrowAtmWithdrawalService
 import com.enviouse.futureshops.server.escrow.runtime.EscrowCashDepositService;
 import com.enviouse.futureshops.server.security.ServerRequestAction;
 import com.enviouse.futureshops.server.security.ServerRequestSecurityManager;
+import com.mojang.logging.LogUtils;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.network.chat.Component;
+import org.slf4j.Logger;
 
 import java.util.List;
 import java.util.UUID;
@@ -26,6 +28,8 @@ import java.util.OptionalLong;
 import java.util.function.Supplier;
 
 public final class AtmService {
+    private static final Logger LOGGER = LogUtils.getLogger();
+
     private AtmService() {
     }
 
@@ -45,6 +49,13 @@ public final class AtmService {
             ServerPlayer player,
             boolean openScreen
     ) {
+        Optional<S2CAtmDataPacket.DepositRecoverySummary> recovery =
+                EscrowCashDepositService.recoverySnapshot(player)
+                        .map(value -> new S2CAtmDataPacket
+                                .DepositRecoverySummary(
+                                value.requestId(), value.transactionId(),
+                                value.status().name(),
+                                value.amountMinorUnits()));
         AtmAccessSnapshot access = EscrowAtmWithdrawalService.access(player);
         AtmCurrencyCatalog catalog = access.catalog();
         List<AtmDenominationData> denominations = catalog.denominations()
@@ -64,7 +75,7 @@ public final class AtmService {
                 catalog.signature(), denominations,
                 access.serviceAvailable(), access.availabilityCode(),
                 openScreen, cashClaims.pendingClaimCount(),
-                cashClaims.collectibleClaims()));
+                cashClaims.collectibleClaims(), recovery));
     }
 
     public static void withdraw(ServerPlayer player, UUID requestId,
@@ -141,14 +152,37 @@ public final class AtmService {
             packet = depositResultPacket(
                     EscrowCashDepositService.deposit(player, request));
         } catch (RuntimeException exception) {
+            LOGGER.error(
+                    "ATM deposit failed before a recoverable result was created. player {}, request {}.",
+                    player.getUUID(), requestId, exception);
             packet = depositFailurePacket(requestId, "SERVER_ERROR");
         }
         ShopPackets.sendToPlayer(player, packet);
         if (packet.success()
                 || packet.status().equals("CONFIG_CHANGED")
-                || packet.status().equals("CANCELLED")) {
+                || packet.status().equals("CANCELLED")
+                || packet.status().equals("RECOVERY_PENDING")
+                || packet.status().equals("MANUAL_REVIEW")
+                || packet.status().equals("REFUNDED")) {
             refreshAfterMutation(player);
         }
+    }
+
+    public static void checkDepositRecovery(
+            ServerPlayer player,
+            UUID requestId,
+            UUID transactionId
+    ) {
+        S2CAtmDepositResultPacket packet;
+        try {
+            packet = depositResultPacket(
+                    EscrowCashDepositService.checkRecovery(
+                            player, requestId, transactionId));
+        } catch (RuntimeException exception) {
+            packet = depositFailurePacket(requestId, "SERVER_ERROR");
+        }
+        ShopPackets.sendToPlayer(player, packet);
+        refreshAfterMutation(player);
     }
 
     private static void sendDataRejection(
@@ -216,14 +250,19 @@ public final class AtmService {
                                 .LegacyMigrationSummary(
                                 value.availableMinorUnits(),
                                 value.billCount(), value.bills().size()));
-        String status = result.status().name();
+        String status = result.status()
+                == EscrowCashDepositService.Status.RECOVERY_REQUIRED
+                && result.transactionId().isPresent()
+                ? "RECOVERY_PENDING" : result.status().name();
         boolean success = status.equals("SUCCESS");
         return new S2CAtmDepositResultPacket(
                 result.requestId(), status, result.retryable(),
                 result.replayed(),
                 result.transactionId(), result.depositedMinorUnits(),
                 result.itemsConsumed(), result.walletCreditMinorUnits(),
-                result.overflowClaimMinorUnits(), success,
+                result.overflowClaimMinorUnits(),
+                result.returnedMinorUnits(),
+                result.refundDestination().name(), success,
                 success ? result.resultingBalanceMinorUnits() : 0L,
                 result.cleanupPending(), legacy,
                 result.retryAfterMillis());
@@ -254,7 +293,10 @@ public final class AtmService {
     private static void refreshAfterMutation(ServerPlayer player) {
         try {
             sendAuthoritativeData(player, false);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException exception) {
+            LOGGER.warn(
+                    "ATM state refresh failed. player {}.",
+                    player.getUUID(), exception);
         }
     }
 

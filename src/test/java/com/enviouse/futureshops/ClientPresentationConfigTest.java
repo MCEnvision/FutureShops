@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -15,6 +16,7 @@ class ClientPresentationConfigTest {
         ClientConfig.Settings settings = ClientConfig.Settings.defaults();
 
         assertFalse(settings.presentation().use12HourTime());
+        assertEquals("$", settings.presentation().currencySymbol());
         assertTrue(settings.search().predictive());
         assertTrue(settings.presentation().rememberPaymentSource());
         assertTrue(settings.sound().enabled());
@@ -35,7 +37,9 @@ class ClientPresentationConfigTest {
     @Test
     void invalidPresentationValuesFailClosed() {
         assertThrows(IllegalArgumentException.class, () -> new ClientConfig.Presentation(
-            false, "dense", "medium", true, true, true, true));
+            false, "dense", "medium", "$", true, true, true, true));
+        assertThrows(IllegalArgumentException.class, () -> new ClientConfig.Presentation(
+            false, "normal", "medium", "money", true, true, true, true));
         assertThrows(IllegalArgumentException.class, () -> new ClientConfig.Theme(
             "server", true, "not a color"));
         assertThrows(IllegalArgumentException.class, () -> new ClientConfig.Accessibility(

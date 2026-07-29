@@ -481,6 +481,10 @@ public class PlayerStorefrontScreen extends Screen implements ShopScreenMarker {
 
         super.render(graphics, mouseX, mouseY, partialTick);
 
+        if (confirmationModal == null) {
+            ShopUiUtil.renderShellHeaderTooltip(graphics, this.font,
+                    headerHit, mouseX, mouseY);
+        }
         if (tooltipItemId != null && confirmationModal == null) {
             ShopUiUtil.renderItemTooltip(graphics, this.font, tooltipItemId,
                     tooltipNbtJson != null ? tooltipNbtJson : "", tooltipMouseX, tooltipMouseY);

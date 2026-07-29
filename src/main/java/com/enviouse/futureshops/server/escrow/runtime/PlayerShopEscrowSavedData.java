@@ -32,6 +32,7 @@ public final class PlayerShopEscrowSavedData
 
     private final Map<UUID, Entry> entries = new HashMap<>();
     private long payloadBytes;
+    private long mutationRevision;
 
     public static PlayerShopEscrowSavedData load(CompoundTag tag) {
         Objects.requireNonNull(tag, "tag");
@@ -100,6 +101,7 @@ public final class PlayerShopEscrowSavedData
         if (version < CURRENT_VERSION) {
             data.setDirty();
         }
+        data.mutationRevision = data.entries.size();
         return data;
     }
 
@@ -136,6 +138,10 @@ public final class PlayerShopEscrowSavedData
                 Objects.requireNonNull(requestId, "requestId")));
     }
 
+    public synchronized List<Entry> entries() {
+        return List.copyOf(entries.values());
+    }
+
     public synchronized List<Entry> pendingRecovery(int limit) {
         if (limit <= 0 || limit > MAXIMUM_ENTRIES) {
             throw new IllegalArgumentException(
@@ -169,6 +175,7 @@ public final class PlayerShopEscrowSavedData
                     event.snapshot()).length;
             payloadBytes = Math.addExact(
                     Math.subtractExact(payloadBytes, previousBytes), nextBytes);
+            mutationRevision = Math.addExact(mutationRevision, 1L);
             setDirty();
         }
         return disposition;
@@ -183,6 +190,7 @@ public final class PlayerShopEscrowSavedData
         entries.clear();
         entries.putAll(source.snapshotEntries());
         payloadBytes = source.payloadBytes;
+        mutationRevision = Math.addExact(mutationRevision, 1L);
         setDirty();
     }
 
@@ -192,6 +200,10 @@ public final class PlayerShopEscrowSavedData
 
     public synchronized int size() {
         return entries.size();
+    }
+
+    public synchronized long mutationRevision() {
+        return mutationRevision;
     }
 
     private MutationDisposition inspect(PlayerShopEscrowLifecycleEvent event) {

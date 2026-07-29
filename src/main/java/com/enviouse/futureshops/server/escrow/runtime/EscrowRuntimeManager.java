@@ -59,12 +59,27 @@ public final class EscrowRuntimeManager {
     public static synchronized void shutdown(MinecraftServer server) {
         requireActiveServer(server);
         quiescing = true;
+        RuntimeException failure = null;
         try {
             runtime.close();
+        } catch (RuntimeException exception) {
+            failure = exception;
+        }
+        try {
+            ServerShopOfferReplayLedger.shutdown(server);
+        } catch (RuntimeException exception) {
+            if (failure == null) {
+                failure = exception;
+            } else {
+                failure.addSuppressed(exception);
+            }
         } finally {
             runtime = null;
             activeServer = null;
             quiescing = false;
+        }
+        if (failure != null) {
+            throw failure;
         }
     }
 

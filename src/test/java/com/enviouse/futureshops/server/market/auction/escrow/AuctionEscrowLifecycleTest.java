@@ -401,6 +401,52 @@ class AuctionEscrowLifecycleTest {
     }
 
     @Test
+    void forcedCancellationReturnsItemAndBidAsClaims() {
+        Applied created = created();
+        AuctionListing listing = created.snapshot().listings().get(
+                AuctionEscrowTestFixtures.id(2));
+        UUID bidder = AuctionEscrowTestFixtures.id(72);
+        PlaceAuctionBidCommand bid = new PlaceAuctionBidCommand(
+                AuctionEscrowTestFixtures.id(70), listing.listingId(),
+                listing.revision(), AuctionEscrowTestFixtures.id(71),
+                bidder, AuctionEscrowTestFixtures.id(73),
+                AuctionEscrowTestFixtures.id(74), 250L, 250L, 1200L);
+        AuctionEscrowCommit bidCommit = AuctionEscrowLifecyclePlanner.bid(
+                created.snapshot(), bid,
+                AuctionEscrowTestFixtures.wallet(bidder, 1_000L,
+                        10_000L), AuctionEscrowTestFixtures.CURRENCY_ID,
+                AuctionEscrowTestFixtures.NOW);
+        var afterBid = AuctionEscrowLifecycleRepository.apply(
+                created.snapshot(), created.lifecycle(),
+                new AuctionEscrowLifecycleEvent.Commit(Optional.empty(),
+                        bidCommit));
+        AuctionListing bidListing = afterBid.auctionHouse().listings()
+                .get(listing.listingId());
+        CancelAuctionCommand cancel = new CancelAuctionCommand(
+                AuctionEscrowTestFixtures.id(80), listing.listingId(),
+                bidListing.revision(), listing.sellerId(),
+                AuctionEscrowTestFixtures.id(81), 1300L, true);
+
+        AuctionEscrowCommit commit = AuctionEscrowLifecyclePlanner.cancel(
+                afterBid.auctionHouse(), cancel,
+                AuctionEscrowTestFixtures.preparedCreate()
+                        .plannedCustody(),
+                AuctionEscrowTestFixtures.CURRENCY_ID,
+                AuctionEscrowTestFixtures.NOW.plusSeconds(1));
+
+        assertEquals(AuctionListingState.CANCELLED,
+                commit.finalListing().state());
+        assertTrue(commit.claims().stream().anyMatch(claim ->
+                claim.kind() == ClaimKind.ITEM
+                        && claim.ownerId().equals(listing.sellerId())));
+        assertTrue(commit.claims().stream().anyMatch(claim ->
+                claim.kind() == ClaimKind.REFUND
+                        && claim.ownerId().equals(bidder)
+                        && claim.originalUnits() == 250L));
+        assertTrue(commit.ledgerTransaction().isPresent());
+    }
+
+    @Test
     void preparedCustodyRecoveryFailsClosedOnMismatchedEvidence() {
         AuctionCreateEscrowIntent intent =
                 AuctionEscrowTestFixtures.preparedCreate();

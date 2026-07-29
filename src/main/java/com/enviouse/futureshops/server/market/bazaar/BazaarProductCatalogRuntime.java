@@ -10,7 +10,6 @@ import net.minecraftforge.registries.ForgeRegistries;
 import org.slf4j.Logger;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
@@ -30,11 +29,9 @@ public final class BazaarProductCatalogRuntime {
             .ReconciliationResult reload(EscrowRuntimeService runtime) {
         Objects.requireNonNull(runtime, "runtime");
         Path directory = productDirectory();
-        try {
-            Files.createDirectories(directory);
-        } catch (IOException exception) {
-            LOGGER.error("Unable to create FutureShops Bazaar product directory.",
-                    exception);
+        if (!prepareStorage(true)) {
+            throw new IllegalStateException(
+                    "FutureShops Bazaar product storage is unavailable");
         }
         BazaarConfig.Settings settings = BazaarConfig.settings();
         lastResult = coordinator.reloadAndReconcile(directory,
@@ -51,6 +48,25 @@ public final class BazaarProductCatalogRuntime {
                     lastResult.reload().snapshot().definitions().size());
         }
         return lastResult;
+    }
+
+    public static synchronized boolean prepareStorage(
+            boolean seedDefaults
+    ) {
+        try {
+            boolean generated = BazaarProductCatalogStorage.prepare(
+                    productDirectory(), seedDefaults);
+            if (generated) {
+                LOGGER.info(
+                        "Generated the default FutureShops Bazaar product catalog.");
+            }
+            return true;
+        } catch (IOException | RuntimeException exception) {
+            LOGGER.error(
+                    "Unable to prepare the FutureShops Bazaar product directory.",
+                    exception);
+            return false;
+        }
     }
 
     public static synchronized BazaarProductCatalogSnapshot current() {
