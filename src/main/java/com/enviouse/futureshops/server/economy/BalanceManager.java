@@ -26,6 +26,13 @@ public final class BalanceManager {
         return provider.getBalance(playerUUID);
     }
 
+    public static long getDisplayBalance(UUID playerUUID) {
+        if (provider == null) {
+            throw new IllegalStateException("BalanceManager accessed before initialization.");
+        }
+        return provider.getDisplayBalance(playerUUID);
+    }
+
     public static EconomyProvider getProvider() {
         if (provider == null) {
             throw new IllegalStateException("BalanceManager accessed before initialization.");

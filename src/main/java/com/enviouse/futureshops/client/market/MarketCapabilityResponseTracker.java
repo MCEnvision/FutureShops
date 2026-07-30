@@ -61,15 +61,16 @@ public final class MarketCapabilityResponseTracker {
             return Decision.DUPLICATE_RESPONSE;
         }
         requests.put(snapshot.requestId(), request.consumedCopy());
-        if (request.sequence() != latestSequence) {
-            return Decision.STALE_REQUEST;
-        }
         if (latest != null && snapshot.revision() < latest.revision()) {
             return Decision.STALE_REVISION;
         }
         if (latest != null && snapshot.revision() == latest.revision()
                 && !sameState(snapshot, latest)) {
             return Decision.REVISION_CONFLICT;
+        }
+        if (request.sequence() != latestSequence && latest != null
+                && snapshot.revision() == latest.revision()) {
+            return Decision.STALE_REQUEST;
         }
         latest = snapshot;
         return Decision.ACCEPT;
@@ -126,6 +127,7 @@ public final class MarketCapabilityResponseTracker {
             MarketCapabilitiesSnapshot second
     ) {
         return first.showNavigation() == second.showNavigation()
+                && first.escrowReady() == second.escrowReady()
                 && first.defaultModule() == second.defaultModule()
                 && first.walletBalanceMinorUnits()
                 == second.walletBalanceMinorUnits()
@@ -133,6 +135,12 @@ public final class MarketCapabilityResponseTracker {
                 == second.walletBalanceKnown()
                 && first.currencyName().equals(second.currencyName())
                 && first.currencyDecimals() == second.currencyDecimals()
+                && first.auctionListingFeeMinor()
+                == second.auctionListingFeeMinor()
+                && first.bazaarPlayerCatalog()
+                == second.bazaarPlayerCatalog()
+                && first.auctionDurationPresetSeconds().equals(
+                second.auctionDurationPresetSeconds())
                 && first.modules().equals(second.modules());
     }
 

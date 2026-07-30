@@ -12,6 +12,7 @@ public record MarketProfileMutationResult(
         MarketProfileMutationType type,
         MarketProfileMutationResultCode resultCode,
         long profileRevision,
+        long replayEpoch,
         int watchedAuctionCount,
         int favoriteProductCount,
         int priceAlertCount,
@@ -30,6 +31,7 @@ public record MarketProfileMutationResult(
         type = Objects.requireNonNull(type, "type");
         resultCode = Objects.requireNonNull(resultCode, "resultCode");
         if (module == MarketModule.SHOP || profileRevision < 0L
+                || replayEpoch < 0L
                 || type == MarketProfileMutationType.AUCTION_WATCH
                 && module != MarketModule.AUCTION_HOUSE
                 || type != MarketProfileMutationType.AUCTION_WATCH
@@ -65,6 +67,21 @@ public record MarketProfileMutationResult(
         }
     }
 
+    public MarketProfileMutationResult(
+            UUID requestId, UUID routeNonce, MarketModule module,
+            MarketProfileMutationType type,
+            MarketProfileMutationResultCode resultCode,
+            long profileRevision, int watchedAuctionCount,
+            int favoriteProductCount, int priceAlertCount,
+            int notificationCount, int unreadNotificationCount,
+            int affectedCount, boolean changed, boolean replayed) {
+        this(requestId, routeNonce, module, type, resultCode,
+                profileRevision, 0L, watchedAuctionCount,
+                favoriteProductCount, priceAlertCount,
+                notificationCount, unreadNotificationCount,
+                affectedCount, changed, replayed);
+    }
+
     public static MarketProfileMutationResult from(
             MarketProfileMutationCommand command,
             MarketProfileMutationResultCode resultCode,
@@ -78,7 +95,8 @@ public record MarketProfileMutationResult(
         return new MarketProfileMutationResult(command.requestId(),
                 command.routeNonce(), command.module(),
                 command.mutation().type(), resultCode,
-                state.revision(), state.watchedAuctions().size(),
+                state.revision(), state.replayEpoch(),
+                state.watchedAuctions().size(),
                 state.favoriteProducts().size(),
                 state.priceAlerts().size(),
                 state.notifications().size(),
@@ -90,7 +108,7 @@ public record MarketProfileMutationResult(
     public MarketProfileMutationResult asReplay() {
         return replayed ? this : new MarketProfileMutationResult(
                 requestId, routeNonce, module, type, resultCode,
-                profileRevision, watchedAuctionCount,
+                profileRevision, replayEpoch, watchedAuctionCount,
                 favoriteProductCount, priceAlertCount,
                 notificationCount, unreadNotificationCount,
                 affectedCount, changed, true);

@@ -808,10 +808,17 @@ public final class EscrowRuntimeCoordinator implements AutoCloseable {
     }
 
     private void initializeJournal() throws IOException {
-        if (cursor.journalLineage().isPresent() || cursor.lastAppliedSequence() != 0L) {
-            throw new EscrowRuntimeException("Escrow journal is missing for its persisted cursor");
+        boolean materializedState = materializedStateExists.getAsBoolean();
+        if (cursor.journalLineage().isPresent()
+                || cursor.lastAppliedSequence() != 0L) {
+            if (materializedState || !cursor.isPristineBootstrap()) {
+                throw new EscrowRuntimeException(
+                        "Escrow journal is missing for its persisted cursor at sequence "
+                                + cursor.lastAppliedSequence());
+            }
+            mutateCursor(cursor::resetPristineBootstrap);
         }
-        if (materializedStateExists.getAsBoolean()) {
+        if (materializedState) {
             throw new EscrowRuntimeException("Escrow journal is missing for materialized state");
         }
         JournalLineage lineage = new JournalLineage(
@@ -850,7 +857,13 @@ public final class EscrowRuntimeCoordinator implements AutoCloseable {
         Optional<UUID> persistedLineage = cursor.journalLineage();
         if (persistedLineage.isPresent()
                 && !persistedLineage.orElseThrow().equals(lineage.lineageId())) {
-            throw new EscrowRuntimeException("Escrow persisted lineage does not match the journal");
+            if (scan.lastSequence() != 1L
+                    || materializedStateExists.getAsBoolean()
+                    || !cursor.isPristineBootstrap()) {
+                throw new EscrowRuntimeException(
+                        "Escrow persisted lineage does not match the journal");
+            }
+            mutateCursor(cursor::resetPristineBootstrap);
         }
         if (cursor.lastAppliedSequence() > scan.lastSequence()) {
             throw new EscrowRuntimeException("Escrow cursor is ahead of the journal");

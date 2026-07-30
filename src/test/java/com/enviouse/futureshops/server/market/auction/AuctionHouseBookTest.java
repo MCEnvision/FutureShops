@@ -190,6 +190,30 @@ class AuctionHouseBookTest {
     }
 
     @Test
+    void forcedCancellationRefundsTheStandingBid() {
+        AuctionHouseBook book = new AuctionHouseBook();
+        AuctionListing listing = createTimed(book);
+        AuctionListing afterBid = book.bid(bid(
+                id(10), listing, 0L, id(11), id(12), id(14), id(13),
+                250L, 250L, 1200L)).listing().orElseThrow();
+
+        AuctionOperationResult result = book.cancel(
+                new CancelAuctionCommand(id(20), listing.listingId(),
+                        afterBid.revision(), listing.sellerId(), id(21),
+                        1300L, true));
+
+        assertTrue(result.applied());
+        assertEquals(AuctionListingState.CANCELLED,
+                result.listing().orElseThrow().state());
+        assertEquals(250L, result.refundMinor());
+        assertEquals(id(12), result.refundPlayerId().orElseThrow());
+        assertEquals(id(14), result.displacedBid().orElseThrow()
+                .holdAccountId());
+        assertEquals(book.snapshot(),
+                new AuctionHouseBook(book.snapshot()).snapshot());
+    }
+
+    @Test
     void expirationAllocatesWinningSaleAndSettlementIsIdempotent() {
         AuctionHouseBook book = new AuctionHouseBook();
         AuctionListing listing = createTimed(book);

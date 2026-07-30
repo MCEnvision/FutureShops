@@ -122,8 +122,15 @@ final class ProtectedCashRedemptionWorkflow {
             } else if (reservation != null && reservationCommitted) {
                 enqueueRecovery(reservation, exception);
             } else if (intentPersistAttempted && intent != null) {
-                if (!enqueueIntentRecovery(intent, exception)) {
-                    discardMatchingLiveIntent(player, intent);
+                CashDepositRecoveryEnqueueResult enqueueResult =
+                        enqueueIntentRecovery(intent, exception);
+                switch (enqueueResult) {
+                    case NO_DURABLE_EVIDENCE -> discardMatchingIntent(
+                            player, intent, exception);
+                    case QUEUED -> {
+                    }
+                    case FAILED -> {
+                    }
                 }
             }
             if (cancellationResolved) {
@@ -148,7 +155,7 @@ final class ProtectedCashRedemptionWorkflow {
         }
     }
 
-    private boolean enqueueIntentRecovery(
+    private CashDepositRecoveryEnqueueResult enqueueIntentRecovery(
             ProtectedCashRedemptionEvidence evidence,
             Throwable failure
     ) {
@@ -156,25 +163,19 @@ final class ProtectedCashRedemptionWorkflow {
             return runtime.enqueueProtectedCashIntentRecovery(evidence);
         } catch (RuntimeException enqueueFailure) {
             failure.addSuppressed(enqueueFailure);
-            return true;
+            return CashDepositRecoveryEnqueueResult.FAILED;
         }
     }
 
-    private static void discardMatchingLiveIntent(
+    private void discardMatchingIntent(
             ServerPlayer player,
-            ProtectedCashRedemptionEvidence evidence
+            ProtectedCashRedemptionEvidence evidence,
+            Throwable failure
     ) {
-        net.minecraft.nbt.Tag raw = player.getPersistentData().get(
-                ProtectedCashRedemptionIntentStore.EVIDENCE_KEY);
-        if (raw instanceof net.minecraft.nbt.ByteArrayTag bytes) {
-            try {
-                if (ProtectedCashRedemptionEvidence.decode(
-                        bytes.getAsByteArray()).equals(evidence)) {
-                    player.getPersistentData().remove(
-                            ProtectedCashRedemptionIntentStore.EVIDENCE_KEY);
-                }
-            } catch (RuntimeException ignored) {
-            }
+        try {
+            intentStore.discardIntent(server, player, evidence);
+        } catch (IOException | RuntimeException cleanupFailure) {
+            failure.addSuppressed(cleanupFailure);
         }
     }
 

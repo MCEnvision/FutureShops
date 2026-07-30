@@ -72,6 +72,7 @@ public final class AuctionRequestFingerprints {
             number(output, command.expectedRevision());
             id(output, command.actorId());
             id(output, command.terminalTransactionId());
+            number(output, command.forced() ? 1L : 0L);
         });
     }
 

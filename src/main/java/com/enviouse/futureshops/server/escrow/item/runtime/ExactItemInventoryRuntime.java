@@ -21,6 +21,8 @@ import java.util.UUID;
 
 public final class ExactItemInventoryRuntime {
     public static final int MAX_RECOVERY_BATCH = 256;
+    private static final org.slf4j.Logger LOGGER =
+            com.mojang.logging.LogUtils.getLogger();
 
     private final DurableItemInventoryMutationGateway gateway;
     private final ItemInventoryStackPolicy stackPolicy;
@@ -314,6 +316,9 @@ public final class ExactItemInventoryRuntime {
         try {
             return commitApplied(entry, replayed);
         } catch (RuntimeException commitFailure) {
+            LOGGER.error(
+                    "Exact item inventory commit failed for request {}",
+                    entry.intent().token().requestId(), commitFailure);
             return ItemInventoryExecutionResult.state(
                     ItemInventoryExecutionStatus.RECOVERY_REQUIRED,
                     entry.intent(), replayed);
@@ -499,8 +504,17 @@ public final class ExactItemInventoryRuntime {
         try {
             access.savePlayerData();
             access.forcePlayerData();
-            return classify(access.capture(), intent) == expected;
+            boolean matches = classify(access.capture(), intent) == expected;
+            if (!matches) {
+                LOGGER.error(
+                        "Player item inventory durability verification failed for player {} and request {}",
+                        access.playerId(), intent.token().requestId());
+            }
+            return matches;
         } catch (RuntimeException exception) {
+            LOGGER.error(
+                    "Player item inventory durability barrier failed for player {} and request {}",
+                    access.playerId(), intent.token().requestId(), exception);
             return false;
         }
     }

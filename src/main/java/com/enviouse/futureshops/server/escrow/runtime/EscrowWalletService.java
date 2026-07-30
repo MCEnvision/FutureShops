@@ -4,6 +4,7 @@ import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountId;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountType;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerConflictException;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerLeg;
+import com.enviouse.futureshops.server.escrow.ledger.LedgerSavedData;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerTransaction;
 
 import java.util.ArrayList;
@@ -14,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -44,6 +46,21 @@ public final class EscrowWalletService {
     public long balance(UUID playerId) {
         Objects.requireNonNull(playerId, "playerId");
         return netBalance(playerId);
+    }
+
+    public static OptionalLong storedBalance(LedgerSavedData ledger,
+                                             UUID playerId) {
+        Objects.requireNonNull(ledger, "ledger");
+        Objects.requireNonNull(playerId, "playerId");
+        LedgerAccountId wallet = walletAccount(playerId);
+        LedgerAccountId debt = debtAccount(playerId);
+        if (!ledger.containsAccount(wallet) && !ledger.containsAccount(debt)) {
+            return OptionalLong.empty();
+        }
+        long walletBalance = ledger.balance(wallet);
+        long debtBalance = ledger.balance(debt);
+        requireNormalized(playerId, walletBalance, debtBalance);
+        return OptionalLong.of(Math.addExact(walletBalance, debtBalance));
     }
 
     public boolean isInitialized(UUID playerId) {

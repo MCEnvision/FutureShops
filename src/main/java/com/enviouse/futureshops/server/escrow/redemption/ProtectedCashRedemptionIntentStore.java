@@ -144,6 +144,30 @@ public final class ProtectedCashRedemptionIntentStore {
         saveAndForce(server, player);
     }
 
+    public synchronized void discardIntent(
+            MinecraftServer server,
+            ServerPlayer player,
+            ProtectedCashRedemptionEvidence evidence
+    ) throws IOException {
+        requireOwner(player, evidence);
+        if (evidence.phase()
+                != ProtectedCashRedemptionEvidence.Phase.INTENT
+                || !evidence.inventoryState().matches(
+                player.getInventory())) {
+            throw new IllegalStateException(
+                    "Protected cash intent is not safe to discard");
+        }
+        CompoundTag persistent = player.getPersistentData();
+        ProtectedCashRedemptionEvidence current = decodeTag(
+                persistent.get(EVIDENCE_KEY));
+        if (!current.equals(evidence)) {
+            throw new IllegalStateException(
+                    "Protected cash intent cleanup identity conflicts");
+        }
+        persistent.remove(EVIDENCE_KEY);
+        saveAndForce(server, player);
+    }
+
     public synchronized void cleanup(
             MinecraftServer server,
             UUID playerId,

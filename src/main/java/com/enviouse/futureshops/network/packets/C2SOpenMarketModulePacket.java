@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.network.packets;
 
+import com.enviouse.futureshops.client.market.MarketModule;
 import com.enviouse.futureshops.server.market.MarketModuleService;
 import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.FriendlyByteBuf;
@@ -20,7 +21,7 @@ public record C2SOpenMarketModulePacket(
     public C2SOpenMarketModulePacket {
         requestId = Objects.requireNonNull(requestId, "requestId");
         moduleId = requireText(moduleId, 32);
-        view = requireText(view, 32);
+        view = requireView(view, MarketModule.fromId(moduleId));
         if (requestId.equals(ZERO)) {
             throw new IllegalArgumentException("Market open request identity is invalid");
         }
@@ -61,5 +62,12 @@ public record C2SOpenMarketModulePacket(
             throw new IllegalArgumentException("Market open text is invalid");
         }
         return normalized;
+    }
+
+    private static String requireView(String value, MarketModule module) {
+        String normalized = Objects.requireNonNull(value, "value").strip();
+        return normalized.isEmpty()
+                ? Objects.requireNonNull(module, "module").rootView()
+                : requireText(normalized, 32);
     }
 }

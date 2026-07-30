@@ -29,7 +29,7 @@ class AuctionHouseSnapshotCodecTest {
 
         assertEquals(snapshot, decoded);
         assertArrayEquals(encoded, AuctionHouseSnapshotCodec.encode(decoded));
-        assertEquals(snapshot.listings(),
+        assertEquals(new AuctionHouseBook(snapshot).listings(),
                 new AuctionHouseBook(decoded).listings());
     }
 

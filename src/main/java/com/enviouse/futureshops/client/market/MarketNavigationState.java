@@ -80,6 +80,22 @@ public final class MarketNavigationState {
         return new Transition(Action.NAVIGATE, Optional.of(current), false);
     }
 
+    public synchronized Transition replaceWithinModule(
+            MarketRoute next
+    ) {
+        requireOpen();
+        Objects.requireNonNull(next, "next");
+        if (next.module() != current.module()) {
+            throw new IllegalArgumentException(
+                    "Replacement route must remain in its module.");
+        }
+        requireFreshNonce(next.routeNonce());
+        history.clear();
+        current = next;
+        return new Transition(Action.NAVIGATE,
+                Optional.of(current), false);
+    }
+
     public synchronized Transition back() {
         requireOpen();
         if (history.isEmpty()) {

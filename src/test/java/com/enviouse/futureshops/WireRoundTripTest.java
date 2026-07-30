@@ -1,5 +1,13 @@
 package com.enviouse.futureshops;
 
+import com.enviouse.futureshops.catalog.AdminShopOfferConfigWriter;
+import com.enviouse.futureshops.catalog.offer.AcquireOfferOption;
+import com.enviouse.futureshops.catalog.offer.OfferItemComponent;
+import com.enviouse.futureshops.catalog.offer.OfferLimitPolicy;
+import com.enviouse.futureshops.catalog.offer.OfferSchedule;
+import com.enviouse.futureshops.catalog.offer.OfferStockPolicy;
+import com.enviouse.futureshops.catalog.offer.OfferValidationIssue;
+import com.enviouse.futureshops.catalog.offer.ServerShopOfferListing;
 import com.enviouse.futureshops.data.BalanceTopEntry;
 import com.enviouse.futureshops.data.AtmDenominationData;
 import com.enviouse.futureshops.data.CatalogBarterIngredient;
@@ -10,6 +18,7 @@ import com.enviouse.futureshops.data.CatalogPromo;
 import com.enviouse.futureshops.data.FranchiseLeaderboardEntry;
 import com.enviouse.futureshops.data.NearbyShopEntry;
 import com.enviouse.futureshops.data.OwnedShopSummary;
+import com.enviouse.futureshops.data.PlayerShopNormalizedOfferData;
 import com.enviouse.futureshops.data.SettlementHistoryRow;
 import com.enviouse.futureshops.data.TransactionHistoryEntry;
 import com.enviouse.futureshops.network.packets.C2SAdminShopAddItemsPacket;
@@ -17,8 +26,10 @@ import com.enviouse.futureshops.network.packets.C2SAdminShopEditPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmWithdrawPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmCollectCashPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
+import com.enviouse.futureshops.network.packets.C2SAtmDepositRecoveryPacket;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
 import com.enviouse.futureshops.network.packets.C2SPlayerShopBuyPacket;
+import com.enviouse.futureshops.network.packets.C2SPlayerShopOfferSavePacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyAdminCartPacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyCartPacket;
 import com.enviouse.futureshops.network.packets.S2CAdminEditAckPacket;
@@ -29,6 +40,7 @@ import com.enviouse.futureshops.network.packets.S2CAtmDepositResultPacket;
 import com.enviouse.futureshops.network.packets.S2CBalTopUiPacket;
 import com.enviouse.futureshops.network.packets.S2CBuyResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopResultPacket;
+import com.enviouse.futureshops.network.packets.S2CPlayerShopOfferSaveResultPacket;
 import com.enviouse.futureshops.network.packets.S2CShopDataPacket;
 import com.enviouse.futureshops.server.shop.ShopResultCode;
 import io.netty.buffer.Unpooled;
@@ -541,7 +553,8 @@ public class WireRoundTripTest {
                         new BlockPos(0, 64, 0), true, new UUID(1L, 2L), "Owner",
                         List.of(), true, 100L, 500L, List.of("row"),
                         "Shop", false, true, "desc", "franchise", false, false,
-                        "CUSTOM_ITEM", "minecraft:diamond", List.of(entry), List.of("cfg-a", "cfg-b"));
+                        "CUSTOM_ITEM", "minecraft:diamond", List.of(entry),
+                        List.of("cfg-a", "cfg-b"), List.of());
         FriendlyByteBuf b = buf();
         com.enviouse.futureshops.network.packets.S2CPlayerShopDataPacket.encode(in, b);
         com.enviouse.futureshops.network.packets.S2CPlayerShopDataPacket out =
@@ -553,6 +566,92 @@ public class WireRoundTripTest {
         assertEquals("minecraft:chest", out.linkedStorages().get(0).blockId());
         assertEquals(42, out.linkedStorages().get(0).itemCount());
         assertEquals(List.of("cfg-a", "cfg-b"), out.savedConfigNames());
+        assertTrue(out.normalizedOffers().isEmpty());
+    }
+
+    @Test
+    void playerShopNormalizedOfferSnapshotRoundTrips() {
+        ServerShopOfferListing offer = normalizedPlayerShopOffer();
+        PlayerShopNormalizedOfferData normalized =
+                new PlayerShopNormalizedOfferData(
+                        1, 3, false, Optional.of(offer));
+        FriendlyByteBuf buffer = buf();
+
+        PlayerShopNormalizedOfferData.encode(buffer, normalized);
+        PlayerShopNormalizedOfferData out =
+                PlayerShopNormalizedOfferData.decode(buffer);
+
+        assertEquals(normalized, out);
+        assertEquals(offer, out.offer().orElseThrow());
+        assertEquals(0, buffer.readableBytes());
+    }
+
+    @Test
+    void playerShopOfferSaveRequestRoundTrips() {
+        UUID requestId = UUID.fromString(
+                "35000000-0000-0000-0000-000000000001");
+        C2SPlayerShopOfferSavePacket in =
+                new C2SPlayerShopOfferSavePacket(
+                        requestId, new BlockPos(4, 70, -9), 2,
+                        "player_offer", 14L,
+                        normalizedPlayerShopOffer());
+        FriendlyByteBuf buffer = buf();
+
+        C2SPlayerShopOfferSavePacket.encode(in, buffer);
+        C2SPlayerShopOfferSavePacket out =
+                C2SPlayerShopOfferSavePacket.decode(buffer);
+
+        assertEquals(in, out);
+        assertEquals(requestId, out.requestId());
+        assertEquals("player_offer", out.listingId());
+        assertEquals(0, buffer.readableBytes());
+    }
+
+    @Test
+    void playerShopOfferSaveRequestRejectsUnboundedFields() {
+        UUID requestId = UUID.fromString(
+                "35000000-0000-0000-0000-000000000003");
+        ServerShopOfferListing offer = normalizedPlayerShopOffer();
+        assertThrows(IllegalArgumentException.class,
+                () -> new C2SPlayerShopOfferSavePacket(
+                        requestId, BlockPos.ZERO,
+                        com.enviouse.futureshops.server.transaction
+                                .ShopTransactionUtil
+                                .MAX_PLAYER_SHOP_LISTING_INDEX + 1,
+                        offer.listingId(), offer.revision(), offer));
+        assertThrows(IllegalArgumentException.class,
+                () -> new C2SPlayerShopOfferSavePacket(
+                        requestId, BlockPos.ZERO, 0,
+                        offer.listingId(),
+                        com.enviouse.futureshops.server.escrow.runtime
+                                .ServerShopOfferCommit.MAX_REVISION + 1L,
+                        offer));
+    }
+
+    @Test
+    void playerShopOfferSaveResultRoundTripsSnapshotAndIssues() {
+        UUID requestId = UUID.fromString(
+                "35000000-0000-0000-0000-000000000002");
+        OfferValidationIssue issue = new OfferValidationIssue(
+                OfferValidationIssue.Severity.ERROR,
+                "revision", "offer.player_shop.stale");
+        S2CPlayerShopOfferSaveResultPacket in =
+                new S2CPlayerShopOfferSaveResultPacket(
+                        requestId,
+                        AdminShopOfferConfigWriter.Status.STALE,
+                        false, 14L,
+                        Optional.of(normalizedPlayerShopOffer()),
+                        List.of(issue));
+        FriendlyByteBuf buffer = buf();
+
+        S2CPlayerShopOfferSaveResultPacket.encode(in, buffer);
+        S2CPlayerShopOfferSaveResultPacket out =
+                S2CPlayerShopOfferSaveResultPacket.decode(buffer);
+
+        assertEquals(in, out);
+        assertEquals(requestId, out.requestId());
+        assertEquals(List.of(issue), out.issues());
+        assertEquals(0, buffer.readableBytes());
     }
 
     @Test
@@ -603,6 +702,13 @@ public class WireRoundTripTest {
 
     @Test
     void atmDataPacketRoundTripsSecurityAndDenominations() {
+        S2CAtmDataPacket.DepositRecoverySummary recovery =
+                new S2CAtmDataPacket.DepositRecoverySummary(
+                        UUID.fromString(
+                                "30000000-0000-0000-0000-000000000010"),
+                        UUID.fromString(
+                                "30000000-0000-0000-0000-000000000011"),
+                        "RECOVERY_PENDING", 3_007L);
         S2CAtmDataPacket in = new S2CAtmDataPacket(
                 123_456L, true, "Credits", 2, "custom",
                 S2CAtmDataPacket.ROUTE_FOREIGN, false, "a".repeat(64),
@@ -618,7 +724,8 @@ public class WireRoundTripTest {
                         new S2CAtmDataPacket.CashClaimSummary(
                                 UUID.fromString(
                                         "30000000-0000-0000-0000-000000000002"),
-                                "FOREIGN_CASH", 3)));
+                                "FOREIGN_CASH", 3)),
+                Optional.of(recovery));
         FriendlyByteBuf b = buf();
         S2CAtmDataPacket.encode(in, b);
         S2CAtmDataPacket out = S2CAtmDataPacket.decode(b);
@@ -631,7 +738,26 @@ public class WireRoundTripTest {
         assertEquals(2, out.denominations().size());
         assertEquals(6, out.pendingCashClaimCount());
         assertEquals(2, out.collectibleCashClaims().size());
+        assertEquals(Optional.of(recovery), out.depositRecovery());
         assertEquals(0, b.readableBytes());
+    }
+
+    @Test
+    void atmDepositRecoveryCheckRoundTripsExactIdentity() {
+        C2SAtmDepositRecoveryPacket in =
+                new C2SAtmDepositRecoveryPacket(
+                        UUID.fromString(
+                                "30000000-0000-0000-0000-000000000020"),
+                        UUID.fromString(
+                                "30000000-0000-0000-0000-000000000021"));
+        FriendlyByteBuf buffer = buf();
+
+        C2SAtmDepositRecoveryPacket.encode(in, buffer);
+        C2SAtmDepositRecoveryPacket out =
+                C2SAtmDepositRecoveryPacket.decode(buffer);
+
+        assertEquals(in, out);
+        assertEquals(0, buffer.readableBytes());
     }
 
     @Test
@@ -1112,6 +1238,30 @@ public class WireRoundTripTest {
     }
 
     @Test
+    void atmDepositRefundReportsExactReturnedInventoryValue() {
+        UUID requestId = UUID.fromString(
+                "34000000-0000-0000-0000-000000000013");
+        UUID transactionId = UUID.fromString(
+                "34000000-0000-0000-0000-000000000014");
+        S2CAtmDepositResultPacket input =
+                new S2CAtmDepositResultPacket(
+                        requestId, "REFUNDED", false, false,
+                        Optional.of(transactionId),
+                        0L, 0, 0L, 0L,
+                        1_250L, "ORIGINAL_INVENTORY",
+                        false, 0L, false, Optional.empty(), 0L);
+        FriendlyByteBuf buffer = buf();
+
+        S2CAtmDepositResultPacket.encode(input, buffer);
+
+        assertEquals(input,
+                S2CAtmDepositResultPacket.decode(buffer));
+        assertEquals(1_250L, input.returnedMinorUnits());
+        assertEquals("ORIGINAL_INVENTORY", input.refundDestination());
+        assertEquals(0, buffer.readableBytes());
+    }
+
+    @Test
     void atmDepositLegacySummaryOmitsUnsafeBillPayload() {
         S2CAtmDepositResultPacket in =
                 new S2CAtmDepositResultPacket(
@@ -1206,5 +1356,19 @@ public class WireRoundTripTest {
                         requestId, "CANCELLED", false, false,
                         Optional.of(transactionId), 0L, 0, 0L, 0L,
                         true, 500L, false, Optional.empty(), 0L));
+    }
+
+    private static ServerShopOfferListing normalizedPlayerShopOffer() {
+        OfferItemComponent output = new OfferItemComponent(
+                "output", "minecraft:diamond", 2, "");
+        AcquireOfferOption free =
+                AcquireOfferOption.free("free");
+        return new ServerShopOfferListing(
+                "player_offer", 14L, "Player Offer", "",
+                "all", "minecraft:diamond", "", true,
+                0L, "", List.of(output), List.of(free),
+                List.of(), OfferStockPolicy.unlimited(),
+                OfferLimitPolicy.defaults(), OfferSchedule.always(),
+                List.of());
     }
 }

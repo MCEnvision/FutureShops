@@ -1,13 +1,18 @@
 package com.enviouse.futureshops.server.escrow.playershop;
 
+import com.enviouse.futureshops.catalog.offer.OfferAction;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class PlayerShopEscrowFoundationTest {
     private static final UUID OWNER = id("owner");
@@ -43,6 +48,142 @@ class PlayerShopEscrowFoundationTest {
                     PlayerShopAtomicCommitCodec.encode(fixture.commit())),
                     "commit round trip");
         }
+    }
+
+    @Test
+    void normalizedOfferIdentityUsesSchemaTwoAndSurvivesCommitRoundTrip() {
+        Fixture legacy = purchase(id("normalized offer"),
+                PlayerShopTradeMethod.MONEY_AND_BARTER,
+                PlayerShopPaymentSource.WALLET, false);
+        PlayerShopEscrowIntent source = legacy.intent();
+        PlayerShopOfferSelection selection =
+                new PlayerShopOfferSelection(
+                        source.listing().listingId(), 44L,
+                        "money_and_barter",
+                        OfferAction.ACQUIRE_FROM_SHOP,
+                        com.enviouse.futureshops.catalog.offer
+                                .OfferLimitPolicy.defaults(),
+                        com.enviouse.futureshops.catalog.offer
+                                .OfferLimitPolicy.defaults(),
+                        0L, source.listing().outputs(),
+                        List.of(source.listing()
+                                .barterTemplate()));
+        PlayerShopEscrowIntent normalized =
+                PlayerShopEscrowIntent.prepared(
+                        source.requestId(), source.actorId(),
+                        source.ownerId(), source.shopIdentity(),
+                        PlayerShopOperation.PLAYER_SHOP_OFFER_ACQUIRE,
+                        source.tradeMethod(), source.paymentSource(),
+                        source.requestedUnits(), source.quoteCreatedAt(),
+                        source.listing(), source.moneyTransfers(),
+                        source.itemTransfers(), source.claims(),
+                        source.storageMutations(),
+                        Optional.of(selection));
+
+        byte[] encoded = PlayerShopIntentCodec.encode(normalized);
+        assertEquals(2, ByteBuffer.wrap(encoded).getInt(4));
+        assertEquals(normalized,
+                PlayerShopIntentCodec.decode(encoded));
+        assertEquals(selection,
+                PlayerShopIntentCodec.decode(encoded)
+                        .offerSelection().orElseThrow());
+        PlayerShopAtomicCommit commit =
+                PlayerShopAtomicCommit.create(
+                        normalized, NOW.plusSeconds(1),
+                        legacy.commit().moneyReceipts(),
+                        legacy.commit().itemReceipts(),
+                        legacy.commit().storageReceipts());
+        assertEquals(commit, PlayerShopAtomicCommitCodec.decode(
+                PlayerShopAtomicCommitCodec.encode(commit)));
+    }
+
+    @Test
+    void legacyIntentEncodingRemainsSchemaOne() {
+        PlayerShopEscrowIntent legacy = purchase(
+                id("legacy intent schema"),
+                PlayerShopTradeMethod.MONEY,
+                PlayerShopPaymentSource.WALLET, false).intent();
+        byte[] encoded = PlayerShopIntentCodec.encode(legacy);
+
+        assertEquals(1, ByteBuffer.wrap(encoded).getInt(4));
+        assertEquals(legacy, PlayerShopIntentCodec.decode(encoded));
+    }
+
+    @Test
+    void normalizedPlayerShopAcquireAndSellAreConserved() {
+        Fixture acquireSource = purchase(
+                id("player offer acquire conservation"),
+                PlayerShopTradeMethod.BARTER,
+                PlayerShopPaymentSource.NONE, false);
+        PlayerShopEscrowIntent acquire = normalized(
+                acquireSource.intent(),
+                PlayerShopOperation.PLAYER_SHOP_OFFER_ACQUIRE,
+                "barter", OfferAction.ACQUIRE_FROM_SHOP);
+        Fixture sellSource = buyback(
+                id("player offer sell conservation"), false);
+        PlayerShopEscrowIntent sell = normalized(
+                sellSource.intent(),
+                PlayerShopOperation.PLAYER_SHOP_OFFER_SELL,
+                "sell_money", OfferAction.SELL_TO_SHOP);
+
+        check(PlayerShopConservationValidator.validate(acquire)
+                .conserved(), "normalized acquire conservation");
+        check(PlayerShopConservationValidator.validate(sell)
+                .conserved(), "normalized sell conservation");
+    }
+
+    @Test
+    void normalizedPlayerShopSellAcceptsAuthorizedPayout() {
+        PlayerShopEscrowIntent source = withPayout(
+                buyback(id("player offer authorized payout"),
+                        false).intent(),
+                37L);
+        PlayerShopEscrowIntent sell = normalized(
+                source,
+                PlayerShopOperation.PLAYER_SHOP_OFFER_SELL,
+                "sell_money", OfferAction.SELL_TO_SHOP);
+
+        assertEquals(37L, sell.moneyTransfers()
+                .get(0).amountMinorUnits());
+        check(PlayerShopConservationValidator.validate(sell)
+                .conserved(), "normalized authorized sell conservation");
+    }
+
+    @Test
+    void normalizedAcquireRejectsMissingAndWrongCostEvidence() {
+        PlayerShopEscrowIntent source = purchase(
+                id("player offer cost evidence"),
+                PlayerShopTradeMethod.BARTER,
+                PlayerShopPaymentSource.NONE, false).intent();
+        PlayerShopEscrowIntent missing = withSelection(
+                source, new PlayerShopOfferSelection(
+                        source.listing().listingId(), 44L,
+                        "barter", OfferAction.ACQUIRE_FROM_SHOP,
+                        com.enviouse.futureshops.catalog.offer
+                                .OfferLimitPolicy.defaults(),
+                        com.enviouse.futureshops.catalog.offer
+                                .OfferLimitPolicy.defaults(),
+                        0L, source.listing().outputs(), List.of()));
+        PlayerShopListingSnapshot.ItemTemplate wrong =
+                new PlayerShopListingSnapshot.ItemTemplate(
+                        "minecraft:stick", 3,
+                        PlayerShopItemMatchMode.EXACT,
+                        bytes("stick template"));
+        PlayerShopEscrowIntent mismatched = withSelection(
+                source, new PlayerShopOfferSelection(
+                        source.listing().listingId(), 44L,
+                        "barter", OfferAction.ACQUIRE_FROM_SHOP,
+                        com.enviouse.futureshops.catalog.offer
+                                .OfferLimitPolicy.defaults(),
+                        com.enviouse.futureshops.catalog.offer
+                                .OfferLimitPolicy.defaults(),
+                        0L, source.listing().outputs(),
+                        List.of(wrong)));
+
+        check(!PlayerShopConservationValidator.validate(missing)
+                .conserved(), "missing cost evidence rejected");
+        check(!PlayerShopConservationValidator.validate(mismatched)
+                .conserved(), "wrong cost evidence rejected");
     }
 
     @Test
@@ -461,6 +602,88 @@ class PlayerShopEscrowFoundationTest {
         return new PlayerShopIdentity(id("registry shop"), 3L,
                 "player_shop.registry", "minecraft:overworld",
                 10, 64, -4, owner);
+    }
+
+    private static PlayerShopEscrowIntent normalized(
+            PlayerShopEscrowIntent source,
+            PlayerShopOperation operation,
+            String optionId,
+            OfferAction action
+    ) {
+        List<PlayerShopListingSnapshot.ItemTemplate> inputs =
+                action == OfferAction.SELL_TO_SHOP
+                        ? source.listing().outputs()
+                        : source.listing().barterTemplate() == null
+                        ? List.of()
+                        : List.of(source.listing()
+                        .barterTemplate());
+        List<PlayerShopListingSnapshot.ItemTemplate> outputs =
+                action == OfferAction.ACQUIRE_FROM_SHOP
+                        ? source.listing().outputs() : List.of();
+        return withSelection(source,
+                new PlayerShopOfferSelection(
+                        source.listing().listingId(), 44L,
+                        optionId, action,
+                        com.enviouse.futureshops.catalog.offer
+                                .OfferLimitPolicy.defaults(),
+                        com.enviouse.futureshops.catalog.offer
+                                .OfferLimitPolicy.defaults(),
+                        0L, outputs, inputs));
+    }
+
+    private static PlayerShopEscrowIntent withSelection(
+            PlayerShopEscrowIntent source,
+            PlayerShopOfferSelection selection
+    ) {
+        return PlayerShopEscrowIntent.prepared(
+                source.requestId(), source.actorId(),
+                source.ownerId(), source.shopIdentity(),
+                selection.action() == OfferAction.ACQUIRE_FROM_SHOP
+                        ? PlayerShopOperation
+                        .PLAYER_SHOP_OFFER_ACQUIRE
+                        : PlayerShopOperation.PLAYER_SHOP_OFFER_SELL,
+                source.tradeMethod(), source.paymentSource(),
+                source.requestedUnits(), source.quoteCreatedAt(),
+                source.listing(), source.moneyTransfers(),
+                source.itemTransfers(), source.claims(),
+                source.storageMutations(),
+                Optional.of(selection));
+    }
+
+    private static PlayerShopEscrowIntent withPayout(
+            PlayerShopEscrowIntent source,
+            long payout
+    ) {
+        PlayerShopMoneyTransfer originalTransfer =
+                source.moneyTransfers().get(0);
+        PlayerShopClaimPlan originalClaim = source.claims().stream()
+                .filter(value -> value.kind()
+                        == PlayerShopClaimPlan.Kind.MONEY)
+                .findFirst().orElseThrow();
+        PlayerShopClaimPlan claim = new PlayerShopClaimPlan(
+                originalClaim.claimId(), originalClaim.beneficiaryId(),
+                originalClaim.kind(), originalClaim.purpose(),
+                payout, null);
+        PlayerShopMoneyTransfer transfer =
+                new PlayerShopMoneyTransfer(
+                        originalTransfer.transferId(),
+                        originalTransfer.source(),
+                        originalTransfer.destination(), payout,
+                        originalTransfer.paymentSource(),
+                        originalTransfer.sourceBalanceBeforeMinorUnits(),
+                        originalTransfer.destinationBalanceBeforeMinorUnits());
+        List<PlayerShopClaimPlan> claims = source.claims().stream()
+                .map(value -> value.claimId().equals(claim.claimId())
+                        ? claim : value)
+                .toList();
+        return PlayerShopEscrowIntent.prepared(
+                source.requestId(), source.actorId(), source.ownerId(),
+                source.shopIdentity(), source.operation(),
+                source.tradeMethod(), source.paymentSource(),
+                source.requestedUnits(), source.quoteCreatedAt(),
+                source.listing(), List.of(transfer),
+                source.itemTransfers(), claims,
+                source.storageMutations());
     }
 
     private static PlayerShopStorageEndpoint storageEndpoint(int ordinal) {
