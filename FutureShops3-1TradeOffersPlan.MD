@@ -2,7 +2,7 @@
 
 ## Status
 
-Owner approval was granted and the verified 3.1 implementation was merged into `master` through pull request 7 on July 29, 2026. The automated, GameTest, build, dedicated server, client, multiplayer reconnect, migration, recovery, and packaged JAR gates recorded below passed. Release publication remains a separate action that requires explicit owner authorization.
+Owner approval was granted and the verified advanced trade offer implementation was merged into `master` through pull request 7 on July 29, 2026. The `3.1` in this feature plan title is an internal planning label and does not define the public artifact release line. These features currently ship in the `3.0.0-beta.<n>` line. The automated, GameTest, build, dedicated server, client, multiplayer reconnect, migration, recovery, and packaged JAR gates recorded below passed. Release publication remains a separate action that requires explicit owner authorization.
 
 This document remains the acceptance source of truth for the 3.1 trade offer expansion. Requirements use plan language so an unverified gate is never mistaken for a passed gate. The audited current behavior section records the 3.0 baseline that motivated the work, not the current 3.1 beta behavior. Current code, tests, and the final verification record determine which requirements are implemented. The [FutureShops 3.0 plan](FutureShops3-0Plan.MD) remains the source of truth for unfinished 3.0 work.
 

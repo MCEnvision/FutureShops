@@ -4,6 +4,43 @@ Status. The ATM deposit recovery and Bazaar refund access blocker in Section 20 
 
 This document is the implementation contract for FutureShops 3.0. It covers the shared escrow foundation, migration of all existing value moving features, the Auction House, the Bazaar, the shared market interface, configuration, recovery, abuse controls, testing, and release sequencing.
 
+## Beta release identity
+
+FutureShops remains on the `3.0.0` release line until the owner explicitly approves a different
+release line. Feature plan names, merged feature groups, and network protocol revisions do not
+change the public mod version by themselves.
+
+Every bug fix increments only the final beta build number by exactly one. Artifact names use
+`futureshops-3.0.0-beta.<n>.jar`. The correction recorded by this plan changes the current build
+from the incorrect `3.1.0-beta.1` identity to `3.0.0-beta.3`. Future bug fixes continue with
+`3.0.0-beta.4`, `3.0.0-beta.5`, and so on unless the owner explicitly changes the release line.
+
+The Gradle project version is the single source of the beta identity. Packaging must project the
+same value into the JAR filename, the expanded `META-INF/mods.toml`, and the manifest
+`Implementation-Version`. Documentation and release notes must use the same release line. Network
+compatibility remains governed by the independent FutureShops protocol number.
+
+This maintenance change does not alter gameplay, persistence, configuration schemas, packet
+formats, or the release publication state. It adds a build policy regression test and requires a
+clean build followed by packaged JAR inspection. Acceptance requires all of the following.
+
+- `gradle.properties` declares `mod_version=3.0.0-beta.3`.
+- The produced artifact is named `futureshops-3.0.0-beta.3.jar`.
+- The expanded mod metadata and manifest both report `3.0.0-beta.3`.
+- Repository documentation no longer describes the current artifact as `3.1.0`.
+- The release line regression test rejects a version outside `3.0.0-beta.<positive integer>`.
+- Publishing, tagging, and changing the release line remain separate owner authorized actions.
+
+Implementation status. Implemented and verified on `envy/version-3-0-beta-3` on July 30, 2026,
+but not yet merged. The clean test run passed 1,874 tests with no failures, errors, or skips. The
+build and beta identity verification passed. The packaged JAR filename, expanded mod metadata,
+manifest version, logo, mixin configuration, and refmap were inspected. A dedicated server reached
+ready state with FutureShops `3.0.0-beta.3` loaded, and the virtual display client reached
+FutureShops client setup and the render thread. The existing development world reported Forge's
+expected version difference from the incorrect `3.1.0-beta.1` label and then reached ready state.
+There were no implementation deviations. Release publication and release line approval remain
+unchanged.
+
 The required build order is.
 
 1. Freeze and verify the regression baseline for all community bug reports.

@@ -1,6 +1,6 @@
-# FutureShops 3.1 beta release notes
+# FutureShops 3.0.0 beta release notes
 
-FutureShops 3.1 replaces separate special case shop trades with one clear offer model. This is a beta build for Minecraft 1.20.1 and Forge 47.4.20. Client and server must use the same build because the network protocol is now 57.
+FutureShops 3.0.0 beta replaces separate special case shop trades with one clear offer model. This is a beta build for Minecraft 1.20.1 and Forge 47.4.20. Client and server must use the same build because the network protocol is now 57.
 
 ## Player changes
 
