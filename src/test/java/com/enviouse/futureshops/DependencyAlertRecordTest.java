@@ -5,14 +5,16 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.regex.Pattern;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DependencyAlertRecordTest {
     @Test
     void recordClassifiesEveryOpenAdvisory() throws Exception {
         String record = Files.readString(Path.of(
-                "docs/security/dependency-alerts-3.0-beta.4.md"));
+                "docs/security/dependency-alerts-3.0-beta.5.md"));
         List<String> advisories = List.of(
                 "GHSA-558v-64gr-wgg4",
                 "GHSA-c653-97m9-rcg9",
@@ -40,6 +42,19 @@ class DependencyAlertRecordTest {
                 "GHSA-7hfm-57qf-j43q",
                 "GHSA-53x6-4x5p-rrvv");
 
-        assertTrue(advisories.stream().allMatch(record::contains));
+        assertEquals(25, record.lines()
+                .filter(line -> line.matches(
+                        "\\| [0-9]+ \\| GHSA-[^|]+ \\|.*"))
+                .count());
+        advisories.forEach(advisory -> assertEquals(1,
+                record.split(Pattern.quote(advisory), -1).length - 1,
+                advisory));
+        assertTrue(record.contains("FutureShops reachability"));
+        assertTrue(record.lines()
+                .filter(line -> line.matches(
+                        "\\| [0-9]+ \\| GHSA-[^|]+ \\|.*"))
+                .allMatch(line -> line.contains("Tolerable risk")
+                        && (line.contains("Runtime")
+                        || line.contains("Build time"))));
     }
 }

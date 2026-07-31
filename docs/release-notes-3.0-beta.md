@@ -2,6 +2,14 @@
 
 FutureShops 3.0.0 beta replaces separate special case shop trades with one clear offer model. This is a beta build for Minecraft 1.20.1 and Forge 47.4.20. Client and server must use the same build because the network protocol is now 57.
 
+## Beta 5 dependency maintenance
+
+* Every reported transitive dependency alert now has a runtime or build classification, FutureShops reachability evidence, a patched boundary, and an explicit accepted risk disposition in [Dependency alert disposition for 3.0.0 beta 5](security/dependency-alerts-3.0-beta.5.md).
+* The build now fails if Netty, Apache Commons, Guava, Log4j, Plexus, or Forge Jar in Jar metadata is accidentally bundled in the FutureShops JAR.
+* Dependabot monitors Gradle and GitHub Actions weekly. Minor and patch updates are grouped, while major platform changes remain visible for compatibility planning.
+* This maintenance build does not replace launcher supplied libraries or change the pinned Minecraft 1.20.1 and Forge 47.4.20 compatibility boundary.
+* The beta artifact and metadata version is `3.0.0-beta.5`.
+
 ## Beta 4 maintenance
 
 * Sell to Shop now calculates the authoritative payout from the configured unit value and selected quantity. Direct selling and Sell Inventory use the same corrected quote.

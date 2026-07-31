@@ -23,4 +23,17 @@ class DependencyMaintenanceBaselineTest {
                 "version-update:semver-major"));
         assertFalse(config.contains("net.neoforged:neoforge"));
     }
+
+    @Test
+    void packagedJarRejectsLauncherSuppliedLibraries() throws Exception {
+        String build = Files.readString(Path.of("build.gradle"));
+
+        assertTrue(build.contains("verifyPackagedDependencyBoundary"));
+        assertTrue(build.contains("META-INF/jarjar/metadata.json"));
+        assertTrue(build.contains("io/netty/"));
+        assertTrue(build.contains("org/apache/commons/"));
+        assertTrue(build.contains("com/google/common/"));
+        assertTrue(build.contains("org/apache/logging/log4j/"));
+        assertTrue(build.contains("org/codehaus/plexus/"));
+    }
 }

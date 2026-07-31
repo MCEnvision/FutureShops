@@ -232,8 +232,43 @@ tasks.register('verifyBetaReleaseIdentity') {
     }
 }
 
+tasks.register('verifyPackagedDependencyBoundary') {
+    group = 'verification'
+    description = 'Verifies that launcher supplied libraries are not bundled in the FutureShops jar.'
+    dependsOn tasks.named('jar')
+
+    doLast {
+        File artifact = tasks.named('jar', Jar).get().archiveFile.get().asFile
+        List<String> forbiddenPrefixes = [
+                'io/netty/',
+                'org/apache/commons/',
+                'com/google/common/',
+                'org/apache/logging/log4j/',
+                'org/codehaus/plexus/'
+        ]
+        List<String> forbiddenEntries = []
+
+        new java.util.zip.ZipFile(artifact).withCloseable { archive ->
+            archive.entries().each { entry ->
+                boolean forbiddenClass = entry.name.endsWith('.class')
+                        && forbiddenPrefixes.any { entry.name.startsWith(it) }
+                boolean jarInJarMetadata = entry.name == 'META-INF/jarjar/metadata.json'
+                if (forbiddenClass || jarInJarMetadata) {
+                    forbiddenEntries.add(entry.name)
+                }
+            }
+        }
+
+        if (!forbiddenEntries.isEmpty()) {
+            throw new GradleException(
+                    "FutureShops must not bundle launcher supplied libraries. Found ${forbiddenEntries}")
+        }
+    }
+}
+
 tasks.named('check') {
     dependsOn tasks.named('verifyBetaReleaseIdentity')
+    dependsOn tasks.named('verifyPackagedDependencyBoundary')
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.
