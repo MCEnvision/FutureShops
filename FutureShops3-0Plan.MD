@@ -347,6 +347,8 @@ on an isolated port, headless client setup and atlas creation, metadata inspecti
 boundary verification on node1. The resulting `futureshops-3.0.0-beta.7.jar` is 5,730,621 bytes.
 Its SHA-256 is `04d03bee881fa7a1a3dfa4d7f07d1a099d40998d2b052bfe2592c131847b0c95`, and its
 SHA-512 is `8ca549a6f163d3926809187c19ffd8a3441c0bed3fbfb0ad979d845c9524a02d8c9ecd36d925c1e1edaf737cae7abc837593a6492402152b84551eaf5d1334b1`.
+Source contract tests normalize platform line endings so the same verification gate runs on Windows
+and Linux checkouts.
 Pull request checks, CodeQL confirmation, merge, default branch scanning, and reporter testing remain
 open gates.
 
