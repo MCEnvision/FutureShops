@@ -2,6 +2,15 @@
 
 FutureShops 3.0.0 beta replaces separate special case shop trades with one clear offer model. This is a beta build for Minecraft 1.20.1 and Forge 47.4.20. Client and server must use the same build because the network protocol is now 57.
 
+## Beta 6 dependency maintenance
+
+* MixinGradle now uses the fixed `0.7.38` release instead of a moving snapshot.
+* The Foojay toolchain resolver convention is updated to `1.0.0` for the Java 17 build.
+* JUnit Jupiter and the JUnit Platform launcher are aligned at `6.1.2` through JUnit dependency metadata.
+* Gradle remains pinned to `8.14.4` because ForgeGradle rejects Gradle 9 before project compilation.
+* These build and test dependency changes do not alter gameplay, saved data, configuration, or the network protocol.
+* The beta artifact and metadata version is `3.0.0-beta.6`.
+
 ## Beta 5 dependency maintenance
 
 * Every reported transitive dependency alert now has a runtime or build classification, FutureShops reachability evidence, a patched boundary, and an explicit accepted risk disposition in [Dependency alert disposition for 3.0.0 beta 5](security/dependency-alerts-3.0-beta.5.md).
