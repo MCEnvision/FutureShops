@@ -203,7 +203,7 @@ dependencies {
 
     // Source-scan / invariant tests only — they never load the Minecraft classpath
     // and therefore don't need ForgeGradle fixtures. JUnit 5 is sufficient.
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter:6.1.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
 
 }
