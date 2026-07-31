@@ -212,7 +212,7 @@ Local verification passed 1,887 unit and source contract tests, all 5 required G
 Gradle build, dedicated server ready state, client setup and render thread startup, expanded mod
 metadata and manifest inspection, JSON validation, forbidden package inspection, and final diff
 checks. The resulting artifact is `futureshops-3.0.0-beta.5.jar`. Its SHA 256 digest is
-`722e84af55eab40e7eb1c4ef81c026027a0ff94aee92427523a5ef0d8bc4d869`. Default branch
+`0a8a9b0a20d55b3448330ab7874cb672abb760caad8811251925ee708ea6ee94`. Default branch
 integration, GitHub alert reconciliation, issue closure, and Discord delivery remain pending and
 must not be reported as complete before their external state is verified.
 
