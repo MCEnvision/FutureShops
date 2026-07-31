@@ -257,6 +257,12 @@ The prepared and commit SavedData stores keep bounded live windows. Their finite
 
 Do not log credentials, tokens, private configuration, full player inventories, or unbounded NBT. Do not follow symbolic links when loading administrator product files.
 
+The current transitive dependency review is recorded in
+[Dependency alert disposition for 3.0.0 beta 4](docs/security/dependency-alerts-3.0-beta.4.md).
+FutureShops does not bundle the reported Minecraft, Forge, or ForgeGradle libraries. Platform
+owned alerts must be resolved through a compatible platform upgrade, not a development only
+constraint that leaves player launchers unchanged.
+
 ## Verification by change type
 
 For all source changes:
@@ -276,7 +282,7 @@ Also run:
 
 For readiness changes, verify both the recovery window and the ready transition. A screen opened during recovery must refresh without reconnecting. Navigation requests must remain server authorized. Currency and profile reads may use the safe display balance, while mutations remain blocked until ready.
 
-After packaging, inspect the manifest, expanded `META-INF/mods.toml`, mixin configuration and refmap, assets, data, dependency metadata, and the complete Git diff. Version `3.0.0-beta.3` must expand into the mod metadata, and `logoFile = "futureshops.png"` must resolve to the 400 by 400 project logo at the jar root. Bug fix builds stay on the `3.0.0` release line and increment only the final beta number until the owner explicitly approves another release line. Build output, run directories, logs, crash reports, local configs, caches, IDE files, and `AGENTS.md` must not be committed.
+After packaging, inspect the manifest, expanded `META-INF/mods.toml`, mixin configuration and refmap, assets, data, dependency metadata, and the complete Git diff. Version `3.0.0-beta.4` must expand into the mod metadata, and `logoFile = "futureshops.png"` must resolve to the 400 by 400 project logo at the jar root. Bug fix builds stay on the `3.0.0` release line and increment only the final beta number until the owner explicitly approves another release line. Build output, run directories, logs, crash reports, local configs, caches, IDE files, and `AGENTS.md` must not be committed.
 
 ## Troubleshooting
 

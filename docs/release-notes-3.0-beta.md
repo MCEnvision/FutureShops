@@ -2,6 +2,14 @@
 
 FutureShops 3.0.0 beta replaces separate special case shop trades with one clear offer model. This is a beta build for Minecraft 1.20.1 and Forge 47.4.20. Client and server must use the same build because the network protocol is now 57.
 
+## Beta 4 maintenance
+
+* Sell to Shop now calculates the authoritative payout from the configured unit value and selected quantity. Direct selling and Sell Inventory use the same corrected quote.
+* A cart response timeout no longer leaves quantity, remove, and Clear controls locked forever.
+* Check Result resends the exact original checkout identity and item snapshot. Visible cart edits remain separate, and a different checkout cannot begin until the original request reaches a terminal result.
+* Dependabot now covers Gradle and GitHub Actions without hiding major updates. The 25 inherited platform and toolchain alerts are classified in [Dependency alert disposition for 3.0.0 beta 4](security/dependency-alerts-3.0-beta.4.md).
+* The beta artifact and metadata version is `3.0.0-beta.4`.
+
 ## Player changes
 
 * Free offers have an explicit Get action and never open a payment source chooser.

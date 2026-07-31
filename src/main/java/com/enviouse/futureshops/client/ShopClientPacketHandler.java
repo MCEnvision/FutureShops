@@ -843,7 +843,7 @@ public final class ShopClientPacketHandler {
     public static void handlePlayerShopData(S2CPlayerShopDataPacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
-            if (PlayerShopCartState.hasTrackedCheckout()) {
+            if (PlayerShopCartState.isCheckoutPending()) {
                 return;
             }
             boolean storefrontOpen = mc.screen instanceof PlayerStorefrontScreen;

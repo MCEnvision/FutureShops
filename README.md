@@ -45,6 +45,10 @@ The Bazaar and Auction House are disabled on a new installation. Enable either m
 
 For 3.0 beta upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
 
+The current test artifact is `futureshops-3.0.0-beta.4.jar`. It fixes Server Shop sell payout
+quotes and lets a timed out cart be edited while preserving the original checkout identity for a
+safe result check.
+
 Worlds previously opened with the incorrectly labeled `3.1.0-beta.1` build can report a Forge
 version difference when first opened with `3.0.0-beta.3`. This corrects the public artifact label
 and does not roll back the FutureShops data schema. Keep the normal complete backup before opening

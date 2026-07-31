@@ -302,22 +302,29 @@ public class CartScreen extends Screen implements ShopScreenMarker {
 
         // Footer buttons — flat Nocturne primitives at their former bounds.
         boolean checkoutTracked = ShopClientState.hasTrackedCartCheckout();
-        boolean canCheckout = !ShopClientState.getCartEntries().isEmpty()
-                && !checkoutTracked
-                && !awaitingVerification;
+        boolean checkoutPending = ShopClientState.isCartCheckoutPending();
+        boolean canCheckout = !awaitingVerification
+                && (checkoutTracked
+                ? !checkoutPending
+                : !ShopClientState.getCartEntries().isEmpty());
+        Component checkoutLabel = Component.translatable(
+                checkoutTracked
+                        ? "gui.futureshops.cart.check_result_btn"
+                        : "gui.futureshops.cart.checkout_btn");
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + 10, guiTop + guiH - 24, 48, 18,
                 Component.translatable("gui.futureshops.cart.back"), ShopUiUtil.ButtonStyle.SECONDARY, true, this::onClose);
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + 64, guiTop + guiH - 24, 48, 18,
                 Component.translatable("gui.futureshops.cart.clear_btn"), ShopUiUtil.ButtonStyle.DANGER,
-                !checkoutTracked, () -> {
-                    ShopClientState.clearCart();
+                !checkoutPending, () -> {
+                    ShopClientState.clearCartContents();
                     ShopClientState.clearCartVerification();
                 });
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + guiW - 100, guiTop + guiH - 24, 90, 18,
-                Component.translatable("gui.futureshops.cart.checkout_btn"), ShopUiUtil.ButtonStyle.PRIMARY, canCheckout, this::requestVerifyAndCheckout);
+                checkoutLabel, ShopUiUtil.ButtonStyle.PRIMARY,
+                canCheckout, this::requestVerifyAndCheckout);
 
         super.render(graphics, mouseX, mouseY, partialTick);
 
@@ -353,7 +360,7 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.renderCard(graphics, listX, listY, listW, listH);
 
         List<ShopClientState.CartEntry> entries = ShopClientState.getCartEntries();
-        boolean checkoutTracked = ShopClientState.hasTrackedCartCheckout();
+        boolean checkoutPending = ShopClientState.isCartCheckoutPending();
         if (entries.isEmpty()) {
             graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.cart.empty"), listX + listW / 2, listY + listH / 2 - 8, ShopColors.TEXT_MUTED);
             graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.cart.empty_hint"), listX + listW / 2, listY + listH / 2 + 6, ShopColors.TEXT_FAINT);
@@ -392,7 +399,7 @@ public class CartScreen extends Screen implements ShopScreenMarker {
             int ctrlX = listX + listW - 130;
             ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                     ctrlX, y + 3, 14, 16, Component.literal("-"), ShopUiUtil.ButtonStyle.SECONDARY,
-                    !checkoutTracked,
+                    !checkoutPending,
                     () -> ShopClientState.setCartQuantity(
                             rowEntry, rowEntry.quantity() - 1));
             // Wider (18px) qty window between the steppers so 3-4 digit quantities no longer
@@ -403,7 +410,7 @@ public class CartScreen extends Screen implements ShopScreenMarker {
             graphics.drawString(this.font, qtyStr, qtyWinX + (qtyWinW - this.font.width(qtyStr)) / 2, y + 7, ShopColors.TEXT_STRONG, false);
             boolean plusHover = ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                     ctrlX + 34, y + 3, 14, 16, Component.literal("+"), ShopUiUtil.ButtonStyle.SECONDARY,
-                    !checkoutTracked,
+                    !checkoutPending,
                     () -> {
                         if (hasShiftDown()) {
                             ShopClientState.setCartQuantity(
@@ -429,7 +436,7 @@ public class CartScreen extends Screen implements ShopScreenMarker {
             // Remove — flat DANGER "✕" button with a registered ClickZone.
             ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                     listX + listW - 24, y + 3, 16, 16, Component.literal("✕"), ShopUiUtil.ButtonStyle.DANGER,
-                    !checkoutTracked,
+                    !checkoutPending,
                     () -> ShopClientState.removeFromCart(rowEntry));
         }
     }
@@ -455,9 +462,7 @@ public class CartScreen extends Screen implements ShopScreenMarker {
     private void requestVerifyAndCheckout() {
         if (ShopClientState.isCartCheckoutPending() || awaitingVerification) return;
         if (ShopClientState.hasTrackedCartCheckout()) {
-            onTransactionResult(false,
-                    Component.translatable(
-                            "gui.futureshops.cart.checkout_awaiting_result").getString());
+            checkOriginalCheckout();
             return;
         }
         List<ShopClientState.CartEntry> entries = ShopClientState.getCartEntries();
@@ -499,6 +504,16 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         ShopClientState.clearCartVerification();
         awaitingVerification = true;
         ShopPackets.CHANNEL.sendToServer(new C2SVerifyAdminCartPacket(shopId, lines));
+    }
+
+    private void checkOriginalCheckout() {
+        ShopClientState.retryCartCheckout(System.currentTimeMillis())
+                .ifPresentOrElse(
+                        this::sendCheckoutSubmission,
+                        () -> onTransactionResult(false,
+                                Component.translatable(
+                                        "gui.futureshops.cart.checkout_pending")
+                                        .getString()));
     }
 
     private void sendCheckout(Optional<PaymentSource> paymentSource) {

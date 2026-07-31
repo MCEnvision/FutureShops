@@ -11,6 +11,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -74,7 +75,7 @@ class ShopClientStateCartPolicyTest {
     }
 
     @Test
-    void timedOutCheckoutRetainsOriginalRequestSnapshotAndPaymentSource() {
+    void timedOutCheckoutAllowsEditsAndRetainsOriginalSubmission() {
         apply(item("diamond", 500L, 10));
         ShopClientState.addToCart("diamond", 2);
         List<ShopClientState.CartEntry> original = ShopClientState.getCartEntries();
@@ -87,13 +88,78 @@ class ShopClientStateCartPolicyTest {
                 ShopClientState.expireCartCheckout(16_000L));
 
         ShopClientState.addToCart("diamond", 1);
-        assertEquals(original, ShopClientState.getCartEntries());
+        assertEquals(List.of(new ShopClientState.CartEntry("diamond", 3)),
+                ShopClientState.getCartEntries());
+        assertEquals(CartResponsePolicy.BeginDecision.ALREADY_PENDING,
+                ShopClientState.beginCartCheckout(
+                        UUID.randomUUID(),
+                        ShopClientState.getCartEntries(),
+                        "WALLET", 16_001L));
         ShopClientState.CartCheckoutSubmission retry =
                 ShopClientState.retryCartCheckout(16_001L).orElseThrow();
         assertEquals(requestId, retry.requestId());
         assertEquals("default", retry.shopId());
         assertEquals(original, retry.entries());
         assertEquals("INVENTORY", retry.paymentSource());
+        ShopClientState.addToCart("diamond", 1);
+        assertEquals(3, ShopClientState.getCartTotalQuantity());
+    }
+
+    @Test
+    void timedOutCheckoutCanClearVisibleCartWithoutLosingOriginalSubmission() {
+        apply(item("diamond", 500L, 10));
+        ShopClientState.addToCart("diamond", 2);
+        List<ShopClientState.CartEntry> original =
+                ShopClientState.getCartEntries();
+        UUID requestId = UUID.randomUUID();
+
+        ShopClientState.beginCartCheckout(
+                requestId, original, "WALLET", 1_000L);
+        ShopClientState.expireCartCheckout(16_000L);
+        ShopClientState.clearCartContents();
+
+        assertTrue(ShopClientState.getCartEntries().isEmpty());
+        assertTrue(ShopClientState.hasTrackedCartCheckout());
+        ShopClientState.CartCheckoutSubmission retry =
+                ShopClientState.retryCartCheckout(16_001L).orElseThrow();
+        assertEquals(original, retry.entries());
+        ShopClientState.applyCartCheckoutResponse(requestId, true);
+        assertTrue(ShopClientState.getCartEntries().isEmpty());
+        assertFalse(ShopClientState.hasTrackedCartCheckout());
+    }
+
+    @Test
+    void activeCheckoutStillBlocksVisibleCartClear() {
+        apply(item("diamond", 500L, 10));
+        ShopClientState.addToCart("diamond", 2);
+        List<ShopClientState.CartEntry> original =
+                ShopClientState.getCartEntries();
+
+        ShopClientState.beginCartCheckout(
+                UUID.randomUUID(), original, "WALLET", 1_000L);
+        ShopClientState.clearCartContents();
+
+        assertEquals(original, ShopClientState.getCartEntries());
+    }
+
+    @Test
+    void terminalCheckoutFailureUnlocksCartWithoutRemovingItems() {
+        apply(item("diamond", 500L, 10));
+        ShopClientState.addToCart("diamond", 2);
+        List<ShopClientState.CartEntry> original =
+                ShopClientState.getCartEntries();
+        UUID requestId = UUID.randomUUID();
+
+        ShopClientState.beginCartCheckout(
+                requestId, original, "WALLET",
+                System.currentTimeMillis());
+        ShopClientState.applyCartCheckoutResponse(
+                requestId, false, true);
+
+        assertFalse(ShopClientState.hasTrackedCartCheckout());
+        assertEquals(original, ShopClientState.getCartEntries());
+        ShopClientState.addToCart("diamond", 1);
+        assertEquals(3, ShopClientState.getCartTotalQuantity());
     }
 
     @Test

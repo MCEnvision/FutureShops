@@ -1,6 +1,6 @@
 # FutureShops 3.0 Plan
 
-Status. The ATM deposit recovery and Bazaar refund access blocker in Section 20 is implemented on the active 3.0 beta branch. Automated tests, the build, headless client startup, and dedicated server startup pass. Release approval still requires the remaining live multiplayer, reconnect, restart, and recovery fault acceptance checks.
+Status. The ATM deposit recovery and Bazaar refund access blocker in Section 20 is implemented on the active 3.0 beta branch. The `3.0.0-beta.4` issue maintenance work below is implemented and locally verified. Release approval still requires the remaining live multiplayer, reconnect, restart, and recovery fault acceptance checks.
 
 This document is the implementation contract for FutureShops 3.0. It covers the shared escrow foundation, migration of all existing value moving features, the Auction House, the Bazaar, the shared market interface, configuration, recovery, abuse controls, testing, and release sequencing.
 
@@ -24,9 +24,9 @@ This maintenance change does not alter gameplay, persistence, configuration sche
 formats, or the release publication state. It adds a build policy regression test and requires a
 clean build followed by packaged JAR inspection. Acceptance requires all of the following.
 
-- `gradle.properties` declares `mod_version=3.0.0-beta.3`.
-- The produced artifact is named `futureshops-3.0.0-beta.3.jar`.
-- The expanded mod metadata and manifest both report `3.0.0-beta.3`.
+- `gradle.properties` declares `mod_version=3.0.0-beta.4` for the next verified bug fix artifact.
+- The produced artifact is named `futureshops-3.0.0-beta.4.jar`.
+- The expanded mod metadata and manifest both report `3.0.0-beta.4`.
 - Repository documentation no longer describes the current artifact as `3.1.0`.
 - The release line regression test rejects a version outside `3.0.0-beta.<positive integer>`.
 - Publishing, tagging, and changing the release line remain separate owner authorized actions.
@@ -40,6 +40,93 @@ FutureShops client setup and the render thread. The existing development world r
 expected version difference from the incorrect `3.1.0-beta.1` label and then reached ready state.
 There were no implementation deviations. Release publication and release line approval remain
 unchanged.
+
+### Beta 4 issue maintenance
+
+Objective. Resolve the reproducible selling and cart checkout regressions reported against the
+current beta, classify every open dependency alert without weakening the pinned Forge platform,
+and publish the result only as the next `3.0.0` beta artifact.
+
+Current evidence.
+
+- Server shop sell quotes currently return zero because the shared money quote helper only prices
+  acquire options. The sell intent rejects that zero payout as invalid. The same defect affects
+  direct Sell to Shop and the server shop Sell Inventory workflow.
+- Admin and player shop carts retain an immutable request after a response timeout, which is
+  required for replay safety. Their mutation guards and buttons currently treat any tracked
+  request as actively processing, so a missing response permanently prevents clearing, reducing,
+  or editing the cart.
+- GitHub reports 25 transitive dependency alerts from the submitted Gradle graph. The affected
+  libraries are inherited from Minecraft 1.20.1, Forge 47.4.20, ForgeGradle, or their tooling.
+  FutureShops does not package those libraries inside its mod JAR. Changing only the development
+  graph would not update libraries supplied to players by the pinned platform.
+
+Scope and architecture.
+
+1. Quote a Sell to Shop option from its configured per unit payout with checked integer
+   multiplication. Keep acquire pricing delegated to the existing server pricing policy. Both
+   direct and bulk selling must consume the same authoritative quote.
+2. Distinguish an actively pending cart request from a timed out but still tracked request. Active
+   requests continue to block cart mutations. After timeout, players may edit or clear the visible
+   cart contents while the immutable original submission and request UUID remain available for an
+   exact idempotent result check. A different checkout cannot start until the original request
+   reaches a terminal result.
+3. The cart result check must resend the original snapshot and payment source, never the edited
+   cart. Delayed or replayed success subtracts only the acknowledged original quantities from the
+   current cart. Terminal failure clears the tracker without removing cart contents.
+4. Record every dependency alert with its advisory, vulnerable dependency, resolved graph,
+   runtime or build classification, reachability evidence, patched boundary, and disposition.
+   Do not add direct dependency constraints unless they update the real shipped runtime and remain
+   compatible with Minecraft 1.20.1 and Forge 47.4.20.
+5. Review Dependabot coverage for Gradle and GitHub Actions. Existing unrelated or untracked
+   workflow work must not be overwritten. Default branch coverage that cannot be safely integrated
+   on this branch remains an explicit repository maintenance gate rather than a false gameplay
+   completion claim.
+
+Compatibility, failure, and recovery behavior.
+
+- No catalog, offer, escrow, claim, configuration, or persistent schema changes are permitted.
+- No packet identifier or payload shape changes are required. Existing request UUID replay and
+  server authoritative validation remain mandatory.
+- Checked payout overflow fails safely as an invalid request before inventory or money mutation.
+- A cart timeout never creates a second request identity. Editing the visible cart does not cancel
+  or replace the unresolved economic request.
+- Platform owned dependency alerts that require a Minecraft or Forge upgrade remain documented
+  and open. A development only override must not be presented as a player security fix.
+
+Verification and acceptance.
+
+- Focused tests prove direct and bulk sell quotes use the configured positive payout and preserve
+  free, barter, and acquire pricing behavior.
+- Focused tests prove timed out admin and player shop carts can be edited and cleared, retry the
+  immutable original submission, reject a different checkout, handle delayed success by exact
+  quantity, and unlock normally on terminal failure.
+- Interface tests or source contracts prove both cart screens expose the result check and enable
+  mutation controls only after the active timeout ends.
+- The dependency record covers all 25 alerts and JAR inspection proves the reported third party
+  packages are not bundled by FutureShops.
+- The complete test suite, build, dedicated server smoke test, client smoke test, multiplayer
+  request and response checks, packaged JAR inspection, and final diff inspection pass.
+- The artifact, expanded metadata, manifest, documentation, and release notes all report
+  `3.0.0-beta.4`. Issues remain open and in review until the fix is merged and its acceptance gates
+  pass on the approved default branch.
+
+Implementation status on July 31, 2026. The sell quote path now uses the configured server shop
+payout for sell actions and fails closed on multiplication overflow. Both cart implementations
+distinguish an actively pending request from an unresolved timed out request. A timed out cart can
+be edited or cleared while retaining its immutable original submission, and the Check Result
+action resends only that original request. Delayed success removes only acknowledged original
+quantities, while terminal failure preserves current cart contents.
+
+Local verification passed 1,886 unit and source contract tests, all 5 required GameTests, the
+Gradle build, dedicated server startup, client startup, JAR metadata inspection, third party class
+inspection, JSON validation, and final diff checks. The resulting artifact is
+`futureshops-3.0.0-beta.4.jar`, and both its expanded mod metadata and manifest report
+`3.0.0-beta.4`. The dependency record classifies all 25 open alerts. Those inherited platform and
+tooling alerts are not falsely marked remediated because replacing their runtime libraries requires
+a separately planned compatible Minecraft, Forge, and ForgeGradle upgrade. Dependabot coverage is
+prepared for Gradle and GitHub Actions. The gameplay issues remain in review until merge and live
+multiplayer confirmation.
 
 The required build order is.
 
