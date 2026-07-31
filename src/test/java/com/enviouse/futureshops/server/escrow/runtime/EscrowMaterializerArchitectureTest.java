@@ -105,6 +105,40 @@ class EscrowMaterializerArchitectureTest {
     }
 
     @Test
+    void valueFlowsBindRuntimeAndReplayAccessToTheServerThread() {
+        String manager = read(Path.of(
+                "src/main/java/com/enviouse/futureshops/server/escrow/runtime/EscrowRuntimeManager.java"));
+        assertTrue(manager.contains("getOrNull(\n"
+                + "            MinecraftServer server\n"
+                + "    ) {\n"
+                + "        requireServerThread(server);"));
+        assertTrue(manager.contains("requireReady(\n"
+                + "            MinecraftServer server\n"
+                + "    ) {\n"
+                + "        EscrowRuntimeService active = getOrNull(server);"));
+
+        for (String name : List.of(
+                "EscrowMoneyClaimService.java",
+                "EscrowCashDepositService.java")) {
+            String source = read(Path.of(
+                    "src/main/java/com/enviouse/futureshops/server/escrow/runtime/"
+                            + name));
+            assertFalse(source.contains(
+                    "EscrowRuntimeManager.getOrNull()"));
+            assertTrue(source.contains(
+                    "EscrowRuntimeManager.getOrNull(server)"));
+            assertTrue(source.contains("synchronized (runtime)"));
+        }
+
+        String retention = read(Path.of(
+                "src/main/java/com/enviouse/futureshops/server/escrow/runtime/ServerShopOfferReplayRetention.java"));
+        assertEquals(2, occurrences(retention,
+                "EscrowRuntimeManager.requireServerThread(server);"));
+        assertEquals(2, occurrences(retention, "synchronized (prepared)"));
+        assertEquals(2, occurrences(retention, "synchronized (commits)"));
+    }
+
+    @Test
     void manualReviewWorkKeepsRuntimeInMaintenance() {
         String service = read(Path.of(
                 "src/main/java/com/enviouse/futureshops/server/escrow/runtime/EscrowRuntimeService.java"));
@@ -203,6 +237,16 @@ class EscrowMaterializerArchitectureTest {
 
     private static boolean containsAny(String source, List<String> values) {
         return values.stream().anyMatch(source::contains);
+    }
+
+    private static int occurrences(String source, String value) {
+        int result = 0;
+        int offset = 0;
+        while ((offset = source.indexOf(value, offset)) >= 0) {
+            result++;
+            offset += value.length();
+        }
+        return result;
     }
 
     private static void assertBefore(String source, String first, String second) {

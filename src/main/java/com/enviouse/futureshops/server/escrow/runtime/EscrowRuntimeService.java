@@ -411,10 +411,14 @@ public final class EscrowRuntimeService implements AutoCloseable {
     }
 
     public synchronized EscrowRuntimeState state() {
+        assertServerThread();
         if (coordinator == null) {
             return unavailableState;
         }
-        EscrowRuntimeState journalState = coordinator.state();
+        EscrowRuntimeState journalState;
+        synchronized (coordinator) {
+            journalState = coordinator.state();
+        }
         if (journalState == EscrowRuntimeState.READY) {
             if (maintenanceController != null
                     && maintenanceController.maintenanceRequested()) {
@@ -428,11 +432,18 @@ public final class EscrowRuntimeService implements AutoCloseable {
                     || serverShopFundingRecoveryFailure != null) {
                 return EscrowRuntimeState.MAINTENANCE;
             }
+            boolean schedulerRecovering;
+            boolean schedulerBlocked;
+            synchronized (recoveryScheduler) {
+                schedulerRecovering = !recoveryScheduler.enumerationComplete()
+                        || recoveryScheduler.hasRunnableWork();
+                schedulerBlocked = recoveryScheduler.hasBlockingWork()
+                        || recoveryScheduler.hasManualReviewWork();
+            }
             if (!domainRecoveryInitialized || !protectedCashDiscoveryComplete
                     || !foreignCashDiscoveryComplete
                     || !paymentHistoryProjector.complete()
-                    || !recoveryScheduler.enumerationComplete()
-                    || recoveryScheduler.hasRunnableWork()
+                    || schedulerRecovering
                     || hasResolvableCustodyRecovery()
                     || !protectedCashCleanupWork.isEmpty()
                     || !foreignCashCleanupWork.isEmpty()
@@ -440,8 +451,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
                     || hasOnlinePreparedItemMutations()) {
                 return EscrowRuntimeState.RECOVERING;
             }
-            if (recoveryScheduler.hasBlockingWork()
-                    || recoveryScheduler.hasManualReviewWork()
+            if (schedulerBlocked
                     || hasBlockedCustodyRecovery()
                     || protectedCashDiscoveryFailure != null) {
                 return EscrowRuntimeState.MAINTENANCE;
@@ -458,6 +468,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
     }
 
     public synchronized Optional<Throwable> failure() {
+        assertServerThread();
         if (coordinator == null) {
             return Optional.ofNullable(startupFailure);
         }
@@ -498,13 +509,15 @@ public final class EscrowRuntimeService implements AutoCloseable {
         EscrowRuntimeCoordinator available = requireCoordinator();
         int remaining = maximumRecords;
         int worked = 0;
-        if (available.state() == EscrowRuntimeState.RECOVERING) {
-            int journalWork = available.recoverBatch(remaining);
-            worked += journalWork;
-            remaining -= journalWork;
-        }
-        if (available.state() != EscrowRuntimeState.READY) {
-            return worked;
+        synchronized (available) {
+            if (available.state() == EscrowRuntimeState.RECOVERING) {
+                int journalWork = available.recoverBatch(remaining);
+                worked += journalWork;
+                remaining -= journalWork;
+            }
+            if (available.state() != EscrowRuntimeState.READY) {
+                return worked;
+            }
         }
         initializeDomainRecovery();
         if (remaining > 0 && !protectedCashDiscoveryComplete) {
@@ -526,12 +539,14 @@ public final class EscrowRuntimeService implements AutoCloseable {
             worked += released;
             remaining -= released;
         }
-        if (remaining > 0 && !recoveryScheduler.enumerationComplete()) {
-            int enumerationBudget = recoveryScheduler.hasRunnableWork()
-                    ? Math.max(1, remaining / 2) : remaining;
-            int enumerated = recoveryScheduler.enumerateBatch(enumerationBudget);
-            worked += enumerated;
-            remaining -= enumerated;
+        synchronized (recoveryScheduler) {
+            if (remaining > 0 && !recoveryScheduler.enumerationComplete()) {
+                int enumerationBudget = recoveryScheduler.hasRunnableWork()
+                        ? Math.max(1, remaining / 2) : remaining;
+                int enumerated = recoveryScheduler.enumerateBatch(enumerationBudget);
+                worked += enumerated;
+                remaining -= enumerated;
+            }
         }
         if (maintenanceController != null
                 && maintenanceController.maintenanceRequested()) {
@@ -543,21 +558,27 @@ public final class EscrowRuntimeService implements AutoCloseable {
             }
             return worked;
         }
-        if (remaining > 0 && recoveryScheduler.hasRunnableWork()) {
-            int processingBudget = remaining;
-            EscrowRecoveryBatchResult result = withRecoveryLane(
-                    () -> recoveryScheduler.processBatch(processingBudget));
-            worked += result.examined();
-            remaining -= result.examined();
+        synchronized (recoveryScheduler) {
+            if (remaining > 0 && recoveryScheduler.hasRunnableWork()) {
+                int processingBudget = remaining;
+                EscrowRecoveryBatchResult result = withRecoveryLane(
+                        () -> recoveryScheduler.processBatch(processingBudget));
+                worked += result.examined();
+                remaining -= result.examined();
+            }
         }
         if (remaining > 0 && hasResolvableCustodyRecovery()) {
             int custodyWork = recoverOneCustodyOperation();
             worked += custodyWork;
             remaining -= custodyWork;
         }
+        boolean schedulerComplete;
+        synchronized (recoveryScheduler) {
+            schedulerComplete = recoveryScheduler.enumerationComplete()
+                    && !recoveryScheduler.hasRunnableWork();
+        }
         if (remaining > 0
-                && recoveryScheduler.enumerationComplete()
-                && !recoveryScheduler.hasRunnableWork()
+                && schedulerComplete
                 && !paymentHistoryProjector.complete()) {
             int projected = paymentHistoryProjector.reconcileBatch(remaining);
             worked += projected;
@@ -584,40 +605,45 @@ public final class EscrowRuntimeService implements AutoCloseable {
     }
 
     public synchronized boolean shouldRunRecovery() {
+        assertServerThread();
         if (coordinator == null) {
             return false;
         }
-        if (coordinator.state() == EscrowRuntimeState.RECOVERING) {
-            return true;
+        synchronized (coordinator) {
+            if (coordinator.state() == EscrowRuntimeState.RECOVERING) {
+                return true;
+            }
+            if (coordinator.state() != EscrowRuntimeState.READY) {
+                return false;
+            }
         }
-        if (coordinator.state() != EscrowRuntimeState.READY) {
-            return false;
-        }
-        if (maintenanceController != null
-                && maintenanceController.maintenanceRequested()) {
+        synchronized (recoveryScheduler) {
+            if (maintenanceController != null
+                    && maintenanceController.maintenanceRequested()) {
+                return !domainRecoveryInitialized
+                        || !protectedCashDiscoveryComplete
+                        || !foreignCashDiscoveryComplete
+                        || !paymentHistoryProjector.complete()
+                        || !recoveryScheduler.enumerationComplete()
+                        || !protectedCashCleanupWork.isEmpty()
+                        || !foreignCashCleanupWork.isEmpty()
+                        || !serverShopFundingRecoveryWork.isEmpty()
+                        || itemInventoryRecoveryFailure == null
+                        && hasOnlinePreparedItemMutations();
+            }
             return !domainRecoveryInitialized
                     || !protectedCashDiscoveryComplete
                     || !foreignCashDiscoveryComplete
                     || !paymentHistoryProjector.complete()
                     || !recoveryScheduler.enumerationComplete()
+                    || recoveryScheduler.hasRunnableWork()
+                    || hasResolvableCustodyRecovery()
                     || !protectedCashCleanupWork.isEmpty()
                     || !foreignCashCleanupWork.isEmpty()
                     || !serverShopFundingRecoveryWork.isEmpty()
                     || itemInventoryRecoveryFailure == null
                     && hasOnlinePreparedItemMutations();
         }
-        return !domainRecoveryInitialized
-                || !protectedCashDiscoveryComplete
-                || !foreignCashDiscoveryComplete
-                || !paymentHistoryProjector.complete()
-                || !recoveryScheduler.enumerationComplete()
-                || recoveryScheduler.hasRunnableWork()
-                || hasResolvableCustodyRecovery()
-                || !protectedCashCleanupWork.isEmpty()
-                || !foreignCashCleanupWork.isEmpty()
-                || !serverShopFundingRecoveryWork.isEmpty()
-                || itemInventoryRecoveryFailure == null
-                && hasOnlinePreparedItemMutations();
     }
 
     private int recoverOnlineItemInventoryMutations(int maximumWork) {
@@ -1202,12 +1228,16 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 EscrowJournalEventType.ADMIN_AUDIT,
                 AdministrativeAuditJournalCodec.encode(audit));
         EscrowRuntimeCoordinator available = requireCoordinator();
-        if (!available.isReady()) {
-            throw new EscrowRuntimeException(
-                    "Administrative audit journal is unavailable in state " + available.state(),
-                    available.failure().orElse(null));
+        EscrowCommitResult result;
+        synchronized (available) {
+            if (!available.isReady()) {
+                throw new EscrowRuntimeException(
+                        "Administrative audit journal is unavailable in state "
+                                + available.state(),
+                        available.failure().orElse(null));
+            }
+            result = available.commit(audit.requestId(), event);
         }
-        EscrowCommitResult result = available.commit(audit.requestId(), event);
         invalidateConservationAudit();
         return result;
     }
@@ -1229,16 +1259,20 @@ public final class EscrowRuntimeService implements AutoCloseable {
         assertServerThread();
         Objects.requireNonNull(command, "command");
         EscrowRuntimeCoordinator available = requireCoordinator();
-        if (!available.journalHealthyAndAligned()) {
-            throw new EscrowRuntimeException(
-                    "Maintenance repair journal is unavailable in state "
-                            + available.state(), available.failure().orElse(null));
-        }
         EscrowJournalEvent event = applier.planMaintenanceRepair(command);
         MaintenanceRepairCommand plannedCommand = MaintenanceRepairJournalCodec.decode(
                 event.body()).command();
-        EscrowCommitResult result = available.commitMaintenanceRepair(
-                command.commandId(), event);
+        EscrowCommitResult result;
+        synchronized (available) {
+            if (!available.journalHealthyAndAligned()) {
+                throw new EscrowRuntimeException(
+                        "Maintenance repair journal is unavailable in state "
+                                + available.state(),
+                        available.failure().orElse(null));
+            }
+            result = available.commitMaintenanceRepair(
+                    command.commandId(), event);
+        }
         invalidateConservationAudit();
         if (plannedCommand.appliesAction()
                 && plannedCommand.target().type()
@@ -2599,10 +2633,13 @@ public final class EscrowRuntimeService implements AutoCloseable {
 
     private EscrowRuntimeCoordinator requireReadyCoordinator() {
         EscrowRuntimeCoordinator available = requireCoordinator();
-        if (!isReady() && !(recoveryDepth.get() > 0 && available.isReady())) {
-            throw new EscrowRuntimeException(
-                    "Escrow runtime is not ready and is in state " + state(),
-                    failure().orElse(null));
+        synchronized (available) {
+            if (!isReady()
+                    && !(recoveryDepth.get() > 0 && available.isReady())) {
+                throw new EscrowRuntimeException(
+                        "Escrow runtime is not ready and is in state "
+                                + state(), failure().orElse(null));
+            }
         }
         return available;
     }

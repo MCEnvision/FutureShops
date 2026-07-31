@@ -42,8 +42,29 @@ public final class EscrowMoneyClaimService {
                     "Money claim collection identity cannot be zero");
         }
         MinecraftServer server = player.getServer();
-        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
-        if (server == null || runtime == null || !runtime.isReady()) {
+        if (server == null) {
+            return result(Status.ESCROW_UNAVAILABLE, requestId, claimId,
+                    0L, 0L, false);
+        }
+        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull(server);
+        if (runtime == null) {
+            return result(Status.ESCROW_UNAVAILABLE, requestId, claimId,
+                    0L, 0L, false);
+        }
+        synchronized (runtime) {
+            return collectLocked(player, claimId, requestId, server,
+                    runtime);
+        }
+    }
+
+    private static CollectionResult collectLocked(
+            ServerPlayer player,
+            UUID claimId,
+            UUID requestId,
+            MinecraftServer server,
+            EscrowRuntimeService runtime
+    ) {
+        if (!runtime.isReady()) {
             return result(Status.ESCROW_UNAVAILABLE, requestId, claimId,
                     0L, 0L, false);
         }
