@@ -4,7 +4,7 @@
 
 FutureShops is a Forge 1.20.1 mod that owns a server authoritative economy, shop catalogs, player shop blocks, physical currency, an escrow protected Auction House, and a Bazaar order book.
 
-The 3.1 trade offer implementation is in beta on the active phase branch. It extends the durable 3.0 market foundation with one normalized offer contract for Server Shops and Player Shops. The [FutureShops 3.1 advanced trade offers plan](FutureShops3-1TradeOffersPlan.MD) remains the acceptance source of truth. Current code and tests establish implemented behavior. Release approval still requires the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, and recovery acceptance run. Focused operator documentation is available in:
+The 3.0.0 implementation is in beta on the active phase branch. Its advanced trade offer work extends the durable 3.0 market foundation with one normalized offer contract for Server Shops and Player Shops. The [FutureShops advanced trade offers plan](FutureShops3-1TradeOffersPlan.MD) remains the feature acceptance source of truth, but its filename does not define the public artifact version. Current code and tests establish implemented behavior. Release approval still requires the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, and recovery acceptance run. Focused operator documentation is available in:
 
 * [Auction House and Bazaar guide](docs/markets-guide.md)
 * [Configuration examples](docs/config-3.0-examples.md)
@@ -12,14 +12,14 @@ The 3.1 trade offer implementation is in beta on the active phase branch. It ext
 * [Backup and restore](docs/backup-restore.md)
 * [Compatibility matrix](docs/compatibility-matrix.md)
 * [Physical currency and ATM](docs/physical-currency-atm.md)
-* [3.1 trade offer configuration](docs/config-3.1-offers.md)
-* [3.1 release notes](docs/release-notes-3.1.md)
+* [Advanced trade offer configuration](docs/config-3.1-offers.md)
+* [3.0.0 beta release notes](docs/release-notes-3.0-beta.md)
 
 ## Runtime and toolchain
 
 | Component | Pinned value |
 | --- | --- |
-| FutureShops | 3.1.0 beta 1 |
+| FutureShops | 3.0.0 beta 3 |
 | Java | 17 |
 | Gradle Wrapper | 8.14.4 |
 | Minecraft | 1.20.1 |
@@ -45,6 +45,7 @@ Linux and macOS:
 ```text
 bash ./gradlew test
 bash ./gradlew build
+bash ./gradlew verifyBetaReleaseIdentity
 bash ./gradlew runServer
 bash ./gradlew runClient
 bash ./gradlew runGameTestServer
@@ -56,6 +57,7 @@ Windows:
 ```text
 gradlew.bat test
 gradlew.bat build
+gradlew.bat verifyBetaReleaseIdentity
 gradlew.bat runServer
 gradlew.bat runClient
 gradlew.bat runGameTestServer
@@ -255,6 +257,12 @@ The prepared and commit SavedData stores keep bounded live windows. Their finite
 
 Do not log credentials, tokens, private configuration, full player inventories, or unbounded NBT. Do not follow symbolic links when loading administrator product files.
 
+The current transitive dependency review is recorded in
+[Dependency alert disposition for 3.0.0 beta 5](docs/security/dependency-alerts-3.0-beta.5.md).
+FutureShops does not bundle the reported Minecraft, Forge, or ForgeGradle libraries. Platform
+owned alerts must be resolved through a compatible platform upgrade, not a development only
+constraint that leaves player launchers unchanged.
+
 ## Verification by change type
 
 For all source changes:
@@ -274,9 +282,17 @@ Also run:
 
 For readiness changes, verify both the recovery window and the ready transition. A screen opened during recovery must refresh without reconnecting. Navigation requests must remain server authorized. Currency and profile reads may use the safe display balance, while mutations remain blocked until ready.
 
-After packaging, inspect the manifest, expanded `META-INF/mods.toml`, mixin configuration and refmap, assets, data, dependency metadata, and the complete Git diff. Version `3.1.0-beta.1` must expand into the mod metadata, and `logoFile = "futureshops.png"` must resolve to the 400 by 400 project logo at the jar root. Build output, run directories, logs, crash reports, local configs, caches, IDE files, and `AGENTS.md` must not be committed.
+After packaging, inspect the manifest, expanded `META-INF/mods.toml`, mixin configuration and refmap, assets, data, dependency metadata, and the complete Git diff. Version `3.0.0-beta.5` must expand into the mod metadata, and `logoFile = "futureshops.png"` must resolve to the 400 by 400 project logo at the jar root. Run `verifyPackagedDependencyBoundary` and confirm the JAR contains no launcher supplied Netty, Apache Commons, Guava, Log4j, or Plexus classes and no Forge Jar in Jar metadata. Calculate release checksums only after the final Forge reobfuscation and packaging pass. Bug fix builds stay on the `3.0.0` release line and increment only the final beta number until the owner explicitly approves another release line. Build output, run directories, logs, crash reports, local configs, caches, IDE files, and `AGENTS.md` must not be committed.
 
 ## Troubleshooting
+
+### Forge reports a FutureShops version difference
+
+A world previously opened with the incorrectly labeled `3.1.0-beta.1` build can report a version
+difference when it is first opened with `3.0.0-beta.3`. This is an artifact identity correction,
+not a rollback of the persistent FutureShops schema. Preserve the complete world and configuration
+backup, then verify normal escrow recovery and catalog loading. Do not delete market or escrow
+state to remove the warning.
 
 ### Module disabled although TOML enables it
 

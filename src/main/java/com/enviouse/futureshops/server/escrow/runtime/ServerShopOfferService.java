@@ -1221,12 +1221,21 @@ public final class ServerShopOfferService {
             ServerShopOfferListing listing,
             OptionFacts option
     ) {
+        if (request.action() == OfferAction.SELL_TO_SHOP) {
+            return sellMoneyTotal(
+                    option.sell().moneyPayoutMinorUnits(),
+                    request.quantity());
+        }
         if (!option.moneyRequired()) {
             return 0L;
         }
         return ServerShopOfferPricing.moneyTotal(
                 player.getServer(), request.shopId(), listing,
                 option.acquire(), request.quantity());
+    }
+
+    static long sellMoneyTotal(long unitPayoutMinorUnits, int quantity) {
+        return Math.multiplyExact(unitPayoutMinorUnits, (long) quantity);
     }
 
     private static long committedMoneyTotal(

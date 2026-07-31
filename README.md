@@ -1,16 +1,16 @@
 # FutureShops
 
-FutureShops is a Minecraft Forge economy and marketplace mod for server shops, player owned shop blocks, physical currency, barter trades, an Auction House, and a Bazaar order book. Version 3.1 adds one server authoritative trade offer model for free, money, barter, compound, alternative, Sell to Shop, and bundle exchanges. Value movement remains protected by the durable 3.0 escrow foundation.
+FutureShops is a Minecraft Forge economy and marketplace mod for server shops, player owned shop blocks, physical currency, barter trades, an Auction House, and a Bazaar order book. The current 3.0.0 beta includes one server authoritative trade offer model for free, money, barter, compound, alternative, Sell to Shop, and bundle exchanges. Value movement remains protected by the durable 3.0 escrow foundation.
 
 ## Status
 
-The 3.1 trade offer implementation is in beta on the active phase branch. Active phase branches remain test builds until the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, and recovery acceptance run is complete. Use matching FutureShops builds on the client and server.
+The 3.0.0 implementation is in beta on the active phase branch. Active phase branches remain test builds until the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, and recovery acceptance run is complete. Use matching FutureShops builds on the client and server.
 
 Supported runtime:
 
 | Component | Version |
 | --- | --- |
-| FutureShops | 3.1.0 beta 1 |
+| FutureShops | 3.0.0 beta 5 |
 | Minecraft | 1.20.1 |
 | Forge | 47.4.20 |
 | Java | 17 |
@@ -43,7 +43,17 @@ FutureShops currently assumes one authoritative server and world. It does not pr
 
 The Bazaar and Auction House are disabled on a new installation. Enable either module in `config/futureshops/futureshops-common.toml` after reviewing its rules. Existing configuration files keep their configured values. Disabled modules are omitted from the marketplace header. An enabled module remains visible while escrow or its lifecycle control is recovering and shows a recovery state instead of claiming that the module is disabled. An accepted server configuration change appears on an open marketplace screen within five seconds without requiring a reconnect.
 
-For 3.0 or 3.1 upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
+For 3.0 beta upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
+
+The current test artifact is `futureshops-3.0.0-beta.5.jar`. It includes the Server Shop sell
+payout and timed out cart recovery fixes from beta 4. It also completes the dependency alert audit,
+adds weekly Gradle and GitHub Actions monitoring, and rejects any build that bundles launcher
+supplied libraries inside the FutureShops JAR.
+
+Worlds previously opened with the incorrectly labeled `3.1.0-beta.1` build can report a Forge
+version difference when first opened with `3.0.0-beta.3`. This corrects the public artifact label
+and does not roll back the FutureShops data schema. Keep the normal complete backup before opening
+the world.
 
 Marketplace screens opened while escrow is recovering refresh automatically when the runtime becomes ready. Reconnecting or reopening the screen should not be necessary.
 
@@ -96,7 +106,7 @@ Recognized loose FutureShops TOML files and their Forge backups are moved into
 conflicting loose copies are preserved under `config/futureshops/migration-backups/`. The migration
 does not rewrite values or move unrelated Forge and mod configuration.
 
-See [3.1 trade offer configuration](docs/config-3.1-offers.md), [Configuration examples](docs/config-3.0-examples.md), and [Bazaar product definitions](docs/bazaar-products.md).
+See [Advanced trade offer configuration](docs/config-3.1-offers.md), [Configuration examples](docs/config-3.0-examples.md), and [Bazaar product definitions](docs/bazaar-products.md).
 
 ## Development
 
@@ -122,7 +132,7 @@ Useful run tasks are `runClient`, `runServer`, `runGameTestServer`, and `runData
 
 ## Compatibility and support
 
-Read [Compatibility matrix](docs/compatibility-matrix.md) before using custom currency, permission plugins, external storage, advanced trade offers, or restored world data. The player and administrator changes for this beta are summarized in [3.1 release notes](docs/release-notes-3.1.md).
+Read [Compatibility matrix](docs/compatibility-matrix.md) before using custom currency, permission plugins, external storage, advanced trade offers, or restored world data. The player and administrator changes for this beta are summarized in [3.0.0 beta release notes](docs/release-notes-3.0-beta.md).
 
 When reporting a problem, include the FutureShops jar version, Minecraft and Forge versions, client and server logs, relevant sanitized TOML files, the command or screen involved, and whether the world was new or upgraded. For market availability failures, include the output of `/marketadmin status`. For a deposit recovery, copy the complete ATM recovery handle and include `/marketadmin inspect <transactionId>`.
 

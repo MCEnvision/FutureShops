@@ -129,11 +129,16 @@ public final class PlayerShopCartState {
      * Clears all cart entries.
      */
     public static void clear() {
+        cartResponsePolicy.reset();
+        trackedCheckout = null;
+        clearEntries();
+    }
+
+    public static void clearEntries() {
+        if (checkoutBlocksMutation()) return;
         synchronized (entries) {
             entries.clear();
         }
-        cartResponsePolicy.reset();
-        trackedCheckout = null;
     }
 
     public static CartResponsePolicy.BeginDecision beginCheckout(
@@ -199,7 +204,7 @@ public final class PlayerShopCartState {
     }
 
     private static boolean checkoutBlocksMutation() {
-        return cartResponsePolicy.hasTrackedRequest();
+        return cartResponsePolicy.isPending();
     }
 
     private static void removeAcknowledgedQuantityLocked(String key, int quantity) {

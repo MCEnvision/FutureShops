@@ -17,7 +17,9 @@
 ## Design and release
 
 * [Nocturne interface specification](redesign-nocturne-spec.md)
-* [FutureShops 3.1 beta release notes](release-notes-3.1.md)
+* [FutureShops 3.0.0 beta release notes](release-notes-3.0-beta.md)
+* [3.0.0 beta 5 dependency alert disposition](security/dependency-alerts-3.0-beta.5.md)
+* [3.0.0 beta 4 dependency alert disposition](security/dependency-alerts-3.0-beta.4.md)
 * [Community suggestions](community_suggestions.md)
 * [Community regression coverage](community-bug-regression-test-gaps.md)
 

@@ -197,7 +197,7 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
                 if (isBoth) {
                     int toggleIdx = idx;
                     ShopUiUtil.zone(clickZones, panelLeft + 28, badgeY - 2,
-                            (panelRight - 140) - (panelLeft + 28), 14, !checkoutTracked,
+                            (panelRight - 140) - (panelLeft + 28), 14, !checkoutPending,
                             () -> PlayerShopCartState.togglePayment(toggleIdx));
                 }
 
@@ -234,12 +234,12 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
                 final int qtyIdx = idx;
                 ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                         qtyMinusX, qtyBtnY, qtyBtnSize, qtyBtnSize, Component.literal("-"),
-                        ShopUiUtil.ButtonStyle.SECONDARY, !checkoutTracked,
+                        ShopUiUtil.ButtonStyle.SECONDARY, !checkoutPending,
                         () -> PlayerShopCartState.setQuantity(qtyIdx,
                                 qtyEntry.quantity() - (Screen.hasShiftDown() ? 10 : 1)));
                 ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                         qtyPlusX, qtyBtnY, qtyBtnSize, qtyBtnSize, Component.literal("+"),
-                        ShopUiUtil.ButtonStyle.SECONDARY, !checkoutTracked,
+                        ShopUiUtil.ButtonStyle.SECONDARY, !checkoutPending,
                         () -> PlayerShopCartState.setQuantity(qtyIdx,
                                 Math.min(999, qtyEntry.quantity() + (Screen.hasShiftDown() ? 10 : 1))));
                 graphics.drawString(this.font, qtyStr, qtyTextX, centerY, ShopColors.TEXT_STRONG, false);
@@ -281,7 +281,7 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
                 int rmY = y + (rowH - 2 - 14) / 2;
                 ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                         removeX, rmY, REMOVE_BTN_W, 14, Component.literal("✕"),
-                        ShopUiUtil.ButtonStyle.DANGER, !checkoutTracked,
+                        ShopUiUtil.ButtonStyle.DANGER, !checkoutPending,
                         () -> PlayerShopCartState.remove(qtyIdx));
             }
 
@@ -386,14 +386,19 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + 8, guiTop + guiH - 22, 50, 16,
                 Component.translatable("gui.futureshops.player_shop_cart.clear"), ShopUiUtil.ButtonStyle.DANGER,
-                !checkoutTracked, () -> {
-                    PlayerShopCartState.clear();
+                !checkoutPending, () -> {
+                    PlayerShopCartState.clearEntries();
                     ShopClientState.clearCartVerification();
                 });
+        Component checkoutLabel = Component.translatable(
+                checkoutTracked
+                        ? "gui.futureshops.player_shop_cart.check_result"
+                        : "gui.futureshops.player_shop_cart.checkout");
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + guiW - 100, guiTop + guiH - 22, 92, 16,
-                Component.translatable("gui.futureshops.player_shop_cart.checkout"), ShopUiUtil.ButtonStyle.PRIMARY,
-                !entries.isEmpty() && !checkoutTracked && !awaitingVerification,
+                checkoutLabel, ShopUiUtil.ButtonStyle.PRIMARY,
+                !awaitingVerification && (checkoutTracked
+                        ? !checkoutPending : !entries.isEmpty()),
                 this::requestVerifyAndCheckout);
 
         super.render(graphics, mouseX, mouseY, partialTick);
@@ -445,9 +450,7 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
     private void requestVerifyAndCheckout() {
         if (PlayerShopCartState.isCheckoutPending() || awaitingVerification) return;
         if (PlayerShopCartState.hasTrackedCheckout()) {
-            onTransactionResult(false,
-                    Component.translatable(
-                            "gui.futureshops.player_shop_cart.checkout_awaiting_result").getString());
+            checkOriginalCheckout();
             return;
         }
         List<PlayerShopCartState.CartEntry> entries = PlayerShopCartState.getEntries();
@@ -464,6 +467,16 @@ public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
         ShopClientState.clearCartVerification();
         awaitingVerification = true;
         ShopPackets.CHANNEL.sendToServer(new C2SVerifyCartPacket(lines));
+    }
+
+    private void checkOriginalCheckout() {
+        PlayerShopCartState.retryCheckout(System.currentTimeMillis())
+                .ifPresentOrElse(
+                        this::sendCheckoutSubmission,
+                        () -> onTransactionResult(false,
+                                Component.translatable(
+                                        "gui.futureshops.player_shop_cart.checkout_pending")
+                                        .getString()));
     }
 
     @Override

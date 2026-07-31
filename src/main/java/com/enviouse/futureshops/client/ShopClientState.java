@@ -337,13 +337,20 @@ public final class ShopClientState {
     }
 
     public static void clearCart() {
+        cartResponsePolicy.reset();
+        trackedCartCheckout = null;
+        clearCartContents();
+    }
+
+    public static void clearCartContents() {
+        if (cartCheckoutBlocksMutation()) {
+            return;
+        }
         synchronized (cart) {
             cart.clear();
             offerCart.clear();
             cartNbtSnapshots.clear();
         }
-        cartResponsePolicy.reset();
-        trackedCartCheckout = null;
     }
 
     public static CartResponsePolicy.BeginDecision beginCartCheckout(
@@ -415,7 +422,7 @@ public final class ShopClientState {
     }
 
     private static boolean cartCheckoutBlocksMutation() {
-        return cartResponsePolicy.hasTrackedRequest();
+        return cartResponsePolicy.isPending();
     }
 
     private static void removeAcknowledgedCartQuantityLocked(
