@@ -24,9 +24,9 @@ This maintenance change does not alter gameplay, persistence, configuration sche
 formats, or the release publication state. It adds a build policy regression test and requires a
 clean build followed by packaged JAR inspection. Acceptance requires all of the following.
 
-- `gradle.properties` declares `mod_version=3.0.0-beta.6` for the next verified bug fix artifact.
-- The produced artifact is named `futureshops-3.0.0-beta.6.jar`.
-- The expanded mod metadata and manifest both report `3.0.0-beta.6`.
+- `gradle.properties` declares `mod_version=3.0.0-beta.5` for the next verified bug fix artifact.
+- The produced artifact is named `futureshops-3.0.0-beta.5.jar`.
+- The expanded mod metadata and manifest both report `3.0.0-beta.5`.
 - Repository documentation no longer describes the current artifact as `3.1.0`.
 - The release line regression test rejects a version outside `3.0.0-beta.<positive integer>`.
 - Publishing, tagging, and changing the release line remain separate owner authorized actions.
