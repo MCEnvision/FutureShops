@@ -2,6 +2,14 @@
 
 FutureShops 3.0.0 beta replaces separate special case shop trades with one clear offer model. This is a beta build for Minecraft 1.20.1 and Forge 47.4.20. Client and server must use the same build because the network protocol is now 57.
 
+## Beta 7 escrow concurrency maintenance
+
+* Escrow value operations now acquire the active runtime through the owning logical server thread.
+* Readiness checks and their dependent wallet, claim, recovery, checkpoint, and replay operations use the same monitor.
+* Runtime shutdown, recovery state changes, and replay compaction cannot invalidate an accepted operation between its check and use.
+* Persistent data, journals, packets, configuration, pricing, and replay formats are unchanged.
+* The beta artifact and metadata version is `3.0.0-beta.7`.
+
 ## Beta 6 dependency maintenance
 
 * MixinGradle now uses the fixed `0.7.38` release instead of a moving snapshot.

@@ -30,6 +30,7 @@ import com.enviouse.futureshops.server.security.ServerRequestAction;
 import com.enviouse.futureshops.server.security.ServerRequestSecurityManager;
 import net.minecraft.nbt.ByteArrayTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.common.MinecraftForge;
@@ -79,6 +80,7 @@ public final class EscrowCashDepositService {
             ServerPlayer player
     ) {
         Objects.requireNonNull(player, "player");
+        EscrowRuntimeService runtime = runtimeFor(player);
         ActiveEvidence evidence = inspectActiveEvidence(player);
         if (evidence.corrupt() || evidence.identity().isEmpty()
                 || evidence.identity().orElseThrow().depositMode()
@@ -93,44 +95,47 @@ public final class EscrowCashDepositService {
                     RecoveryStatus.MANUAL_REVIEW,
                     identity.amountMinorUnits()));
         }
-        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
-        if (runtime != null && runtime.isReady()) {
-            evidence = attemptAutomaticRecovery(runtime, player, evidence);
-            if (evidence.corrupt()) {
-                return Optional.of(new DepositRecovery(
-                        identity.requestId(), identity.transactionId(),
-                        RecoveryStatus.MANUAL_REVIEW,
-                        identity.amountMinorUnits()));
-            }
-            if (evidence.identity().isEmpty()) {
-                return Optional.empty();
-            }
-            identity = evidence.identity().orElseThrow();
-        }
         RecoveryStatus status = RecoveryStatus.RECOVERY_PENDING;
         if (runtime != null) {
-            Optional<EscrowTransaction> transaction =
-                    runtime.transaction(identity.transactionId());
-            if (transaction.isPresent()) {
-                EscrowTransaction stored = transaction.orElseThrow();
-                if (!matchesPublicRecovery(
-                        stored, player.getUUID(), identity.requestId(),
-                        identity.transactionId())) {
-                    status = RecoveryStatus.MANUAL_REVIEW;
-                } else if (stored.state().isTerminal()) {
-                    if (runtime.isReady()
-                            && enqueueTransactionRecovery(
-                            runtime, stored, player.getUUID())) {
-                        recoverBounded(runtime);
+            synchronized (runtime) {
+                if (runtime.isReady()) {
+                    evidence = attemptAutomaticRecovery(runtime, player,
+                            evidence);
+                    if (evidence.corrupt()) {
+                        return Optional.of(new DepositRecovery(
+                                identity.requestId(),
+                                identity.transactionId(),
+                                RecoveryStatus.MANUAL_REVIEW,
+                                identity.amountMinorUnits()));
                     }
-                    if (!hasRawEvidence(player)) {
+                    if (evidence.identity().isEmpty()) {
                         return Optional.empty();
                     }
-                    status = runtime.failure().isPresent()
-                            ? RecoveryStatus.MANUAL_REVIEW
-                            : RecoveryStatus.RECOVERY_PENDING;
-                } else {
-                    status = recoveryStatus(stored.state());
+                    identity = evidence.identity().orElseThrow();
+                }
+                Optional<EscrowTransaction> transaction =
+                        runtime.transaction(identity.transactionId());
+                if (transaction.isPresent()) {
+                    EscrowTransaction stored = transaction.orElseThrow();
+                    if (!matchesPublicRecovery(
+                            stored, player.getUUID(), identity.requestId(),
+                            identity.transactionId())) {
+                        status = RecoveryStatus.MANUAL_REVIEW;
+                    } else if (stored.state().isTerminal()) {
+                        if (runtime.isReady()
+                                && enqueueTransactionRecovery(
+                                runtime, stored, player.getUUID())) {
+                            recoverBounded(runtime);
+                        }
+                        if (!hasRawEvidence(player)) {
+                            return Optional.empty();
+                        }
+                        status = runtime.failure().isPresent()
+                                ? RecoveryStatus.MANUAL_REVIEW
+                                : RecoveryStatus.RECOVERY_PENDING;
+                    } else {
+                        status = recoveryStatus(stored.state());
+                    }
                 }
             }
         }
@@ -147,6 +152,7 @@ public final class EscrowCashDepositService {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(requestId, "requestId");
         Objects.requireNonNull(transactionId, "transactionId");
+        EscrowRuntimeService runtime = runtimeFor(player);
         DepositRequest request = recoveryRequest(requestId);
         if (!transactionIdForRequest(
                 player.getUUID(), requestId).equals(transactionId)) {
@@ -159,11 +165,23 @@ public final class EscrowCashDepositService {
         if (!gate.allowed()) {
             return gateFailure(request, gate);
         }
-        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
         if (runtime == null) {
             return failure(Status.ESCROW_UNAVAILABLE, request,
                     Optional.empty(), Optional.empty());
         }
+        synchronized (runtime) {
+            return checkRecoveryLocked(player, requestId, transactionId,
+                    request, runtime);
+        }
+    }
+
+    private static DepositResult checkRecoveryLocked(
+            ServerPlayer player,
+            UUID requestId,
+            UUID transactionId,
+            DepositRequest request,
+            EscrowRuntimeService runtime
+    ) {
         ActiveEvidence evidence = inspectActiveEvidence(player);
         if (evidence.corrupt()) {
             return failure(Status.MANUAL_REVIEW, request,
@@ -269,20 +287,27 @@ public final class EscrowCashDepositService {
             throw new EscrowRuntimeException(
                     "Internal cash funding result is invalid");
         }
-        List<EscrowClaim> matches = EscrowRuntimeManager.requireReady()
-                .claimsForTransaction(transactionId).stream()
-                .filter(claim -> claim.ownerId().equals(player.getUUID()))
-                .filter(claim -> claim.transactionId().equals(transactionId))
-                .filter(claim -> claim.kind()
-                        == ClaimKind.INTERNAL_ESCROW_MONEY)
-                .filter(claim -> claim.originalUnits()
-                        == result.depositedMinorUnits())
-                .filter(claim -> (claim.status() == ClaimStatus.PENDING
-                        && claim.remainingUnits()
-                        == result.depositedMinorUnits())
-                        || (claim.status() == ClaimStatus.COMPLETED
-                        && claim.remainingUnits() == 0L))
-                .toList();
+        EscrowRuntimeService runtime = EscrowRuntimeManager.requireReady(
+                player.getServer());
+        List<EscrowClaim> matches;
+        synchronized (runtime) {
+            matches = runtime.claimsForTransaction(transactionId).stream()
+                    .filter(claim -> claim.ownerId().equals(
+                            player.getUUID()))
+                    .filter(claim -> claim.transactionId().equals(
+                            transactionId))
+                    .filter(claim -> claim.kind()
+                            == ClaimKind.INTERNAL_ESCROW_MONEY)
+                    .filter(claim -> claim.originalUnits()
+                            == result.depositedMinorUnits())
+                    .filter(claim -> (claim.status()
+                            == ClaimStatus.PENDING
+                            && claim.remainingUnits()
+                            == result.depositedMinorUnits())
+                            || (claim.status() == ClaimStatus.COMPLETED
+                            && claim.remainingUnits() == 0L))
+                    .toList();
+        }
         if (matches.size() != 1) {
             throw new EscrowRuntimeException(
                     "Internal cash funding claim is missing or ambiguous");
@@ -349,8 +374,25 @@ public final class EscrowCashDepositService {
         if (!gate.allowed()) {
             return gateFailure(request, gate);
         }
-        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
-        if (runtime == null || !runtime.isReady()) {
+        EscrowRuntimeService runtime = runtimeFor(player);
+        if (runtime == null) {
+            return failure(Status.ESCROW_UNAVAILABLE, request,
+                    Optional.empty(), Optional.empty());
+        }
+        synchronized (runtime) {
+            return depositLocked(player, request, requiredMode,
+                    transactionId, runtime);
+        }
+    }
+
+    private static DepositResult depositLocked(
+            ServerPlayer player,
+            DepositRequest request,
+            CashDepositMode requiredMode,
+            UUID transactionId,
+            EscrowRuntimeService runtime
+    ) {
+        if (!runtime.isReady()) {
             return failure(Status.ESCROW_UNAVAILABLE, request,
                     Optional.empty(), Optional.empty());
         }
@@ -399,6 +441,11 @@ public final class EscrowCashDepositService {
                      CurrencyManager.acquireConfigurationReadLease()) {
             return operation.get();
         }
+    }
+
+    private static EscrowRuntimeService runtimeFor(ServerPlayer player) {
+        MinecraftServer server = player.getServer();
+        return server == null ? null : EscrowRuntimeManager.getOrNull(server);
     }
 
     private static DepositResult depositWithConfigurationLease(

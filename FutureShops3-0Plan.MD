@@ -295,6 +295,63 @@ verified artifact is `futureshops-3.0.0-beta.6.jar`. Its expanded mod metadata a
 No Dependabot pull request from this batch remains open. Gameplay, network, persistence,
 configuration, escrow, and release publication behavior did not change.
 
+### Issue 18 escrow lifecycle concurrency review
+
+Objective. Resolve the twenty high severity CodeQL time of check and time of use findings on the
+merged beta 6 baseline without weakening escrow readiness, replay protection, recovery,
+checkpoints, claims, wallets, or logical server authority.
+
+Release boundary. This security bug fix increments the test artifact once to `3.0.0-beta.7`.
+Minecraft, Forge, ForgeGradle, Gradle, mappings, Java, and network protocol versions remain pinned.
+
+Current evidence. The findings cover runtime acquisition in cash deposit and money claim flows,
+runtime lifecycle checks in `EscrowRuntimeManager`, scheduler and coordinator state checks inside
+`EscrowRuntimeService`, and Server Shop replay compaction. Runtime value mutation is already
+confined to the owning logical server thread, and the relevant runtime methods are synchronized.
+CodeQL cannot infer that thread confinement across separate method calls. The unbound static
+runtime lookup is still a weak boundary because it does not prove that its caller owns the server
+lifecycle. Nested synchronized resources also make their atomicity implicit instead of local to
+the check and use.
+
+Implementation.
+
+1. Add server scoped runtime lookup and readiness methods that require the owning server thread,
+   reject a mismatched server, and fail closed during quiescence. Use them for the reported money
+   claim and cash deposit value paths.
+2. Keep the no argument lookup only for existing read only status paths that have no server
+   context. Do not broaden its use in value moving code.
+3. Make each reported state check and dependent use atomic on the same runtime, coordinator,
+   scheduler, or replay store monitor. Preserve the owning server thread assertion as a second
+   invariant rather than relying on monitor locking alone.
+4. Add source contracts and focused concurrency tests for the server bound lookup, wrong server
+   rejection, off thread rejection, lifecycle quiescence, and replay retention locking. Do not
+   change persistent data, journals, packets, configuration, pricing, or replay formats.
+5. Run CodeQL on the exact pull request commit. Fix every valid finding. Dismiss a remaining false
+   positive only with exact server thread and monitor evidence recorded on that alert.
+
+Verification and acceptance.
+
+- Focused runtime lifecycle and source contract tests compile and pass.
+- The full unit suite, all GameTests, `check`, `build`, dedicated server smoke test, client smoke
+  test, packaged JAR inspection, and complete diff inspection pass.
+- The exact pull request commit receives successful Gradle, dependency review, secret scan, and
+  Java CodeQL checks.
+- Zero unexplained open findings remain for `java/toctou-race-condition`. Issue 18 stays open until
+  the reviewed pull request is merged and the default branch scan confirms the final state.
+- Issues 10 and 11 remain open until their original Discord reporters receive and test the exact
+  distributable JAR. Their test evidence does not authorize release publication.
+
+Implementation status. Signed commit `a41bec43137d0256d36dcb401e3928515bf140c4` passes all 1,888
+unit and architecture tests, all five required GameTests, `check`, `build`, dedicated server startup
+on an isolated port, headless client setup and atlas creation, metadata inspection, and dependency
+boundary verification on node1. The resulting `futureshops-3.0.0-beta.7.jar` is 5,730,621 bytes.
+Its SHA-256 is `04d03bee881fa7a1a3dfa4d7f07d1a099d40998d2b052bfe2592c131847b0c95`, and its
+SHA-512 is `8ca549a6f163d3926809187c19ffd8a3441c0bed3fbfb0ad979d845c9524a02d8c9ecd36d925c1e1edaf737cae7abc837593a6492402152b84551eaf5d1334b1`.
+Source contract tests normalize platform line endings so the same verification gate runs on Windows
+and Linux checkouts.
+Pull request checks, CodeQL confirmation, merge, default branch scanning, and reporter testing remain
+open gates.
+
 The required build order is.
 
 1. Freeze and verify the regression baseline for all community bug reports.

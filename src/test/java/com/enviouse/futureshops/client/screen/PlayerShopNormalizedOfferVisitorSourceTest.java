@@ -17,7 +17,7 @@ class PlayerShopNormalizedOfferVisitorSourceTest {
 
     @Test
     void normalizedVisitorActionsUseTheTypedOfferPacket() throws Exception {
-        String screen = Files.readString(SCREEN);
+        String screen = readSource(SCREEN);
         assertTrue(screen.contains(
                 "PlayerShopClientState.selectedNormalizedOffer()"));
         assertTrue(screen.contains(
@@ -33,7 +33,7 @@ class PlayerShopNormalizedOfferVisitorSourceTest {
     @Test
     void chooserMakesAlternativesAndCompoundInputsVisible()
             throws Exception {
-        String chooser = Files.readString(CHOOSER);
+        String chooser = readSource(CHOOSER);
         assertTrue(chooser.contains(
                 "\"gui.futureshops.offer.or\""));
         assertTrue(chooser.contains(
@@ -52,12 +52,18 @@ class PlayerShopNormalizedOfferVisitorSourceTest {
 
     @Test
     void freeAndBarterSkipThePaymentChooser() throws Exception {
-        String screen = Files.readString(SCREEN);
+        String screen = readSource(SCREEN);
         assertTrue(screen.contains(
                 "if (option.moneyCostPresent())"));
         assertTrue(screen.contains(
                 "quantity, Optional.empty())"));
         assertTrue(screen.contains(
                 "Optional.of(paymentSource)"));
+    }
+
+    private static String readSource(Path path) throws Exception {
+        return Files.readString(path)
+                .replace("\r\n", "\n")
+                .replace('\r', '\n');
     }
 }

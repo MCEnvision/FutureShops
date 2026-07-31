@@ -15,24 +15,29 @@ public final class ServerShopOfferReplayRetention {
     ) {
         java.util.Objects.requireNonNull(server, "server");
         java.util.Objects.requireNonNull(requestId, "requestId");
+        EscrowRuntimeManager.requireServerThread(server);
         ServerShopOfferCommitSavedData commits =
                 ServerShopOfferCommitSavedData.get(server);
         ServerShopOfferPreparedSavedData prepared =
                 ServerShopOfferPreparedSavedData.get(server);
         ServerShopOfferReplayLedger ledger =
                 ServerShopOfferReplayLedger.get(server);
-        while (!commits.canCommit(requestId)) {
-            if (commits.compactOldestReplay().isEmpty()
-                    && commits.compactOldestReplay(
-                    ledger).isEmpty()) {
-                return false;
+        synchronized (commits) {
+            while (!commits.canCommit(requestId)) {
+                if (commits.compactOldestReplay().isEmpty()
+                        && commits.compactOldestReplay(
+                        ledger).isEmpty()) {
+                    return false;
+                }
             }
         }
-        while (!prepared.canPrepare(requestId)) {
-            if (prepared.compactOldestReplay().isEmpty()
-                    && prepared.compactOldestReplay(
-                    ledger).isEmpty()) {
-                return false;
+        synchronized (prepared) {
+            while (!prepared.canPrepare(requestId)) {
+                if (prepared.compactOldestReplay().isEmpty()
+                        && prepared.compactOldestReplay(
+                        ledger).isEmpty()) {
+                    return false;
+                }
             }
         }
         return true;
@@ -45,24 +50,29 @@ public final class ServerShopOfferReplayRetention {
     ) {
         java.util.Objects.requireNonNull(server, "server");
         java.util.Objects.requireNonNull(requestId, "requestId");
+        EscrowRuntimeManager.requireServerThread(server);
         ServerShopOfferCartCommitSavedData commits =
                 ServerShopOfferCartCommitSavedData.get(server);
         ServerShopOfferCartPreparedSavedData prepared =
                 ServerShopOfferCartPreparedSavedData.get(server);
         ServerShopOfferReplayLedger ledger =
                 ServerShopOfferReplayLedger.get(server);
-        while (!commits.canCommit(requestId)) {
-            if (commits.compactOldestReplay().isEmpty()
-                    && commits.compactOldestReplay(
-                    ledger).isEmpty()) {
-                return false;
+        synchronized (commits) {
+            while (!commits.canCommit(requestId)) {
+                if (commits.compactOldestReplay().isEmpty()
+                        && commits.compactOldestReplay(
+                        ledger).isEmpty()) {
+                    return false;
+                }
             }
         }
-        while (!prepared.canPrepare(requestId)) {
-            if (prepared.compactOldestReplay().isEmpty()
-                    && prepared.compactOldestReplay(
-                    ledger).isEmpty()) {
-                return false;
+        synchronized (prepared) {
+            while (!prepared.canPrepare(requestId)) {
+                if (prepared.compactOldestReplay().isEmpty()
+                        && prepared.compactOldestReplay(
+                        ledger).isEmpty()) {
+                    return false;
+                }
             }
         }
         return true;
