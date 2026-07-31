@@ -1,6 +1,6 @@
 # FutureShops 3.0 Plan
 
-Status. The ATM deposit recovery and Bazaar refund access blocker in Section 20 is implemented on the active 3.0 beta branch. The `3.0.0-beta.4` gameplay maintenance and `3.0.0-beta.5` dependency audit closure below are implemented and locally verified. Default branch integration and community delivery remain pending. Release approval still requires the remaining live multiplayer, reconnect, restart, and recovery fault acceptance checks.
+Status. The ATM deposit recovery and Bazaar refund access blocker in Section 20 is implemented on the active 3.0 beta branch. The `3.0.0-beta.4` gameplay maintenance and `3.0.0-beta.5` dependency audit closure below are implemented, verified, and merged. The `3.0.0-beta.6` dependency maintenance followup below is in progress. Community delivery and the remaining live multiplayer, reconnect, restart, and recovery fault acceptance checks still block release approval.
 
 This document is the implementation contract for FutureShops 3.0. It covers the shared escrow foundation, migration of all existing value moving features, the Auction House, the Bazaar, the shared market interface, configuration, recovery, abuse controls, testing, and release sequencing.
 
@@ -24,9 +24,9 @@ This maintenance change does not alter gameplay, persistence, configuration sche
 formats, or the release publication state. It adds a build policy regression test and requires a
 clean build followed by packaged JAR inspection. Acceptance requires all of the following.
 
-- `gradle.properties` declares `mod_version=3.0.0-beta.5` for the next verified bug fix artifact.
-- The produced artifact is named `futureshops-3.0.0-beta.5.jar`.
-- The expanded mod metadata and manifest both report `3.0.0-beta.5`.
+- `gradle.properties` declares `mod_version=3.0.0-beta.6` for the next verified bug fix artifact.
+- The produced artifact is named `futureshops-3.0.0-beta.6.jar`.
+- The expanded mod metadata and manifest both report `3.0.0-beta.6`.
 - Repository documentation no longer describes the current artifact as `3.1.0`.
 - The release line regression test rejects a version outside `3.0.0-beta.<positive integer>`.
 - Publishing, tagging, and changing the release line remain separate owner authorized actions.
@@ -216,6 +216,67 @@ be calculated from the verified artifact after the last build because Forge reob
 the archive during packaging. Default branch integration, GitHub alert reconciliation, issue
 closure, and Discord delivery remain pending and must not be reported as complete before their
 external state is verified.
+
+### Beta 6 dependency maintenance
+
+Objective. Reconcile the open Dependabot pull requests without crossing the pinned Forge platform
+boundary, keep the JUnit test runtime internally compatible, and produce the next `3.0.0` beta
+artifact only after the updated default branch passes the complete Gradle verification gate.
+
+Current evidence and decisions.
+
+- Pull request 14 replaces the moving MixinGradle `0.7-SNAPSHOT` selector with the fixed `0.7.38`
+  release. Its Gradle and secret checks pass against beta 5.
+- Pull request 16 updates the Foojay toolchain resolver convention from `0.7.0` to `1.0.0`. The
+  plugin requires Java 17 or newer, which matches this project, and its Gradle and secret checks
+  pass against beta 5.
+- Pull requests 13 and 17 independently update JUnit Jupiter and the JUnit Platform launcher from
+  the aligned `5.10.2` and `1.10.2` generation to `6.1.2`. Either pull request alone leaves an
+  incompatible mixed JUnit runtime. The update must be combined by declaring JUnit Jupiter
+  `6.1.2` and allowing its JUnit BOM to supply the matching launcher version.
+- Pull request 15 updates the wrapper from Gradle `8.14.4` to `9.6.1`. ForgeGradle rejects Gradle 9
+  during plugin application, before project compilation. The wrapper remains pinned to `8.14.4`,
+  and Dependabot must ignore that incompatible major line until a separately approved ForgeGradle
+  migration supports it.
+
+Scope and implementation.
+
+1. Merge the MixinGradle and Foojay updates through their existing Dependabot pull requests after
+   their current heads and required checks are verified.
+2. Repair the JUnit Jupiter pull request so Jupiter and the launcher resolve through the same JUnit
+   `6.1.2` BOM. Close the separate launcher pull request as superseded only after the repaired pull
+   request is verified.
+3. Close the Gradle 9 wrapper pull request as incompatible and record the exact ForgeGradle failure.
+   Do not modify the wrapper, ForgeGradle, Minecraft, Forge, Java, mappings, or loader boundary.
+4. Increment the beta artifact identity once to `3.0.0-beta.6`. Keep the JAR filename, expanded mod
+   metadata, manifest, documentation, and release notes aligned with that version.
+5. After all compatible pull requests merge, update local `master` from `origin/master` and run the
+   full Gradle test and build gates from the exact merged default branch.
+
+Compatibility, security, and recovery behavior.
+
+- These dependencies affect build configuration and test execution only. They do not change the
+  shipped gameplay runtime, packets, persistent schemas, configuration, escrow, or market state.
+- The packaged dependency boundary remains mandatory and must prove that no build or test library
+  enters the FutureShops JAR.
+- A failed pull request check, incompatible dependency graph, unresolved review, or nonmatching
+  JUnit generation blocks merge. No required check or review is bypassed.
+- The existing untracked local workflows and generated run data remain outside this maintenance
+  change.
+
+Verification and acceptance.
+
+- Pull requests 14 and 16 merge with their successful checks intact.
+- The repaired JUnit pull request resolves Jupiter and the launcher to `6.1.2`, passes all required
+  checks, and merges. The separate launcher pull request closes as superseded.
+- The Gradle 9 wrapper pull request closes without merge and records ForgeGradle's explicit Gradle
+  9 incompatibility.
+- `test`, `check`, and `build` pass from updated `master`. The final test count is recorded from the
+  generated JUnit results.
+- The packaged JAR is named `futureshops-3.0.0-beta.6.jar`. Its expanded `mods.toml` and manifest
+  report `3.0.0-beta.6`, and the forbidden packaged dependency gate passes.
+- GitHub shows no remaining open Dependabot pull request from this update batch. Any future major
+  platform proposal remains review only.
 
 The required build order is.
 

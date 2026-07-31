@@ -19,19 +19,20 @@ The 3.0.0 implementation is in beta on the active phase branch. Its advanced tra
 
 | Component | Pinned value |
 | --- | --- |
-| FutureShops | 3.0.0 beta 3 |
+| FutureShops | 3.0.0 beta 6 |
 | Java | 17 |
 | Gradle Wrapper | 8.14.4 |
 | Minecraft | 1.20.1 |
 | Forge | 47.4.20 |
 | Mappings | Official 1.20.1 |
 | ForgeGradle | 6.0 line |
-| MixinGradle | 0.7 snapshot |
+| MixinGradle | 0.7.38 |
+| Foojay toolchain resolver | 1.0.0 |
 | Mixin processor | 0.8.5 |
 | GeckoLib Forge | 4.8.3 |
 | mclib | 20 |
-| JUnit Jupiter | 5.10.2 |
-| JUnit Platform | 1.10.2 |
+| JUnit Jupiter | 6.1.2 |
+| JUnit Platform | 6.1.2 |
 | Network protocol | 57 |
 
 The repository uses one Gradle module named `futureshops`. Java sources use UTF 8. Runtime and data generation launches are defined in `build.gradle`.
@@ -282,7 +283,7 @@ Also run:
 
 For readiness changes, verify both the recovery window and the ready transition. A screen opened during recovery must refresh without reconnecting. Navigation requests must remain server authorized. Currency and profile reads may use the safe display balance, while mutations remain blocked until ready.
 
-After packaging, inspect the manifest, expanded `META-INF/mods.toml`, mixin configuration and refmap, assets, data, dependency metadata, and the complete Git diff. Version `3.0.0-beta.5` must expand into the mod metadata, and `logoFile = "futureshops.png"` must resolve to the 400 by 400 project logo at the jar root. Run `verifyPackagedDependencyBoundary` and confirm the JAR contains no launcher supplied Netty, Apache Commons, Guava, Log4j, or Plexus classes and no Forge Jar in Jar metadata. Calculate release checksums only after the final Forge reobfuscation and packaging pass. Bug fix builds stay on the `3.0.0` release line and increment only the final beta number until the owner explicitly approves another release line. Build output, run directories, logs, crash reports, local configs, caches, IDE files, and `AGENTS.md` must not be committed.
+After packaging, inspect the manifest, expanded `META-INF/mods.toml`, mixin configuration and refmap, assets, data, dependency metadata, and the complete Git diff. Version `3.0.0-beta.6` must expand into the mod metadata, and `logoFile = "futureshops.png"` must resolve to the 400 by 400 project logo at the jar root. Run `verifyPackagedDependencyBoundary` and confirm the JAR contains no launcher supplied Netty, Apache Commons, Guava, Log4j, or Plexus classes and no Forge Jar in Jar metadata. Calculate release checksums only after the final Forge reobfuscation and packaging pass. Bug fix builds stay on the `3.0.0` release line and increment only the final beta number until the owner explicitly approves another release line. Build output, run directories, logs, crash reports, local configs, caches, IDE files, and `AGENTS.md` must not be committed.
 
 ## Troubleshooting
 
