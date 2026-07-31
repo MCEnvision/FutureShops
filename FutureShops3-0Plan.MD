@@ -1,6 +1,6 @@
 # FutureShops 3.0 Plan
 
-Status. The ATM deposit recovery and Bazaar refund access blocker in Section 20 is implemented on the active 3.0 beta branch. The `3.0.0-beta.4` gameplay maintenance and `3.0.0-beta.5` dependency audit closure below are implemented, verified, and merged. The `3.0.0-beta.6` dependency maintenance followup below is in progress. Community delivery and the remaining live multiplayer, reconnect, restart, and recovery fault acceptance checks still block release approval.
+Status. The ATM deposit recovery and Bazaar refund access blocker in Section 20 is implemented on the active 3.0 beta branch. The `3.0.0-beta.4` gameplay maintenance, `3.0.0-beta.5` dependency audit closure, and `3.0.0-beta.6` dependency maintenance followup below are implemented, verified, and merged. Community delivery and the remaining live multiplayer, reconnect, restart, and recovery fault acceptance checks still block release approval.
 
 This document is the implementation contract for FutureShops 3.0. It covers the shared escrow foundation, migration of all existing value moving features, the Auction House, the Bazaar, the shared market interface, configuration, recovery, abuse controls, testing, and release sequencing.
 
@@ -277,6 +277,23 @@ Verification and acceptance.
   report `3.0.0-beta.6`, and the forbidden packaged dependency gate passes.
 - GitHub shows no remaining open Dependabot pull request from this update batch. Any future major
   platform proposal remains review only.
+
+Implementation status on July 31, 2026. Pull requests 14 and 16 merged the fixed MixinGradle
+`0.7.38` and Foojay resolver `1.0.0` updates. Pull request 13 merged the aligned JUnit `6.1.2`
+runtime after both review findings were corrected and every required GitHub check passed. Pull
+request 17 closed as superseded. Pull request 15 closed without merge because ForgeGradle rejects
+Gradle 9 during plugin application, and Dependabot was instructed to ignore that major line.
+
+Verification on merged `master` passed `clean`, `test`, `check`, and `build` with 1,887 tests and
+no failures, errors, or skips. Dependency insight resolves JUnit Jupiter and the JUnit Platform
+launcher to `6.1.2` through the same BOM. The wrapper remains Gradle `8.14.4`. Packaged dependency
+validation passed, and the JAR contains the expected logo, mixin configuration, and refmap. The
+verified artifact is `futureshops-3.0.0-beta.6.jar`. Its expanded mod metadata and manifest report
+`3.0.0-beta.6`. Its SHA-256 is
+`d667668845e10ef30c89103c84411e46a1c2bc753aa03a5b5060fb81de0849fa`, and its SHA-512 is
+`05e9a8fbc47d14c94ad9a9e4cfa5e0b99e4b0ae67d95cb488ca2bfa884019bda24fbdfdd7af5708e6afb5f830f6f075b2710a32da8ff553cae92bfdbb8b08b0d`.
+No Dependabot pull request from this batch remains open. Gameplay, network, persistence,
+configuration, escrow, and release publication behavior did not change.
 
 The required build order is.
 
