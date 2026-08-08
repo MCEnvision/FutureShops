@@ -45,12 +45,14 @@ The Bazaar and Auction House are disabled on a new installation. Enable either m
 
 For 3.0 beta upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
 
-The current test artifact is `futureshops-3.0.0-beta.7.jar`. It includes the Server Shop sell
+The issue 23 development artifact is `futureshops-3.0.0-beta.9.jar`. It includes the Server Shop sell
 payout and timed out cart recovery fixes from beta 4. It also completes the dependency alert audit,
 uses fixed MixinGradle and Foojay resolver releases, aligns the JUnit 6 test runtime, and rejects any
 build that bundles launcher supplied libraries inside the FutureShops JAR. Gradle remains pinned to
 8.14.4 because ForgeGradle does not support Gradle 9. Beta 7 also makes escrow lifecycle checks and
 their dependent value or replay operation explicitly atomic on the owning logical server thread.
+Beta 9 bounds exact item durability work. It remains a development artifact until the approved beta
+8 recovery repair is integrated and the combined branch is rebuilt and retested.
 
 Worlds previously opened with the incorrectly labeled `3.1.0-beta.1` build can report a Forge
 version difference when first opened with `3.0.0-beta.3`. This corrects the public artifact label
@@ -62,6 +64,8 @@ Marketplace screens opened while escrow is recovering refresh automatically when
 Interrupted normalized Server Shop offers recover from exact persisted evidence when the player logs in and through bounded background retries while the escrow runtime is ready. A retry never reconstructs a trade from current client state.
 
 Pending escrow money and exact item claims are delivered automatically while the beneficiary is online. A full inventory or temporary delivery failure leaves the durable claim available instead of discarding value.
+
+Exact item claims are delivered incrementally. At most one exact item delivery operation runs in a server tick because each successful operation saves and forces player data before the claim is committed. Large purchases can therefore continue appearing over several delivery intervals instead of causing one burst of durable saves. The general claim scan budget does not bypass this safety limit.
 
 Opening the ATM and starting a new deposit both attempt bounded automatic reconciliation of safe pending deposit evidence. This behavior is server authoritative and identical for singleplayer and connected dedicated server players. Conflicting or corrupt evidence remains protected for administrator inspection.
 

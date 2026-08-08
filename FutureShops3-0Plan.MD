@@ -1490,6 +1490,24 @@ The implementation now preserves and synchronizes the exact request and transact
 - Bazaar refunds funded by wallet and Inventory Cash, collected normally and at maximum wallet balance.
 - Bazaar disabled after order placement with cancellation and Claims still available.
 
+### 20.5 Exact item delivery tick budget
+
+Issue 23 demonstrates that the automatic claim delivery limit does not represent the real cost of exact item delivery. A purchase of about 2300 items produces about 36 exact stack claims. The current default can process 32 claims in one server tick, and every successful exact item delivery persists the player and forces the player data file before the claim is committed. This can place dozens of durable saves in one tick and reduce a healthy dedicated server to about 10 TPS until the delivery completes.
+
+The repair is a maintenance extension of the existing bounded work and no value loss contracts.
+
+1. Automatic exact item delivery must enforce a non bypassable durability operation budget per server tick. Existing configuration values from earlier 3.0 builds must not permit a burst of player saves after upgrade.
+2. Delivery remains automatic and fair across online players and pending claims. Excess claims remain durable and pending for later ticks. The repair must not delete value, drop items into the world, merge unlike item data, or convert exact items into money.
+3. A full inventory produces a pending claim without repeated durable writes. Manual claim collection remains available and uses the same exact item identity and replay protection.
+4. Money claims and exact item claims share the configured scan budget. Every exact item delivery attempt consumes the durability operation budget because recovery can perform durable work even when the final result is not delivered. Failure and retry logging remains bounded.
+5. The public configuration must describe the expensive operation being limited. Existing configurations automatically receive `claims.exact_item_delivery_operations_per_tick = 1`. The older general `claims.delivery_work_per_tick` setting remains compatible but cannot bypass the exact item durability limit.
+6. Regression coverage must prove that a large pending claim set cannot execute more than the safe exact item delivery budget in one server tick, that work resumes on later eligible ticks, and that fairness rotation is preserved.
+7. Verification requires the formatter, static checks, unit tests, relevant GameTests, data validation, the full Gradle build, dedicated server startup through FutureShops initialization, and a final artifact inspection. A live dedicated server acceptance run should confirm stable tick time while delivering more items than one inventory can hold.
+
+Implementation status. The source repair adds a dedicated exact item operation limit of one per tick, applies it to immediate purchase and barter delivery, and preserves the larger general scan budget for money claims. Selection rotates across pending claims and online players. Focused regression tests, the complete unit suite, data generation, all five GameTests, packaged dependency checks, and the full build pass on Java 17. The GameTest server reaches FutureShops ready state and shuts down cleanly. Final acceptance still requires the reporter's Windows server and large purchase scenario after the issue 25 recovery repair is integrated.
+
+This work is separate from the issue 25 startup recovery repair. The issue 23 log also shows escrow remaining in `RECOVERING`, which is addressed by the issue 25 beta artifact. Issue 23 remains open until both the recovery repair and this delivery budget repair are tested against the reporter's world and large purchase scenario.
+
 The source blockers described above are implemented. Automated recovery, packet, interface policy, refund detail, and architecture coverage passes. The headless client reaches FutureShops client setup and the render thread, and the dedicated server reaches ready state with FutureShops loaded. Release approval still requires the remaining live multiplayer reconnect, restart, and fault drills from the matrix above.
 
 ## 21. Completion record

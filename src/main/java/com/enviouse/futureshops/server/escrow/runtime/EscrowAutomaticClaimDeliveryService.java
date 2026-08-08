@@ -54,6 +54,11 @@ public final class EscrowAutomaticClaimDeliveryService {
         }
         ClaimSavedData claims = ClaimSavedData.get(server);
         int remaining = settings.claimDeliveryWorkPerTick();
+        int exactItemOperationLimit =
+                settings.exactItemDeliveryOperationsPerTick();
+        int remainingExactItemOperations =
+                ExactItemDeliveryTickBudget.remaining(
+                        server, exactItemOperationLimit);
         int playerStart = Math.floorMod(
                 server.getTickCount() / DELIVERY_INTERVAL_TICKS,
                 players.size());
@@ -63,21 +68,27 @@ public final class EscrowAutomaticClaimDeliveryService {
             ServerPlayer player = players.get(
                     Math.floorMod(playerStart + offset,
                             players.size()));
-            remaining -= deliverPlayerClaims(
+            DeliveryWork work = deliverPlayerClaims(
                     player, runtime, claims, remaining,
+                    remainingExactItemOperations,
+                    exactItemOperationLimit,
                     server.getTickCount());
+            remaining -= work.attempts();
+            remainingExactItemOperations -= work.exactItemAttempts();
         }
     }
 
-    static int deliverPlayerClaims(
+    static DeliveryWork deliverPlayerClaims(
             ServerPlayer player,
             EscrowRuntimeService runtime,
             ClaimSavedData claims,
             int limit,
+            int exactItemLimit,
+            int exactItemOperationLimit,
             int tickCount
     ) {
         if (limit <= 0) {
-            return 0;
+            return DeliveryWork.NONE;
         }
         int scanLimit = Math.min(1024,
                 Math.max(64, Math.multiplyExact(
@@ -85,19 +96,24 @@ public final class EscrowAutomaticClaimDeliveryService {
         List<EscrowClaim> pending = claims.pendingFor(
                 player.getUUID(), scanLimit);
         if (pending.isEmpty()) {
-            return 0;
+            return DeliveryWork.NONE;
         }
         int start = Math.floorMod(
                 tickCount / DELIVERY_INTERVAL_TICKS,
                 pending.size());
+        List<EscrowClaim> selected = selectDeliveries(
+                pending, start, limit, exactItemLimit);
         int attempts = 0;
-        for (int offset = 0;
-             offset < pending.size() && attempts < limit;
-             offset++) {
-            EscrowClaim claim = pending.get(
-                    Math.floorMod(start + offset, pending.size()));
-            if (!automaticallyDeliverable(claim)) {
-                continue;
+        int exactItemAttempts = 0;
+        for (EscrowClaim claim : selected) {
+            if (isExactItemClaim(claim)) {
+                MinecraftServer server = player.getServer();
+                if (server == null
+                        || !ExactItemDeliveryTickBudget.tryAcquire(
+                                server, exactItemOperationLimit)) {
+                    continue;
+                }
+                exactItemAttempts++;
             }
             attempts++;
             try {
@@ -127,7 +143,38 @@ public final class EscrowAutomaticClaimDeliveryService {
                 }
             }
         }
-        return attempts;
+        return new DeliveryWork(attempts, exactItemAttempts);
+    }
+
+    static List<EscrowClaim> selectDeliveries(
+            List<EscrowClaim> pending,
+            int start,
+            int limit,
+            int exactItemLimit
+    ) {
+        if (limit <= 0 || pending.isEmpty()) {
+            return List.of();
+        }
+        int exactItemAttempts = 0;
+        java.util.ArrayList<EscrowClaim> selected =
+                new java.util.ArrayList<>(Math.min(limit, pending.size()));
+        for (int offset = 0;
+             offset < pending.size() && selected.size() < limit;
+             offset++) {
+            EscrowClaim claim = pending.get(
+                    Math.floorMod(start + offset, pending.size()));
+            if (!automaticallyDeliverable(claim)) {
+                continue;
+            }
+            if (isExactItemClaim(claim)) {
+                if (exactItemAttempts >= Math.max(0, exactItemLimit)) {
+                    continue;
+                }
+                exactItemAttempts++;
+            }
+            selected.add(claim);
+        }
+        return List.copyOf(selected);
     }
 
     static boolean automaticallyDeliverable(EscrowClaim claim) {
@@ -141,10 +188,28 @@ public final class EscrowAutomaticClaimDeliveryService {
                         claim.kind()));
     }
 
+    static boolean isExactItemClaim(EscrowClaim claim) {
+        return claim != null
+                && !EscrowMoneyClaimService.isMonetaryClaim(claim)
+                && ExactItemClaimDeliveryPlanner.supportedKind(claim.kind());
+    }
+
     static UUID moneyRequestId(EscrowClaim claim) {
         String identity = "futureshops automatic money claim "
                 + claim.claimId() + " " + claim.remainingUnits();
         return UUID.nameUUIDFromBytes(
                 identity.getBytes(StandardCharsets.UTF_8));
+    }
+
+    record DeliveryWork(int attempts, int exactItemAttempts) {
+        static final DeliveryWork NONE = new DeliveryWork(0, 0);
+
+        DeliveryWork {
+            if (attempts < 0 || exactItemAttempts < 0
+                    || exactItemAttempts > attempts) {
+                throw new IllegalArgumentException(
+                        "Automatic delivery work is invalid");
+            }
+        }
     }
 }

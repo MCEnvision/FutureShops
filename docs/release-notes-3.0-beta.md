@@ -2,6 +2,14 @@
 
 FutureShops 3.0.0 beta replaces separate special case shop trades with one clear offer model. This is a beta build for Minecraft 1.20.1 and Forge 47.4.20. Client and server must use the same build because the network protocol is now 57.
 
+## Exact item delivery maintenance
+
+* Large purchases no longer deliver dozens of exact item claims and force dozens of player saves in one server tick.
+* Automatic delivery permits one exact item durability operation per tick while continuing to service bounded money claims.
+* Existing configurations receive the safe exact item operation limit automatically. The older general delivery work setting cannot override it.
+* Full inventories continue preserving exact items as durable claims. No item value is dropped, deleted, or converted.
+* The maintenance artifact and metadata version is `3.0.0-beta.9`. It must be rebased onto the approved beta 8 recovery repair before release or reporter distribution.
+
 ## Beta 7 escrow concurrency maintenance
 
 * Escrow value operations now acquire the active runtime through the owning logical server thread.

@@ -170,7 +170,11 @@ and checkpoints these settings govern live in `<world>/futureshops/escrow/` — 
 	automatic_delivery = true
 	# Bounds one Claim All style request.
 	max_entries_per_request = 64
+	# Bounds cheap automatic claim attempts such as wallet delivery and scans.
 	delivery_work_per_tick = 32
+	# Exact item delivery saves and forces player data. This hard safety limit is
+	# one operation per server tick, including on upgraded configurations.
+	exact_item_delivery_operations_per_tick = 1
 
 [assets]
 	# Item lots one transaction may hold.

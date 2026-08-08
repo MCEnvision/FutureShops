@@ -13,6 +13,7 @@ import com.enviouse.futureshops.server.economy.EconomyProvider;
 import com.enviouse.futureshops.server.economy.WalletMutationGuard;
 import com.enviouse.futureshops.server.escrow.item.ExactItemClaimResolution;
 import com.enviouse.futureshops.server.escrow.claim.EscrowClaim;
+import com.enviouse.futureshops.server.escrow.runtime.ExactItemDeliveryTickBudget;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeManager;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
 import com.enviouse.futureshops.server.escrow.runtime.ServerShopPurchaseCommit;
@@ -496,10 +497,18 @@ public final class ShopBuyService {
         if (runtime == null || !runtime.isReady()) {
             return;
         }
-        int limit = Math.min(settings.claimDeliveryWorkPerTick(),
-                claims.size());
+        if (player.getServer() == null) {
+            return;
+        }
+        int operationLimit = settings.exactItemDeliveryOperationsPerTick();
+        int limit = Math.min(ExactItemDeliveryTickBudget.remaining(
+                player.getServer(), operationLimit), claims.size());
         Instant now = Instant.now();
         for (int index = 0; index < limit; index++) {
+            if (!ExactItemDeliveryTickBudget.tryAcquire(
+                    player.getServer(), operationLimit)) {
+                return;
+            }
             try {
                 runtime.collectExactItemClaim(player,
                         claims.get(index).claimId(), now);
