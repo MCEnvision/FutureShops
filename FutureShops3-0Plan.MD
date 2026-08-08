@@ -1566,3 +1566,65 @@ without a false warning. A failed handshake now distinguishes a missing client i
 missing server installation, an older client protocol, an older server protocol, and an unknown
 incompatible protocol. Each case explains the correct recovery action without assuming that the
 client always needs an update.
+
+## 22. Server Shop durable-stock restart compatibility
+
+Issue 25 reports that an upgraded singleplayer world can retain a visible Server Shop catalog while
+every acquire, direct sell, and bulk-sell destination is unavailable. The report is evidence only.
+The exact prior and failing artifact hashes remain unconfirmed, so the implementation must be
+grounded in the checked-in lifecycle and compatible persisted-data fixtures rather than the report
+alone.
+
+The affected lifecycle starts with `ShopCatalog.reload` during server startup, captures or restores
+the catalog stock migration, opens and recovers escrow, reconciles the current catalog definition,
+activates the durable stock authority, publishes the authoritative definitions, and then serves
+single-offer, cart, and bulk-sell quotes. All three mutation paths already fail closed when escrow
+or the durable listing is unavailable. They must continue to share that authority; this work must
+not restore the former in-memory stock path or bypass escrow readiness.
+
+The fix must identify and repair the smallest compatible restart or migration transition that can
+leave a valid persisted catalog permanently outside the durable authority. A valid prior-world
+snapshot must converge to an active authoritative catalog after recovery, preserve stock and escrow
+evidence, and make buy, direct sell, and inventory selling quote against the same listings.
+Malformed, conflicting, or incomplete durable evidence must remain unavailable and expose a
+specific migration or activation diagnostic suitable for `/marketadmin status` and the server log.
+No automatic deletion, reseeding, or reconstruction of unverified stock evidence is allowed.
+
+Implementation decision. The verified compatibility gap is a missing or previously failed catalog
+stock migration record alongside an already complete durable stock store. The old migrator rejected
+every nonempty destination before invoking its existing full verification boundary, so a compatible
+world could remain permanently frozen even though every listing and import receipt was valid. The
+repair adopts materialized state only after exact verification of the captured source snapshot,
+destination fingerprint, listing definitions, quantities, reservations, conservation, and
+deterministic receipts. It then rebuilds only migration progress metadata. Any partial or conflicting
+state preserves the failure and remains unavailable. The release boundary is `3.0.0-beta.8`.
+
+Required implementation and verification.
+
+1. Add a deterministic regression fixture representing compatible existing world catalog and stock
+   evidence across a restart. Prove that startup reaches durable activation and that acquire, direct
+   sell, and bulk destination selection observe the same ready catalog.
+2. Add negative coverage for unrecoverable migration or stock evidence. It must fail closed with a
+   stable actionable reason and must not enable any offer.
+3. Keep catalog parsing, stock recovery, escrow startup, snapshot publication, direct offer paths,
+   and bulk selling on their existing server-authoritative boundaries.
+4. Run applicable unit tests, GameTests, data generation or validation, the full build, dedicated
+   server startup, client startup, world reopen or reconnect coverage, packaged JAR inspection, and
+   final diff inspection. Record any environment-blocked verification exactly. The issue remains
+   open until the reporter tests the exact built artifact.
+
+Implementation result on August 8, 2026. The migration now verifies and adopts compatible
+materialized stock when migration metadata is missing or retains the original nonempty store
+failure. Persisted failure recovery, missing metadata recovery, incompatible partial stock, source
+change, deterministic replay, and restored lineage tests pass. `/marketadmin status` and the
+once-per-startup server log expose the durable authority, migration stage, failure code, and bounded
+verification detail. `bash gradlew test`, `bash gradlew runData`, `bash gradlew runGameTestServer`,
+and `bash gradlew build` pass. All five required GameTests pass. The virtual display client reaches
+normal Forge resource loading and FutureShops client setup; audio is unavailable on the headless
+host and Minecraft disables it without aborting startup. The standalone `runServer` check reaches
+Forge launch but stops at the unaccepted local Minecraft EULA, so the successful Forge GameTest
+server startup is the available server smoke evidence. The packaged beta 8 JAR is 5,734,715 bytes.
+Its SHA-256 is
+`161501c37dbd7d7157c318d422cea50b704a8547365f25345814eeb4b49d86df` and its SHA-512 is
+`0c2403d794efb7c8bad391e9490a6b9331de81cafd4c86a8745d2b732ddb57bab542c69a2e83f2da5b0db089d5653941e5e0f124647dffd551aa8817d107e015`.
+Issue 25 remains open for the reporter to test this exact artifact in the affected world.

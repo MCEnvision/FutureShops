@@ -19,7 +19,7 @@ The 3.0.0 implementation is in beta on the active phase branch. Its advanced tra
 
 | Component | Pinned value |
 | --- | --- |
-| FutureShops | 3.0.0 beta 6 |
+| FutureShops | 3.0.0 beta 8 |
 | Java | 17 |
 | Gradle Wrapper | 8.14.4 |
 | Minecraft | 1.20.1 |
@@ -266,6 +266,20 @@ The prepared and commit SavedData stores keep bounded live windows. Their finite
 
 `futureshops_server_shop_offer_usage` persists its byte cursor into the replay discovery index. Usage recovery consumes at most 1,024 receipts per batch and applies their evidence idempotently. This closes the period between a durable value commit and a failed usage projection without requiring an unbounded startup scan.
 
+Catalog stock activation is also restart safe. An existing world can contain a complete durable
+stock store while its catalog migration metadata is absent or retains the original
+`STOCK_STORE_NOT_EMPTY` failure. During startup, FutureShops captures the current Server Shop
+catalog and verifies the materialized store against it. Adoption requires an exact catalog
+fingerprint, every expected listing, matching definitions and quantities, valid import receipts,
+no unexpected listings, and conserved reservations. A successful verification reconstructs only
+the deterministic migration progress metadata and activates the existing durable stock without
+changing its store revision. Any mismatch remains failed and frozen. FutureShops never deletes,
+reseeds, or guesses at conflicting stock.
+
+`/marketadmin status` reports the catalog stock authority, migration stage, processed entry count,
+and the exact failure code and bounded detail when activation fails. The server log records the
+same failure once per startup rather than repeating it every tick.
+
 Do not log credentials, tokens, private configuration, full player inventories, or unbounded NBT. Do not follow symbolic links when loading administrator product files.
 
 The current transitive dependency review is recorded in
@@ -293,7 +307,7 @@ Also run:
 
 For readiness changes, verify both the recovery window and the ready transition. A screen opened during recovery must refresh without reconnecting. Navigation requests must remain server authorized. Currency and profile reads may use the safe display balance, while mutations remain blocked until ready.
 
-After packaging, inspect the manifest, expanded `META-INF/mods.toml`, mixin configuration and refmap, assets, data, dependency metadata, and the complete Git diff. Version `3.0.0-beta.7` must expand into the mod metadata, and `logoFile = "futureshops.png"` must resolve to the 400 by 400 project logo at the jar root. Run `verifyPackagedDependencyBoundary` and confirm the JAR contains no launcher supplied Netty, Apache Commons, Guava, Log4j, or Plexus classes and no Forge Jar in Jar metadata. Calculate release checksums only after the final Forge reobfuscation and packaging pass. Bug fix builds stay on the `3.0.0` release line and increment only the final beta number until the owner explicitly approves another release line. Build output, run directories, logs, crash reports, local configs, caches, IDE files, and `AGENTS.md` must not be committed.
+After packaging, inspect the manifest, expanded `META-INF/mods.toml`, mixin configuration and refmap, assets, data, dependency metadata, and the complete Git diff. Version `3.0.0-beta.8` must expand into the mod metadata, and `logoFile = "futureshops.png"` must resolve to the 400 by 400 project logo at the jar root. Run `verifyPackagedDependencyBoundary` and confirm the JAR contains no launcher supplied Netty, Apache Commons, Guava, Log4j, or Plexus classes and no Forge Jar in Jar metadata. Calculate release checksums only after the final Forge reobfuscation and packaging pass. Bug fix builds stay on the `3.0.0` release line and increment only the final beta number until the owner explicitly approves another release line. Build output, run directories, logs, crash reports, local configs, caches, IDE files, and `AGENTS.md` must not be committed.
 
 ## Troubleshooting
 
@@ -310,6 +324,16 @@ state to remove the warning.
 Run `/marketadmin status`. Confirm the configured toggle, market control status, and escrow runtime state separately. A configured module can still be claims only, frozen, draining, recovering, or in maintenance.
 
 Check that the value was changed in the server copy of `config/futureshops/futureshops-common.toml`, then check the server log for an accepted reload or a rejected field. Also check for checkpoint, journal, migration, catalog, or market control failures. Open screens refresh the server projection every second during recovery and every five seconds while ready. Reopening the screen should not be required.
+
+### Every Server Shop offer is unavailable after an update
+
+Run `/marketadmin status` and inspect the catalog stock authority and migration lines. `DURABLE`
+with `COMPLETE` is the required ready state. `CUTOVER FROZEN` with `FAILED` means catalog stock
+evidence did not pass activation verification. Preserve the world and its complete FutureShops
+data, then provide the failure code, detail, relevant startup log, exact FutureShops JAR, and a
+backup of the affected world when requested. Do not delete escrow SavedData, migration SavedData,
+or the durable stock store. Beta 8 can adopt an already complete compatible store, but intentionally
+leaves partial or conflicting evidence unavailable.
 
 ### Marketplace profile does not open
 

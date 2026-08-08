@@ -2,6 +2,14 @@
 
 FutureShops 3.0.0 beta replaces separate special case shop trades with one clear offer model. This is a beta build for Minecraft 1.20.1 and Forge 47.4.20. Client and server must use the same build because the network protocol is now 57.
 
+## Beta 8 Server Shop restart recovery
+
+* Existing worlds can recover when durable Server Shop stock is already fully materialized but the catalog migration metadata is missing or records the earlier nonempty store failure.
+* Recovery verifies every catalog listing, stock quantity, reservation, receipt, and fingerprint before adopting the existing state. It does not delete, reseed, or reconstruct unverified stock.
+* Partial, conflicting, or corrupt stock evidence remains unavailable and reports a specific failure in the server log and `/marketadmin status`.
+* Buying, direct selling, and Sell Inventory continue to use the same durable stock authority after recovery.
+* The beta artifact and metadata version is `3.0.0-beta.8`.
+
 ## Beta 7 escrow concurrency maintenance
 
 * Escrow value operations now acquire the active runtime through the owning logical server thread.

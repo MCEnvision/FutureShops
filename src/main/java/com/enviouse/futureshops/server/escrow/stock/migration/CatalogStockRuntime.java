@@ -17,6 +17,8 @@ import com.enviouse.futureshops.server.escrow.stock.StockMutationCommand;
 import com.enviouse.futureshops.server.escrow.stock.StockMutationType;
 import com.enviouse.futureshops.server.escrow.stock.StockStoreSnapshot;
 import net.minecraft.server.MinecraftServer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.List;
@@ -24,10 +26,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 public final class CatalogStockRuntime {
+    private static final Logger LOGGER = LoggerFactory.getLogger(
+            CatalogStockRuntime.class);
     private static final CatalogStockActivationCoverage COVERAGE =
             CatalogStockActivationCoverage.productionCutover();
     private static final CatalogStockCutoverCoordinator CUTOVER =
             new CatalogStockCutoverCoordinator();
+    private static String loggedFailureSignature = "";
 
     private CatalogStockRuntime() {
     }
@@ -37,7 +42,21 @@ public final class CatalogStockRuntime {
             EscrowRuntimeService runtime
     ) {
         requireServerThread(server);
+        loggedFailureSignature = "";
         advance(server, Objects.requireNonNull(runtime, "runtime"));
+    }
+
+    public static Status status(MinecraftServer server) {
+        requireServerThread(server);
+        CatalogStockMigrationSavedData migration =
+                CatalogStockMigrationSavedData.get(server);
+        return new Status(
+                ShopCatalog.stockAuthorityMode(),
+                migration.stage(),
+                migration.failure(),
+                migration.failureDetail(),
+                migration.nextEntryIndex(),
+                migration.totalEntries());
     }
 
     public static void tick(MinecraftServer server) {
@@ -173,8 +192,12 @@ public final class CatalogStockRuntime {
         CatalogStockMigrationSavedData migration =
                 CatalogStockMigrationSavedData.get(server);
         if (migration.stage() == CatalogStockMigrationStage.FAILED) {
-            freezeFailedMigration(migration);
-            return;
+            if (!migration.canRetryMaterializedState()
+                    || mode != CatalogStockAuthorityMode.LEGACY) {
+                recordMigrationFailure(migration);
+                freezeFailedMigration(migration);
+                return;
+            }
         }
         if (!runtime.isReady()) {
             return;
@@ -184,6 +207,7 @@ public final class CatalogStockRuntime {
                     server, runtime, COVERAGE,
                     CatalogStockMigrator.MAXIMUM_BATCH_SIZE);
             if (result.stage() == CatalogStockMigrationStage.FAILED) {
+                recordMigrationFailure(migration);
                 freezeFailedMigration(migration);
                 return;
             }
@@ -209,6 +233,20 @@ public final class CatalogStockRuntime {
         reconcile(runtime, definitions, Instant.now());
         CUTOVER.activate(runtime, migration, COVERAGE);
         ShopCatalog.publishDurableDefinitions(server, definitions);
+    }
+
+    private static void recordMigrationFailure(
+            CatalogStockMigrationSavedData migration
+    ) {
+        String signature = migration.failure().name() + "\n"
+                + migration.failureDetail();
+        if (signature.equals(loggedFailureSignature)) {
+            return;
+        }
+        loggedFailureSignature = signature;
+        LOGGER.error(
+                "Catalog stock migration failed. Failure: {}. Detail: {}",
+                migration.failure(), migration.failureDetail());
     }
 
     private static void freezeFailedMigration(
@@ -284,5 +322,22 @@ public final class CatalogStockRuntime {
     }
 
     private record ResolvedListing(String shopId, ItemDef item) {
+    }
+
+    public record Status(
+            CatalogStockAuthorityMode authorityMode,
+            CatalogStockMigrationStage migrationStage,
+            CatalogStockMigrationFailure migrationFailure,
+            String failureDetail,
+            int processedEntries,
+            int totalEntries
+    ) {
+        public Status {
+            Objects.requireNonNull(authorityMode, "authorityMode");
+            Objects.requireNonNull(migrationStage, "migrationStage");
+            Objects.requireNonNull(migrationFailure, "migrationFailure");
+            failureDetail = Objects.requireNonNull(
+                    failureDetail, "failureDetail");
+        }
     }
 }

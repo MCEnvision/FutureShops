@@ -229,6 +229,46 @@ public final class CatalogStockMigrationSavedData extends SavedData {
         setDirty();
     }
 
+    public synchronized boolean canRetryMaterializedState() {
+        return stage == CatalogStockMigrationStage.FAILED
+                && failure
+                == CatalogStockMigrationFailure.STOCK_STORE_NOT_EMPTY
+                && snapshotEntries.isEmpty()
+                && snapshotFingerprint.isEmpty()
+                && nextEntryIndex == 0
+                && lastCompletedKey == null
+                && lastCompletedRequest == null
+                && completionSequence == -1L;
+    }
+
+    public synchronized void retryMaterializedState() {
+        if (!canRetryMaterializedState()) {
+            throw new IllegalStateException(
+                    "Catalog stock migration failure cannot be retried");
+        }
+        failure = CatalogStockMigrationFailure.NONE;
+        failureDetail = "";
+        stage = CatalogStockMigrationStage.UNINITIALIZED;
+        setDirty();
+    }
+
+    public synchronized void recordMaterializedStateFailure(
+            String detail
+    ) {
+        if (!canRetryMaterializedState()) {
+            throw new IllegalStateException(
+                    "Catalog stock migration failure cannot be updated");
+        }
+        detail = Objects.requireNonNull(detail, "detail").trim();
+        if (detail.isEmpty()
+                || detail.length() > MAXIMUM_DETAIL_LENGTH) {
+            throw new IllegalArgumentException(
+                    "Catalog stock migration failure detail is invalid");
+        }
+        failureDetail = detail;
+        setDirty();
+    }
+
     public synchronized CatalogStockMigrationStage stage() {
         return stage;
     }

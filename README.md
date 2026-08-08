@@ -10,7 +10,7 @@ Supported runtime:
 
 | Component | Version |
 | --- | --- |
-| FutureShops | 3.0.0 beta 6 |
+| FutureShops | 3.0.0 beta 8 |
 | Minecraft | 1.20.1 |
 | Forge | 47.4.20 |
 | Java | 17 |
@@ -45,12 +45,16 @@ The Bazaar and Auction House are disabled on a new installation. Enable either m
 
 For 3.0 beta upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
 
-The current test artifact is `futureshops-3.0.0-beta.7.jar`. It includes the Server Shop sell
+The current test artifact is `futureshops-3.0.0-beta.8.jar`. It includes the Server Shop sell
 payout and timed out cart recovery fixes from beta 4. It also completes the dependency alert audit,
 uses fixed MixinGradle and Foojay resolver releases, aligns the JUnit 6 test runtime, and rejects any
 build that bundles launcher supplied libraries inside the FutureShops JAR. Gradle remains pinned to
 8.14.4 because ForgeGradle does not support Gradle 9. Beta 7 also makes escrow lifecycle checks and
 their dependent value or replay operation explicitly atomic on the owning logical server thread.
+Beta 8 safely recovers existing worlds whose catalog stock was fully materialized but whose
+migration metadata is missing or records the earlier nonempty store failure. Recovery activates
+only when every listing, receipt, reservation, quantity, and catalog fingerprint verifies exactly.
+Conflicting or incomplete evidence remains unavailable for administrator inspection.
 
 Worlds previously opened with the incorrectly labeled `3.1.0-beta.1` build can report a Forge
 version difference when first opened with `3.0.0-beta.3`. This corrects the public artifact label

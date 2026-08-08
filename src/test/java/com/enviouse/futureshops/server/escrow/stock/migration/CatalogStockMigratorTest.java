@@ -90,6 +90,25 @@ class CatalogStockMigratorTest {
                 nonempty.stage());
         assertEquals(CatalogStockMigrationFailure.STOCK_STORE_NOT_EMPTY,
                 nonempty.failure());
+        assertTrue(nonempty.detail().contains(
+                "Catalog stock checksum differs"));
+
+        CatalogStockMigrationSavedData previouslyFailed =
+                new CatalogStockMigrationSavedData();
+        previouslyFailed.fail(
+                CatalogStockMigrationFailure.STOCK_STORE_NOT_EMPTY,
+                "Escrow stock already contains materialized state");
+        CatalogStockMigrationResult retry = new CatalogStockMigrator(
+                new CatalogStockSeedGateway(
+                        new RepositoryBackend(occupied))).runBatch(
+                source, previouslyFailed, 10, NOW,
+                new TestBarrier(true));
+        assertEquals(CatalogStockMigrationStage.FAILED,
+                retry.stage());
+        assertTrue(retry.detail().contains(
+                "Catalog stock checksum differs"));
+        assertEquals(retry.detail(),
+                previouslyFailed.failureDetail());
 
         PersistentStockRepository repository =
                 new PersistentStockRepository();
@@ -160,6 +179,50 @@ class CatalogStockMigratorTest {
         assertTrue(restored.valid());
         assertTrue(restored.completionSequence()
                 >= migration.completionSequence());
+    }
+
+    @Test
+    void verifiedMaterializedStateRecoversMissingAndFailedMetadata() {
+        PersistentStockRepository repository =
+                new PersistentStockRepository();
+        CatalogStockSeedSnapshot source = snapshot();
+        CatalogStockSeedGateway gateway = new CatalogStockSeedGateway(
+                new RepositoryBackend(repository));
+        CatalogStockMigrationResult original = new CatalogStockMigrator(
+                gateway).runBatch(source,
+                new CatalogStockMigrationSavedData(), 10, NOW,
+                new TestBarrier(true));
+        assertEquals(CatalogStockMigrationStage.COMPLETE,
+                original.stage());
+        long materializedRevision =
+                repository.snapshot().storeRevision();
+
+        CatalogStockMigrationSavedData missing =
+                new CatalogStockMigrationSavedData();
+        CatalogStockMigrationResult adopted = new CatalogStockMigrator(
+                gateway).runBatch(source, missing, 10,
+                NOW.plusSeconds(1), new TestBarrier(true));
+        assertEquals(CatalogStockMigrationStage.COMPLETE,
+                adopted.stage());
+        assertEquals(materializedRevision,
+                repository.snapshot().storeRevision());
+
+        CatalogStockMigrationSavedData failed =
+                new CatalogStockMigrationSavedData();
+        failed.fail(CatalogStockMigrationFailure.STOCK_STORE_NOT_EMPTY,
+                "Escrow stock already contains materialized state");
+        failed = CatalogStockMigrationSavedData.load(
+                failed.save(new CompoundTag()));
+        CatalogStockMigrationResult recovered = new CatalogStockMigrator(
+                gateway).runBatch(source, failed, 10,
+                NOW.plusSeconds(2), new TestBarrier(true));
+        assertEquals(CatalogStockMigrationStage.COMPLETE,
+                recovered.stage());
+        assertEquals(CatalogStockMigrationFailure.NONE,
+                recovered.failure());
+        assertEquals(materializedRevision,
+                repository.snapshot().storeRevision());
+        assertTrue(gateway.verifyRestoredLineage(source).valid());
     }
 
     private static CatalogStockSeedSnapshot snapshot() {

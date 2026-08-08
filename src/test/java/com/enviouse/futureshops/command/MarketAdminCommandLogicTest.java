@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.command;
 
+import com.enviouse.futureshops.catalog.CatalogStockAuthorityMode;
 import com.enviouse.futureshops.server.market.auction.AuctionListingState;
 import com.enviouse.futureshops.server.market.bazaar.BazaarOrderState;
 import com.enviouse.futureshops.server.market.bazaar.BazaarProductStatus;
@@ -8,6 +9,8 @@ import com.enviouse.futureshops.server.market.control.MarketControlModule;
 import com.enviouse.futureshops.server.market.control.MarketModuleControl;
 import com.enviouse.futureshops.server.market.control.MarketModuleStatus;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeState;
+import com.enviouse.futureshops.server.escrow.stock.migration.CatalogStockMigrationFailure;
+import com.enviouse.futureshops.server.escrow.stock.migration.CatalogStockMigrationStage;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -308,6 +311,21 @@ class MarketAdminCommandLogicTest {
             assertKey(lang, prefix + "runtime_state."
                     + state.name().toLowerCase(Locale.ROOT));
         }
+        for (CatalogStockAuthorityMode mode
+                : CatalogStockAuthorityMode.values()) {
+            assertKey(lang, prefix + "catalog_authority."
+                    + mode.name().toLowerCase(Locale.ROOT));
+        }
+        for (CatalogStockMigrationStage stage
+                : CatalogStockMigrationStage.values()) {
+            assertKey(lang, prefix + "catalog_migration_stage."
+                    + stage.name().toLowerCase(Locale.ROOT));
+        }
+        for (CatalogStockMigrationFailure failure
+                : CatalogStockMigrationFailure.values()) {
+            assertKey(lang, prefix + "catalog_migration_failure."
+                    + failure.name().toLowerCase(Locale.ROOT));
+        }
         for (BazaarProductStatus status : BazaarProductStatus.values()) {
             assertKey(lang, prefix + "bazaar.product_state."
                     + status.name().toLowerCase(Locale.ROOT));
@@ -321,6 +339,8 @@ class MarketAdminCommandLogicTest {
         for (String fixed : new String[] {
                 "runtime_unavailable",
                 "status.header", "status.module_line", "status.runtime_line",
+                "status.catalog_line", "status.catalog_failure_line",
+                "status.catalog_unavailable",
                 "status.counts_line", "status.recovery_line", "status.maintenance_line",
                 "status.counts_unavailable",
                 "control.unknown_module", "control.noop", "control.applied",

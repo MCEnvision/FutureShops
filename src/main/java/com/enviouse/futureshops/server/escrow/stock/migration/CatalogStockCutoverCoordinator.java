@@ -48,7 +48,8 @@ public final class CatalogStockCutoverCoordinator {
         }
         CatalogStockSeedSnapshot source;
         if (migration.stage()
-                == CatalogStockMigrationStage.UNINITIALIZED) {
+                == CatalogStockMigrationStage.UNINITIALIZED
+                || migration.canRetryMaterializedState()) {
             return ShopCatalog.captureAndFreezeStockForCutover();
         } else {
             source = migration.snapshot();
