@@ -8,13 +8,12 @@ import com.enviouse.futureshopsp.network.packets.C2SOpenBalTopUiPacket;
 import com.enviouse.futureshopsp.network.packets.C2SOpenBalanceUiPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
 import java.util.UUID;
 
-public class BalTopOverviewScreen extends Screen implements ShopScreenMarker {
+public class BalTopOverviewScreen extends AbstractShopScreen implements ShopScreenMarker {
     private int page;
     private int totalPages;
     private List<BalanceTopEntry> entries;

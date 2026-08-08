@@ -8,10 +8,10 @@ import com.enviouse.futureshopsp.network.ShopPackets;
 import com.enviouse.futureshopsp.network.packets.C2SBarterRequestPacket;
 import com.enviouse.futureshopsp.network.packets.C2SInventorySyncPacket;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
@@ -21,7 +21,7 @@ import java.util.List;
  * left = what you receive, right = what you give, arrow in between,
  * bottom row: qty controls LEFT | receive summary CENTER | confirm RIGHT.
  */
-public class BarterScreen extends Screen implements ShopScreenMarker {
+public class BarterScreen extends AbstractShopScreen implements ShopScreenMarker {
     private final Screen parent;
     private final String targetItemId;
 

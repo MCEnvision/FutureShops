@@ -8,13 +8,13 @@ import com.enviouse.futureshopsp.network.packets.C2SBuyRequestPacket;
 import com.enviouse.futureshopsp.network.packets.C2SVerifyAdminCartPacket;
 import com.enviouse.futureshopsp.network.packets.S2CVerifyCartResponsePacket;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
 
-public class CartScreen extends Screen implements ShopScreenMarker {
+public class CartScreen extends AbstractShopScreen implements ShopScreenMarker {
     private final Screen parent;
     private int guiLeft;
     private int guiTop;

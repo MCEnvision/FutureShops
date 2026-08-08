@@ -7,9 +7,9 @@ import com.enviouse.futureshopsp.data.LocalShopOwnerEntry.LocalListing;
 import com.enviouse.futureshopsp.network.ShopPackets;
 import com.enviouse.futureshopsp.network.packets.C2SPlayerShopActionPacket;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 
@@ -21,7 +21,7 @@ import java.util.Locale;
  * Browsing screen for a single player/franchise's shops in local mode.
  * Shows their custom departments in the sidebar and all listings from all shop blocks in the grid.
  */
-public class LocalShopBrowserScreen extends Screen implements ShopScreenMarker {
+public class LocalShopBrowserScreen extends AbstractShopScreen implements ShopScreenMarker {
     private final Screen parent;
     private final LocalShopOwnerEntry owner;
     private int guiLeft, guiTop, guiW, guiH;

@@ -9,14 +9,13 @@ import com.enviouse.futureshopsp.network.packets.C2SOpenShopPacket;
 import com.enviouse.futureshopsp.network.packets.C2SPlayerShopActionPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
 import java.util.UUID;
 
-public class BalanceOverviewScreen extends Screen implements ShopScreenMarker {
+public class BalanceOverviewScreen extends AbstractShopScreen implements ShopScreenMarker {
     private final UUID playerUuid;
     private final String playerName;
     private final long balanceMinorUnits;

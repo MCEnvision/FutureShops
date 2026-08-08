@@ -8,7 +8,6 @@ import com.enviouse.futureshopsp.network.packets.C2SOpenBalanceUiPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
@@ -18,7 +17,7 @@ import java.util.UUID;
  * Franchise management GUI — view members, invite, kick, promote, leave, disband.
  * Opened via /franchise manage or from BalanceOverviewScreen.
  */
-public class FranchiseManagementScreen extends Screen implements ShopScreenMarker {
+public class FranchiseManagementScreen extends AbstractShopScreen implements ShopScreenMarker {
 
     private boolean inFranchise;
     private UUID franchiseId;

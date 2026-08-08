@@ -6,10 +6,10 @@ import com.enviouse.futureshopsp.data.PlayerShopListingData;
 import com.enviouse.futureshopsp.network.ShopPackets;
 import com.enviouse.futureshopsp.network.packets.C2SPlayerShopBuyPacket;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -17,7 +17,7 @@ import net.minecraft.network.chat.Component;
  * left = what you receive, right = what you give, arrow between,
  * bottom row: qty controls LEFT | receive summary CENTER | confirm RIGHT.
  */
-public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
+public class PlayerShopBarterScreen extends AbstractShopScreen implements ShopScreenMarker {
     private final Screen parent;
     private int guiLeft;
     private int guiTop;

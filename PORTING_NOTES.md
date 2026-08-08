@@ -115,6 +115,16 @@ component patch via the vanilla item DataFixer (wrap `{id,Count,tag}`, fix, take
 analogous to the coin rescue. Verify match outcomes against real listing shapes (bare / NBT-variant /
 empty-patch edge) with a test, since this touches player-created listing data.
 
+## Issue 22 maintenance. Shop screen background blur
+
+The 1.21.1 screen render contract differs from the old Forge line. `Screen.render` invokes `renderBackground` before it draws registered widgets. Every FutureShops screen currently draws its custom background and content before calling `super.render`. The superclass therefore applies the 1.21.1 world blur after the custom content has been drawn, while widgets and tooltips rendered afterward remain sharp. The reported screenshot matches this exact layering failure on all shop pages.
+
+The repair must preserve the existing custom dim backdrop and screen layout. All FutureShops screens that implement `ShopScreenMarker` must inherit one shared shop screen base that suppresses only the vanilla `renderBackground` pass. It must not disable the custom backdrop, widget rendering, tooltips, input handling, narration, or ordinary screen navigation. No global Minecraft blur setting may be changed.
+
+Acceptance requires a structural regression test that covers every concrete `ShopScreenMarker` screen, verifies that it inherits the shared background policy, and rejects direct `Screen` inheritance. The full NeoForge build and unit suite must pass. Client verification must open representative Server Shop, Player Shop, Bazaar, history, and modal screens and confirm that custom content, buttons, and tooltips remain sharp with the configured GUI scale.
+
+Implementation status. All 16 concrete shop screens now inherit `AbstractShopScreen`, which suppresses only the vanilla background pass. The structural regression test, complete unit suite, and `./gradlew build` pass on Java 21. A virtual display client loads FutureShops 2.2.1, completes resource loading, and remains stable on the render thread until the bounded smoke test ends. Final acceptance still requires the reporter to open the affected shop pages and confirm that the custom content remains sharp on the original Windows setup.
+
 ## Green floor reached — full port compiles + 8/8 tests (250+ → 0 errors)
 
 The whole remaining port (106 files) is transformed and the tree is GREEN: `./gradlew build` SUCCESSFUL,
