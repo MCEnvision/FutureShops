@@ -1,9 +1,11 @@
 package com.enviouse.futureshops.command;
 
+import com.enviouse.futureshops.catalog.AdminShopCatalogMaintenance;
 import com.enviouse.futureshops.server.escrow.admin.EscrowAdministrativeAction;
 import com.enviouse.futureshops.server.escrow.admin.EscrowAdministrativeAuditSavedData;
 import com.enviouse.futureshops.server.escrow.admin.EscrowAdministrativeRecord;
 import com.enviouse.futureshops.server.escrow.admin.MaintenanceRepairTarget;
+import com.enviouse.futureshops.server.escrow.audit.EscrowConservationReport;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransactionId;
 import com.enviouse.futureshops.server.escrow.runtime.AuctionExpirationScheduler;
@@ -11,6 +13,7 @@ import com.enviouse.futureshops.server.escrow.runtime.BazaarExpirationScheduler;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeManager;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeState;
+import com.enviouse.futureshops.server.escrow.runtime.EscrowGlobalVerificationSnapshot;
 import com.enviouse.futureshops.server.escrow.runtime.LiveAdministrativeBalanceBackend;
 import com.enviouse.futureshops.server.market.auction.AuctionHouseBook;
 import com.enviouse.futureshops.server.market.auction.AuctionHouseSnapshot;
@@ -60,6 +63,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -104,6 +108,7 @@ public final class MarketAdminCommand {
 
     /** Upper bound on recovery intents listed per kind. */
     private static final int RECOVERY_LIST_LIMIT = 100;
+    private static final int CATALOG_ISSUE_LIMIT = 20;
 
 
     /** Console / non-player confirm bucket (matches MarketControlActor.SYSTEM_ACTOR_ID). */
@@ -191,6 +196,40 @@ public final class MarketAdminCommand {
 
                 .then(Commands.literal("recovery")
                         .executes(ctx -> recovery(ctx.getSource())))
+
+                .then(Commands.literal("maintenance")
+                        .requires(src -> src.hasPermission(3)
+                                && MarketPermissions.canEscrowAdmin(src))
+                        .then(Commands.literal("status")
+                                .executes(ctx -> maintenanceStatus(
+                                        ctx.getSource())))
+                        .then(Commands.literal("verify")
+                                .executes(ctx -> maintenanceVerify(
+                                        ctx.getSource())))
+                        .then(Commands.literal("resume")
+                                .then(Commands.literal("confirm")
+                                        .then(Commands.argument("reason",
+                                                        StringArgumentType.greedyString())
+                                                .executes(ctx -> maintenanceResume(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(
+                                                                ctx, "reason")))))))
+
+                .then(Commands.literal("adminshop")
+                        .requires(src -> src.hasPermission(3)
+                                && MarketPermissions.canEscrowAdmin(src))
+                        .then(Commands.literal("validate")
+                                .executes(ctx -> adminShopValidate(
+                                        ctx.getSource())))
+                        .then(Commands.literal("quarantine_missing")
+                                .then(Commands.literal("confirm")
+                                        .then(Commands.argument("reason",
+                                                        StringArgumentType.greedyString())
+                                                .executes(ctx ->
+                                                        adminShopQuarantineMissing(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(
+                                                                        ctx, "reason")))))))
 
                 .then(Commands.literal("inspect")
                         .requires(src -> src.hasPermission(3)
@@ -472,6 +511,237 @@ public final class MarketAdminCommand {
             LOGGER.error("Recovery listing failed", exception);
             source.sendFailure(Component.translatable(KEY + "error.internal",
                     String.valueOf(exception.getMessage())).withStyle(ChatFormatting.RED));
+            return 0;
+        }
+    }
+
+    private static int maintenanceStatus(CommandSourceStack source) {
+        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
+        if (runtime == null) {
+            sendRuntimeUnavailable(source);
+            return 0;
+        }
+        try {
+            EscrowRuntimeState state = runtime.state();
+            long revision = runtime.maintenanceRevision(
+                    MaintenanceRepairTarget.runtime());
+            boolean recoveryClear = runtime.maintenanceRecoveryClear();
+            String failure = runtime.failure()
+                    .map(value -> value.getClass().getSimpleName()
+                            + ". " + String.valueOf(value.getMessage()))
+                    .orElse("none");
+            source.sendSuccess(() -> Component.translatable(
+                            KEY + "maintenance.status",
+                            Component.translatable(KEY_RUNTIME_STATE
+                                    + Logic.statusKeySuffix(state)),
+                            revision, recoveryClear, failure)
+                    .withStyle(ChatFormatting.GRAY), false);
+            return 1;
+        } catch (RuntimeException exception) {
+            LOGGER.error("Escrow maintenance status failed", exception);
+            source.sendFailure(Component.translatable(
+                    KEY + "maintenance.failed",
+                    String.valueOf(exception.getMessage()))
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+    }
+
+    private static int maintenanceVerify(CommandSourceStack source) {
+        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
+        if (runtime == null) {
+            sendRuntimeUnavailable(source);
+            return 0;
+        }
+        try {
+            boolean recoveryClear = runtime.maintenanceRecoveryClear();
+            EscrowConservationReport conservation =
+                    runtime.maintenanceConservationReport();
+            EscrowGlobalVerificationSnapshot verification =
+                    runtime.maintenanceGlobalVerification();
+            String fingerprint = HexFormat.of().formatHex(
+                    verification.fingerprint().bytes());
+            source.sendSuccess(() -> Component.translatable(
+                            KEY + "maintenance.verify",
+                            recoveryClear, conservation.conserved(),
+                            verification.journalSequence(), fingerprint)
+                    .withStyle(recoveryClear && conservation.conserved()
+                            ? ChatFormatting.GREEN : ChatFormatting.YELLOW),
+                    false);
+            return recoveryClear && conservation.conserved() ? 1 : 0;
+        } catch (RuntimeException exception) {
+            LOGGER.error("Escrow maintenance verification failed", exception);
+            source.sendFailure(Component.translatable(
+                    KEY + "maintenance.failed",
+                    String.valueOf(exception.getMessage()))
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+    }
+
+    private static int maintenanceResume(
+            CommandSourceStack source,
+            String rawReason
+    ) {
+        String reason = Logic.normalizeReason(rawReason);
+        Optional<String> problem = Logic.reasonProblem(reason);
+        if (problem.isPresent()) {
+            source.sendFailure(Component.translatable(
+                            KEY_REASON_PROBLEM + problem.orElseThrow(),
+                            Logic.MAX_REASON_BYTES)
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
+        if (runtime == null) {
+            sendRuntimeUnavailable(source);
+            return 0;
+        }
+        try {
+            MaintenanceRepairTarget target =
+                    MaintenanceRepairTarget.runtime();
+            long revision = runtime.maintenanceRevision(target);
+            if (!runtime.maintenanceRecoveryClear()) {
+                source.sendFailure(Component.translatable(
+                                KEY + "maintenance.recovery_blocked")
+                        .withStyle(ChatFormatting.RED));
+                return 0;
+            }
+            EscrowConservationReport conservation =
+                    runtime.maintenanceConservationReport();
+            if (!conservation.conserved()) {
+                source.sendFailure(Component.translatable(
+                                KEY + "maintenance.conservation_blocked")
+                        .withStyle(ChatFormatting.RED));
+                return 0;
+            }
+            EscrowGlobalVerificationSnapshot verification =
+                    runtime.maintenanceGlobalVerification();
+            UUID commandId = maintenanceResumeRequestId(
+                    source, revision, verification, reason);
+            Instant now = Instant.now();
+            var result = runtime.verifyAndResumeMaintenance(
+                    commandId, auditActor(source), reason, revision,
+                    verification, now);
+            source.sendSuccess(() -> Component.translatable(
+                            result.replayed()
+                                    ? KEY + "maintenance.resume_replayed"
+                                    : KEY + "maintenance.resumed",
+                            commandId.toString())
+                    .withStyle(result.replayed()
+                            ? ChatFormatting.YELLOW : ChatFormatting.GREEN),
+                    true);
+            return 1;
+        } catch (RuntimeException exception) {
+            LOGGER.error("Escrow maintenance resume failed", exception);
+            source.sendFailure(Component.translatable(
+                    KEY + "maintenance.failed",
+                    String.valueOf(exception.getMessage()))
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+    }
+
+    private static UUID maintenanceResumeRequestId(
+            CommandSourceStack source,
+            long revision,
+            EscrowGlobalVerificationSnapshot verification,
+            String reason
+    ) {
+        String identity = "futureshops maintenance resume "
+                + actorId(source) + " " + revision + " "
+                + verification.journalSequence() + " "
+                + HexFormat.of().formatHex(
+                verification.fingerprint().bytes()) + " " + reason;
+        return UUID.nameUUIDFromBytes(
+                identity.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static int adminShopValidate(CommandSourceStack source) {
+        try {
+            AdminShopCatalogMaintenance.ValidationReport report =
+                    AdminShopCatalogMaintenance.validate();
+            source.sendSuccess(() -> Component.translatable(
+                            KEY + "adminshop.validate.header",
+                            report.listingCount(), report.configuredMaximum(),
+                            report.issues().size())
+                    .withStyle(report.valid()
+                            ? ChatFormatting.GREEN : ChatFormatting.YELLOW),
+                    false);
+            int shown = Math.min(CATALOG_ISSUE_LIMIT,
+                    report.issues().size());
+            for (int index = 0; index < shown; index++) {
+                AdminShopCatalogMaintenance.CatalogIssue issue =
+                        report.issues().get(index);
+                String itemId = issue.itemId().isBlank()
+                        ? "none" : issue.itemId();
+                source.sendSuccess(() -> Component.translatable(
+                                KEY + "adminshop.validate.issue",
+                                issue.listingId(), itemId,
+                                issue.path(), issue.code())
+                        .withStyle(ChatFormatting.RED), false);
+            }
+            if (report.issues().size() > shown) {
+                int remaining = report.issues().size() - shown;
+                source.sendSuccess(() -> Component.translatable(
+                                KEY + "adminshop.validate.more", remaining)
+                        .withStyle(ChatFormatting.GRAY), false);
+            }
+            return report.valid() ? 1 : 0;
+        } catch (RuntimeException exception) {
+            LOGGER.error("Admin shop catalog validation failed", exception);
+            source.sendFailure(Component.translatable(
+                            KEY + "adminshop.failed",
+                            String.valueOf(exception.getMessage()))
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+    }
+
+    private static int adminShopQuarantineMissing(
+            CommandSourceStack source,
+            String rawReason
+    ) {
+        String reason = Logic.normalizeReason(rawReason);
+        Optional<String> problem = Logic.reasonProblem(reason);
+        if (problem.isPresent()) {
+            source.sendFailure(Component.translatable(
+                            KEY_REASON_PROBLEM + problem.orElseThrow(),
+                            Logic.MAX_REASON_BYTES)
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        try {
+            AdminShopCatalogMaintenance.QuarantineResult result =
+                    AdminShopCatalogMaintenance.quarantineMissing(
+                            source.getServer(), auditActor(source), reason);
+            if (!result.success()) {
+                source.sendFailure(Component.translatable(
+                                KEY + "adminshop.quarantine_failed",
+                                result.status())
+                        .withStyle(ChatFormatting.RED));
+                return 0;
+            }
+            if (result.quarantinedListings() == 0) {
+                source.sendSuccess(() -> Component.translatable(
+                                KEY + "adminshop.quarantine_empty")
+                        .withStyle(ChatFormatting.GRAY), false);
+                return 1;
+            }
+            String recovery = result.recoveryFile() == null
+                    ? "unavailable"
+                    : result.recoveryFile().toString();
+            source.sendSuccess(() -> Component.translatable(
+                            KEY + "adminshop.quarantined",
+                            result.quarantinedListings(), recovery)
+                    .withStyle(ChatFormatting.GREEN), true);
+            return result.quarantinedListings();
+        } catch (RuntimeException exception) {
+            LOGGER.error("Admin shop missing item quarantine failed", exception);
+            source.sendFailure(Component.translatable(
+                            KEY + "adminshop.failed",
+                            String.valueOf(exception.getMessage()))
+                    .withStyle(ChatFormatting.RED));
             return 0;
         }
     }

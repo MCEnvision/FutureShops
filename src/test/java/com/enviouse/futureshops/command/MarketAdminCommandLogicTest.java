@@ -35,6 +35,8 @@ class MarketAdminCommandLogicTest {
 
     private static final Path EN_US =
             Path.of("src/main/resources/assets/futureshops/lang/en_us.json");
+    private static final Path COMMAND_SOURCE = Path.of(
+            "src/main/java/com/enviouse/futureshops/command/MarketAdminCommand.java");
 
     // ── confirm window ──────────────────────────────────────────────────────
 
@@ -327,6 +329,15 @@ class MarketAdminCommandLogicTest {
                 "control.replayed", "control.rejected",
                 "audit.header", "audit.empty", "audit.line_ok", "audit.line_failed",
                 "recovery.header", "recovery.empty", "recovery.line",
+                "maintenance.status", "maintenance.verify",
+                "maintenance.recovery_blocked",
+                "maintenance.conservation_blocked",
+                "maintenance.resumed", "maintenance.resume_replayed",
+                "maintenance.failed",
+                "adminshop.validate.header", "adminshop.validate.issue",
+                "adminshop.validate.more", "adminshop.quarantine_empty",
+                "adminshop.quarantined", "adminshop.quarantine_failed",
+                "adminshop.failed",
                 "sweep.done",
                 "cancel.not_found", "cancel.terminal", "cancel.armed",
                 "cancel.armed_bid_warning", "cancel.armed_hint", "cancel.replayed",
@@ -337,6 +348,24 @@ class MarketAdminCommandLogicTest {
                 "error.internal"}) {
             assertKey(lang, prefix + fixed);
         }
+    }
+
+    @Test
+    void maintenanceAndAdminShopRecoveryCommandsStayRegistered()
+            throws Exception {
+        String source = Files.readString(COMMAND_SOURCE);
+
+        assertTrue(source.contains("Commands.literal(\"maintenance\")"));
+        assertTrue(source.contains("Commands.literal(\"verify\")"));
+        assertTrue(source.contains("Commands.literal(\"resume\")"));
+        assertTrue(source.contains("Commands.literal(\"confirm\")"));
+        assertTrue(source.contains("verifyAndResumeMaintenance("));
+        assertTrue(source.contains("Commands.literal(\"adminshop\")"));
+        assertTrue(source.contains("Commands.literal(\"validate\")"));
+        assertTrue(source.contains(
+                "Commands.literal(\"quarantine_missing\")"));
+        assertTrue(source.contains(
+                "AdminShopCatalogMaintenance.quarantineMissing("));
     }
 
     private static void assertKey(String lang, String key) {

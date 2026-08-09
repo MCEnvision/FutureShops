@@ -5080,6 +5080,14 @@ public final class AdminOfferEditorScreen extends Screen
     private static Component validationMessage(
             com.enviouse.futureshops.catalog.offer.OfferValidationIssue issue
     ) {
+        if (issue.code().equals("offer.catalog.existing_invalid")) {
+            String detail = issue.path().startsWith("catalog.")
+                    ? issue.path().substring("catalog.".length())
+                    : issue.path();
+            return Component.translatable(
+                    "gui.futureshops.offer_editor.validation."
+                            + issue.code(), detail);
+        }
         String registered = registeredFieldPath(issue.path());
         return Component.translatable(
                 "gui.futureshops.offer_editor.validation",

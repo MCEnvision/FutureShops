@@ -3,7 +3,9 @@ package com.enviouse.futureshops.server.escrow.runtime;
 import com.enviouse.futureshops.server.escrow.checkpoint.ActiveEscrowJournal;
 import com.enviouse.futureshops.server.escrow.admin.EscrowAdministrativeAuditSavedData;
 import com.enviouse.futureshops.server.escrow.admin.EscrowAdministrativeRecord;
+import com.enviouse.futureshops.server.escrow.admin.MaintenanceExpectedState;
 import com.enviouse.futureshops.server.escrow.admin.MaintenanceRepairCommand;
+import com.enviouse.futureshops.server.escrow.admin.MaintenanceRepairPayload;
 import com.enviouse.futureshops.server.escrow.admin.MaintenanceRepairTarget;
 import com.enviouse.futureshops.server.escrow.admin.MaintenanceRepairTargetType;
 import com.enviouse.futureshops.server.escrow.admin.MaintenanceStateFingerprint;
@@ -1284,6 +1286,26 @@ public final class EscrowRuntimeService implements AutoCloseable {
             }
         }
         return result;
+    }
+
+    public synchronized EscrowCommitResult verifyAndResumeMaintenance(
+            UUID commandId,
+            String actor,
+            String reason,
+            long expectedRevision,
+            EscrowGlobalVerificationSnapshot verification,
+            Instant now
+    ) {
+        Objects.requireNonNull(verification, "verification");
+        MaintenanceRepairCommand command = MaintenanceRepairCommand.create(
+                commandId, actor, reason, true, now,
+                MaintenanceRepairTarget.runtime(),
+                MaintenanceExpectedState.revision(expectedRevision),
+                new MaintenanceRepairPayload.VerifyAndResume(
+                        verification.journalSequence(),
+                        verification.fingerprint()),
+                true, "Verified escrow maintenance resume");
+        return commitMaintenanceRepair(command);
     }
 
     public synchronized MaintenanceStateFingerprint maintenanceFingerprint(
@@ -2702,7 +2724,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 || conservationFailure != null);
     }
 
-    private boolean maintenanceRecoveryClear() {
+    public synchronized boolean maintenanceRecoveryClear() {
         return domainRecoveryInitialized
                 && protectedCashDiscoveryComplete
                 && protectedCashDiscoveryFailure == null

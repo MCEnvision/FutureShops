@@ -191,6 +191,10 @@ FutureShops state from one consistent snapshot.
 8. If the server reports maintenance mode, read the logged reason. Lineage or schema complaints
    mean the restore mixed snapshots or builds — go back to step 2 with a consistent snapshot.
    Never respond to maintenance mode by deleting journal or checkpoint files.
+9. Run `/marketadmin maintenance status` and `/marketadmin maintenance verify`. When recovery is
+   clear and conservation is verified, resume through the journaled command
+   `/marketadmin maintenance resume confirm <reason>`. If verification refuses, preserve the
+   current files and resolve the reported condition or restore the complete matching backup.
 
 Be aware of what a restore means economically: escrow guarantees the restored state is internally
 consistent, but everything after the snapshot — sales, bids, fills, deposits — is gone for all

@@ -5,11 +5,14 @@ import com.enviouse.futureshops.network.packets.S2CAtmCollectCashResultPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmDataPacket;
 import com.enviouse.futureshops.server.escrow.claim.ClaimSavedData;
 import com.enviouse.futureshops.server.escrow.claim.EscrowClaim;
+import com.enviouse.futureshops.server.escrow.custody.CustodyBatchExecutionResult;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeManager;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeState;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import com.mojang.logging.LogUtils;
+import org.slf4j.Logger;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -18,6 +21,8 @@ import java.util.Objects;
 import java.util.UUID;
 
 public final class AtmCashClaimCenter {
+    private static final Logger LOGGER = LogUtils.getLogger();
+
     private AtmCashClaimCenter() {
     }
 
@@ -55,6 +60,9 @@ public final class AtmCashClaimCenter {
             savedClaims = claims(player);
             before = inspect(savedClaims, player.getUUID(), claimIds);
         } catch (RuntimeException exception) {
+            LOGGER.error(
+                    "ATM cash claim inspection failed before delivery. player {}, request {}.",
+                    player.getUUID(), requestId, exception);
             return conflict(player, requestId);
         }
         if (before.pendingClaimIds().isEmpty()) {
@@ -72,10 +80,25 @@ public final class AtmCashClaimCenter {
         for (UUID claimId : before.pendingClaimIds()) {
             EscrowClaim pendingClaim = savedClaims.getClaim(claimId);
             try {
-                runtime.deliverCashClaim(player, claimId,
+                CustodyBatchExecutionResult delivery =
+                        runtime.deliverCashClaim(player, claimId,
                         attemptId(requestId, claimId),
                         pendingClaim.updatedAt());
-            } catch (RuntimeException ignored) {
+                if (!delivery.applied()) {
+                    String detail = delivery.application()
+                            .map(value -> value.reason())
+                            .filter(value -> !value.isBlank())
+                            .orElseGet(() -> delivery.simulation().reason());
+                    LOGGER.warn(
+                            "ATM cash claim delivery was not applied. player {}, request {}, claim {}, detail {}.",
+                            player.getUUID(), requestId, claimId, detail);
+                    deliveryInterrupted = true;
+                    break;
+                }
+            } catch (RuntimeException exception) {
+                LOGGER.error(
+                        "ATM cash claim delivery failed. player {}, request {}, claim {}.",
+                        player.getUUID(), requestId, claimId, exception);
                 deliveryInterrupted = true;
                 break;
             }
@@ -88,6 +111,9 @@ public final class AtmCashClaimCenter {
         try {
             after = inspect(savedClaims, player.getUUID(), claimIds);
         } catch (RuntimeException exception) {
+            LOGGER.error(
+                    "ATM cash claim inspection failed after delivery. player {}, request {}.",
+                    player.getUUID(), requestId, exception);
             return conflict(player, requestId);
         }
         boolean changed = after.completedBillCount()

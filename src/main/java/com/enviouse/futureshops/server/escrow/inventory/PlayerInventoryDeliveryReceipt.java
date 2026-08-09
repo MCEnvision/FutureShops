@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public record PlayerInventoryDeliveryReceipt(
+        int version,
         UUID receiptId,
         UUID playerId,
         UUID claimId,
@@ -38,11 +39,16 @@ public record PlayerInventoryDeliveryReceipt(
         Instant deliveredAt,
         byte[] digest
 ) {
-    private static final int VERSION = 1;
+    private static final int LEGACY_VERSION = 1;
+    private static final int CURRENT_VERSION = 2;
     private static final int MAX_REQUEST_KEY_LENGTH = 192;
     private static final int MAX_TOKEN_LENGTH = 2048;
 
     public PlayerInventoryDeliveryReceipt {
+        if (version < LEGACY_VERSION || version > CURRENT_VERSION) {
+            throw new IllegalArgumentException(
+                    "Player inventory receipt version is invalid");
+        }
         Objects.requireNonNull(receiptId, "receiptId");
         Objects.requireNonNull(playerId, "playerId");
         Objects.requireNonNull(claimId, "claimId");
@@ -79,7 +85,8 @@ public record PlayerInventoryDeliveryReceipt(
         digest = cloneHash(digest, "Player inventory receipt digest");
         PlayerInventoryDeliveryToken token =
                 PlayerInventoryDeliveryToken.decode(simulationToken);
-        if (!token.receiptId().equals(receiptId)
+        if (token.version() != version
+                || !token.receiptId().equals(receiptId)
                 || !token.playerId().equals(playerId)
                 || !token.claimId().equals(claimId)
                 || !token.transactionId().equals(transactionId)
@@ -95,7 +102,8 @@ public record PlayerInventoryDeliveryReceipt(
             throw new IllegalArgumentException(
                     "Player inventory receipt does not match its token");
         }
-        byte[] expected = computeDigest(receiptId, playerId, claimId,
+        byte[] expected = computeDigest(version, receiptId,
+                playerId, claimId,
                 transactionId, batchId, lotId, requestKey, simulationToken,
                 assetFingerprint, beforeInventoryHash, afterInventoryHash,
                 changedSlots, evidence, deliveredAt);
@@ -114,13 +122,15 @@ public record PlayerInventoryDeliveryReceipt(
     ) {
         Objects.requireNonNull(token, "token");
         String encodedToken = token.encode();
-        byte[] digest = computeDigest(token.receiptId(), token.playerId(),
+        byte[] digest = computeDigest(token.version(), token.receiptId(),
+                token.playerId(),
                 token.claimId(), token.transactionId(), token.batchId(),
                 token.lotId(), requestKey, encodedToken,
                 token.assetFingerprint(), token.beforeInventoryHash(),
                 token.afterInventoryHash(), changedSlots, evidence,
                 deliveredAt);
-        return new PlayerInventoryDeliveryReceipt(token.receiptId(),
+        return new PlayerInventoryDeliveryReceipt(token.version(),
+                token.receiptId(),
                 token.playerId(), token.claimId(), token.transactionId(),
                 token.batchId(), token.lotId(), requestKey, encodedToken,
                 token.assetFingerprint(), token.beforeInventoryHash(),
@@ -129,13 +139,9 @@ public record PlayerInventoryDeliveryReceipt(
     }
 
     public boolean matchesInventory(List<ItemStack> slots) {
-        if (!PlayerInventoryHashes.equal(afterInventoryHash,
-                PlayerInventoryHashes.hashInventory(slots))) {
-            return false;
-        }
         for (PlayerInventorySlotChange change : changedSlots) {
             if (!PlayerInventoryHashes.equal(change.afterHash(),
-                    PlayerInventoryHashes.hashSlot(
+                    hashSlot(
                             slots.get(change.slot())))) {
                 return false;
             }
@@ -145,7 +151,7 @@ public record PlayerInventoryDeliveryReceipt(
 
     public CompoundTag toTag() {
         CompoundTag tag = new CompoundTag();
-        tag.putInt("version", VERSION);
+        tag.putInt("version", version);
         tag.putUUID("receipt", receiptId);
         tag.putUUID("player", playerId);
         tag.putUUID("claim", claimId);
@@ -176,8 +182,9 @@ public record PlayerInventoryDeliveryReceipt(
 
     public static PlayerInventoryDeliveryReceipt fromTag(CompoundTag tag) {
         Objects.requireNonNull(tag, "tag");
-        if (!tag.contains("version", Tag.TAG_INT)
-                || tag.getInt("version") != VERSION
+        int version = tag.contains("version", Tag.TAG_INT)
+                ? tag.getInt("version") : -1;
+        if (version < LEGACY_VERSION || version > CURRENT_VERSION
                 || !tag.hasUUID("receipt")
                 || !tag.hasUUID("player")
                 || !tag.hasUUID("claim")
@@ -218,7 +225,8 @@ public record PlayerInventoryDeliveryReceipt(
             throw new IllegalArgumentException(
                     "Player inventory receipt time is invalid", exception);
         }
-        return new PlayerInventoryDeliveryReceipt(tag.getUUID("receipt"),
+        return new PlayerInventoryDeliveryReceipt(version,
+                tag.getUUID("receipt"),
                 tag.getUUID("player"), tag.getUUID("claim"),
                 tag.getUUID("transaction"), tag.getUUID("batch"),
                 tag.getUUID("lot"), tag.getString("request"),
@@ -255,7 +263,8 @@ public record PlayerInventoryDeliveryReceipt(
         if (!(object instanceof PlayerInventoryDeliveryReceipt other)) {
             return false;
         }
-        return receiptId.equals(other.receiptId)
+        return version == other.version
+                && receiptId.equals(other.receiptId)
                 && playerId.equals(other.playerId)
                 && claimId.equals(other.claimId)
                 && transactionId.equals(other.transactionId)
@@ -276,7 +285,7 @@ public record PlayerInventoryDeliveryReceipt(
 
     @Override
     public int hashCode() {
-        int result = Objects.hash(receiptId, playerId, claimId,
+        int result = Objects.hash(version, receiptId, playerId, claimId,
                 transactionId, batchId, lotId, requestKey, simulationToken,
                 changedSlots, evidence, deliveredAt);
         result = 31 * result + Arrays.hashCode(assetFingerprint);
@@ -312,6 +321,7 @@ public record PlayerInventoryDeliveryReceipt(
     }
 
     private static byte[] computeDigest(
+            int version,
             UUID receiptId,
             UUID playerId,
             UUID claimId,
@@ -330,7 +340,7 @@ public record PlayerInventoryDeliveryReceipt(
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) {
-                output.writeInt(VERSION);
+                output.writeInt(version);
                 writeUuid(output, receiptId);
                 writeUuid(output, playerId);
                 writeUuid(output, claimId);
@@ -358,6 +368,12 @@ public record PlayerInventoryDeliveryReceipt(
             throw new IllegalStateException(
                     "Unable to hash player inventory receipt", exception);
         }
+    }
+
+    private byte[] hashSlot(ItemStack stack) {
+        return version == LEGACY_VERSION
+                ? PlayerInventoryHashes.hashSlotLegacy(stack)
+                : PlayerInventoryHashes.hashSlot(stack);
     }
 
     private static void writeEndpoint(

@@ -4,7 +4,6 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -20,17 +19,16 @@ public final class PlayerInventoryInsertionPlan {
     private PlayerInventoryInsertionPlan(
             List<ItemStack> beforeSlots,
             List<ItemStack> afterSlots,
-            List<PlayerInventorySlotChange> changes,
-            byte[] beforeHash,
-            byte[] afterHash,
             int requestedCount,
             int insertedCount
     ) {
         this.beforeSlots = PlayerInventoryHashes.copySlots(beforeSlots);
         this.afterSlots = PlayerInventoryHashes.copySlots(afterSlots);
-        this.changes = List.copyOf(changes);
-        this.beforeHash = beforeHash.clone();
-        this.afterHash = afterHash.clone();
+        this.changes = changes(this.beforeSlots, this.afterSlots);
+        this.beforeHash = PlayerInventoryHashes.hashInventory(
+                this.beforeSlots);
+        this.afterHash = PlayerInventoryHashes.hashInventory(
+                this.afterSlots);
         this.requestedCount = requestedCount;
         this.insertedCount = insertedCount;
     }
@@ -78,18 +76,8 @@ public final class PlayerInventoryInsertionPlan {
             after.set(index, changed);
             remaining -= moved;
         }
-        List<PlayerInventorySlotChange> changes = new ArrayList<>();
-        for (int index = 0; index < after.size(); index++) {
-            byte[] beforeSlot = PlayerInventoryHashes.hashSlot(before.get(index));
-            byte[] afterSlot = PlayerInventoryHashes.hashSlot(after.get(index));
-            if (!PlayerInventoryHashes.equal(beforeSlot, afterSlot)) {
-                changes.add(new PlayerInventorySlotChange(
-                        index, beforeSlot, afterSlot));
-            }
-        }
-        return new PlayerInventoryInsertionPlan(before, after, changes,
-                PlayerInventoryHashes.hashInventory(before),
-                PlayerInventoryHashes.hashInventory(after), incoming.getCount(),
+        return new PlayerInventoryInsertionPlan(before, after,
+                incoming.getCount(),
                 incoming.getCount() - remaining);
     }
 
@@ -127,13 +115,11 @@ public final class PlayerInventoryInsertionPlan {
     }
 
     public boolean matchesBefore(Inventory inventory) {
-        return PlayerInventoryHashes.equal(beforeHash,
-                PlayerInventoryHashes.hashInventory(mainSlots(inventory)));
+        return matchesChangedSlots(mainSlots(inventory), true);
     }
 
     public boolean matchesAfter(Inventory inventory) {
-        return PlayerInventoryHashes.equal(afterHash,
-                PlayerInventoryHashes.hashInventory(mainSlots(inventory)));
+        return matchesChangedSlots(mainSlots(inventory), false);
     }
 
     public void apply(Inventory inventory) {
@@ -141,7 +127,7 @@ public final class PlayerInventoryInsertionPlan {
             throw new IllegalStateException(
                     "Player inventory no longer matches the delivery plan");
         }
-        replace(inventory, afterSlots);
+        replaceChanged(inventory, afterSlots);
     }
 
     public void restore(Inventory inventory) {
@@ -149,13 +135,51 @@ public final class PlayerInventoryInsertionPlan {
             throw new IllegalStateException(
                     "Player inventory cannot safely restore the delivery plan");
         }
-        replace(inventory, beforeSlots);
+        replaceChanged(inventory, beforeSlots);
     }
 
-    private static void replace(Inventory inventory, List<ItemStack> slots) {
-        for (int index = 0; index < PlayerInventoryHashes.MAIN_SLOT_COUNT; index++) {
-            inventory.items.set(index, slots.get(index).copy());
+    private void replaceChanged(
+            Inventory inventory,
+            List<ItemStack> slots
+    ) {
+        for (PlayerInventorySlotChange change : changes) {
+            int slot = change.slot();
+            inventory.items.set(slot, slots.get(slot).copy());
         }
         inventory.setChanged();
+    }
+
+    private boolean matchesChangedSlots(
+            List<ItemStack> slots,
+            boolean before
+    ) {
+        for (PlayerInventorySlotChange change : changes) {
+            byte[] expected = before
+                    ? change.beforeHash() : change.afterHash();
+            if (!PlayerInventoryHashes.equal(expected,
+                    PlayerInventoryHashes.hashSlot(
+                            slots.get(change.slot())))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<PlayerInventorySlotChange> changes(
+            List<ItemStack> before,
+            List<ItemStack> after
+    ) {
+        List<PlayerInventorySlotChange> changes = new ArrayList<>();
+        for (int index = 0; index < after.size(); index++) {
+            byte[] beforeSlot = PlayerInventoryHashes.hashSlot(
+                    before.get(index));
+            byte[] afterSlot = PlayerInventoryHashes.hashSlot(
+                    after.get(index));
+            if (!PlayerInventoryHashes.equal(beforeSlot, afterSlot)) {
+                changes.add(new PlayerInventorySlotChange(
+                        index, beforeSlot, afterSlot));
+            }
+        }
+        return List.copyOf(changes);
     }
 }

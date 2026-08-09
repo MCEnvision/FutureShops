@@ -44,11 +44,15 @@ class AdminShopOfferDurableReceiptTest {
                         new OfferValidationIssue(
                                 OfferValidationIssue.Severity.ERROR,
                                 "listings.0.listingId",
-                                "offer.identifier.invalid")), 2);
+                                "offer.identifier.invalid")), 2,
+                        List.of(listing("broken_offer"),
+                                listing("middle_offer"),
+                                listing("edited_offer")));
 
         assertEquals("outputs.0.componentId",
                 scoped.get(0).path());
-        assertEquals("catalog", scoped.get(1).path());
+        assertEquals("catalog.broken_offer.listingId",
+                scoped.get(1).path());
         assertEquals("offer.catalog.existing_invalid",
                 scoped.get(1).code());
     }

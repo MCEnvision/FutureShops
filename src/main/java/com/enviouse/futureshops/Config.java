@@ -186,6 +186,13 @@ public class Config {
         )
         .defineInRange("local_listings.scan_radius_blocks", 64, 0, 1024);
 
+    private static final ForgeConfigSpec.IntValue ADMIN_SHOP_MAXIMUM_LISTINGS = BUILDER
+        .comment(
+            "Maximum listings allowed in the admin shop catalog.",
+            "The default remains 512 for compatibility. The protocol hard limit is 10000."
+        )
+        .defineInRange("admin_shop.maximum_listings", 512, 1, 10000);
+
     public static final ForgeConfigSpec SPEC = BUILDER.build();
 
     private static volatile ModuleSettings moduleSettings = ModuleSettings.defaults();
@@ -229,6 +236,7 @@ public class Config {
 
     // Local Listings
     public static int localListingsScanRadiusBlocks = 64;
+    public static int adminShopMaximumListings = 512;
 
     public static ModuleSettings moduleSettings() {
         return moduleSettings;
@@ -301,6 +309,7 @@ public class Config {
                     eventsTransactionEnabled = EVENTS_TRANSACTION_ENABLED.get();
 
                     localListingsScanRadiusBlocks = LOCAL_LISTINGS_SCAN_RADIUS_BLOCKS.get();
+                    adminShopMaximumListings = ADMIN_SHOP_MAXIMUM_LISTINGS.get();
 
                     // A running server rebuilds the physical currency adapter.
                     // Initial loading waits for registered items and server startup.

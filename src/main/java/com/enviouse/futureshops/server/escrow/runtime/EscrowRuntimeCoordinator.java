@@ -26,6 +26,8 @@ import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemption
 import com.enviouse.futureshops.server.market.control.MarketControlMutation;
 import com.enviouse.futureshops.server.market.control.MarketControlMutationCodec;
 import com.enviouse.futureshops.server.market.control.MarketModuleStatus;
+import com.mojang.logging.LogUtils;
+import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -42,6 +44,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 public final class EscrowRuntimeCoordinator implements AutoCloseable {
+    private static final Logger LOGGER = LogUtils.getLogger();
     public static final int DEFAULT_RECOVERY_BATCH_SIZE = 256;
     public static final int MAX_RECOVERY_BATCH_SIZE = 10_000;
 
@@ -1148,6 +1151,10 @@ public final class EscrowRuntimeCoordinator implements AutoCloseable {
     private void enterMaintenance(Throwable cause) {
         if (failure == null) {
             failure = Objects.requireNonNull(cause, "cause");
+            LOGGER.error(
+                    "Escrow runtime entered maintenance. journal {}, state {}, recovery offset {}, expected sequence {}.",
+                    journalPath, state, recoveryOffset,
+                    recoveryExpectedSequence, cause);
         }
         state = EscrowRuntimeState.MAINTENANCE;
     }

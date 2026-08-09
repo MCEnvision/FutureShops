@@ -54,6 +54,17 @@ read only and reports the request, transaction state, participants, currency pro
 evidence phase, amount, claims, retry schedule, last error, and safe next action. Do not delete
 player data, escrow data, journals, checkpoints, or claims to clear a recovery banner.
 
+Cash claim delivery hashes item NBT canonically, including capability data, and verifies only the
+inventory slots changed by that delivery. Unrelated modded items can therefore normalize or change
+without turning a completed cash receipt into an unknown result. Version one receipts remain
+readable under their original hash contract.
+
+If the escrow runtime enters maintenance, use `/marketadmin maintenance status` and
+`/marketadmin maintenance verify`. Resume only with
+`/marketadmin maintenance resume confirm <reason>` after the verification reports both recovery
+clear and conservation verified. The command uses the current journal sequence and global state
+fingerprint. It cannot force past an unsafe condition.
+
 ## Built-in protected money
 
 `currency.provider = "futureshops"` mints `futureshops:money`. Every minted stack receives:

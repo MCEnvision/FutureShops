@@ -45,14 +45,12 @@ The Bazaar and Auction House are disabled on a new installation. Enable either m
 
 For 3.0 beta upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
 
-The issue 23 development artifact is `futureshops-3.0.0-beta.9.jar`. It includes the Server Shop sell
-payout and timed out cart recovery fixes from beta 4. It also completes the dependency alert audit,
-uses fixed MixinGradle and Foojay resolver releases, aligns the JUnit 6 test runtime, and rejects any
-build that bundles launcher supplied libraries inside the FutureShops JAR. Gradle remains pinned to
-8.14.4 because ForgeGradle does not support Gradle 9. Beta 7 also makes escrow lifecycle checks and
-their dependent value or replay operation explicitly atomic on the owning logical server thread.
-Beta 9 bounds exact item durability work. It remains a development artifact until the approved beta
-8 recovery repair is integrated and the combined branch is rebuilt and retested.
+The issue 23 development artifact is `futureshops-3.0.0-beta.10.jar`. It adds canonical inventory
+evidence for modded item capabilities, narrows delivery receipts to their changed slots, preserves
+version one receipt compatibility, exposes verified maintenance recovery commands, and adds admin
+shop validation and missing item quarantine. It also keeps the beta 9 exact item durability budget.
+This remains a development artifact until the approved earlier beta work is integrated and the
+combined branch is rebuilt and retested.
 
 Worlds previously opened with the incorrectly labeled `3.1.0-beta.1` build can report a Forge
 version difference when first opened with `3.0.0-beta.3`. This corrects the public artifact label
@@ -90,6 +88,11 @@ Common commands include:
 | `/atm` | Open physical currency controls |
 | `/marketadmin` | Inspect and control market runtime state |
 | `/marketadmin inspect <transactionId>` | Inspect one escrow recovery handle without changing it |
+| `/marketadmin maintenance status` | Inspect escrow maintenance and its blocking failure |
+| `/marketadmin maintenance verify` | Verify recovery, conservation, journal sequence, and fingerprint |
+| `/marketadmin maintenance resume confirm <reason>` | Resume writes only after every maintenance safety check passes |
+| `/marketadmin adminshop validate` | Report exact invalid admin shop listings and fields |
+| `/marketadmin adminshop quarantine_missing confirm <reason>` | Preserve and remove listings whose item registry entries are missing |
 
 See [Bulk inventory selling](docs/bulk-selling.md) and the [Auction House and Bazaar guide](docs/markets-guide.md) for player and administrator workflows.
 
@@ -104,6 +107,8 @@ FutureShops creates these files:
 * `config/futureshops/futureshops-client.toml` for presentation and accessibility.
 
 Server shop catalogs live in `config/futureshops/shops/`. Bazaar products live in `config/futureshops/bazaar/products/`.
+The common config setting `admin_shop.maximum_listings` defaults to 512 and accepts values from 1
+through 10000. The packet payload remains independently bounded.
 
 FutureShops creates `config/futureshops/shops/admin.json` during common mod setup, before a client opens a singleplayer world. Modpack developers can start the client once, edit that file, and ship the complete `config/futureshops/` directory as the pack's singleplayer Server Shop template. An integrated server reads this global client configuration. A remote multiplayer server ignores the client's copy and uses its own authoritative `config/futureshops/shops/` directory.
 

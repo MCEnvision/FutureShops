@@ -17,7 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class ServerShopOfferNetworkCodec {
-    public static final int MAX_LISTINGS = 512;
+    public static final int MAX_LISTINGS = 10_000;
     public static final int MAX_ENCODED_LISTING_BYTES = 1_048_576;
     public static final int MAX_ENCODED_CATALOG_BYTES = 1_048_576;
     private static final int MAX_COMPONENTS =

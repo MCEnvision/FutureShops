@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.catalog.offer;
 
+import com.enviouse.futureshops.Config;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -10,7 +11,7 @@ import java.util.Locale;
 
 public final class ServerShopOfferJsonParser {
     public static final int SCHEMA_VERSION = 2;
-    public static final int MAX_LISTINGS = 512;
+    public static final int MAX_LISTINGS = 10_000;
     private static final int MAX_NBT_TEXT_LENGTH = 65_536;
 
     private ServerShopOfferJsonParser() {
@@ -24,7 +25,9 @@ public final class ServerShopOfferJsonParser {
                             + schemaVersion);
         }
         JsonArray listings = requiredArray(root, "listings");
-        requireMaximum(listings, MAX_LISTINGS, "offer listings");
+        requireMaximum(listings,
+                Math.min(MAX_LISTINGS, Config.adminShopMaximumListings),
+                "offer listings");
         List<ServerShopOfferListing> parsed = new ArrayList<>();
         for (JsonElement element : listings) {
             if (!element.isJsonObject()) {

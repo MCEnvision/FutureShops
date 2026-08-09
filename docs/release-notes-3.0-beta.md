@@ -2,6 +2,17 @@
 
 FutureShops 3.0.0 beta replaces separate special case shop trades with one clear offer model. This is a beta build for Minecraft 1.20.1 and Forge 47.4.20. Client and server must use the same build because the network protocol is now 57.
 
+## Issue 23 ATM and catalog recovery
+
+* Modded item capability compounds use deterministic canonical evidence, so semantically equal copied stacks no longer reject ATM cash collection because of compound key order.
+* A delivery receipt verifies only the slots changed by that delivery. Unrelated inventory changes no longer create a false unknown result, while a changed delivery slot still fails closed.
+* Existing version one inventory delivery tokens and receipts remain readable under their original hash contract.
+* ATM claim rejection, request gate failure, and escrow maintenance entry now retain bounded recovery diagnostics in the server log.
+* `/marketadmin maintenance status`, `/marketadmin maintenance verify`, and `/marketadmin maintenance resume confirm <reason>` expose the existing verified and journaled maintenance recovery workflow.
+* `admin_shop.maximum_listings` defaults to 512 and can be configured up to the hard limit of 10000.
+* `/marketadmin adminshop validate` identifies exact invalid listings and fields. `/marketadmin adminshop quarantine_missing confirm <reason>` preserves complete removed mod listings in a recovery file before updating and reloading the active catalog.
+* The development artifact and metadata version is `3.0.0-beta.10`.
+
 ## Exact item delivery maintenance
 
 * Large purchases no longer deliver dozens of exact item claims and force dozens of player saves in one server tick.

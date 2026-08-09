@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.catalog;
 
+import com.enviouse.futureshops.Config;
 import com.enviouse.futureshops.catalog.offer.OfferValidationIssue;
 import com.enviouse.futureshops.catalog.offer.OfferValidationResult;
 import com.enviouse.futureshops.catalog.offer.ServerShopOfferCatalogValidator;
@@ -113,6 +114,14 @@ public final class AdminShopOfferConfigWriter {
             }
             case REMOVE -> current.remove(currentIndex);
         }
+        if (current.size() > Config.adminShopMaximumListings) {
+            return SaveResult.failure(Status.INVALID,
+                    normalized == null ? 0L : normalized.revision(),
+                    List.of(new OfferValidationIssue(
+                            OfferValidationIssue.Severity.ERROR,
+                            "catalog.listings",
+                            "offer.catalog.too_many_listings")));
+        }
         OfferValidationResult validation =
                 ServerShopOfferCatalogValidator.validate(
                         current,
@@ -129,7 +138,7 @@ public final class AdminShopOfferConfigWriter {
             };
             return SaveResult.failure(Status.INVALID,
                     normalized == null ? 0L : normalized.revision(),
-                    editorIssues(validation.issues(), editedIndex));
+                    editorIssues(validation.issues(), editedIndex, current));
         }
         Path path = ShopDefinitionLoader.adminShopPath();
         JsonObject root = AdminShopConfigWriter.readRoot(path);
@@ -381,12 +390,13 @@ public final class AdminShopOfferConfigWriter {
 
     static List<OfferValidationIssue> editorIssues(
             List<OfferValidationIssue> issues,
-            int editedIndex
+            int editedIndex,
+            List<ServerShopOfferListing> listings
     ) {
         List<OfferValidationIssue> scoped = new ArrayList<>();
         String prefix = editedIndex < 0
                 ? "" : "listings." + editedIndex + ".";
-        boolean otherListingInvalid = false;
+        OfferValidationIssue otherListingInvalid = null;
         for (OfferValidationIssue issue : issues) {
             if (!prefix.isEmpty() && issue.path().startsWith(prefix)) {
                 scoped.add(new OfferValidationIssue(
@@ -394,16 +404,45 @@ public final class AdminShopOfferConfigWriter {
                         issue.path().substring(prefix.length()),
                         issue.code()));
             } else if (issue.severity()
-                    == OfferValidationIssue.Severity.ERROR) {
-                otherListingInvalid = true;
+                    == OfferValidationIssue.Severity.ERROR
+                    && otherListingInvalid == null) {
+                otherListingInvalid = issue;
             }
         }
-        if (otherListingInvalid) {
+        if (otherListingInvalid != null) {
+            String detail = existingListingDetail(
+                    otherListingInvalid, listings);
             scoped.add(new OfferValidationIssue(
                     OfferValidationIssue.Severity.ERROR,
-                    "catalog", "offer.catalog.existing_invalid"));
+                    "catalog." + detail,
+                    "offer.catalog.existing_invalid"));
         }
         return List.copyOf(scoped);
+    }
+
+    private static String existingListingDetail(
+            OfferValidationIssue issue,
+            List<ServerShopOfferListing> listings
+    ) {
+        String path = issue.path();
+        if (!path.startsWith("listings.")) {
+            return path;
+        }
+        int indexStart = "listings.".length();
+        int indexEnd = path.indexOf('.', indexStart);
+        if (indexEnd < 0) {
+            return path;
+        }
+        try {
+            int index = Integer.parseInt(
+                    path.substring(indexStart, indexEnd));
+            if (index >= 0 && index < listings.size()) {
+                return listings.get(index).listingId()
+                        + path.substring(indexEnd);
+            }
+        } catch (NumberFormatException ignored) {
+        }
+        return path;
     }
 
     private static boolean knownItem(String itemId) {

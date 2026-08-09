@@ -123,6 +123,12 @@ public final class AtmService {
                 ServerRequestSecurityManager.tryAcquire(
                         player, ServerRequestAction.ATM_CASH_COLLECTION);
         if (!gate.allowed()) {
+            if (gate.status()
+                    != ServerRequestSecurityManager.GateStatus.RATE_LIMITED) {
+                LOGGER.warn(
+                        "ATM cash collection was rejected by the request gate. player {}, request {}, status {}.",
+                        player.getUUID(), requestId, gate.status());
+            }
             sendCashCollectionRejection(player, requestId, gate);
             return;
         }

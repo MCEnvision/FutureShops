@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 public record PlayerInventoryDeliveryToken(
+        int version,
         UUID playerId,
         UUID claimId,
         UUID transactionId,
@@ -25,10 +26,15 @@ public record PlayerInventoryDeliveryToken(
         byte[] digest
 ) {
     private static final int MAGIC = 0x50494454;
-    private static final int VERSION = 1;
+    static final int LEGACY_VERSION = 1;
+    static final int CURRENT_VERSION = 2;
     private static final int MAX_ENCODED_BYTES = 512;
 
     public PlayerInventoryDeliveryToken {
+        if (version < LEGACY_VERSION || version > CURRENT_VERSION) {
+            throw new IllegalArgumentException(
+                    "Player inventory delivery token version is invalid");
+        }
         Objects.requireNonNull(playerId, "playerId");
         Objects.requireNonNull(claimId, "claimId");
         Objects.requireNonNull(transactionId, "transactionId");
@@ -42,7 +48,8 @@ public record PlayerInventoryDeliveryToken(
         afterInventoryHash = cloneHash(
                 afterInventoryHash, "afterInventoryHash");
         digest = cloneHash(digest, "digest");
-        byte[] expected = digest(playerId, claimId, transactionId, batchId,
+        byte[] expected = digest(version, playerId, claimId,
+                transactionId, batchId,
                 lotId, receiptId, requestKeyHash, assetFingerprint,
                 beforeInventoryHash, afterInventoryHash);
         if (!PlayerInventoryHashes.equal(expected, digest)) {
@@ -62,15 +69,52 @@ public record PlayerInventoryDeliveryToken(
             byte[] beforeInventoryHash,
             byte[] afterInventoryHash
     ) {
+        return create(CURRENT_VERSION, playerId, claimId,
+                transactionId, batchId, lotId, requestKey,
+                assetFingerprint, beforeInventoryHash,
+                afterInventoryHash);
+    }
+
+    static PlayerInventoryDeliveryToken createLegacy(
+            UUID playerId,
+            UUID claimId,
+            UUID transactionId,
+            UUID batchId,
+            UUID lotId,
+            String requestKey,
+            byte[] assetFingerprint,
+            byte[] beforeInventoryHash,
+            byte[] afterInventoryHash
+    ) {
+        return create(LEGACY_VERSION, playerId, claimId,
+                transactionId, batchId, lotId, requestKey,
+                assetFingerprint, beforeInventoryHash,
+                afterInventoryHash);
+    }
+
+    private static PlayerInventoryDeliveryToken create(
+            int version,
+            UUID playerId,
+            UUID claimId,
+            UUID transactionId,
+            UUID batchId,
+            UUID lotId,
+            String requestKey,
+            byte[] assetFingerprint,
+            byte[] beforeInventoryHash,
+            byte[] afterInventoryHash
+    ) {
         Objects.requireNonNull(requestKey, "requestKey");
         UUID receiptId = UUID.nameUUIDFromBytes((
                 "futureshops player inventory receipt " + batchId)
                 .getBytes(StandardCharsets.UTF_8));
         byte[] requestHash = PlayerInventoryHashes.hashText(requestKey);
-        byte[] tokenDigest = digest(playerId, claimId, transactionId, batchId,
+        byte[] tokenDigest = digest(version, playerId, claimId,
+                transactionId, batchId,
                 lotId, receiptId, requestHash, assetFingerprint,
                 beforeInventoryHash, afterInventoryHash);
-        return new PlayerInventoryDeliveryToken(playerId, claimId,
+        return new PlayerInventoryDeliveryToken(version,
+                playerId, claimId,
                 transactionId, batchId, lotId, receiptId, requestHash,
                 assetFingerprint, beforeInventoryHash, afterInventoryHash,
                 tokenDigest);
@@ -81,7 +125,7 @@ public record PlayerInventoryDeliveryToken(
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) {
                 output.writeInt(MAGIC);
-                output.writeInt(VERSION);
+                output.writeInt(version);
                 writeUuid(output, playerId);
                 writeUuid(output, claimId);
                 writeUuid(output, transactionId);
@@ -123,12 +167,18 @@ public record PlayerInventoryDeliveryToken(
         }
         try (DataInputStream input = new DataInputStream(
                 new ByteArrayInputStream(encoded))) {
-            if (input.readInt() != MAGIC || input.readInt() != VERSION) {
+            if (input.readInt() != MAGIC) {
+                throw new IllegalArgumentException(
+                        "Player inventory delivery token version is invalid");
+            }
+            int version = input.readInt();
+            if (version < LEGACY_VERSION || version > CURRENT_VERSION) {
                 throw new IllegalArgumentException(
                         "Player inventory delivery token version is invalid");
             }
             PlayerInventoryDeliveryToken result =
                     new PlayerInventoryDeliveryToken(
+                            version,
                             readUuid(input), readUuid(input), readUuid(input),
                             readUuid(input), readUuid(input), readUuid(input),
                             input.readNBytes(PlayerInventoryHashes.HASH_BYTES),
@@ -184,7 +234,8 @@ public record PlayerInventoryDeliveryToken(
         if (!(object instanceof PlayerInventoryDeliveryToken other)) {
             return false;
         }
-        return playerId.equals(other.playerId)
+        return version == other.version
+                && playerId.equals(other.playerId)
                 && claimId.equals(other.claimId)
                 && transactionId.equals(other.transactionId)
                 && batchId.equals(other.batchId)
@@ -201,7 +252,8 @@ public record PlayerInventoryDeliveryToken(
 
     @Override
     public int hashCode() {
-        int result = Objects.hash(playerId, claimId, transactionId, batchId,
+        int result = Objects.hash(version, playerId, claimId,
+                transactionId, batchId,
                 lotId, receiptId);
         result = 31 * result + Arrays.hashCode(requestKeyHash);
         result = 31 * result + Arrays.hashCode(assetFingerprint);
@@ -211,6 +263,7 @@ public record PlayerInventoryDeliveryToken(
     }
 
     private static byte[] digest(
+            int version,
             UUID playerId,
             UUID claimId,
             UUID transactionId,
@@ -226,7 +279,7 @@ public record PlayerInventoryDeliveryToken(
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) {
                 output.writeInt(MAGIC);
-                output.writeInt(VERSION);
+                output.writeInt(version);
                 writeUuid(output, playerId);
                 writeUuid(output, claimId);
                 writeUuid(output, transactionId);

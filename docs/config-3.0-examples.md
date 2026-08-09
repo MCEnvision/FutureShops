@@ -85,6 +85,11 @@ valid settings snapshot stays active and the server log reports the rejected fie
 	# Vanilla operator fallback for market administration nodes.
 	market_admin_op_level = 2
 
+[admin_shop]
+	# Maximum normalized listings in config/futureshops/shops/admin.json.
+	# Defaults to 512. Valid range is 1 through 10000.
+	maximum_listings = 512
+
 [currency]
 	# Physical item layer used by /withdraw, /deposit, and the ATM.
 	# "futureshops" (protected, default), "apocalypsenow" (preset), or "custom".
