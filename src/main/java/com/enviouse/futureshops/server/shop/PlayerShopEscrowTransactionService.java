@@ -58,7 +58,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HexFormat;
@@ -2943,8 +2942,7 @@ final class PlayerShopEscrowTransactionService {
         ItemStack b = second.copy();
         a.setCount(1);
         b.setCount(1);
-        return Arrays.equals(ItemStackSnapshotCodec.encode(a),
-                ItemStackSnapshotCodec.encode(b));
+        return ItemStackSnapshotCodec.sameIdentity(a, b);
     }
 
     private record Expected(

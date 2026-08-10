@@ -334,8 +334,8 @@ public record ServerShopBarterCommit(
                 encoded, "exactItemTemplate").clone();
         ItemStack stack = ItemStackSnapshotCodec.decode(copy);
         if (stack.getCount() != 1
-                || !Arrays.equals(copy, ItemStackSnapshotCodec.encode(
-                stack))) {
+                || !ItemStackSnapshotCodec.snapshotMatchesIdentity(copy,
+                stack)) {
             throw new IllegalArgumentException(
                     "Server shop barter item template is not canonical");
         }
@@ -358,8 +358,8 @@ public record ServerShopBarterCommit(
                 return false;
             }
             stack.setCount(1);
-            return Arrays.equals(template,
-                    ItemStackSnapshotCodec.encode(stack));
+            return ItemStackSnapshotCodec.snapshotMatchesIdentity(
+                    template, stack);
         } catch (RuntimeException exception) {
             return false;
         }

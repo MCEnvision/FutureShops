@@ -335,6 +335,14 @@ Read the first validation error in the server log. The loader rejects the whole 
 
 Preserve the world and logs. Read the first causal recovery error and run `/marketadmin maintenance status`, then `/marketadmin maintenance verify`. If verification reports recovery clear and conservation verified, run `/marketadmin maintenance resume confirm <reason>`. The resume is journaled and audited. It refuses unhealthy journal lineage, unresolved recovery, manual review, or failed conservation. Do not delete state files. Restore one complete consistent backup if lineage or schema validation cannot be resolved in place.
 
+Beta 11 accepts intact legacy exact item inventory intents whose serialized NBT compound key order
+changes after decoding. Legacy slot hashes are checked against the original evidence bytes rather
+than a normalized copy. Complete item tag and Forge capability data remain part of custody identity.
+If beta 10 persisted maintenance after rejecting one of these intents, beta 11 first loads and
+aligns the journal. The operator can then use the normal verify and resume commands above. There is
+no force clear command because clearing maintenance without conservation proof would make recovery
+state unauditable.
+
 ### Admin shop cannot be edited after a mod is removed
 
 Run `/marketadmin adminshop validate`. The output identifies the listing, missing item identifier, JSON field path, and validation code. Fix the source JSON manually, or preserve and remove only missing item listings with `/marketadmin adminshop quarantine_missing confirm <reason>`. Recovery JSON is written below `config/futureshops/shops/recovery/`. Parse errors, duplicate listing identifiers, invalid NBT, and unrelated validation failures still require a deliberate edit.

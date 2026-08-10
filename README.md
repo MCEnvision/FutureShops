@@ -45,12 +45,15 @@ The Bazaar and Auction House are disabled on a new installation. Enable either m
 
 For 3.0 beta upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
 
-The issue 23 development artifact is `futureshops-3.0.0-beta.10.jar`. It adds canonical inventory
-evidence for modded item capabilities, narrows delivery receipts to their changed slots, preserves
-version one receipt compatibility, exposes verified maintenance recovery commands, and adds admin
-shop validation and missing item quarantine. It also keeps the beta 9 exact item durability budget.
-This remains a development artifact until the approved earlier beta work is integrated and the
-combined branch is rebuilt and retested.
+The issue 23 development artifact is `futureshops-3.0.0-beta.11.jar`. It keeps the beta 10 ATM and
+catalog recovery work and repairs startup compatibility for legacy exact item inventory intents.
+Persisted slot proofs are validated from their original serialized evidence, while live item
+comparisons use complete semantic NBT including Forge capabilities. New plans derive their hashes
+and evidence from one owned snapshot per slot. The repair does not clear maintenance state or
+discard escrow evidence. A world that recorded maintenance during beta 10 can use the verified
+maintenance resume command after beta 11 loads and aligns the journal. This remains a development
+artifact until the reporter's backed up dedicated server passes startup, purchase, restart, and
+recovery testing.
 
 Worlds previously opened with the incorrectly labeled `3.1.0-beta.1` build can report a Forge
 version difference when first opened with `3.0.0-beta.3`. This corrects the public artifact label

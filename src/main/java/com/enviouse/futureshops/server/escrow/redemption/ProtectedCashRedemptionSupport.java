@@ -30,7 +30,6 @@ import java.security.NoSuchAlgorithmException;
 import java.time.DateTimeException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -593,7 +592,8 @@ final class ProtectedCashRedemptionSupport {
                 || stack.getItem() != ModItems.MONEY_ITEM.get()
                 || !registryId.equals(Futureshops.MODID + ":money")
                 || stack.getCount() != portion.originalStackCount()
-                || !Arrays.equals(encoded, ItemStackSnapshotCodec.encode(stack))) {
+                || !ItemStackSnapshotCodec.snapshotMatchesIdentity(
+                encoded, stack)) {
             throw new IllegalArgumentException(
                     "Protected cash stack is not registered protected money");
         }

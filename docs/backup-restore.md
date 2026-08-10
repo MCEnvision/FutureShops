@@ -196,6 +196,12 @@ FutureShops state from one consistent snapshot.
    `/marketadmin maintenance resume confirm <reason>`. If verification refuses, preserve the
    current files and resolve the reported condition or restore the complete matching backup.
 
+Worlds that first entered maintenance under `3.0.0-beta.10` because an intact legacy exact item
+intent failed slot evidence validation should be retried with `3.0.0-beta.11` before restoring an
+older snapshot. Beta 11 validates the legacy hash against its original evidence bytes and keeps
+complete item tag and Forge capability identity. After the journal loads, use the same verify and
+resume commands above. Never delete or force clear the maintenance record.
+
 Be aware of what a restore means economically: escrow guarantees the restored state is internally
 consistent, but everything after the snapshot — sales, bids, fills, deposits — is gone for all
 players equally. Restores are for disaster recovery, not for undoing individual trades; for those,

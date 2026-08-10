@@ -19,6 +19,54 @@ public final class ItemStackSnapshotCodec {
     private ItemStackSnapshotCodec() {
     }
 
+    public static boolean sameIdentity(ItemStack first, ItemStack second) {
+        Objects.requireNonNull(first, "first");
+        Objects.requireNonNull(second, "second");
+        if (first.isEmpty() || second.isEmpty()) {
+            return first.isEmpty() && second.isEmpty();
+        }
+        return first.save(new CompoundTag()).equals(
+                second.save(new CompoundTag()));
+    }
+
+    public static boolean snapshotMatchesIdentity(
+            byte[] snapshot,
+            ItemStack stack
+    ) {
+        Objects.requireNonNull(snapshot, "snapshot");
+        Objects.requireNonNull(stack, "stack");
+        if (snapshot.length == 0 || stack.isEmpty()) {
+            return snapshot.length == 0 && stack.isEmpty();
+        }
+        try {
+            CompoundTag tag = readTag(snapshot);
+            return !ItemStack.of(tag).isEmpty()
+                    && tag.equals(stack.save(new CompoundTag()));
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    public static boolean snapshotsSameIdentity(
+            byte[] first,
+            byte[] second
+    ) {
+        Objects.requireNonNull(first, "first");
+        Objects.requireNonNull(second, "second");
+        if (first.length == 0 || second.length == 0) {
+            return first.length == 0 && second.length == 0;
+        }
+        try {
+            CompoundTag firstTag = readTag(first);
+            CompoundTag secondTag = readTag(second);
+            return !ItemStack.of(firstTag).isEmpty()
+                    && !ItemStack.of(secondTag).isEmpty()
+                    && firstTag.equals(secondTag);
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
     public static byte[] encode(ItemStack stack) {
         Objects.requireNonNull(stack, "stack");
         if (stack.isEmpty() || stack.getCount() <= 0
@@ -49,6 +97,16 @@ public final class ItemStackSnapshotCodec {
     }
 
     public static ItemStack decode(byte[] encoded) {
+        CompoundTag tag = readTag(encoded);
+        ItemStack stack = ItemStack.of(tag);
+        if (stack.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Item stack snapshot resolved empty");
+        }
+        return stack;
+    }
+
+    private static CompoundTag readTag(byte[] encoded) {
         Objects.requireNonNull(encoded, "encoded");
         if (encoded.length == 0 || encoded.length > MAXIMUM_BYTES) {
             throw new IllegalArgumentException(
@@ -63,12 +121,7 @@ public final class ItemStackSnapshotCodec {
                 throw new IllegalArgumentException(
                         "Item stack snapshot NBT is invalid");
             }
-            ItemStack stack = ItemStack.of(tag);
-            if (stack.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "Item stack snapshot resolved empty");
-            }
-            return stack;
+            return tag;
         } catch (IOException | RuntimeException exception) {
             if (exception instanceof IllegalArgumentException invalid) {
                 throw invalid;

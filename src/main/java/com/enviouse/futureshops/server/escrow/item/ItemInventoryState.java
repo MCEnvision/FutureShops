@@ -10,12 +10,15 @@ import java.util.Objects;
 
 public final class ItemInventoryState {
     private final List<ItemStack> accessibleSlots;
+    private final List<byte[]> accessibleSnapshots;
     private final byte[] inventoryHash;
 
     private ItemInventoryState(List<ItemStack> accessibleSlots) {
         this.accessibleSlots = ItemInventoryHashes.copySlots(accessibleSlots);
-        this.inventoryHash = ItemInventoryHashes.hashInventory(
+        this.accessibleSnapshots = ItemInventoryHashes.snapshots(
                 this.accessibleSlots);
+        this.inventoryHash = ItemInventoryHashes.hashInventorySnapshots(
+                this.accessibleSnapshots);
     }
 
     public static ItemInventoryState of(
@@ -69,9 +72,14 @@ public final class ItemInventoryState {
     }
 
     public byte[] slotHash(ItemInventorySlot slot) {
-        return ItemInventoryHashes.hashSlot(
-                accessibleSlots.get(Objects.requireNonNull(slot, "slot")
+        return ItemInventoryHashes.hashSlotSnapshot(
+                accessibleSnapshots.get(Objects.requireNonNull(slot, "slot")
                         .logicalIndex()));
+    }
+
+    public byte[] slotSnapshot(ItemInventorySlot slot) {
+        return accessibleSnapshots.get(Objects.requireNonNull(slot, "slot")
+                .logicalIndex()).clone();
     }
 
     public static boolean stackMatchesHash(
@@ -81,6 +89,14 @@ public final class ItemInventoryState {
         Objects.requireNonNull(stack, "stack");
         return ItemInventoryHashes.equal(
                 ItemInventoryHashes.hashSlot(stack), expectedHash);
+    }
+
+    public static boolean snapshotMatchesHash(
+            byte[] snapshot,
+            byte[] expectedHash
+    ) {
+        return ItemInventoryHashes.equal(
+                ItemInventoryHashes.hashSlotSnapshot(snapshot), expectedHash);
     }
 
     public boolean matchesInventoryHash(byte[] expectedHash) {
@@ -102,17 +118,9 @@ public final class ItemInventoryState {
                 other.inventoryHash)) {
             return false;
         }
-        for (int index = 0; index < accessibleSlots.size(); index++) {
-            ItemStack first = accessibleSlots.get(index);
-            ItemStack second = other.accessibleSlots.get(index);
-            if (first.isEmpty() != second.isEmpty()) {
-                return false;
-            }
-            if (!first.isEmpty() && !Arrays.equals(
-                    com.enviouse.futureshops.money.ItemStackSnapshotCodec
-                            .encode(first),
-                    com.enviouse.futureshops.money.ItemStackSnapshotCodec
-                            .encode(second))) {
+        for (int index = 0; index < accessibleSnapshots.size(); index++) {
+            if (!Arrays.equals(accessibleSnapshots.get(index),
+                    other.accessibleSnapshots.get(index))) {
                 return false;
             }
         }

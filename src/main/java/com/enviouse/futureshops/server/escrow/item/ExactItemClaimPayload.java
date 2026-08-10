@@ -154,8 +154,8 @@ public final class ExactItemClaimPayload {
                     ItemStackSnapshotEvidence.registryId(stack))
                     || !registryItemId.equals(
                     ItemStackSnapshotEvidence.registryId(template))
-                    || !Arrays.equals(serializedStackSnapshot,
-                    ItemStackSnapshotCodec.encode(stack))
+                    || !ItemStackSnapshotCodec.snapshotMatchesIdentity(
+                    serializedStackSnapshot, stack)
                     || !Arrays.equals(canonicalOneCountTemplate,
                     ItemStackSnapshotEvidence.canonicalOneCountSnapshot(
                             serializedStackSnapshot))) {

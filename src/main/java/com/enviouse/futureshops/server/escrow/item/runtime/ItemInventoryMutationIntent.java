@@ -71,9 +71,9 @@ public final class ItemInventoryMutationIntent {
         List<ItemInventorySlotMutationEvidence> evidence = new ArrayList<>(
                 plan.changes().size());
         for (ItemInventorySlotChange change : plan.changes()) {
-            evidence.add(ItemInventorySlotMutationEvidence.capture(
-                    change.slot(), plan.before().stack(change.slot()),
-                    plan.after().stack(change.slot())));
+            evidence.add(ItemInventorySlotMutationEvidence.captureSnapshots(
+                    change.slot(), plan.before().slotSnapshot(change.slot()),
+                    plan.after().slotSnapshot(change.slot())));
         }
         return new ItemInventoryMutationIntent(token, plannedReceipt,
                 evidence);

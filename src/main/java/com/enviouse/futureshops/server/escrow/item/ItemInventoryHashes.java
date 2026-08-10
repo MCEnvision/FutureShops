@@ -21,13 +21,19 @@ final class ItemInventoryHashes {
 
     static byte[] hashInventory(List<ItemStack> slots) {
         requireSlots(slots);
+        return hashInventorySnapshots(slots.stream()
+                .map(ItemInventoryHashes::snapshot).toList());
+    }
+
+    static byte[] hashInventorySnapshots(List<byte[]> snapshots) {
+        requireSnapshots(snapshots);
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             DataOutputStream output = new DataOutputStream(bytes);
             output.writeInt(1);
-            output.writeInt(slots.size());
-            for (int index = 0; index < slots.size(); index++) {
-                byte[] snapshot = slotBytes(slots.get(index));
+            output.writeInt(snapshots.size());
+            for (int index = 0; index < snapshots.size(); index++) {
+                byte[] snapshot = slotBytes(snapshots.get(index));
                 output.writeInt(ItemInventorySlot.fromLogicalIndex(index)
                         .serializedSlot());
                 output.writeInt(snapshot.length);
@@ -42,7 +48,11 @@ final class ItemInventoryHashes {
     }
 
     static byte[] hashSlot(ItemStack stack) {
-        return sha256(slotBytes(stack));
+        return hashSlotSnapshot(snapshot(stack));
+    }
+
+    static byte[] hashSlotSnapshot(byte[] snapshot) {
+        return sha256(slotBytes(snapshot));
     }
 
     static byte[] sha256(byte[] value) {
@@ -101,12 +111,24 @@ final class ItemInventoryHashes {
         return stack.isEmpty() ? ItemStack.EMPTY : stack.copy();
     }
 
-    private static byte[] slotBytes(ItemStack stack) {
+    static List<byte[]> snapshots(List<ItemStack> slots) {
+        requireSlots(slots);
+        return slots.stream().map(ItemInventoryHashes::snapshot).toList();
+    }
+
+    private static byte[] snapshot(ItemStack stack) {
         Objects.requireNonNull(stack, "stack");
         if (stack.isEmpty()) {
+            return new byte[0];
+        }
+        return ItemStackSnapshotCodec.encode(stack);
+    }
+
+    private static byte[] slotBytes(byte[] snapshot) {
+        byte[] encoded = Objects.requireNonNull(snapshot, "snapshot");
+        if (encoded.length == 0) {
             return new byte[]{0};
         }
-        byte[] encoded = ItemStackSnapshotCodec.encode(stack);
         byte[] value = new byte[Math.addExact(encoded.length, 1)];
         value[0] = 1;
         System.arraycopy(encoded, 0, value, 1, encoded.length);
@@ -119,6 +141,15 @@ final class ItemInventoryHashes {
                 || slots.stream().anyMatch(Objects::isNull)) {
             throw new IllegalArgumentException(
                     "Item inventory must contain main inventory and offhand");
+        }
+    }
+
+    private static void requireSnapshots(List<byte[]> snapshots) {
+        Objects.requireNonNull(snapshots, "snapshots");
+        if (snapshots.size() != ItemInventorySlot.ACCESSIBLE_SLOT_COUNT
+                || snapshots.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException(
+                    "Item inventory snapshots must contain main inventory and offhand");
         }
     }
 }

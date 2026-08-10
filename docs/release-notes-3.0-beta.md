@@ -4,6 +4,10 @@ FutureShops 3.0.0 beta replaces separate special case shop trades with one clear
 
 ## Issue 23 ATM and catalog recovery
 
+* Legacy exact item inventory intents now validate their slot hashes from the exact serialized evidence that originally created the token. A decode and reencode cycle cannot invalidate an otherwise intact checkpoint.
+* Exact item comparisons treat compound key order as irrelevant while preserving registry ID, count, item tag, Forge capability data, list order, and primitive values.
+* New item inventory plans derive slot hashes and journal evidence from the same owned snapshots, preventing defensive copies from producing different proofs for one mutation.
+* The unsafe force clear path proposed in the supplied combined patch is intentionally excluded. Maintenance still requires journal alignment, conservation verification, permission, confirmation, reason, and a durable audit record.
 * Modded item capability compounds use deterministic canonical evidence, so semantically equal copied stacks no longer reject ATM cash collection because of compound key order.
 * A delivery receipt verifies only the slots changed by that delivery. Unrelated inventory changes no longer create a false unknown result, while a changed delivery slot still fails closed.
 * Existing version one inventory delivery tokens and receipts remain readable under their original hash contract.
@@ -11,7 +15,7 @@ FutureShops 3.0.0 beta replaces separate special case shop trades with one clear
 * `/marketadmin maintenance status`, `/marketadmin maintenance verify`, and `/marketadmin maintenance resume confirm <reason>` expose the existing verified and journaled maintenance recovery workflow.
 * `admin_shop.maximum_listings` defaults to 512 and can be configured up to the hard limit of 10000.
 * `/marketadmin adminshop validate` identifies exact invalid listings and fields. `/marketadmin adminshop quarantine_missing confirm <reason>` preserves complete removed mod listings in a recovery file before updating and reloading the active catalog.
-* The development artifact and metadata version is `3.0.0-beta.10`.
+* The development artifact and metadata version is `3.0.0-beta.11`.
 
 ## Exact item delivery maintenance
 

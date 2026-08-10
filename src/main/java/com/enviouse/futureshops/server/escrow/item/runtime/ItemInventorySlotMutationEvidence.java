@@ -39,6 +39,14 @@ public final class ItemInventorySlotMutationEvidence
                 encode(before), encode(after));
     }
 
+    static ItemInventorySlotMutationEvidence captureSnapshots(
+            ItemInventorySlot slot,
+            byte[] before,
+            byte[] after
+    ) {
+        return new ItemInventorySlotMutationEvidence(slot, before, after);
+    }
+
     public ItemInventorySlot slot() {
         return slot;
     }
@@ -71,10 +79,8 @@ public final class ItemInventorySlotMutationEvidence
             byte[] expectedBeforeHash,
             byte[] expectedAfterHash
     ) {
-        return ItemInventoryState.stackMatchesHash(
-                beforeStack(), expectedBeforeHash)
-                && ItemInventoryState.stackMatchesHash(
-                afterStack(), expectedAfterHash);
+        return hashMatches(beforeSnapshot, expectedBeforeHash)
+                && hashMatches(afterSnapshot, expectedAfterHash);
     }
 
     @Override
@@ -118,8 +124,8 @@ public final class ItemInventorySlotMutationEvidence
         if (copied.length != 0) {
             ItemStack decoded = ItemStackSnapshotCodec.decode(copied);
             if (decoded.isEmpty()
-                    || !Arrays.equals(copied,
-                    ItemStackSnapshotCodec.encode(decoded))) {
+                    || !ItemStackSnapshotCodec.snapshotMatchesIdentity(
+                    copied, decoded)) {
                 throw new IllegalArgumentException(
                         "Item inventory slot snapshot is not canonical");
             }
@@ -135,18 +141,16 @@ public final class ItemInventorySlotMutationEvidence
         if (stack.isEmpty()) {
             return false;
         }
-        try {
-            return Arrays.equals(snapshot,
-                    ItemStackSnapshotCodec.encode(stack));
-        } catch (RuntimeException exception) {
-            return false;
-        }
+        return ItemStackSnapshotCodec.snapshotMatchesIdentity(snapshot, stack);
     }
 
     private static boolean sameStack(ItemStack first, ItemStack second) {
         return first.isEmpty() && second.isEmpty()
                 || !first.isEmpty() && !second.isEmpty()
-                && Arrays.equals(ItemStackSnapshotCodec.encode(first),
-                ItemStackSnapshotCodec.encode(second));
+                && ItemStackSnapshotCodec.sameIdentity(first, second);
+    }
+
+    private static boolean hashMatches(byte[] snapshot, byte[] expectedHash) {
+        return ItemInventoryState.snapshotMatchesHash(snapshot, expectedHash);
     }
 }

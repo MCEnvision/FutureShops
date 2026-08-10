@@ -442,8 +442,8 @@ public record ServerShopSellCommit(
                 encoded, "exactItemTemplate").clone();
         ItemStack stack = ItemStackSnapshotCodec.decode(copy);
         if (stack.getCount() != 1
-                || !Arrays.equals(copy, ItemStackSnapshotCodec.encode(
-                stack))) {
+                || !ItemStackSnapshotCodec.snapshotMatchesIdentity(copy,
+                stack)) {
             throw new IllegalArgumentException(
                     "Server shop sell item template is not canonical");
         }
@@ -467,8 +467,8 @@ public record ServerShopSellCommit(
                 return false;
             }
             actual.setCount(1);
-            return Arrays.equals(expectedTemplate,
-                    ItemStackSnapshotCodec.encode(actual));
+            return ItemStackSnapshotCodec.snapshotMatchesIdentity(
+                    expectedTemplate, actual);
         } catch (RuntimeException exception) {
             return false;
         }

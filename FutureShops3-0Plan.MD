@@ -1537,7 +1537,56 @@ Large admin shops need an operator controlled catalog ceiling and a recovery pat
 
 This issue 23 maintenance extension targets `3.0.0-beta.10`. It remains isolated from concurrent issue work and must not merge or publish until the earlier beta phase is integrated. Completion requires focused tests, the complete unit suite, data validation, relevant GameTests, the full build, dedicated server and client startup, multiplayer and reconnect checks for ATM receipt proof, final JAR inspection, and the reporter's Windows dedicated server confirmation.
 
-The source blockers described above are implemented. The focused issue 23 tests, complete unit suite, data generation, all five required GameTests including `atm_multiplayer`, packaged dependency checks, full build, final JAR inspection, and standalone dedicated server startup pass on Java 17. The final safety review also confirms that applying or restoring a delivery plan writes only its changed slots, so unrelated inventory changes are neither rejected nor overwritten. A fresh client smoke attempt prepared the Forge client run but the shared verification host exhausted memory before Minecraft started. Release approval still requires a successful client startup and the reporter's Windows dedicated server multiplayer, reconnect, restart, and fault drills from the matrix above.
+The source blockers described above are implemented. The focused issue 23 tests, complete unit suite, data generation, all five required GameTests including `atm_multiplayer`, packaged dependency checks, full build, final JAR inspection, standalone dedicated server startup, and virtual display client startup pass on Java 17. The final safety review also confirms that applying or restoring a delivery plan writes only its changed slots, so unrelated inventory changes are neither rejected nor overwritten. Release approval still requires the reporter's Windows dedicated server multiplayer, reconnect, restart, and fault drills from the matrix above.
+
+### 20.8 Issue 23 legacy exact item journal compatibility
+
+The reporter's `3.0.0-beta.10` logs prove a second startup blocker. Both the first launch and the
+restart reject `futureshops_escrow_item_inventory_journal` before a shop purchase can run. A
+persisted item inventory intent reaches `ItemInventoryMutationIntent` with valid framing and
+identity but fails its slot evidence hash check. The Auction House checkpoint then fails for the
+same dependent snapshot, and escrow enters maintenance during server startup. A normal maintenance
+verification cannot resume because the journal never reaches an aligned state.
+
+The repair targets `3.0.0-beta.11` and preserves the complete exact item custody contract.
+
+1. A persisted slot snapshot is validated as complete semantic item data rather than by requiring
+   byte for byte equality with a decode and reencode cycle. Registry ID, count, item tag, Forge
+   capability data, nested compound values, list order, and primitive values remain significant.
+   Compound key insertion order alone is not item identity.
+2. Legacy slot change hashes are verified against the exact serialized evidence bytes stored with
+   that intent. This validates the original signed proof instead of recomputing a potentially
+   normalized copy. Existing token IDs, digests, receipts, journal events, and checkpoint bytes are
+   not rewritten or reinterpreted.
+3. New item inventory states retain one owned serialized snapshot per slot. Inventory hashes, slot
+   hashes, token changes, and intent evidence derive from those same owned snapshots so a defensive
+   `ItemStack.copy()` cannot create two different proofs for one plan.
+4. Live recovery compares only the recorded changed slots against their complete semantic before
+   and after snapshots. Unrelated modded inventory slots are neither inspected as mutation proof
+   nor overwritten. A changed slot with different item or capability data remains unknown and
+   fails closed.
+5. Successfully decoded legacy work continues through the existing bounded replay and verified
+   maintenance workflow. No command may clear the maintenance flag, delete a checkpoint, discard
+   an intent, or bypass conservation merely to make the market available. Failed alignment or
+   ambiguous changed slot evidence leaves maintenance active with an actionable recovery handle.
+6. The supplied combined patch is treated as diagnostic input. Compatible semantic identity and
+   bounded diagnostic changes may be integrated. Its unverified force clear path and unrelated
+   lifecycle, replay, packet ceiling, or catalog changes are excluded from this repair.
+7. Regression coverage must load legacy noncanonical compound ordering through the intent and
+   journal codecs, validate legacy raw slot hashes, preserve Forge capability differences, reject
+   malformed or lossy snapshots, recover before and after slot images, and prove restart decoding
+   no longer places a valid legacy checkpoint into maintenance.
+8. Acceptance requires focused compatibility and recovery tests, the complete unit suite, data
+   validation, all required GameTests, the full build, dedicated server and client startup,
+   packaged JAR inspection, and a reporter retest with the backed up multiplayer world. The issue
+   remains open until that live world confirms startup, purchase, restart, and verified resume.
+
+The beta 11 source repair and local verification are complete. The compatibility regressions and
+all 1905 unit tests pass, isolated data generation succeeds, all five required GameTests pass, the
+dedicated server reaches ready state, and the virtual display client completes common and client
+setup through texture atlas creation. The full build and packaged version checks pass, producing
+`futureshops-3.0.0-beta.11.jar`. The issue remains open only for the reporter's backed up dedicated
+server acceptance sequence.
 
 ## 21. Completion record
 
