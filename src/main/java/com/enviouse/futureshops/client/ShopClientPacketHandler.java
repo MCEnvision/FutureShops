@@ -1,6 +1,15 @@
 package com.enviouse.futureshops.client;
 
+import com.enviouse.futureshops.ClientConfig;
 import com.enviouse.futureshops.Futureshops;
+import com.enviouse.futureshops.client.market.MarketClientNavigationCoordinator;
+import com.enviouse.futureshops.client.market.MarketCapabilityClientState;
+import com.enviouse.futureshops.client.market.MarketCapabilityResponseTracker;
+import com.enviouse.futureshops.client.market.MarketModule;
+import com.enviouse.futureshops.client.market.MarketProfileMutationClientState;
+import com.enviouse.futureshops.client.market.MarketProfileMutationResponseTracker;
+import com.enviouse.futureshops.client.market.MarketRoute;
+import com.enviouse.futureshops.client.market.MarketSessionPreferences;
 import com.enviouse.futureshops.client.screen.BarterScreen;
 import com.enviouse.futureshops.client.screen.CartScreen;
 import com.enviouse.futureshops.client.screen.FranchiseManagementScreen;
@@ -11,15 +20,27 @@ import com.enviouse.futureshops.client.screen.PlayerShopCartScreen;
 import com.enviouse.futureshops.client.screen.PlayerStorefrontScreen;
 import com.enviouse.futureshops.client.screen.BalTopOverviewScreen;
 import com.enviouse.futureshops.client.screen.AtmScreen;
+import com.enviouse.futureshops.client.screen.AdminItemPickerScreen;
+import com.enviouse.futureshops.client.screen.AdminOfferEditorScreen;
 import com.enviouse.futureshops.client.screen.BalanceOverviewScreen;
+import com.enviouse.futureshops.client.screen.BulkSellConfirmationScreen;
+import com.enviouse.futureshops.client.screen.BulkSellModeScreen;
 import com.enviouse.futureshops.client.screen.ShopMainScreen;
+import com.enviouse.futureshops.client.screen.MarketModuleScreen;
 import com.enviouse.futureshops.client.screen.ShopScreenMarker;
 import com.enviouse.futureshops.client.screen.ShopUiUtil;
 import com.enviouse.futureshops.client.screen.TransactionHistoryScreen;
 import com.enviouse.futureshops.network.packets.S2CAdminEditAckPacket;
+import com.enviouse.futureshops.network.packets.S2CAdminOfferSaveResultPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmWithdrawPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmCollectCashPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
+import com.enviouse.futureshops.network.packets.C2SAtmDepositRecoveryPacket;
+import com.enviouse.futureshops.network.packets.C2SCloseMarketSessionPacket;
+import com.enviouse.futureshops.network.packets.C2SMarketCapabilitiesPacket;
+import com.enviouse.futureshops.network.packets.C2SMarketProfileMutationPacket;
+import com.enviouse.futureshops.network.packets.C2SOpenMarketModulePacket;
+import com.enviouse.futureshops.network.packets.C2SServerShopOfferPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmDataPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmResultPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmCollectCashResultPacket;
@@ -28,15 +49,24 @@ import com.enviouse.futureshops.network.packets.S2CBalTopUiPacket;
 import com.enviouse.futureshops.network.packets.S2CBalanceUiPacket;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.S2CBarterResponsePacket;
+import com.enviouse.futureshops.network.packets.S2CBulkSellQuotePacket;
+import com.enviouse.futureshops.network.packets.S2CBulkSellResultPacket;
 import com.enviouse.futureshops.network.packets.S2CBuyResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CForceClosePacket;
 import com.enviouse.futureshops.network.packets.S2CFranchiseDataPacket;
 import com.enviouse.futureshops.network.packets.S2CHistoryResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CInventorySyncPacket;
 import com.enviouse.futureshops.network.packets.S2CLocalShopsPacket;
+import com.enviouse.futureshops.network.packets.S2CMarketActionResponsePacket;
+import com.enviouse.futureshops.network.packets.S2COpenMarketModulePacket;
+import com.enviouse.futureshops.network.packets.S2CMarketPagePacket;
+import com.enviouse.futureshops.network.packets.S2CMarketCapabilitiesPacket;
+import com.enviouse.futureshops.network.packets.S2CMarketProfileMutationPacket;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopDataPacket;
 import com.enviouse.futureshops.network.packets.S2CPlayerShopResultPacket;
 import com.enviouse.futureshops.network.packets.S2CSettlementHistoryPacket;
+import com.enviouse.futureshops.network.packets.S2CServerShopOfferResultPacket;
+import com.enviouse.futureshops.network.packets.S2CServerShopOfferCartResultPacket;
 import com.enviouse.futureshops.network.packets.S2CSellResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CShopDataPacket;
 import com.enviouse.futureshops.network.packets.S2CVerifyCartResponsePacket;
@@ -49,8 +79,10 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.UUID;
 
 @Mod.EventBusSubscriber(modid = Futureshops.MODID, value = Dist.CLIENT)
 public final class ShopClientPacketHandler {
@@ -60,11 +92,60 @@ public final class ShopClientPacketHandler {
             new AtmCashClaimCollectionTracker();
     private static final AtmDepositTracker ATM_DEPOSITS =
             new AtmDepositTracker();
+    private static final PlayerShopResponseTracker PLAYER_SHOP_RESPONSES =
+            new PlayerShopResponseTracker();
+    private static final ServerShopOfferResponseTracker
+            SERVER_SHOP_OFFER_RESPONSES =
+            new ServerShopOfferResponseTracker();
+    private static final com.enviouse.futureshops.client.editor
+            .AdminOfferSaveResultTracker ADMIN_OFFER_SAVE_RESULTS =
+            new com.enviouse.futureshops.client.editor
+                    .AdminOfferSaveResultTracker();
     private static volatile S2CAtmResultPacket lastRetryableAtmResult;
     private static volatile S2CAtmDepositResultPacket
             lastRetryableAtmDepositResult;
+    private static final LinkedHashSet<UUID> CANCELLED_MARKET_OPENS =
+            new LinkedHashSet<>();
+    private static final MarketSessionPreferences MARKET_PREFERENCES =
+            MarketSessionPreferences.from(ClientConfig.settings());
+    private static MarketClientNavigationCoordinator marketNavigation;
 
     private ShopClientPacketHandler() {
+    }
+
+    public static Optional<ServerShopOfferResponseTracker.PendingRequest>
+    submitServerShopOffer(
+            String shopId,
+            String listingId,
+            String optionId,
+            com.enviouse.futureshops.catalog.offer.OfferAction action,
+            int quantity,
+            long revision,
+            Optional<com.enviouse.futureshops.money.PaymentSource> source
+    ) {
+        try {
+            C2SServerShopOfferPacket packet =
+                    SERVER_SHOP_OFFER_RESPONSES.begin(
+                            shopId, listingId, optionId, action,
+                            quantity, revision, source);
+            ShopPackets.CHANNEL.sendToServer(packet);
+            return SERVER_SHOP_OFFER_RESPONSES.pending();
+        } catch (RuntimeException exception) {
+            return Optional.empty();
+        }
+    }
+
+    public static Optional<ServerShopOfferResponseTracker.PendingRequest>
+    pendingServerShopOffer() {
+        return SERVER_SHOP_OFFER_RESPONSES.pending();
+    }
+
+    public static PlayerShopResponseTracker.PendingRequest
+    beginPlayerShopRequest(
+            PlayerShopResponseTracker.Operation operation,
+            int responseToken
+    ) {
+        return PLAYER_SHOP_RESPONSES.begin(operation, responseToken);
     }
 
     public static Optional<AtmWithdrawalTracker.PendingRequest>
@@ -204,6 +285,14 @@ public final class ShopClientPacketHandler {
     private static void sendAtmDeposit(
             AtmDepositTracker.PendingRequest request
     ) {
+        if (request.recoveryTransactionId().isPresent()) {
+            ShopPackets.CHANNEL.sendToServer(
+                    new C2SAtmDepositRecoveryPacket(
+                            request.requestId(),
+                            request.recoveryTransactionId()
+                                    .orElseThrow()));
+            return;
+        }
         ShopPackets.CHANNEL.sendToServer(atmDepositPacket(request));
     }
 
@@ -261,6 +350,29 @@ public final class ShopClientPacketHandler {
     public static void handleAtmData(S2CAtmDataPacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
+            packet.depositRecovery().ifPresent(recovery -> {
+                if (recovery.status().equals("RECOVERY_PENDING")) {
+                    ATM_DEPOSITS.adoptRecovery(
+                            recovery.requestId(),
+                            packet.currencySignature(),
+                            recovery.transactionId());
+                } else if (recovery.status().equals("MANUAL_REVIEW")) {
+                    ATM_DEPOSITS.adoptBlockedRecovery(
+                            recovery.requestId(),
+                            packet.currencySignature(),
+                            recovery.transactionId());
+                } else {
+                    ATM_DEPOSITS.reconcileTerminalRecovery(
+                            recovery.requestId(),
+                            recovery.transactionId());
+                }
+                lastRetryableAtmDepositResult = null;
+            });
+            if (packet.serviceAvailable()
+                    && packet.depositRecovery().isEmpty()
+                    && ATM_DEPOSITS.reconcileNoRecovery()) {
+                lastRetryableAtmDepositResult = null;
+            }
             if (mc.screen instanceof AtmScreen atm) {
                 atm.applyData(packet);
             } else {
@@ -271,6 +383,211 @@ public final class ShopClientPacketHandler {
                     return;
                 }
                 mc.setScreen(new AtmScreen(mc.screen, packet));
+            }
+        });
+    }
+
+    public static void handleOpenMarket(
+            S2COpenMarketModulePacket packet
+    ) {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.execute(() -> {
+            if (consumeCancelledMarketOpen(packet.requestId())) {
+                ShopPackets.CHANNEL.sendToServer(
+                        new C2SCloseMarketSessionPacket(
+                                packet.routeNonce(), false));
+                return;
+            }
+            MarketModule module;
+            try {
+                module = MarketModule.fromId(packet.moduleId());
+            } catch (IllegalArgumentException exception) {
+                return;
+            }
+            MarketClientNavigationCoordinator coordinator =
+                    activeMarketNavigation();
+            if (coordinator != null) {
+                if (!coordinator.isOpen()) {
+                    return;
+                }
+                MarketClientNavigationCoordinator.OpenResponse response =
+                        coordinator.acceptOpenResponse(packet.requestId(),
+                                module, packet.view(), packet.routeNonce());
+                if (response.decision()
+                        != MarketClientNavigationCoordinator.OpenDecision
+                        .ACCEPT) {
+                    return;
+                }
+                if (minecraft.screen instanceof MarketModuleScreen current) {
+                    current.prepareNavigationHandoff();
+                }
+                minecraft.setScreen(new MarketModuleScreen(packet,
+                        coordinator));
+                return;
+            }
+            MARKET_PREFERENCES.applySettings(ClientConfig.settings());
+            boolean rememberedTab =
+                    MARKET_PREFERENCES.hasRememberedTab(module);
+            if (!rememberedTab) {
+                MARKET_PREFERENCES.rememberTab(module, packet.view());
+            }
+            MarketSessionPreferences.ModulePreference preference =
+                    MARKET_PREFERENCES.preference(module);
+            String sort = preference.sortId().isEmpty()
+                    ? defaultMarketSort(module) : preference.sortId();
+            MarketRoute initial = new MarketRoute(module, packet.view(),
+                    preference.categoryId(), "", preference.filterId(),
+                    sort, 0, 0, "", packet.routeNonce());
+            coordinator = new MarketClientNavigationCoordinator(initial,
+                    64, 128, false, MARKET_PREFERENCES);
+            setActiveMarketNavigation(coordinator);
+            if (rememberedTab
+                    && !preference.viewId().equals(packet.view())) {
+                MarketClientNavigationCoordinator.OpenRequest request =
+                        coordinator.beginTab(UUID.randomUUID(),
+                                preference.viewId());
+                ShopPackets.CHANNEL.sendToServer(
+                        new C2SOpenMarketModulePacket(request.requestId(),
+                                request.module().id(), request.viewId()));
+                return;
+            }
+            minecraft.setScreen(new MarketModuleScreen(packet,
+                    coordinator));
+        });
+    }
+
+    public static synchronized MarketClientNavigationCoordinator
+    activeMarketNavigation() {
+        return marketNavigation;
+    }
+
+    public static synchronized void releaseMarketNavigation(
+            MarketClientNavigationCoordinator coordinator
+    ) {
+        if (marketNavigation == coordinator) {
+            marketNavigation = null;
+        }
+    }
+
+    private static synchronized void setActiveMarketNavigation(
+            MarketClientNavigationCoordinator coordinator
+    ) {
+        marketNavigation = coordinator;
+    }
+
+    private static String defaultMarketSort(MarketModule module) {
+        return module == MarketModule.BAZAAR ? "name" : "ending_soon";
+    }
+
+    public static synchronized void cancelMarketOpen(UUID requestId) {
+        if (requestId == null) {
+            return;
+        }
+        CANCELLED_MARKET_OPENS.add(requestId);
+        while (CANCELLED_MARKET_OPENS.size() > 128) {
+            var iterator = CANCELLED_MARKET_OPENS.iterator();
+            iterator.next();
+            iterator.remove();
+        }
+    }
+
+    private static synchronized boolean consumeCancelledMarketOpen(
+            UUID requestId
+    ) {
+        return CANCELLED_MARKET_OPENS.remove(requestId);
+    }
+
+    public static void handleMarketPage(S2CMarketPagePacket packet) {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.execute(() -> {
+            if (minecraft.screen instanceof MarketModuleScreen market) {
+                market.applyPage(packet);
+            }
+        });
+    }
+
+    /**
+     * Result of an Auction House / Bazaar mutation (plan §12). On the main thread the open
+     * market screen clears its pending request, localizes the status, and refreshes the page
+     * on success or on the stale-revision family (plan §15: stale interfaces refresh rather
+     * than execute). Without an open market screen the response is dropped: there is no
+     * market-wide status surface outside the screen, and durable outcomes (claims, wallet
+     * movement, page contents) all arrive through their own packets.
+     */
+    public static void handleMarketActionResponse(
+            S2CMarketActionResponsePacket packet
+    ) {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.execute(() -> {
+            if (minecraft.screen instanceof MarketModuleScreen market) {
+                market.applyActionResponse(packet);
+            }
+        });
+    }
+
+    public static UUID requestMarketCapabilities() {
+        UUID requestId = MarketCapabilityClientState.beginRequest();
+        ShopPackets.CHANNEL.sendToServer(
+                marketCapabilitiesPacket(requestId));
+        return requestId;
+    }
+
+    static C2SMarketCapabilitiesPacket marketCapabilitiesPacket(
+            UUID requestId
+    ) {
+        return new C2SMarketCapabilitiesPacket(requestId);
+    }
+
+    public static void handleMarketCapabilities(
+            S2CMarketCapabilitiesPacket packet
+    ) {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.execute(() -> {
+            MarketCapabilityResponseTracker.Decision decision =
+                    MarketCapabilityClientState.accept(
+                            packet.snapshot());
+            if (decision != MarketCapabilityResponseTracker.Decision
+                    .ACCEPT) {
+                return;
+            }
+            ShopClientState.applyMarketWalletSnapshot(
+                    packet.snapshot().walletBalanceMinorUnits(),
+                    packet.snapshot().walletBalanceKnown(),
+                    packet.snapshot().currencyName(),
+                    packet.snapshot().currencyDecimals());
+            if (minecraft.screen instanceof MarketModuleScreen market) {
+                market.applyCapabilities(packet.snapshot());
+            }
+        });
+    }
+
+    public static boolean submitMarketProfileMutation(
+            C2SMarketProfileMutationPacket packet
+    ) {
+        try {
+            MarketProfileMutationClientState.begin(packet.command());
+            ShopPackets.CHANNEL.sendToServer(packet);
+            return true;
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    public static void handleMarketProfileMutation(
+            S2CMarketProfileMutationPacket packet
+    ) {
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.execute(() -> {
+            MarketProfileMutationResponseTracker.Decision decision =
+                    MarketProfileMutationClientState.accept(
+                            packet.result());
+            if (decision
+                    != MarketProfileMutationResponseTracker.Decision
+                    .ACCEPT) {
+                return;
+            }
+            if (minecraft.screen instanceof MarketModuleScreen market) {
+                market.applyProfileMutationResult(packet.result());
             }
         });
     }
@@ -365,6 +682,21 @@ public final class ShopClientPacketHandler {
     ) {
         clearAtmWithdrawalState();
         ClientRouteGuard.clear();
+        PLAYER_SHOP_RESPONSES.clear();
+        SERVER_SHOP_OFFER_RESPONSES.clear();
+        MarketCapabilityClientState.clear();
+        MarketProfileMutationClientState.clear();
+        ShopClientState.clearMarketWalletSnapshot();
+        MarketClientNavigationCoordinator coordinator =
+                activeMarketNavigation();
+        if (coordinator != null) {
+            coordinator.close();
+            releaseMarketNavigation(coordinator);
+        }
+        MARKET_PREFERENCES.reset();
+        synchronized (ShopClientPacketHandler.class) {
+            CANCELLED_MARKET_OPENS.clear();
+        }
     }
 
     /**
@@ -397,7 +729,8 @@ public final class ShopClientPacketHandler {
                     packet.barterRecipes(),
                     packet.adminShopEnabled(),
                     packet.nearbyShops(),
-                    packet.canEdit());
+                    packet.canEdit(),
+                    packet.offers());
             ShopPackets.CHANNEL.sendToServer(new com.enviouse.futureshops.network.packets.C2SInventorySyncPacket(packet.shopId()));
             if (shopMainOpen) {
                 // Update in-place — preserves nearbyMode, scroll, tabs.
@@ -430,6 +763,9 @@ public final class ShopClientPacketHandler {
                     : (current instanceof BalTopOverviewScreen || current instanceof FranchiseManagementScreen)
                             ? new ShopMainScreen()
                     : current;
+            if (current instanceof MarketModuleScreen market) {
+                market.prepareNavigationHandoff();
+            }
             mc.setScreen(new BalanceOverviewScreen(
                 parent,
                 packet.playerUuid(),
@@ -507,7 +843,7 @@ public final class ShopClientPacketHandler {
     public static void handlePlayerShopData(S2CPlayerShopDataPacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
-            if (PlayerShopCartState.hasTrackedCheckout()) {
+            if (PlayerShopCartState.isCheckoutPending()) {
                 return;
             }
             boolean storefrontOpen = mc.screen instanceof PlayerStorefrontScreen;
@@ -547,11 +883,15 @@ public final class ShopClientPacketHandler {
                     packet.floatingIconMode(),
                     packet.floatingIconItem(),
                     packet.linkedStorages(),
-                    packet.savedConfigNames());
+                    packet.savedConfigNames(),
+                    packet.normalizedOffers());
             if (packet.owner()) {
                 // Owner MANAGE view is unchanged (Phase 5 rebuild). Data resends (buy/config acks)
                 // update an already-open block screen in place; it reads live client state.
-                if (!(mc.screen instanceof PlayerShopBlockScreen)) {
+                if (!(mc.screen instanceof PlayerShopBlockScreen)
+                        && !(mc.screen
+                        instanceof AdminOfferEditorScreen editor
+                        && editor.isPlayerShopEditor())) {
                     // Pass current screen as parent for back-button navigation (Items 4, 9)
                     mc.setScreen(new PlayerShopBlockScreen(mc.screen));
                 }
@@ -593,18 +933,22 @@ public final class ShopClientPacketHandler {
                 CartResponsePolicy.ResponseResult result =
                         PlayerShopCartState.applyCheckoutResponse(
                                 packet.requestId(), packet.responseToken(), packet.success());
-                if (!result.matched()) {
+                if (result.matched()) {
+                    if (result.checkoutComplete() && mc.screen instanceof PlayerShopCartScreen cartScreen) {
+                        String completionMessage = result.checkoutSuccessful()
+                                ? Component.translatable(
+                                        "gui.futureshops.player_shop_cart.checkout_success").getString()
+                                : Component.translatable(
+                                        "gui.futureshops.player_shop_cart.checkout_partial_failure").getString();
+                        cartScreen.onTransactionResult(result.checkoutSuccessful(), completionMessage);
+                    }
                     return;
                 }
-                if (result.checkoutComplete() && mc.screen instanceof PlayerShopCartScreen cartScreen) {
-                    String completionMessage = result.checkoutSuccessful()
-                            ? Component.translatable(
-                                    "gui.futureshops.player_shop_cart.checkout_success").getString()
-                            : Component.translatable(
-                                    "gui.futureshops.player_shop_cart.checkout_partial_failure").getString();
-                    cartScreen.onTransactionResult(result.checkoutSuccessful(), completionMessage);
+                if (PLAYER_SHOP_RESPONSES.consume(packet.requestId(),
+                        packet.responseToken())
+                        != PlayerShopResponseTracker.Match.MATCHED) {
+                    return;
                 }
-                return;
             }
             if (mc.screen instanceof PlayerShopBlockScreen psScreen) {
                 psScreen.onTransactionResult(isSuccess, msg);
@@ -679,9 +1023,110 @@ public final class ShopClientPacketHandler {
 
             // Update ConfirmationModal if ItemDetailScreen is open
             if (mc.screen instanceof ItemDetailScreen detailScreen) {
-                detailScreen.onTransactionResult(packet.success(), buildSellMessage(packet).getString());
+                detailScreen.onSellTransactionResult(packet.requestId(),
+                        packet.success(), buildSellMessage(packet).getString());
             }
         });
+    }
+
+    public static void handleServerShopOfferResult(
+            S2CServerShopOfferResultPacket packet
+    ) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            if (!SERVER_SHOP_OFFER_RESPONSES.accept(packet)) {
+                return;
+            }
+            ShopClientState.setCurrentBalanceMinorUnits(
+                    packet.resultingBalanceMinorUnits());
+            boolean success = packet.status().success();
+            Component message = Component.translatable(
+                    "gui.futureshops.offer.result."
+                            + packet.status().name()
+                            .toLowerCase(java.util.Locale.ROOT));
+            ShopClientState.setStatus(message, success);
+            if (mc.screen instanceof ItemDetailScreen detailScreen) {
+                detailScreen.onOfferTransactionResult(
+                        packet.requestId(), success,
+                        message.getString(), packet.status());
+            }
+        });
+    }
+
+    public static void handleServerShopOfferCartResult(
+            S2CServerShopOfferCartResultPacket packet
+    ) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            if (!ShopClientState.hasTrackedCartCheckout()) {
+                return;
+            }
+            CartResponsePolicy.ResponseResult response =
+                    ShopClientState.applyCartCheckoutResponse(
+                            packet.requestId(),
+                            packet.status().success(),
+                            packet.status()
+                                    != com.enviouse.futureshops.server
+                                    .escrow.runtime.ServerShopOfferService
+                                    .Status.RECOVERY_REQUIRED
+                                    && packet.status()
+                                    != com.enviouse.futureshops.server
+                                    .escrow.runtime.ServerShopOfferService
+                                    .Status.QUARANTINED);
+            if (!response.matched()) {
+                return;
+            }
+            ShopClientState.setCurrentBalanceMinorUnits(
+                    packet.resultingBalanceMinorUnits());
+            Component message = Component.translatable(
+                    "gui.futureshops.offer.result."
+                            + packet.status().name()
+                            .toLowerCase(java.util.Locale.ROOT));
+            ShopClientState.setStatus(
+                    message, packet.status().success());
+            if (mc.screen instanceof CartScreen cartScreen) {
+                cartScreen.onTransactionResult(
+                        packet.status().success(),
+                        message.getString());
+            }
+        });
+    }
+
+    public static void handleAdminOfferSaveResult(
+            S2CAdminOfferSaveResultPacket packet
+    ) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            if (mc.screen instanceof AdminOfferEditorScreen editor) {
+                editor.applySaveResult(packet);
+            } else if (mc.screen
+                    instanceof AdminItemPickerScreen picker) {
+                picker.applySaveResult(packet);
+            } else {
+                ADMIN_OFFER_SAVE_RESULTS.record(packet);
+            }
+        });
+    }
+
+    public static void handlePlayerShopOfferSaveResult(
+            com.enviouse.futureshops.network.packets
+                    .S2CPlayerShopOfferSaveResultPacket packet
+    ) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            if (mc.screen instanceof AdminOfferEditorScreen editor
+                    && editor.isPlayerShopEditor()) {
+                editor.applyPlayerShopSaveResult(packet);
+            } else {
+                ADMIN_OFFER_SAVE_RESULTS.record(
+                        packet.asAdminResult());
+            }
+        });
+    }
+
+    public static Optional<S2CAdminOfferSaveResultPacket>
+    takeAdminOfferSaveResult(UUID requestId) {
+        return ADMIN_OFFER_SAVE_RESULTS.take(requestId);
     }
 
     public static void handleBarterResponse(S2CBarterResponsePacket packet) {
@@ -691,7 +1136,8 @@ public final class ShopClientPacketHandler {
 
             // Update ConfirmationModal if BarterScreen is open
             if (mc.screen instanceof BarterScreen barterScreen) {
-                barterScreen.onTransactionResult(packet.success(), buildBarterMessage(packet).getString());
+                barterScreen.onTransactionResult(packet.requestId(),
+                        packet.success(), buildBarterMessage(packet).getString());
             }
         });
     }
@@ -705,6 +1151,14 @@ public final class ShopClientPacketHandler {
         mc.execute(() -> {
             clearAtmWithdrawalState();
             ClientRouteGuard.clear();
+            MarketCapabilityClientState.clear();
+            MarketProfileMutationClientState.clear();
+            MarketClientNavigationCoordinator coordinator =
+                    activeMarketNavigation();
+            if (coordinator != null) {
+                coordinator.close();
+                releaseMarketNavigation(coordinator);
+            }
             ShopClientState.reset();
             PlayerShopCartState.clear(); // Item 34: Clear player shop cart on disconnect
             if (mc.screen instanceof ShopScreenMarker) {
@@ -788,6 +1242,75 @@ public final class ShopClientPacketHandler {
                             "gui.futureshops.admin_edit.result." + packet.code().toLowerCase(java.util.Locale.ROOT),
                             packet.arg()),
                     packet.success());
+        });
+    }
+
+    public static void handleBulkSellQuote(
+            S2CBulkSellQuotePacket packet
+    ) {
+        Minecraft client = Minecraft.getInstance();
+        client.execute(() -> {
+            if (packet.quote() == null) {
+                if (client.screen
+                        instanceof BulkSellModeScreen mode) {
+                    mode.onQuoteRejected();
+                } else if (client.screen
+                        instanceof BulkSellConfirmationScreen screen) {
+                    screen.onQuoteRejected();
+                }
+                Component message = Component.translatable(
+                        "gui.futureshops.bulk_sell.result."
+                                + packet.status().name()
+                                .toLowerCase(java.util.Locale.ROOT),
+                        0, 0, 0, "0");
+                ShopClientState.setStatus(message, false);
+                if (client.player != null) {
+                    client.player.displayClientMessage(
+                            message, false);
+                }
+                return;
+            }
+            net.minecraft.client.gui.screens.Screen parent =
+                    client.screen instanceof BulkSellModeScreen mode
+                            ? mode.returnScreen()
+                            : client.screen
+                            instanceof BulkSellConfirmationScreen screen
+                            ? screen.returnScreen()
+                            : client.screen;
+            client.setScreen(new BulkSellConfirmationScreen(
+                    parent, packet.quote()));
+        });
+    }
+
+    public static void handleBulkSellResult(
+            S2CBulkSellResultPacket packet
+    ) {
+        Minecraft client = Minecraft.getInstance();
+        client.execute(() -> {
+            String paid = java.math.BigDecimal.valueOf(
+                            packet.paidMinorUnits(),
+                            packet.currencyDecimals())
+                    .toPlainString() + " " + packet.currencyName();
+            Component message = Component.translatable(
+                    "gui.futureshops.bulk_sell.result."
+                            + packet.status().name()
+                            .toLowerCase(java.util.Locale.ROOT),
+                    packet.soldLines(), packet.failedLines(),
+                    packet.recoveryLines(), paid);
+            boolean success = packet.status()
+                    == com.enviouse.futureshops.server.shop
+                    .BulkSellService.Status.SUCCESS
+                    || packet.status()
+                    == com.enviouse.futureshops.server.shop
+                    .BulkSellService.Status.PARTIAL;
+            ShopClientState.setStatus(message, success);
+            if (client.screen
+                    instanceof BulkSellConfirmationScreen screen) {
+                screen.onResult(packet);
+            } else if (client.player != null) {
+                client.player.displayClientMessage(
+                        message, false);
+            }
         });
     }
 

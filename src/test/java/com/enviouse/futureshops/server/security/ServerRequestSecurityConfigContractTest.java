@@ -28,7 +28,10 @@ class ServerRequestSecurityConfigContractTest {
                 "request_security.atm_cash_collection.refill_period_millis",
                 "request_security.atm_deposit.capacity",
                 "request_security.atm_deposit.refill_tokens",
-                "request_security.atm_deposit.refill_period_millis")) {
+                "request_security.atm_deposit.refill_period_millis",
+                "request_security.pay.capacity",
+                "request_security.pay.refill_tokens",
+                "request_security.pay.refill_period_millis")) {
             assertTrue(config.contains(key), key);
         }
         assertTrue(config.contains(

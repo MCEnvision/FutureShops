@@ -90,6 +90,25 @@ public final class ForgeCapabilityStorageAdapter implements ExternalStorageAdapt
     }
 
     @Override
+    public List<ItemStack> previewExtract(BlockEntity blockEntity, Item item,
+                                          int count, boolean nbtAware,
+                                          @Nullable CompoundTag requiredTag) {
+        IItemHandler handler = getHandler(blockEntity);
+        if (handler == null || count <= 0) return List.of();
+        List<ItemStack> result = new ArrayList<>();
+        int remaining = count;
+        for (int i = 0; i < handler.getSlots() && remaining > 0; i++) {
+            ItemStack probe = handler.extractItem(i, remaining, true);
+            if (probe.isEmpty()
+                    || !NbtMatchUtil.matches(probe, item, nbtAware,
+                    requiredTag)) continue;
+            remaining -= probe.getCount();
+            result.add(probe.copy());
+        }
+        return remaining == 0 ? result : List.of();
+    }
+
+    @Override
     public boolean canInsert(BlockEntity blockEntity, List<ItemStack> stacks) {
         IItemHandler handler = getHandler(blockEntity);
         if (handler == null) return false;
@@ -121,4 +140,3 @@ public final class ForgeCapabilityStorageAdapter implements ExternalStorageAdapt
         return blockEntity == null ? null : blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER).resolve().orElse(null);
     }
 }
-

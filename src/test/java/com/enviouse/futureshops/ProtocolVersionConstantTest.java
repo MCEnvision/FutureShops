@@ -6,6 +6,10 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
+ * Protocol 44 adds market capability synchronization.
+ * Protocol 42 adds correlated paged market data.
+ * Protocol 41 adds durable sell and barter request identities.
+ * Protocol 40 adds shared market module opening.
  * Protocol 39 binds ATM deposits to currency catalog signatures.
  * Protocol 38 adds bounded ATM withdrawal retry timing.
  * Protocol 37 adds correlated ATM cash deposits.
@@ -43,8 +47,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class ProtocolVersionConstantTest {
 
     @Test
-    void protocolVersionIs39() {
-        assertEquals("39", ShopPackets.PROTOCOL_VERSION,
-                "PROTOCOL_VERSION must be 39 because ATM deposit packets changed");
+    void protocolVersionIs57() {
+        assertEquals("57", ShopPackets.PROTOCOL_VERSION,
+                "PROTOCOL_VERSION must be 57 because market recovery changed the wire contract");
     }
 }

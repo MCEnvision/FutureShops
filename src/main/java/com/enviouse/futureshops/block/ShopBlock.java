@@ -138,14 +138,10 @@ public class ShopBlock extends BaseEntityBlock {
                 }
                 shop.setOwnerUuid(player.getUUID(), player.getGameProfile().getName());
             }
-            // Item 14: Always (re-)register the shop at its new position.
-            // This covers CarryOn mod compatibility: when a shop is picked up, its
-            // block entity NBT (owner, listings, etc.) is preserved. On removal the
-            // old position is deregistered. On placement we must register the new
-            // position so the Nearby Shops scanner and dashboard can find it.
+            // Register the durable identity at the current location.
+            // Tombstoned identities reactivate after a carried shop is placed.
             if (!level.isClientSide && level.getServer() != null && shop.getOwnerUuid() != null) {
-                PlayerShopRegistrySavedData.get(level.getServer()).register(
-                        shop.getOwnerUuid(), level.dimension().location(), pos.asLong());
+                shop.reconcileRegistryIdentity();
             }
         }
     }
@@ -153,7 +149,17 @@ public class ShopBlock extends BaseEntityBlock {
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
         if (!state.is(newState.getBlock()) && !level.isClientSide && level.getServer() != null) {
-            PlayerShopRegistrySavedData.get(level.getServer()).remove(level.dimension().location(), pos.asLong());
+            PlayerShopRegistrySavedData registry =
+                    PlayerShopRegistrySavedData.get(level.getServer());
+            if (level.getBlockEntity(pos) instanceof ShopBlockEntity shop
+                    && shop.getOwnerUuid() != null
+                    && shop.getRegistryShopId() != null) {
+                registry.tombstone(shop.getRegistryShopId(), shop.getOwnerUuid(),
+                        shop.getRegistryIdentityRevision(),
+                        level.dimension().location(), pos.asLong());
+            } else {
+                registry.remove(level.dimension().location(), pos.asLong());
+            }
         }
         super.onRemove(state, level, pos, newState, isMoving);
     }
@@ -180,9 +186,9 @@ public class ShopBlock extends BaseEntityBlock {
 
         if (shop.getOwnerUuid() == null) {
             shop.setOwnerUuid(player.getUUID(), player.getGameProfile().getName());
-            if (level.getServer() != null) {
-                PlayerShopRegistrySavedData.get(level.getServer()).register(player.getUUID(), level.dimension().location(), pos.asLong());
-            }
+        }
+        if (level.getServer() != null && shop.getOwnerUuid() != null) {
+            shop.reconcileRegistryIdentity();
         }
 
         if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {

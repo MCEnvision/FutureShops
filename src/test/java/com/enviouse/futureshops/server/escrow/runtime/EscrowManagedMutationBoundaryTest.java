@@ -13,8 +13,13 @@ import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountType;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerLeg;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerSavedData;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerTransaction;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalSavedData;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintSavedData;
 import com.enviouse.futureshops.server.escrow.store.EscrowTransactionSavedData;
+import com.enviouse.futureshops.server.escrow.stock.StockSavedData;
+import com.enviouse.futureshops.server.market.auction.AuctionHouseSavedData;
+import com.enviouse.futureshops.server.market.bazaar.BazaarSavedData;
+import com.enviouse.futureshops.server.market.control.MarketControlSavedData;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -66,6 +71,35 @@ class EscrowManagedMutationBoundaryTest {
         assertRejected(() -> stores.custody().replaceFromValidated(null));
         assertRejected(() -> stores.protectedMints().applyCommitted(null));
         assertRejected(() -> stores.protectedMints().replaceFromValidated(null));
+        assertRejected(() -> stores.stock().applyCommitted(null));
+        assertRejected(() -> stores.stock().replaceFromValidated(null));
+        assertRejected(() -> stores.itemInventoryJournal()
+                .applyCommitted(null));
+        assertRejected(() -> stores.itemInventoryJournal()
+                .replaceFromValidated(null));
+        assertRejected(() -> stores.auctionHouse()
+                .applyCommitted(null));
+        assertRejected(() -> stores.auctionHouse()
+                .applyEscrowLifecycleCommitted(null));
+        assertRejected(() -> stores.auctionHouse()
+                .replaceFromValidated(null));
+        assertRejected(() -> stores.bazaar().applyCommitted(null));
+        assertRejected(() -> stores.bazaar()
+                .applyEscrowLifecycleCommitted(null));
+        assertRejected(() -> stores.bazaar()
+                .replaceFromValidated(null));
+        assertRejected(() -> stores.playerShopEscrow()
+                .apply(null));
+        assertRejected(() -> stores.playerShopEscrow()
+                .replaceFromValidated(null));
+        assertRejected(() -> stores.marketControl()
+                .applyCommitted(null));
+        assertRejected(() -> stores.marketControl()
+                .replaceFromValidated(null));
+        assertRejected(() -> stores.serverShopIntents()
+                .applyPrepareSell(null));
+        assertRejected(() -> stores.serverShopIntents()
+                .replaceFromValidated(null));
         assertRejected(() -> stores.runtimeMetadata().establishLineage(null, 1L));
         assertRejected(() -> stores.runtimeMetadata().advance(null, 2L));
         assertRejected(() -> stores.runtimeMetadata().adoptTrustedCheckpoint(null));
@@ -234,6 +268,13 @@ class EscrowManagedMutationBoundaryTest {
                 EscrowAdministrativeAuditSavedData.class,
                 CustodySavedData.class,
                 ProtectedMintSavedData.class,
+                StockSavedData.class,
+                ItemInventoryJournalSavedData.class,
+                AuctionHouseSavedData.class,
+                BazaarSavedData.class,
+                ServerShopIntentSavedData.class,
+                PlayerShopEscrowSavedData.class,
+                MarketControlSavedData.class,
                 EscrowRuntimeSavedData.class)) {
             assertTrue(EscrowManagedSavedData.class.isAssignableFrom(type), type.getName());
         }
@@ -248,6 +289,13 @@ class EscrowManagedMutationBoundaryTest {
         stores.administrativeAudit.bindManagedMutationPermit(permit);
         stores.custody.bindManagedMutationPermit(permit);
         stores.protectedMints.bindManagedMutationPermit(permit);
+        stores.stock.bindManagedMutationPermit(permit);
+        stores.itemInventoryJournal.bindManagedMutationPermit(permit);
+        stores.auctionHouse.bindManagedMutationPermit(permit);
+        stores.bazaar.bindManagedMutationPermit(permit);
+        stores.serverShopIntents.bindManagedMutationPermit(permit);
+        stores.playerShopEscrow.bindManagedMutationPermit(permit);
+        stores.marketControl.bindManagedMutationPermit(permit);
         return new ManagedStores(stores, permit);
     }
 
@@ -282,12 +330,27 @@ class EscrowManagedMutationBoundaryTest {
                 new EscrowAdministrativeAuditSavedData();
         private final CustodySavedData custody = new CustodySavedData();
         private final ProtectedMintSavedData protectedMints = new ProtectedMintSavedData();
+        private final StockSavedData stock = new StockSavedData();
+        private final ItemInventoryJournalSavedData itemInventoryJournal =
+                new ItemInventoryJournalSavedData();
+        private final AuctionHouseSavedData auctionHouse =
+                new AuctionHouseSavedData();
+        private final BazaarSavedData bazaar = new BazaarSavedData();
+        private final ServerShopIntentSavedData serverShopIntents =
+                new ServerShopIntentSavedData();
+        private final PlayerShopEscrowSavedData playerShopEscrow =
+                new PlayerShopEscrowSavedData();
+        private final MarketControlSavedData marketControl =
+                new MarketControlSavedData();
         private final EscrowRuntimeSavedData runtimeMetadata = new EscrowRuntimeSavedData();
 
         private EscrowSavedDataCheckpointBundle bundle() {
             return new EscrowSavedDataCheckpointBundle(
                     transactions, ledger, claims, administrativeAudit, custody,
-                    protectedMints, runtimeMetadata, () -> true);
+                    protectedMints, stock, itemInventoryJournal,
+                    auctionHouse, bazaar, serverShopIntents,
+                    playerShopEscrow, marketControl,
+                    runtimeMetadata, () -> true);
         }
     }
 
@@ -316,6 +379,34 @@ class EscrowManagedMutationBoundaryTest {
             return stores.protectedMints;
         }
 
+        private StockSavedData stock() {
+            return stores.stock;
+        }
+
+        private ItemInventoryJournalSavedData itemInventoryJournal() {
+            return stores.itemInventoryJournal;
+        }
+
+        private AuctionHouseSavedData auctionHouse() {
+            return stores.auctionHouse;
+        }
+
+        private BazaarSavedData bazaar() {
+            return stores.bazaar;
+        }
+
+        private ServerShopIntentSavedData serverShopIntents() {
+            return stores.serverShopIntents;
+        }
+
+        private PlayerShopEscrowSavedData playerShopEscrow() {
+            return stores.playerShopEscrow;
+        }
+
+        private MarketControlSavedData marketControl() {
+            return stores.marketControl;
+        }
+
         private EscrowRuntimeSavedData runtimeMetadata() {
             return stores.runtimeMetadata;
         }
@@ -323,14 +414,21 @@ class EscrowManagedMutationBoundaryTest {
         private EscrowSavedDataMutationApplier applier() {
             return new EscrowSavedDataMutationApplier(
                     transactions(), ledger(), claims(), administrativeAudit(), custody(),
-                    protectedMints(), MaintenanceRuntimeMutationHandler.unavailable(),
+                    protectedMints(), stock(), itemInventoryJournal(),
+                    auctionHouse(), bazaar(), serverShopIntents(),
+                    playerShopEscrow(), marketControl(),
+                    MaintenanceRuntimeMutationHandler.unavailable(),
                     AtmWithdrawalApplyFaultInjector.NONE, permit);
         }
 
         private EscrowSavedDataCheckpointBundle bundle() {
             return new EscrowSavedDataCheckpointBundle(
                     transactions(), ledger(), claims(), administrativeAudit(), custody(),
-                    protectedMints(), runtimeMetadata(), () -> true, permit);
+                    protectedMints(), stock(), itemInventoryJournal(),
+                    auctionHouse(), bazaar(), serverShopIntents(),
+                    playerShopEscrow(), marketControl(),
+                    runtimeMetadata(), () -> true,
+                    permit);
         }
     }
 }

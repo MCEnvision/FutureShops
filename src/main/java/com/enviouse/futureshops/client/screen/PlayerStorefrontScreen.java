@@ -2,6 +2,8 @@ package com.enviouse.futureshops.client.screen;
 
 import com.enviouse.futureshops.client.PlayerShopCartState;
 import com.enviouse.futureshops.client.PlayerShopClientState;
+import com.enviouse.futureshops.client.PlayerShopResponseTracker;
+import com.enviouse.futureshops.client.ShopClientPacketHandler;
 import com.enviouse.futureshops.client.ShopClientState;
 import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.PlayerShopListingData;
@@ -479,6 +481,10 @@ public class PlayerStorefrontScreen extends Screen implements ShopScreenMarker {
 
         super.render(graphics, mouseX, mouseY, partialTick);
 
+        if (confirmationModal == null) {
+            ShopUiUtil.renderShellHeaderTooltip(graphics, this.font,
+                    headerHit, mouseX, mouseY);
+        }
         if (tooltipItemId != null && confirmationModal == null) {
             ShopUiUtil.renderItemTooltip(graphics, this.font, tooltipItemId,
                     tooltipNbtJson != null ? tooltipNbtJson : "", tooltipMouseX, tooltipMouseY);
@@ -873,9 +879,13 @@ public class PlayerStorefrontScreen extends Screen implements ShopScreenMarker {
         if (detailIndex >= 0) {
             PlayerShopClientState.setSelectedListingIndex(detailIndex);
         }
+        PlayerShopResponseTracker.PendingRequest request =
+                ShopClientPacketHandler.beginPlayerShopRequest(
+                        PlayerShopResponseTracker.Operation.PURCHASE, 0);
         ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopBuyPacket(
                 PlayerShopClientState.shopPos(), PlayerShopClientState.selectedListingIndex(), quantity,
-                paymentMethod, paymentSource.wire()));
+                paymentMethod, paymentSource.wire(), request.requestId(),
+                request.responseToken()));
     }
 
     /** Buy confirmation modal — mirrors PlayerShopBlockScreen.showBuyConfirmation (money / compound). */

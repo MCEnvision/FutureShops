@@ -2,6 +2,7 @@ package com.enviouse.futureshops.client;
 
 import com.enviouse.futureshops.data.PlayerShopListingData;
 import com.enviouse.futureshops.data.PlayerShopStorageEntry;
+import com.enviouse.futureshops.data.PlayerShopNormalizedOfferData;
 import com.enviouse.futureshops.data.SettlementHistoryRow;
 import net.minecraft.core.BlockPos;
 
@@ -30,6 +31,8 @@ public final class PlayerShopClientState {
     private static String floatingIconItem = "";
     private static List<PlayerShopStorageEntry> linkedStorages = List.of();
     private static List<String> savedConfigNames = List.of();
+    private static List<PlayerShopNormalizedOfferData>
+            normalizedOffers = List.of();
     private static List<SettlementHistoryRow> settlementHistoryRows = List.of();
     private static int settlementHistoryPage = 1;
     private static int settlementHistoryTotalPages = 1;
@@ -54,7 +57,9 @@ public final class PlayerShopClientState {
                              boolean placedByCreativeValue, boolean adminShopModeValue,
                              String floatingIconModeValue, String floatingIconItemValue,
                              List<PlayerShopStorageEntry> linkedStoragesValue,
-                             List<String> savedConfigNamesValue) {
+                             List<String> savedConfigNamesValue,
+                             List<PlayerShopNormalizedOfferData>
+                                     normalizedOffersValue) {
         shopPos = pos;
         owner = ownerFlag;
         ownerUuid = ownerUuidValue;
@@ -85,6 +90,7 @@ public final class PlayerShopClientState {
         floatingIconItem = floatingIconItemValue == null ? "" : floatingIconItemValue;
         linkedStorages = List.copyOf(linkedStoragesValue);
         savedConfigNames = List.copyOf(savedConfigNamesValue);
+        normalizedOffers = List.copyOf(normalizedOffersValue);
     }
 
     public static BlockPos shopPos() { return shopPos; }
@@ -107,6 +113,14 @@ public final class PlayerShopClientState {
     public static String floatingIconItem() { return floatingIconItem; }
     public static List<PlayerShopStorageEntry> linkedStorages() { return linkedStorages; }
     public static List<String> savedConfigNames() { return savedConfigNames; }
+    public static List<PlayerShopNormalizedOfferData> normalizedOffers() {
+        return normalizedOffers;
+    }
+    public static PlayerShopNormalizedOfferData selectedNormalizedOffer() {
+        return normalizedOffers.stream().filter(value ->
+                value.clientListingIndex() == selectedListingIndex)
+                .findFirst().orElse(null);
+    }
     public static List<SettlementHistoryRow> settlementHistoryRows() { return settlementHistoryRows; }
     public static int settlementHistoryPage() { return settlementHistoryPage; }
     public static int settlementHistoryTotalPages() { return settlementHistoryTotalPages; }

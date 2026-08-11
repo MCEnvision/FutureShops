@@ -4,288 +4,409 @@ import com.enviouse.futureshops.catalog.BarterIngredientDef;
 import com.enviouse.futureshops.catalog.BarterRecipeDef;
 import com.enviouse.futureshops.catalog.ItemDef;
 import com.enviouse.futureshops.catalog.ShopCatalog;
+import com.enviouse.futureshops.config.EscrowConfig;
 import com.enviouse.futureshops.event.BarterTradeEvent;
 import com.enviouse.futureshops.event.ShopTransactionEvent;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SBarterRequestPacket;
 import com.enviouse.futureshops.network.packets.S2CBarterResponsePacket;
+import com.enviouse.futureshops.server.escrow.claim.EscrowClaim;
+import com.enviouse.futureshops.server.escrow.item.ExactItemClaimResolution;
+import com.enviouse.futureshops.server.escrow.item.ItemMatchMode;
+import com.enviouse.futureshops.server.escrow.runtime.ExactItemDeliveryTickBudget;
+import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeManager;
+import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
+import com.enviouse.futureshops.server.escrow.runtime.ServerShopBarterCommit;
+import com.enviouse.futureshops.server.escrow.runtime.ServerShopBarterService;
+import com.enviouse.futureshops.server.escrow.stock.CatalogStockState;
+import com.enviouse.futureshops.server.escrow.stock.CatalogStockStatus;
+import com.enviouse.futureshops.server.escrow.stock.StockKey;
 import com.enviouse.futureshops.server.session.ShopSession;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
+import com.enviouse.futureshops.server.shop.AdminShopToggleSavedData;
 import com.enviouse.futureshops.server.shop.InventorySyncService;
 import com.enviouse.futureshops.server.shop.ShopDataService;
 import com.enviouse.futureshops.server.shop.ShopResultCode;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.TagParser;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraftforge.common.MinecraftForge;
 
-import javax.annotation.Nullable;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.locks.ReentrantLock;
 
-/** Server-authoritative barter transaction path. */
 public final class ShopBarterService {
-    private static final org.slf4j.Logger LOGGER = com.mojang.logging.LogUtils.getLogger();
-
     private ShopBarterService() {
     }
 
-    public static void handleBarterRequest(ServerPlayer player, C2SBarterRequestPacket packet) {
+    public static void handleBarterRequest(
+            ServerPlayer player,
+            C2SBarterRequestPacket packet
+    ) {
         BarterResult result = execute(player, packet);
         ShopPackets.sendToPlayer(player, new S2CBarterResponsePacket(
-                result.success(),
-                result.shopId(),
-                packet.recipeId(),
-                result.errorCode(),
-                packet.multiplier(),
-                result.outputQuantity()));
-
-        if (result.success() && player.getServer() != null) {
-            // note: "paid=<itemId>×<n>[,<itemId>×<n>...]" so the history UI can show what the player handed over.
-            StringBuilder paid = new StringBuilder("paid=");
-            for (int i = 0; i < result.ingredientEntries().size(); i++) {
-                BarterTradeEvent.IngredientEntry ing = result.ingredientEntries().get(i);
-                if (i > 0) paid.append(',');
-                paid.append(ing.itemId()).append('\u00d7').append(ing.count());
-            }
-            TransactionHistoryService.record(player, result.shopId(), "BARTER", result.targetItemId(),
-                    result.outputQuantity(), 0L, paid.toString(), result.targetNbtJson());
-            // Fire ShopTransactionEvent.Post (spec §33) for barter transactions
-            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
-                    new ShopTransactionEvent.Post(player.getUUID(), result.shopId(), result.targetItemId(),
-                            result.outputQuantity(), "BARTER", 0L, 0L));
-            // Fire BarterTradeEvent.Post (spec §33) with ingredient details
-            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
-                    new BarterTradeEvent.Post(player.getUUID(), result.shopId(), packet.recipeId(),
-                            result.targetItemId(), result.outputQuantity(), result.ingredientEntries()));
+                result.success(), result.shopId(), packet.recipeId(),
+                result.errorCode(), packet.multiplier(),
+                result.outputQuantity(), packet.requestId()));
+        if (!result.success() || player.getServer() == null) {
+            return;
+        }
+        TransactionHistoryService.recordServerBarter(player.getServer(),
+                player.getUUID(), result.shopId(), result.transactionId(),
+                result.targetItemId(), result.outputQuantity(),
+                result.paidNote(), result.targetNbtJson(),
+                result.occurredAt());
+        if (!result.replayed()) {
+            MinecraftForge.EVENT_BUS.post(new ShopTransactionEvent.Post(
+                    player.getUUID(), result.shopId(),
+                    result.targetItemId(), result.outputQuantity(),
+                    "BARTER", 0L, 0L));
+            MinecraftForge.EVENT_BUS.post(new BarterTradeEvent.Post(
+                    player.getUUID(), result.shopId(), packet.recipeId(),
+                    result.targetItemId(), result.outputQuantity(),
+                    result.ingredientEntries()));
             InventorySyncService.sendOwnedCounts(player, result.shopId());
-            ShopDataService.resendSessionsViewingShop(player.getServer(), result.shopId());
+            ShopDataService.resendSessionsViewingShop(player.getServer(),
+                    result.shopId());
         }
     }
 
-    private static BarterResult execute(ServerPlayer player, C2SBarterRequestPacket packet) {
-        String shopId = ShopDataService.resolveShopId(packet.shopId());
-        ShopSession session = ShopSessionManager.get(player.getUUID()).orElse(null);
-        if (session == null || !session.shopId().equals(shopId)) {
+    private static BarterResult execute(
+            ServerPlayer player,
+            C2SBarterRequestPacket packet
+    ) {
+        String candidateShop = candidateShopId(packet.shopId());
+        ServerShopBarterService.Identity identity;
+        try {
+            identity = new ServerShopBarterService.Identity(
+                    packet.requestId(), player.getUUID(), candidateShop,
+                    packet.recipeId(), packet.multiplier());
+        } catch (RuntimeException exception) {
+            return BarterResult.error(candidateShop,
+                    ShopResultCode.INVALID_REQUEST);
+        }
+        Optional<ServerShopBarterService.Result> replay =
+                ServerShopBarterService.resolveReplay(player, identity);
+        if (replay.isPresent()) {
+            return mapResult(player, candidateShop,
+                    replay.orElseThrow());
+        }
+        String shopId = ShopDataService.resolveShopId(candidateShop);
+        if (!shopId.equals(candidateShop)) {
+            return BarterResult.error(shopId,
+                    ShopResultCode.INVALID_REQUEST);
+        }
+        if (!freshAccessAllowed(player, shopId)) {
             return BarterResult.error(shopId, ShopResultCode.SHOP_CLOSED);
         }
-
-        int multiplier = packet.multiplier();
-        if (multiplier <= 0 || multiplier > ShopTransactionUtil.MAX_QUANTITY) {
-            return BarterResult.error(shopId, ShopResultCode.INVALID_RECIPE);
-        }
-
         ReentrantLock lock = ShopTransactionUtil.lockFor(player.getUUID());
         if (!lock.tryLock()) {
             return BarterResult.error(shopId, ShopResultCode.COOLDOWN);
         }
-
         try {
-            BarterRecipeDef recipe = ShopCatalog.getBarterRecipe(shopId, packet.recipeId()).orElse(null);
-            if (recipe == null) {
-                return BarterResult.error(shopId, ShopResultCode.INVALID_RECIPE);
+            PreparedQuote first = prepareQuote(identity).orElse(null);
+            if (first == null) {
+                return BarterResult.error(shopId,
+                        ShopResultCode.INVALID_RECIPE);
             }
-            // A recipe with no ingredients would cost nothing — the collect/consume loop no-ops and
-            // the reward still mints (a free item). The OP's barter editor can leave a recipe empty
-            // mid-setup, so reject empty recipes here rather than trusting them to never be authored.
-            if (recipe.ingredients() == null || recipe.ingredients().isEmpty()) {
-                return BarterResult.error(shopId, ShopResultCode.INVALID_RECIPE);
-            }
-
-            // Recipe targets resolve listingId-FIRST (an exact listing, NBT variants included),
-            // falling back to the first listing whose registry itemId matches (legacy configs).
-            // All stock operations key off the resolved listing's resolutionKey, and its nbtJson
-            // is stamped on the minted reward, so a listingId target delivers that exact variant.
-            ItemDef targetDef = ShopCatalog.resolveBarterTarget(shopId, recipe.targetItemId()).orElse(null);
-            if (targetDef == null) {
-                return BarterResult.error(shopId, ShopResultCode.INVALID_RECIPE);
-            }
-            String targetKey = targetDef.resolutionKey();
-            // Always a real registry id (recipe.targetItemId() may be a listingId) — used for
-            // minting, events and history.
-            String targetRegistryId = targetDef.itemId();
-
-            int outputQuantity;
-            try {
-                outputQuantity = Math.multiplyExact(recipe.outputCount(), multiplier);
-            } catch (ArithmeticException ex) {
-                return BarterResult.error(shopId, ShopResultCode.SERVER_ERROR);
-            }
-
-            int currentStock = ShopCatalog.getCurrentStock(shopId, targetKey);
-            if (currentStock >= 0 && currentStock < outputQuantity) {
-                return BarterResult.error(shopId, ShopResultCode.OUT_OF_STOCK);
-            }
-
-            Inventory inventory = player.getInventory();
-            List<ItemStack> rewards = new ArrayList<>();
-            Item rewardItem = ShopTransactionUtil.resolveItem(targetRegistryId);
-            if (rewardItem == null) {
-                return BarterResult.error(shopId, ShopResultCode.INVALID_RECIPE);
-            }
-            ItemStack rewardStack = new ItemStack(rewardItem, outputQuantity);
-            // Apply the resolved listing's saved NBT (SNBT) when present so tagged variants
-            // (enchanted books, Tacz guns) round-trip through barter with their tag intact —
-            // mirrors ShopBuyService. Stamped BEFORE canFit: tagged stacks don't merge with
-            // bare ones, so fit must be evaluated against the tagged stack.
-            String nbt = targetDef.nbtJson();
-            if (nbt != null && !nbt.isBlank()) {
-                try {
-                    rewardStack.setTag(TagParser.parseTag(nbt));
-                } catch (Exception ignored) {
-                    // Invalid SNBT — log and deliver the bare item rather than fail the barter.
-                    LOGGER.warn(
-                            "[FutureShops] Invalid SNBT for barter target '{}' (listing '{}') in shop '{}' — delivering bare item.",
-                            targetRegistryId, targetKey, shopId);
-                }
-            }
-            rewards.add(rewardStack);
-            if (!ShopTransactionUtil.canFit(inventory, rewards)) {
-                return BarterResult.error(shopId, ShopResultCode.INVENTORY_FULL);
-            }
-
-            // Merge by (itemId, nbtJson): two lines requiring the same item with different NBT
-            // requirements stay distinct, while true duplicates still collapse into one count.
-            Map<IngredientKey, Integer> mergedIngredientCounts = new LinkedHashMap<>();
-            for (BarterIngredientDef ingredient : recipe.ingredients()) {
-                mergedIngredientCounts.merge(
-                        new IngredientKey(ingredient.itemId(), ingredient.nbtJson() == null ? "" : ingredient.nbtJson()),
-                        ingredient.count(), Integer::sum);
-            }
-
-            List<IngredientConsumption> required = new ArrayList<>();
-            for (Map.Entry<IngredientKey, Integer> ingredientEntry : mergedIngredientCounts.entrySet()) {
-                IngredientKey key = ingredientEntry.getKey();
-                Item ingredientItem = ShopTransactionUtil.resolveItem(key.itemId());
-                if (ingredientItem == null) {
-                    return BarterResult.error(shopId, ShopResultCode.INVALID_RECIPE);
-                }
-
-                int needed;
-                try {
-                    needed = Math.multiplyExact(ingredientEntry.getValue(), multiplier);
-                } catch (ArithmeticException ex) {
-                    return BarterResult.error(shopId, ShopResultCode.SERVER_ERROR);
-                }
-
-                // A configured ingredient nbt means NBT-STRICT matching (exact tag), mirroring
-                // the sell path. Blank keeps the legacy lenient identity match: any variant of
-                // the item (damaged, enchanted, semi-full tanks, etc.) qualifies — matches
-                // vanilla villager behavior and the player's intuition. Parsed once here; both
-                // the count gate and the consumption below use the same (nbtAware, tag) pair.
-                CompoundTag requiredTag = null;
-                if (!key.nbtJson().isBlank()) {
-                    try {
-                        requiredTag = TagParser.parseTag(key.nbtJson());
-                    } catch (Exception ex) {
-                        // Invalid SNBT — warn and fall back to lenient matching for this line.
-                        LOGGER.warn(
-                                "[FutureShops] Invalid SNBT for barter ingredient '{}' in recipe '{}' (shop '{}') — matching leniently.",
-                                key.itemId(), recipe.recipeId(), shopId);
-                    }
-                }
-                boolean nbtAware = requiredTag != null;
-
-                if (ShopTransactionUtil.countItems(inventory, ingredientItem, nbtAware, requiredTag) < needed) {
-                    return BarterResult.error(shopId, ShopResultCode.MISSING_INGREDIENTS);
-                }
-                required.add(new IngredientConsumption(ingredientItem, needed, nbtAware, requiredTag));
-            }
-
-            // Build ingredient entries for event data
-            List<BarterTradeEvent.IngredientEntry> ingredientEntries = required.stream()
-                    .map(ic -> new BarterTradeEvent.IngredientEntry(
-                            net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(ic.item()).toString(), ic.count()))
-                    .toList();
-
-            // Fire cancellable BarterTradeEvent.Pre (spec §33) — allows other mods to cancel the trade
-            BarterTradeEvent.Pre preEvent = new BarterTradeEvent.Pre(
+            BarterTradeEvent.Pre barterEvent = new BarterTradeEvent.Pre(
                     player.getUUID(), shopId, packet.recipeId(),
-                    targetRegistryId, outputQuantity, ingredientEntries);
-            if (net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(preEvent)) {
-                return BarterResult.error(shopId, ShopResultCode.CANCELLED_BY_EVENT);
+                    first.target().itemId(), first.outputQuantity(),
+                    first.ingredientEntries());
+            if (MinecraftForge.EVENT_BUS.post(barterEvent)) {
+                return BarterResult.error(shopId,
+                        ShopResultCode.CANCELLED_BY_EVENT);
             }
-
-            // Fire cancellable ShopTransactionEvent.Pre (spec §33) for the barter-as-transaction
-            ShopTransactionEvent.Pre txPreEvent = new ShopTransactionEvent.Pre(
-                    player, shopId, targetRegistryId, outputQuantity, "BARTER", 0L);
-            if (net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(txPreEvent)) {
-                return BarterResult.error(shopId, ShopResultCode.CANCELLED_BY_EVENT);
+            ShopTransactionEvent.Pre transactionEvent =
+                    new ShopTransactionEvent.Pre(player, shopId,
+                            first.target().itemId(),
+                            first.outputQuantity(), "BARTER", 0L);
+            if (MinecraftForge.EVENT_BUS.post(transactionEvent)) {
+                return BarterResult.error(shopId,
+                        ShopResultCode.CANCELLED_BY_EVENT);
             }
-
-            // NBT-strict lines must consume before lenient ones: a lenient line matches ANY
-            // variant, including strictly-tagged stacks, so consuming it first could eat
-            // stacks a later strict line needs and fail a feasible trade order-dependently.
-            // (Sorted after ingredientEntries is built so event/history order stays recipe order.)
-            required.sort(java.util.Comparator.comparing(ic -> !ic.nbtAware()));
-
-            // Consume via collectAndRemoveItems so rollbacks can refund the player's
-            // ACTUAL stacks (tags intact) instead of freshly-minted bare ones.
-            List<ItemStack> consumed = new ArrayList<>();
-            for (IngredientConsumption ingredient : required) {
-                if (ingredient.count() <= 0) {
-                    continue;
-                }
-                List<ItemStack> taken = ShopTransactionUtil.collectAndRemoveItems(
-                        inventory, ingredient.item(), ingredient.count(), ingredient.nbtAware(), ingredient.requiredTag());
-                if (taken.isEmpty()) {
-                    // Refund ingredients already consumed for earlier recipe lines.
-                    ShopTransactionUtil.insertIntoInventory(inventory, consumed);
-                    return BarterResult.error(shopId, ShopResultCode.MISSING_INGREDIENTS);
-                }
-                consumed.addAll(taken);
+            PreparedQuote revalidated = prepareQuote(identity)
+                    .orElse(null);
+            if (!first.equals(revalidated)
+                    || !freshAccessAllowed(player, shopId)) {
+                return BarterResult.error(shopId,
+                        ShopResultCode.INVALID_RECIPE);
             }
-
-            if (!ShopCatalog.reserveStock(shopId, targetKey, outputQuantity)) {
-                ShopTransactionUtil.insertIntoInventory(inventory, consumed);
-                return BarterResult.error(shopId, ShopResultCode.OUT_OF_STOCK);
-            }
-
-            if (!ShopTransactionUtil.insertIntoInventory(inventory, rewards)) {
-                ShopCatalog.restoreStock(shopId, targetKey, outputQuantity);
-                ShopTransactionUtil.insertIntoInventory(inventory, consumed);
-                return BarterResult.error(shopId, ShopResultCode.INVENTORY_FULL);
-            }
-
-            inventory.setChanged();
-            player.inventoryMenu.broadcastChanges();
-            return BarterResult.success(shopId, targetRegistryId, targetDef.nbtJson(), outputQuantity, ingredientEntries);
+            ServerShopBarterService.PreparedRequest request =
+                    new ServerShopBarterService.PreparedRequest(identity,
+                            first.quoteRevision(),
+                            first.recipeRevision(), Instant.now(),
+                            first.ingredients(), first.outputs(),
+                            ShopEscrowItemEvidence.shopReference(
+                                    player, shopId));
+            return mapResult(player, shopId,
+                    ServerShopBarterService.barter(player, request));
+        } catch (RuntimeException exception) {
+            return BarterResult.error(shopId,
+                    ShopResultCode.SERVER_ERROR);
         } finally {
             lock.unlock();
         }
     }
 
-    /** Merge key for ingredient lines — same item with different NBT requirements stays distinct. */
+    private static Optional<PreparedQuote> prepareQuote(
+            ServerShopBarterService.Identity identity
+    ) {
+        BarterRecipeDef recipe = ShopCatalog.getBarterRecipe(
+                identity.shopId(), identity.recipeId()).orElse(null);
+        if (recipe == null || recipe.ingredients() == null
+                || recipe.ingredients().isEmpty()
+                || recipe.outputCount() <= 0) {
+            return Optional.empty();
+        }
+        ItemDef target = ShopCatalog.resolveBarterTarget(
+                identity.shopId(), recipe.targetItemId()).orElse(null);
+        if (target == null
+                || target.isExpired(Instant.now().getEpochSecond())) {
+            return Optional.empty();
+        }
+        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
+        if (runtime == null || !runtime.isReady()) {
+            return Optional.empty();
+        }
+        CatalogStockState stock = runtime.stockListing(new StockKey(
+                identity.shopId(), target.resolutionKey())).orElse(null);
+        if (stock == null || stock.status() != CatalogStockStatus.ACTIVE) {
+            return Optional.empty();
+        }
+        int outputQuantity = Math.multiplyExact(recipe.outputCount(),
+                identity.multiplier());
+        ItemStack prototype = ShopEscrowItemEvidence.exactStack(
+                target.itemId(), target.nbtJson(), 1);
+        String outputSource = ServerShopBarterCommit.outputSourceKey(
+                identity.requestId(), 0);
+        ServerShopBarterCommit.OutputLine output =
+                new ServerShopBarterCommit.OutputLine(0,
+                        target.resolutionKey(), target.itemId(),
+                        recipe.outputCount(), stock.revision(),
+                        ShopEscrowItemEvidence.captureOutput(
+                                identity.requestId(), outputSource,
+                                prototype, outputQuantity));
+        List<ServerShopBarterCommit.Ingredient> ingredients =
+                prepareIngredients(recipe);
+        List<BarterTradeEvent.IngredientEntry> eventIngredients =
+                ingredients.stream().map(ingredient ->
+                        new BarterTradeEvent.IngredientEntry(
+                                ingredient.itemId(),
+                                ingredient.totalQuantity(
+                                        identity.multiplier())))
+                        .toList();
+        return Optional.of(new PreparedQuote(recipe, target,
+                ShopCatalogEvidenceRevision.item(target),
+                ShopCatalogEvidenceRevision.barter(recipe, target),
+                ingredients, List.of(output), eventIngredients,
+                outputQuantity));
+    }
+
+    private static List<ServerShopBarterCommit.Ingredient>
+    prepareIngredients(BarterRecipeDef recipe) {
+        Map<IngredientKey, Integer> merged = new LinkedHashMap<>();
+        for (BarterIngredientDef ingredient : recipe.ingredients()) {
+            if (ingredient == null || ingredient.count() <= 0) {
+                throw new IllegalArgumentException(
+                        "Barter ingredient configuration is invalid");
+            }
+            IngredientKey key = new IngredientKey(ingredient.itemId(),
+                    ingredient.nbtJson() == null
+                            ? "" : ingredient.nbtJson());
+            merged.merge(key, ingredient.count(), Math::addExact);
+        }
+        if (merged.isEmpty()
+                || merged.size() > ServerShopBarterCommit.MAX_INGREDIENTS) {
+            throw new IllegalArgumentException(
+                    "Barter ingredient configuration exceeds its limit");
+        }
+        List<ServerShopBarterCommit.Ingredient> prepared =
+                new ArrayList<>(merged.size());
+        int index = 0;
+        for (Map.Entry<IngredientKey, Integer> entry
+                : merged.entrySet()) {
+            IngredientKey key = entry.getKey();
+            ItemMatchMode mode = key.nbtJson().isBlank()
+                    ? ItemMatchMode.ITEM_ONLY : ItemMatchMode.EXACT;
+            prepared.add(new ServerShopBarterCommit.Ingredient(index,
+                    "ingredient." + index, key.itemId(),
+                    entry.getValue(), mode,
+                    ShopEscrowItemEvidence.exactTemplate(
+                            key.itemId(), key.nbtJson())));
+            index++;
+        }
+        return List.copyOf(prepared);
+    }
+
+    private static BarterResult mapResult(
+            ServerPlayer player,
+            String shopId,
+            ServerShopBarterService.Result result
+    ) {
+        if (!result.success()) {
+            ShopResultCode code = switch (result.status()) {
+                case REQUEST_CONFLICT -> ShopResultCode.INVALID_REQUEST;
+                case MISSING_INGREDIENTS ->
+                        ShopResultCode.MISSING_INGREDIENTS;
+                case UNSUPPORTED_ITEM -> ShopResultCode.INVALID_RECIPE;
+                case STOCK_UNAVAILABLE, STOCK_CHANGED ->
+                        ShopResultCode.OUT_OF_STOCK;
+                case ITEM_CUSTODY_ABORTED, ESCROW_UNAVAILABLE,
+                     RECOVERY_REQUIRED -> ShopResultCode.SERVER_ERROR;
+                case SUCCESS -> throw new IllegalStateException(
+                        "Server shop barter result status is invalid");
+            };
+            return BarterResult.error(shopId, code);
+        }
+        ServerShopBarterCommit commit = result.commit().orElseThrow();
+        deliverExactItemClaims(player, result.outputClaims());
+        ServerShopBarterCommit.OutputLine output =
+                commit.outputs().get(0);
+        ExactItemClaimResolution resolved = output.portions().get(0)
+                .resolve();
+        String nbt = resolved.resolvedStack().map(ItemStack::getTag)
+                .map(Object::toString).orElse("");
+        List<BarterTradeEvent.IngredientEntry> ingredients =
+                commit.ingredients().stream().map(ingredient ->
+                        new BarterTradeEvent.IngredientEntry(
+                                ingredient.itemId(),
+                                ingredient.totalQuantity(
+                                        commit.multiplier())))
+                        .toList();
+        StringBuilder paid = new StringBuilder("paid=");
+        for (int index = 0; index < ingredients.size(); index++) {
+            BarterTradeEvent.IngredientEntry ingredient =
+                    ingredients.get(index);
+            if (index > 0) {
+                paid.append(',');
+            }
+            paid.append(ingredient.itemId()).append('\u00d7')
+                    .append(ingredient.count());
+        }
+        return BarterResult.success(commit.shopId(), output.itemId(),
+                nbt, commit.totalOutputQuantity(), ingredients,
+                paid.toString(), commit.requestId(),
+                commit.completedTransaction().timestamps().updatedAt(),
+                result.replayed());
+    }
+
+    private static void deliverExactItemClaims(
+            ServerPlayer player,
+            List<EscrowClaim> claims
+    ) {
+        EscrowConfig.Settings settings = EscrowConfig.settings();
+        if (!settings.automaticClaimDelivery()) {
+            return;
+        }
+        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
+        if (runtime == null || !runtime.isReady()) {
+            return;
+        }
+        if (player.getServer() == null) {
+            return;
+        }
+        int operationLimit = settings.exactItemDeliveryOperationsPerTick();
+        int limit = Math.min(ExactItemDeliveryTickBudget.remaining(
+                player.getServer(), operationLimit), claims.size());
+        Instant now = Instant.now();
+        for (int index = 0; index < limit; index++) {
+            if (!ExactItemDeliveryTickBudget.tryAcquire(
+                    player.getServer(), operationLimit)) {
+                return;
+            }
+            try {
+                runtime.collectExactItemClaim(player,
+                        claims.get(index).claimId(), now);
+            } catch (RuntimeException ignored) {
+                return;
+            }
+        }
+    }
+
+    private static boolean freshAccessAllowed(
+            ServerPlayer player,
+            String shopId
+    ) {
+        ShopSession session = ShopSessionManager.get(
+                player.getUUID()).orElse(null);
+        return session != null && session.shopId().equals(shopId)
+                && player.getServer() != null
+                && AdminShopToggleSavedData.get(player.getServer())
+                .isAdminShopEnabled();
+    }
+
+    private static String candidateShopId(String requested) {
+        return requested == null || requested.isBlank()
+                ? "default" : requested.strip();
+    }
+
     private record IngredientKey(String itemId, String nbtJson) {
     }
 
-    /**
-     * One resolved ingredient line. {@code nbtAware}/{@code requiredTag} carry the pre-parsed
-     * NBT-strict matching requirement ({@code false}/{@code null} = lenient identity matching).
-     */
-    private record IngredientConsumption(Item item, int count, boolean nbtAware, @Nullable CompoundTag requiredTag) {
+    private record PreparedQuote(
+            BarterRecipeDef recipe,
+            ItemDef target,
+            long quoteRevision,
+            long recipeRevision,
+            List<ServerShopBarterCommit.Ingredient> ingredients,
+            List<ServerShopBarterCommit.OutputLine> outputs,
+            List<BarterTradeEvent.IngredientEntry> ingredientEntries,
+            int outputQuantity
+    ) {
+        private PreparedQuote {
+            ingredients = List.copyOf(ingredients);
+            outputs = List.copyOf(outputs);
+            ingredientEntries = List.copyOf(ingredientEntries);
+        }
     }
 
-    private record BarterResult(boolean success, String shopId, ShopResultCode errorCode, String targetItemId,
-                               String targetNbtJson, int outputQuantity,
-                               List<BarterTradeEvent.IngredientEntry> ingredientEntries) {
-        private static BarterResult success(String shopId, String targetItemId, String targetNbtJson,
-                                            int outputQuantity,
-                                            List<BarterTradeEvent.IngredientEntry> ingredientEntries) {
-            return new BarterResult(true, shopId, ShopResultCode.OK, targetItemId,
-                    targetNbtJson == null ? "" : targetNbtJson, outputQuantity, ingredientEntries);
+    private record BarterResult(
+            boolean success,
+            String shopId,
+            ShopResultCode errorCode,
+            String targetItemId,
+            String targetNbtJson,
+            int outputQuantity,
+            List<BarterTradeEvent.IngredientEntry> ingredientEntries,
+            String paidNote,
+            UUID transactionId,
+            Instant occurredAt,
+            boolean replayed
+    ) {
+        private BarterResult {
+            ingredientEntries = List.copyOf(ingredientEntries);
         }
 
-        private static BarterResult error(String shopId, ShopResultCode errorCode) {
-            return new BarterResult(false, shopId, errorCode, "", "", 0, List.of());
+        private static BarterResult success(
+                String shopId,
+                String targetItemId,
+                String targetNbtJson,
+                int outputQuantity,
+                List<BarterTradeEvent.IngredientEntry> ingredientEntries,
+                String paidNote,
+                UUID transactionId,
+                Instant occurredAt,
+                boolean replayed
+        ) {
+            return new BarterResult(true, shopId, ShopResultCode.OK,
+                    targetItemId, targetNbtJson, outputQuantity,
+                    ingredientEntries, paidNote, transactionId,
+                    occurredAt, replayed);
+        }
+
+        private static BarterResult error(
+                String shopId,
+                ShopResultCode errorCode
+        ) {
+            return new BarterResult(false, shopId, errorCode, "", "",
+                    0, List.of(), "", new UUID(0L, 0L),
+                    Instant.EPOCH, false);
         }
     }
 }
-
-
-

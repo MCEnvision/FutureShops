@@ -44,6 +44,30 @@ public final class DynamicPricingEngine {
         DynamicPricingSavedData.get(server).recordSell(shopId, itemId, quantity);
     }
 
+    public static void recordBuyOnce(
+            MinecraftServer server,
+            String receipt,
+            String shopId,
+            String itemId,
+            int quantity
+    ) {
+        if (!Config.dynamicPricingEnabled) return;
+        DynamicPricingSavedData.get(server).recordBuyOnce(
+                receipt, shopId, itemId, quantity);
+    }
+
+    public static void recordSellOnce(
+            MinecraftServer server,
+            String receipt,
+            String shopId,
+            String itemId,
+            int quantity
+    ) {
+        if (!Config.dynamicPricingEnabled) return;
+        DynamicPricingSavedData.get(server).recordSellOnce(
+                receipt, shopId, itemId, quantity);
+    }
+
     // ---- Price query ----
 
     /**
@@ -139,4 +163,3 @@ public final class DynamicPricingEngine {
         tickCounter = 0;
     }
 }
-

@@ -18,6 +18,7 @@ import com.enviouse.futureshops.server.escrow.mint.ProtectedMintJournalEvent;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintOperation;
 import com.enviouse.futureshops.server.escrow.model.EscrowState;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -434,7 +435,7 @@ public record ProtectedCashRedemptionSettlement(
                 || !claim.ownerId().equals(reservation.playerId())
                 || !claim.sourceKey().equals(
                 overflowClaimSourceKey(reservation))
-                || claim.kind() != ClaimKind.MONEY
+                || claim.kind() != expectedOverflowClaimKind(reservation)
                 || claim.originalUnits() != claimCredit
                 || claim.remainingUnits() != claimCredit
                 || claim.payload().length != 0
@@ -458,6 +459,9 @@ public record ProtectedCashRedemptionSettlement(
             long walletBalanceBefore,
             long walletReservedBefore
     ) {
+        if (reservation.depositMode() == CashDepositMode.INTERNAL_ESCROW) {
+            return 0L;
+        }
         if (reservation.destinationAccount().type()
                 != LedgerAccountType.PLAYER_WALLET) {
             return 0L;
@@ -473,6 +477,13 @@ public record ProtectedCashRedemptionSettlement(
                 reservation.amountMinorUnits());
         return capacity.compareTo(amount) >= 0
                 ? reservation.amountMinorUnits() : capacity.longValueExact();
+    }
+
+    private static ClaimKind expectedOverflowClaimKind(
+            ProtectedCashRedemptionReservation reservation
+    ) {
+        return reservation.depositMode() == CashDepositMode.INTERNAL_ESCROW
+                ? ClaimKind.INTERNAL_ESCROW_MONEY : ClaimKind.MONEY;
     }
 
     private static void requireTime(Instant value,

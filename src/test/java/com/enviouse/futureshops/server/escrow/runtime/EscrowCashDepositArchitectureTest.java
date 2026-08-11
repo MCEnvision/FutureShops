@@ -126,7 +126,7 @@ class EscrowCashDepositArchitectureTest {
         String atm = read(MAIN.resolve(
                 "com/enviouse/futureshops/server/economy/AtmService.java"));
 
-        assertEquals(1, occurrences(service,
+        assertEquals(2, occurrences(service,
                 "ServerRequestAction.ATM_DEPOSIT"));
         assertEquals(0, occurrences(atm,
                 "ServerRequestAction.ATM_DEPOSIT"));
@@ -188,7 +188,14 @@ class EscrowCashDepositArchitectureTest {
                     "commit", source.indexOf(
                             "intentStore.persistIntent(server, player, intent)"));
             assertTrue(source.contains(
-                    "if (!enqueueIntentRecovery(intent, exception))"));
+                    "CashDepositRecoveryEnqueueResult enqueueResult ="));
+            assertTrue(source.contains(
+                    "case NO_DURABLE_EVIDENCE -> discardMatchingIntent("));
+            assertTrue(source.contains("case FAILED ->"));
+            assertFalse(source.contains(
+                    "catch (RuntimeException enqueueFailure) {\n"
+                            + "            failure.addSuppressed(enqueueFailure);\n"
+                            + "            return true;"));
             assertTrue(source.contains(
                     "activePlayers.remove(player.getUUID())"));
             assertTrue(source.contains("player.containerMenu.broadcastChanges()"));

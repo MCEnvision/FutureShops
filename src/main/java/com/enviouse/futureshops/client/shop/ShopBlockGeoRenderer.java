@@ -2,8 +2,7 @@ package com.enviouse.futureshops.client.shop;
 
 import com.enviouse.futureshops.block.ShopBlock;
 import com.enviouse.futureshops.block.ShopBlockEntity;
-import com.mojang.authlib.GameProfile;
-import com.mojang.authlib.minecraft.MinecraftProfileTexture;
+import com.enviouse.futureshops.client.PlayerSkinResolver;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -26,10 +25,7 @@ import org.joml.Matrix4f;
 import software.bernie.geckolib.renderer.GeoBlockRenderer;
 
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 public class ShopBlockGeoRenderer implements BlockEntityRenderer<ShopBlockEntity> {
     /** How long each listing stays on-screen before rotating to the next one. */
@@ -147,7 +143,7 @@ public class ShopBlockGeoRenderer implements BlockEntityRenderer<ShopBlockEntity
         UUID ownerUuid = be.getOwnerUuid();
         if (ownerUuid == null) return;
 
-        ResourceLocation skin = resolveSkinTexture(ownerUuid, be.getOwnerName());
+        ResourceLocation skin = PlayerSkinResolver.resolve(ownerUuid, be.getOwnerName());
         if (skin == null) return;
 
         Direction facing = be.getBlockState().hasProperty(ShopBlock.FACING)
@@ -222,46 +218,4 @@ public class ShopBlockGeoRenderer implements BlockEntityRenderer<ShopBlockEntity
                 .endVertex();
     }
 
-    // Per-client cache of the owner's real skin texture, keyed by UUID. Fetched
-    // once per UUID via SkullBlockEntity's background session-service call so
-    // we don't hit Mojang's API on every block render. Until the real skin
-    // lands, we fall back to the default (Steve/Alex) skin so the block never
-    // shows a random placeholder.
-    private static final ConcurrentMap<UUID, ResourceLocation> SKIN_CACHE = new ConcurrentHashMap<>();
-    private static final Set<UUID> SKIN_FETCHED = ConcurrentHashMap.newKeySet();
-
-    private static ResourceLocation resolveSkinTexture(UUID uuid, String name) {
-        if (uuid == null) return null;
-        ResourceLocation cached = SKIN_CACHE.get(uuid);
-        if (cached != null) return cached;
-
-        if (SKIN_FETCHED.add(uuid)) {
-            startSkinFetch(uuid, name);
-        }
-        // Placeholder until the real skin arrives.
-        return net.minecraft.client.resources.DefaultPlayerSkin.getDefaultSkin(uuid);
-    }
-
-    private static void startSkinFetch(UUID uuid, String name) {
-        try {
-            GameProfile initial = new GameProfile(uuid, name == null || name.isBlank() ? "" : name);
-            // SkullBlockEntity.updateGameprofile runs on its own executor and
-            // returns a profile populated with texture URLs. We then marshal
-            // back to the main thread to hand it to SkinManager, which does
-            // the actual texture download + registration.
-            net.minecraft.world.level.block.entity.SkullBlockEntity.updateGameprofile(initial, filled -> {
-                if (filled == null) return;
-                Minecraft mc = Minecraft.getInstance();
-                mc.execute(() -> mc.getSkinManager().registerSkins(filled, (type, loc, tex) -> {
-                    if (type == MinecraftProfileTexture.Type.SKIN && loc != null) {
-                        SKIN_CACHE.put(uuid, loc);
-                    }
-                }, false));
-            });
-        } catch (Throwable t) {
-            // If the session service is unavailable (offline dev env, rate
-            // limits, network error) just keep using the default skin.
-            SKIN_FETCHED.remove(uuid);
-        }
-    }
 }

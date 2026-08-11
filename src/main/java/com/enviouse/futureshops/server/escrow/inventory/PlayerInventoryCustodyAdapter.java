@@ -27,7 +27,6 @@ import net.minecraftforge.registries.ForgeRegistries;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -343,8 +342,8 @@ public final class PlayerInventoryCustodyAdapter implements CustodyAdapter {
         if (registryId == null
                 || !registryId.toString().equals(snapshot.registryId())
                 || stack.getCount() != snapshot.count()
-                || !Arrays.equals(ItemStackSnapshotCodec.encode(stack),
-                snapshot.serializedNbt())) {
+                || !ItemStackSnapshotCodec.snapshotMatchesIdentity(
+                snapshot.serializedNbt(), stack)) {
             throw new IllegalArgumentException(
                     "Cash claim stack does not match custody");
         }

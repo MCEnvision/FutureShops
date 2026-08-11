@@ -144,7 +144,24 @@ public final class ProtectedCashInventoryState {
     }
 
     public boolean matches(Inventory inventory) {
-        return Arrays.equals(encoded, capture(inventory).encoded);
+        ProtectedCashInventoryState current = capture(inventory);
+        if (main.size() != current.main.size()
+                || offhand.size() != current.offhand.size()) {
+            return false;
+        }
+        for (int index = 0; index < main.size(); index++) {
+            if (!ItemStackSnapshotCodec.sameIdentity(main.get(index),
+                    current.main.get(index))) {
+                return false;
+            }
+        }
+        for (int index = 0; index < offhand.size(); index++) {
+            if (!ItemStackSnapshotCodec.sameIdentity(offhand.get(index),
+                    current.offhand.get(index))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public RemovalResult removeExact(

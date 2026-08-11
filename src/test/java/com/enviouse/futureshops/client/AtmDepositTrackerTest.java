@@ -3,12 +3,15 @@ package com.enviouse.futureshops.client;
 import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
 import org.junit.jupiter.api.Test;
 
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AtmDepositTrackerTest {
     private static final UUID REQUEST_ID = UUID.fromString(
@@ -145,6 +148,99 @@ class AtmDepositTrackerTest {
         assertEquals(AtmDepositTracker.ResultDecision.DUPLICATE,
                 tracker.evaluateResult(request.requestId(), false, 0L,
                         "SUCCESS"));
+    }
+
+    @Test
+    void serverRecoveryCanBeAdoptedAndRetriedWithoutDepositPayload() {
+        AtomicLong now = new AtomicLong();
+        AtmDepositTracker tracker = tracker(now);
+        UUID transactionId = UUID.fromString(
+                "53000000-0000-0000-0000-000000000002");
+
+        AtmDepositTracker.PendingRequest adopted = tracker.adoptRecovery(
+                REQUEST_ID, SIGNATURE, transactionId);
+
+        assertEquals(AtmDepositTracker.PendingState.RETRYABLE,
+                tracker.state());
+        assertEquals(Optional.of(transactionId),
+                adopted.recoveryTransactionId());
+        assertEquals(OptionalLong.empty(), adopted.requestedMinorUnits());
+        assertEquals(REQUEST_ID, tracker.retry().requestId());
+        assertEquals(Optional.of(transactionId),
+                tracker.pending().orElseThrow().recoveryTransactionId());
+    }
+
+    @Test
+    void authoritativeRecoveryReplacesAnUnconfirmedLocalDeposit() {
+        AtmDepositTracker tracker = tracker(new AtomicLong());
+        tracker.begin(SIGNATURE, C2SAtmDepositPacket.Source.MAIN_HAND,
+                OptionalLong.of(500L));
+        UUID serverRequest = UUID.fromString(
+                "53000000-0000-0000-0000-000000000003");
+        UUID transactionId = UUID.fromString(
+                "53000000-0000-0000-0000-000000000004");
+
+        AtmDepositTracker.PendingRequest adopted = tracker.adoptRecovery(
+                serverRequest, SIGNATURE, transactionId);
+
+        assertEquals(serverRequest, adopted.requestId());
+        assertEquals(Optional.of(transactionId),
+                adopted.recoveryTransactionId());
+        assertEquals(AtmDepositTracker.PendingState.RETRYABLE,
+                tracker.state());
+    }
+
+    @Test
+    void manualReviewRecoveryIsBlockedAndCannotRetry() {
+        AtmDepositTracker tracker = tracker(new AtomicLong());
+        UUID transactionId = UUID.fromString(
+                "53000000-0000-0000-0000-000000000005");
+
+        tracker.adoptBlockedRecovery(
+                REQUEST_ID, SIGNATURE, transactionId);
+
+        assertEquals(AtmDepositTracker.PendingState.BLOCKED,
+                tracker.state());
+        assertThrows(IllegalStateException.class, tracker::retry);
+        assertEquals(Optional.of(transactionId),
+                tracker.pending().orElseThrow().recoveryTransactionId());
+    }
+
+    @Test
+    void terminalRecoverySnapshotClearsOnlyTheMatchingRequest() {
+        AtmDepositTracker tracker = tracker(new AtomicLong());
+        UUID transactionId = UUID.fromString(
+                "53000000-0000-0000-0000-000000000006");
+        tracker.adoptRecovery(REQUEST_ID, SIGNATURE, transactionId);
+
+        assertFalse(tracker.reconcileTerminalRecovery(
+                REQUEST_ID, UUID.randomUUID()));
+        assertEquals(AtmDepositTracker.PendingState.RETRYABLE,
+                tracker.state());
+        assertTrue(tracker.reconcileTerminalRecovery(
+                REQUEST_ID, transactionId));
+        assertEquals(AtmDepositTracker.PendingState.NONE, tracker.state());
+        assertEquals(AtmDepositTracker.ResultDecision.DUPLICATE,
+                tracker.evaluateResult(
+                        REQUEST_ID, false, 0L, "SUCCESS"));
+    }
+
+    @Test
+    void absentServerRecoveryClearsOnlyAdoptedRecovery() {
+        AtmDepositTracker tracker = tracker(new AtomicLong());
+        tracker.begin(SIGNATURE, C2SAtmDepositPacket.Source.INVENTORY,
+                OptionalLong.empty());
+
+        assertFalse(tracker.reconcileNoRecovery());
+        assertEquals(AtmDepositTracker.PendingState.AWAITING,
+                tracker.state());
+
+        tracker.clear();
+        tracker.adoptBlockedRecovery(
+                REQUEST_ID, SIGNATURE, UUID.fromString(
+                        "53000000-0000-0000-0000-000000000007"));
+        assertTrue(tracker.reconcileNoRecovery());
+        assertEquals(AtmDepositTracker.PendingState.NONE, tracker.state());
     }
 
     private static AtmDepositTracker tracker(AtomicLong now) {

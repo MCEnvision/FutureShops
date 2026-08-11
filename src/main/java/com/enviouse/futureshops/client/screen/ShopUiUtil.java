@@ -1,13 +1,12 @@
 package com.enviouse.futureshops.client.screen;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.enviouse.futureshops.client.PlayerSkinResolver;
 import com.enviouse.futureshops.client.ShopClientState;
 import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.CatalogBarterIngredient;
 import com.enviouse.futureshops.data.CatalogBarterRecipe;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.PlayerInfo;
-import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.nbt.CompoundTag;
@@ -239,10 +238,16 @@ public final class ShopUiUtil {
             return Long.toString(minorUnits);
         }
 
-        long divisor = (long) Math.pow(10, decimals);
-        long whole = minorUnits / divisor;
-        long fractional = Math.abs(minorUnits % divisor);
-        return whole + "." + String.format("%0" + decimals + "d", fractional);
+        java.math.BigInteger value = java.math.BigInteger.valueOf(
+                minorUnits);
+        java.math.BigInteger divisor = java.math.BigInteger.TEN.pow(
+                decimals);
+        java.math.BigInteger[] parts = value.abs()
+                .divideAndRemainder(divisor);
+        String sign = value.signum() < 0 ? "-" : "";
+        return sign + parts[0] + "." + String.format(
+                java.util.Locale.ROOT, "%0" + decimals + "d",
+                parts[1].longValueExact());
     }
 
     public static int countPlayerInventory(String itemId) {
@@ -712,6 +717,7 @@ public final class ShopUiUtil {
      */
     public static HeaderHit headerLayout(Font font, int x, int y, int width, int headerH,
                                          String[] tabLabels, String balance, String playerName, boolean compact) {
+        compact = effectiveShellCompact(font, width, tabLabels, compact);
         int pad = PAD_LG;
         int ctrlH = 16;
         int ctrlY = y + (headerH - ctrlH) / 2;
@@ -758,6 +764,7 @@ public final class ShopUiUtil {
                                               String[] tabLabels, int activeIdx, String balance,
                                               String playerName, UUID playerUuid, boolean compact,
                                               int mouseX, int mouseY) {
+        compact = effectiveShellCompact(font, width, tabLabels, compact);
         HeaderHit hit = headerLayout(font, x, y, width, headerH, tabLabels, balance, playerName, compact);
         int ctrlY = hit.searchRect()[1];
         int ctrlH = hit.searchRect()[3];
@@ -804,16 +811,19 @@ public final class ShopUiUtil {
         renderCoinAmount(g, font, b[0] + 4, b[1] + (b[3] - 8) / 2,
                 font.plainSubstrByWidth(balance, b[2] - 12), ShopColors.TEXT_STRONG);
 
-        // profile pill (player-color square + initial + name)
+        // profile pill
         int[] p = hit.profileRect();
         renderNocturnePanel(g, p[0], p[1], p[2], p[3], ShopColors.SURFACE_RAISED,
                 hit.hitProfile(mouseX, mouseY) ? ShopColors.BORDER_GLOW : ShopColors.BORDER_MUTED);
-        int sw = 10, swX = p[0] + 4, swY = p[1] + (p[3] - sw) / 2;
-        g.fill(swX, swY, swX + sw, swY + sw, playerColor(playerUuid));
-        drawBorder(g, swX, swY, sw, sw, withAlpha(0xFFFFFFFF, 0x30));
-        String initial = (playerName == null || playerName.isEmpty())
-                ? "" : playerName.substring(0, 1).toUpperCase(java.util.Locale.ROOT);
-        if (!initial.isEmpty()) g.drawCenteredString(font, initial, swX + sw / 2, swY + 1, 0xFFFFFFFF);
+        int sw = 12, swX = p[0] + 4, swY = p[1] + (p[3] - sw) / 2;
+        if (playerUuid != null) {
+            renderPlayerFace(g, playerUuid, playerName, swX, swY, sw);
+        } else {
+            g.fill(swX, swY, swX + sw, swY + sw,
+                    playerColor(playerUuid));
+            drawBorder(g, swX, swY, sw, sw,
+                    withAlpha(0xFFFFFFFF, 0x30));
+        }
         if (!compact) {
             String nm = font.plainSubstrByWidth(playerName == null ? "" : playerName, p[2] - sw - 12);
             g.drawString(font, nm, swX + sw + 4, p[1] + (p[3] - 8) / 2, ShopColors.NEUTRAL_200, false);
@@ -827,6 +837,44 @@ public final class ShopUiUtil {
         g.drawCenteredString(font, "✕", c[0] + c[2] / 2, c[1] + (c[3] - 8) / 2,
                 closeHover ? ShopColors.TEXT_STRONG : ShopColors.TEXT_MUTED);
         return hit;
+    }
+
+    public static void renderShellHeaderTooltip(
+            GuiGraphics graphics,
+            Font font,
+            HeaderHit hit,
+            int mouseX,
+            int mouseY
+    ) {
+        if (hit == null) {
+            return;
+        }
+        if (hit.hitProfile(mouseX, mouseY)) {
+            graphics.renderTooltip(font, Component.translatable(
+                    "gui.futureshops.shell.profile_tooltip"),
+                    mouseX, mouseY);
+        } else if (hit.hitBalance(mouseX, mouseY)) {
+            graphics.renderTooltip(font, Component.translatable(
+                    "gui.futureshops.shell.transactions_tooltip"),
+                    mouseX, mouseY);
+        }
+    }
+
+    private static boolean effectiveShellCompact(Font font, int width,
+                                                 String[] tabLabels,
+                                                 boolean requested) {
+        if (requested) {
+            return true;
+        }
+        int wordmark = Math.max(font.width(shellBrand().getString()),
+                font.width(shellBrandSub().getString()));
+        int tabs = 0;
+        for (String label : tabLabels) {
+            tabs += font.width(label) + 20;
+        }
+        int minimum = PAD_LG * 2 + 18 + 7 + wordmark + 14 + tabs
+                + 12 + 46 + 8 + 74 + 8 + 100 + 8 + 16;
+        return minimum > width;
     }
 
     /**
@@ -927,14 +975,19 @@ public final class ShopUiUtil {
         return new int[]{ draw, truncated ? 1 : 0 };
     }
 
-    public static void renderPlayerFace(GuiGraphics graphics, UUID playerUuid, int x, int y, int size) {
-        Minecraft minecraft = Minecraft.getInstance();
-        ResourceLocation skin = DefaultPlayerSkin.getDefaultSkin(playerUuid);
-        if (minecraft.getConnection() != null) {
-            PlayerInfo info = minecraft.getConnection().getPlayerInfo(playerUuid);
-            if (info != null) {
-                skin = info.getSkinLocation();
-            }
+    public static void renderPlayerFace(GuiGraphics graphics,
+                                        UUID playerUuid,
+                                        int x, int y, int size) {
+        renderPlayerFace(graphics, playerUuid, "", x, y, size);
+    }
+
+    public static void renderPlayerFace(GuiGraphics graphics,
+                                        UUID playerUuid,
+                                        String playerName,
+                                        int x, int y, int size) {
+        ResourceLocation skin = PlayerSkinResolver.resolve(playerUuid, playerName);
+        if (skin == null) {
+            return;
         }
         RenderSystem.enableBlend();
         // Face layer (8,8)-(16,16) in the 64x64 skin texture

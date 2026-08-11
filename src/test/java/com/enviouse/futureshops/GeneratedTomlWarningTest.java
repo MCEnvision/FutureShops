@@ -36,7 +36,16 @@ class GeneratedTomlWarningTest {
                 .sync()
                 .build()) {
             spec.correct(generated);
+            assertTrue(spec.isCorrect(generated), fileName);
             generated.save();
+        }
+
+        try (CommentedFileConfig reloaded = CommentedFileConfig
+                .builder(path, TomlFormat.instance())
+                .sync()
+                .build()) {
+            reloaded.load();
+            assertTrue(spec.isCorrect(reloaded), fileName);
         }
 
         String toml = Files.readString(path);
@@ -52,7 +61,7 @@ class GeneratedTomlWarningTest {
 
     private static Stream<Arguments> serverSpecs() {
         return Stream.of(
-                Arguments.of("futureshops-common.toml",
+                Arguments.of(Config.FILE_NAME,
                         "provider = \"futureshops\"", Config.SPEC),
                 Arguments.of(EscrowConfig.FILE_NAME,
                         "physical_refund_policy = \"wallet_claim\"", EscrowConfig.SPEC),

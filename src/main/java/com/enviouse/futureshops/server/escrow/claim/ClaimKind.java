@@ -6,5 +6,10 @@ public enum ClaimKind {
     PROTECTED_CASH,
     FOREIGN_CASH,
     BARTER_ITEM,
-    REFUND
+    REFUND,
+    INTERNAL_ESCROW_MONEY;
+
+    public boolean publiclyVisible() {
+        return this != INTERNAL_ESCROW_MONEY;
+    }
 }

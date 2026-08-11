@@ -8,6 +8,7 @@ import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountType;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintEventCodec;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintJournalEvent;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
 import com.enviouse.futureshops.server.escrow.store.EscrowTransactionByteCodec;
 
 import java.io.ByteArrayInputStream;
@@ -22,7 +23,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 public final class ProtectedCashRedemptionReservationCodec {
-    public static final int CURRENT_SCHEMA = 3;
+    public static final int CURRENT_SCHEMA = 4;
     public static final int MAX_ENCODED_BYTES = 8_388_608;
 
     private static final int MAGIC = 0x46534352;
@@ -48,6 +49,7 @@ public final class ProtectedCashRedemptionReservationCodec {
             ProtectedCashRedemptionSupport.writeString(output,
                     reservation.destinationAccount().ownerKey(), 512);
             output.writeLong(reservation.walletBalanceLimitMinorUnits());
+            output.writeInt(reservation.depositMode().ordinal());
             ProtectedCashRedemptionSupport.writeBytes(output,
                     reservation.inventoryBeforeHash(),
                     ProtectedCashRedemptionSupport.HASH_BYTES,
@@ -107,7 +109,7 @@ public final class ProtectedCashRedemptionReservationCodec {
                 throw new IllegalStateException(
                         "Protected cash reservation schema is newer than this build");
             }
-            if (schema != CURRENT_SCHEMA) {
+            if (schema < 3) {
                 throw new IllegalArgumentException(
                         "Protected cash reservation schema is unsupported");
             }
@@ -122,6 +124,11 @@ public final class ProtectedCashRedemptionReservationCodec {
                             input, bytes, 512,
                             "Protected cash destination owner"));
             long walletBalanceLimitMinorUnits = input.readLong();
+            CashDepositMode depositMode = schema >= 4
+                    ? ProtectedCashRedemptionSupport.readEnum(
+                            input.readInt(), CashDepositMode.values(),
+                            "Protected cash deposit mode")
+                    : CashDepositMode.PUBLIC_WALLET;
             byte[] inventoryBeforeHash =
                     ProtectedCashRedemptionSupport.readBytes(input, bytes,
                             ProtectedCashRedemptionSupport.HASH_BYTES,
@@ -171,8 +178,9 @@ public final class ProtectedCashRedemptionReservationCodec {
             ProtectedCashRedemptionReservation reservation =
                     new ProtectedCashRedemptionReservation(
                             reservationId, playerId, destination,
-                            walletBalanceLimitMinorUnits, inventoryBeforeHash,
-                            plan, transaction, custody, mints);
+                            walletBalanceLimitMinorUnits, depositMode,
+                            inventoryBeforeHash, plan, transaction, custody,
+                            mints);
             if (!plan.equals(reservation.plan())
                     || !custody.equals(reservation.custodyReservations())
                     || !mints.equals(reservation.mintReservations())) {

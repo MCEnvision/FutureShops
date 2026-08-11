@@ -168,6 +168,8 @@ public final class MaintenanceRepairProcessor {
             case QUARANTINE_CLAIM, REPAIR_CLAIM -> planClaim(command);
             case RECONCILE_CUSTODY -> planCustodyReconciliation(command);
             case QUARANTINE_CUSTODY -> planCustodyQuarantine(command);
+            case BALANCE_MUTATION -> throw new EscrowRuntimeException(
+                    "Balance audit is not a maintenance repair");
         };
     }
 

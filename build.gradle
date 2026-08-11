@@ -5,7 +5,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'org.spongepowered:mixingradle:0.7-SNAPSHOT'
+        classpath 'org.spongepowered:mixingradle:0.7.38'
     }
 }
 
@@ -26,6 +26,20 @@ base {
 
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(17)
+}
+
+sourceSets {
+    gameTest {
+        java.srcDir 'src/gametest/java'
+        resources.srcDir 'src/gametest/resources'
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+configurations {
+    gameTestImplementation.extendsFrom implementation
+    gameTestRuntimeOnly.extendsFrom runtimeOnly
 }
 
 minecraft {
@@ -108,7 +122,12 @@ minecraft {
         // By default, the server will crash when no gametests are provided.
         // The gametest system is also enabled by default for other run configs under the /test command.
         gameTestServer {
-            property 'forge.enabledGameTestNamespaces', mod_id
+            property 'forge.enabledGameTestNamespaces', "${mod_id},minecraft"
+            mods {
+                "${mod_id}" {
+                    source sourceSets.gameTest
+                }
+            }
         }
 
         data {
@@ -182,15 +201,74 @@ dependencies {
 
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 
-    // Source-scan / invariant tests only — they never load the Minecraft classpath
-    // and therefore don't need ForgeGradle fixtures. JUnit 5 is sufficient.
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
+    // Source scan and invariant tests never load the Minecraft classpath.
+    // They do not need ForgeGradle fixtures. JUnit 6 is sufficient.
+    testImplementation 'org.junit.jupiter:junit-jupiter:6.1.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
 }
 
 tasks.named('test', Test) {
     useJUnitPlatform()
+}
+
+tasks.register('verifyBetaReleaseIdentity') {
+    group = 'verification'
+    description = 'Verifies the FutureShops beta release line and artifact name.'
+
+    doLast {
+        String currentVersion = mod_version.toString()
+        if (!(currentVersion ==~ /3\.0\.0-beta\.[1-9][0-9]*/)) {
+            throw new GradleException(
+                    "FutureShops bug fix builds must use 3.0.0-beta.<positive integer>, found ${currentVersion}")
+        }
+
+        String expectedArtifact = "${mod_id}-${currentVersion}.jar"
+        String actualArtifact = tasks.named('jar', Jar).get().archiveFileName.get()
+        if (actualArtifact != expectedArtifact) {
+            throw new GradleException(
+                    "Expected artifact ${expectedArtifact}, found ${actualArtifact}")
+        }
+    }
+}
+
+tasks.register('verifyPackagedDependencyBoundary') {
+    group = 'verification'
+    description = 'Verifies that launcher supplied libraries are not bundled in the FutureShops jar.'
+    dependsOn tasks.named('jar')
+
+    doLast {
+        File artifact = tasks.named('jar', Jar).get().archiveFile.get().asFile
+        List<String> forbiddenPrefixes = [
+                'io/netty/',
+                'org/apache/commons/',
+                'com/google/common/',
+                'org/apache/logging/log4j/',
+                'org/codehaus/plexus/'
+        ]
+        List<String> forbiddenEntries = []
+
+        new java.util.zip.ZipFile(artifact).withCloseable { archive ->
+            archive.entries().each { entry ->
+                boolean forbiddenClass = entry.name.endsWith('.class')
+                        && forbiddenPrefixes.any { entry.name.startsWith(it) }
+                boolean jarInJarMetadata = entry.name == 'META-INF/jarjar/metadata.json'
+                if (forbiddenClass || jarInJarMetadata) {
+                    forbiddenEntries.add(entry.name)
+                }
+            }
+        }
+
+        if (!forbiddenEntries.isEmpty()) {
+            throw new GradleException(
+                    "FutureShops must not bundle launcher supplied libraries. Found ${forbiddenEntries}")
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyBetaReleaseIdentity')
+    dependsOn tasks.named('verifyPackagedDependencyBoundary')
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.

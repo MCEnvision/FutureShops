@@ -139,6 +139,29 @@ final class ForeignCashDepositIntentStore {
         saveAndForce(server, player);
     }
 
+    synchronized void discardIntent(
+            MinecraftServer server,
+            ServerPlayer player,
+            ForeignCashDepositEvidence evidence
+    ) throws IOException {
+        requireOwner(player, evidence);
+        if (evidence.phase() != ForeignCashDepositEvidence.Phase.INTENT
+                || !evidence.inventoryState().matches(
+                player.getInventory())) {
+            throw new IllegalStateException(
+                    "Foreign cash intent is not safe to discard");
+        }
+        CompoundTag persistent = player.getPersistentData();
+        ForeignCashDepositEvidence current = decodeTag(
+                persistent.get(EVIDENCE_KEY));
+        if (!current.equals(evidence)) {
+            throw new IllegalStateException(
+                    "Foreign cash intent cleanup identity conflicts");
+        }
+        persistent.remove(EVIDENCE_KEY);
+        saveAndForce(server, player);
+    }
+
     synchronized void cleanup(
             MinecraftServer server,
             UUID playerId,

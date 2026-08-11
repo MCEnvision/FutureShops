@@ -10,6 +10,12 @@ import com.enviouse.futureshops.money.SpentMintsSavedData;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
 import com.enviouse.futureshops.server.economy.TransactionResult;
+import com.enviouse.futureshops.server.escrow.admin.balance.AdministrativeBalanceConfirmation;
+import com.enviouse.futureshops.server.escrow.admin.balance.AdministrativeBalanceMutation;
+import com.enviouse.futureshops.server.escrow.admin.balance.AdministrativeBalanceMutationService;
+import com.enviouse.futureshops.server.escrow.admin.balance.AdministrativeBalanceOperation;
+import com.enviouse.futureshops.server.escrow.admin.balance.AdministrativeBalanceRequestIds;
+import com.enviouse.futureshops.server.escrow.stock.migration.CatalogStockRuntime;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
 import com.enviouse.futureshops.server.shop.AdminShopToggleSavedData;
 import com.enviouse.futureshops.server.shop.AdminCategorySavedData;
@@ -347,7 +353,7 @@ public final class ShopAdminCommand {
         MinecraftServer server = source.getServer();
         int activeSessions = ShopSessionManager.snapshotSessions().size();
 
-        ShopCatalog.reload(server);
+        CatalogStockRuntime.reload(server);
         ShopDataService.resendActiveSessions(server);
 
         source.sendSuccess(() -> Component.translatable(
@@ -845,9 +851,15 @@ public final class ShopAdminCommand {
         }
 
         int successCount = 0;
+        UUID batchRequestId = UUID.randomUUID();
+        String actor = administrativeBalanceActor(source);
+        AdministrativeBalanceMutationService mutationService =
+                AdministrativeBalanceMutationService.live();
         for (GameProfile profile : targets) {
-            UUID uuid = profile.getId();
-            TransactionResult result = provider.deposit(uuid, amountMinor, "ADMIN");
+            TransactionResult result = administrativeBalanceMutation(
+                    mutationService, batchRequestId, actor,
+                    AdministrativeBalanceOperation.CREDIT, profile,
+                    amountMinor, false, "Shopadmin balance add");
             String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, provider.getDecimalPlaces());
             if (result.success()) {
                 String newBal = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
@@ -877,9 +889,16 @@ public final class ShopAdminCommand {
         }
 
         int successCount = 0;
+        UUID batchRequestId = UUID.randomUUID();
+        String actor = administrativeBalanceActor(source);
+        AdministrativeBalanceMutationService mutationService =
+                AdministrativeBalanceMutationService.live();
         for (GameProfile profile : targets) {
-            UUID uuid = profile.getId();
-            TransactionResult result = provider.withdraw(uuid, amountMinor, "ADMIN");
+            TransactionResult result = administrativeBalanceMutation(
+                    mutationService, batchRequestId, actor,
+                    AdministrativeBalanceOperation.DEBIT, profile,
+                    amountMinor, Config.economyAllowNegative,
+                    "Shopadmin balance remove");
             String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, provider.getDecimalPlaces());
             if (result.success()) {
                 String newBal = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
@@ -920,11 +939,16 @@ public final class ShopAdminCommand {
         int successCount = 0;
         String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, provider.getDecimalPlaces());
         final long setAmount = amountMinor;
+        UUID batchRequestId = UUID.randomUUID();
+        String actor = administrativeBalanceActor(source);
+        AdministrativeBalanceMutationService mutationService =
+                AdministrativeBalanceMutationService.live();
         for (GameProfile profile : targets) {
-            TransactionResult result = BalanceManager.setBalance(
-                    profile.getId(), setAmount,
-                    com.enviouse.futureshops.Config.economyAllowNegative,
-                    "ADMIN");
+            TransactionResult result = administrativeBalanceMutation(
+                    mutationService, batchRequestId, actor,
+                    AdministrativeBalanceOperation.SET, profile,
+                    setAmount, Config.economyAllowNegative,
+                    "Shopadmin balance set");
             if (result.success()) {
                 source.sendSuccess(() -> Component.translatable(
                         "command.futureshops.admin.bal.set_success",
@@ -960,11 +984,16 @@ public final class ShopAdminCommand {
         String formatted = EconomyCommandUtil.formatMinorUnits(startingBalance, provider.getDecimalPlaces());
 
         int successCount = 0;
+        UUID batchRequestId = UUID.randomUUID();
+        String actor = administrativeBalanceActor(source);
+        AdministrativeBalanceMutationService mutationService =
+                AdministrativeBalanceMutationService.live();
         for (GameProfile profile : targets) {
-            TransactionResult result = BalanceManager.setBalance(
-                    profile.getId(), startingBalance,
-                    com.enviouse.futureshops.Config.economyAllowNegative,
-                    "ADMIN");
+            TransactionResult result = administrativeBalanceMutation(
+                    mutationService, batchRequestId, actor,
+                    AdministrativeBalanceOperation.RESET, profile,
+                    startingBalance, Config.economyAllowNegative,
+                    "Shopadmin balance reset");
             if (result.success()) {
                 source.sendSuccess(() -> Component.translatable(
                         "command.futureshops.admin.bal.reset_success",
@@ -979,6 +1008,34 @@ public final class ShopAdminCommand {
             }
         }
         return successCount;
+    }
+
+    private static TransactionResult administrativeBalanceMutation(
+            AdministrativeBalanceMutationService mutationService,
+            UUID batchRequestId,
+            String actor,
+            AdministrativeBalanceOperation operation,
+            GameProfile target,
+            long amountMinor,
+            boolean allowNegative,
+            String reason
+    ) {
+        UUID requestId = AdministrativeBalanceRequestIds.target(
+                batchRequestId, operation, target.getId());
+        return mutationService.execute(new AdministrativeBalanceMutation(
+                requestId, actor, operation, target.getId(),
+                Optional.empty(), amountMinor, allowNegative, reason,
+                AdministrativeBalanceConfirmation.EXPLICIT_COMMAND))
+                .transactionResult();
+    }
+
+    private static String administrativeBalanceActor(
+            CommandSourceStack source
+    ) {
+        if (source.getEntity() instanceof ServerPlayer player) {
+            return "player " + player.getUUID();
+        }
+        return "command source " + source.getTextName();
     }
 
     // -------------------------------------------------------------------------

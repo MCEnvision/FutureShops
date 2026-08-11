@@ -48,7 +48,7 @@ public final class MarketplaceAnalyticsService {
         ShopPackets.sendToPlayer(player, new S2CBalanceUiPacket(
                 player.getUUID(),
                 player.getGameProfile().getName(),
-                provider.getBalance(player.getUUID()),
+                BalanceManager.getDisplayBalance(player.getUUID()),
                 provider.getCurrencyName(),
                 provider.getDecimalPlaces(),
                 snapshot.totalRevenueMinor(),
@@ -71,7 +71,7 @@ public final class MarketplaceAnalyticsService {
         ShopPackets.sendToPlayer(viewer, new S2CBalanceUiPacket(
                 target.getUUID(),
                 target.getGameProfile().getName(),
-                provider.getBalance(target.getUUID()),
+                BalanceManager.getDisplayBalance(target.getUUID()),
                 provider.getCurrencyName(),
                 provider.getDecimalPlaces(),
                 snapshot.totalRevenueMinor(),
@@ -336,4 +336,3 @@ public final class MarketplaceAnalyticsService {
     private record TransactionMetrics(PlayerMetric activityLeader, ProductMetric productMetric) {
     }
 }
-

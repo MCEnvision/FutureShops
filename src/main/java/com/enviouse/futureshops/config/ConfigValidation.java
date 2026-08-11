@@ -4,15 +4,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-final class ConfigValidation {
+public final class ConfigValidation {
     private ConfigValidation() {
     }
 
-    static boolean isOption(Object value, Set<String> allowed) {
+    public static boolean isOption(Object value, Set<String> allowed) {
         return value instanceof String text && allowed.contains(normalize(text));
     }
 
-    static String requireOption(String value, Set<String> allowed, String field) {
+    public static String requireOption(String value, Set<String> allowed, String field) {
         if (value == null) {
             throw new IllegalArgumentException(field + " is required.");
         }
@@ -23,7 +23,7 @@ final class ConfigValidation {
         return normalized;
     }
 
-    static boolean isHexColor(Object value) {
+    public static boolean isHexColor(Object value) {
         if (!(value instanceof String text)) {
             return false;
         }
@@ -39,7 +39,7 @@ final class ConfigValidation {
         return true;
     }
 
-    static String requireHexColor(String value, String field) {
+    public static String requireHexColor(String value, String field) {
         if (!isHexColor(value)) {
             throw new IllegalArgumentException(field + " must be a six or eight digit hexadecimal color.");
         }
@@ -47,7 +47,7 @@ final class ConfigValidation {
         return normalized.toUpperCase(Locale.ROOT);
     }
 
-    static List<Integer> requirePositiveList(List<? extends Integer> values, String field) {
+    public static List<Integer> requirePositiveList(List<? extends Integer> values, String field) {
         if (values == null || values.isEmpty()) {
             throw new IllegalArgumentException(field + " must not be empty.");
         }
@@ -61,7 +61,7 @@ final class ConfigValidation {
         return copy;
     }
 
-    static void require(boolean condition, String message) {
+    public static void require(boolean condition, String message) {
         if (!condition) {
             throw new IllegalArgumentException(message);
         }

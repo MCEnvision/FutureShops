@@ -38,10 +38,14 @@ public final class ShopDataService {
         net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(event);
         if (event.isCanceled()) return;
 
-        ShopSessionManager.open(player.getUUID(), shopId);
-        // forceOpen=true: this is the deliberate open path (command / shop block use)
-        sendShopData(player, shopId, true, true);
-        InventorySyncService.sendOwnedCounts(player, shopId);
+        com.enviouse.futureshops.server.market.MarketModuleService.close(
+                player.getUUID());
+        ShopSessionManager.openWithRollback(
+                player.getUUID(), shopId, () -> {
+                    // forceOpen=true: this is the deliberate open path (command / shop block use)
+                    sendShopData(player, shopId, true, true);
+                    InventorySyncService.sendOwnedCounts(player, shopId);
+                });
     }
 
     public static void sendShopData(ServerPlayer player, String requestedShopId) {
@@ -65,7 +69,7 @@ public final class ShopDataService {
     public static void sendShopData(ServerPlayer player, String requestedShopId, boolean includeNearbyShops, boolean forceOpen) {
         String shopId = resolveShopId(requestedShopId);
         EconomyProvider provider = BalanceManager.getProvider();
-        long balance = provider.getBalance(player.getUUID());
+        long balance = BalanceManager.getDisplayBalance(player.getUUID());
 
         // Check admin shop toggle
         boolean adminEnabled = player.getServer() != null
@@ -89,7 +93,11 @@ public final class ShopDataService {
                 nearbyShops,
                 forceOpen,
                 // In-GUI admin editor gate flag — display only; AdminShopEditService re-checks.
-                player.hasPermissions(2)));
+                player.hasPermissions(2),
+                adminEnabled
+                        ? ShopCatalog.get(shopId)
+                        .map(ShopDefinition::offers).orElse(List.of())
+                        : List.of()));
     }
 
     public static void resendActiveSessions(MinecraftServer server) {
@@ -133,6 +141,3 @@ public final class ShopDataService {
         }
     }
 }
-
-
-

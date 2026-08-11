@@ -6,6 +6,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.Map;
+import java.util.LinkedHashSet;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -14,10 +15,13 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class DynamicPricingSavedData extends SavedData {
     private static final String DATA_NAME = "futureshops_dynamic_pricing";
-    private static final int SCHEMA_VERSION = 1;
+    private static final int SCHEMA_VERSION = 2;
+    private static final int MAXIMUM_ACTIVITY_RECEIPTS = 10_000;
 
     /** Composite key → pricing state */
     private final Map<String, ItemPricingState> states = new ConcurrentHashMap<>();
+    private final LinkedHashSet<String> activityReceipts =
+            new LinkedHashSet<>();
 
     public DynamicPricingSavedData() {
     }
@@ -39,6 +43,53 @@ public class DynamicPricingSavedData extends SavedData {
         String key = key(shopId, itemId);
         states.computeIfAbsent(key, k -> new ItemPricingState()).addSells(quantity);
         setDirty();
+    }
+
+    public synchronized boolean recordBuyOnce(
+            String receipt,
+            String shopId,
+            String itemId,
+            int quantity
+    ) {
+        return recordOnce(receipt, shopId, itemId, quantity, true);
+    }
+
+    public synchronized boolean recordSellOnce(
+            String receipt,
+            String shopId,
+            String itemId,
+            int quantity
+    ) {
+        return recordOnce(receipt, shopId, itemId, quantity, false);
+    }
+
+    private boolean recordOnce(
+            String receipt,
+            String shopId,
+            String itemId,
+            int quantity,
+            boolean buy
+    ) {
+        if (receipt == null || receipt.isBlank()
+                || receipt.length() > 512 || quantity <= 0) {
+            throw new IllegalArgumentException(
+                    "Dynamic pricing activity receipt is invalid");
+        }
+        if (!activityReceipts.add(receipt)) {
+            return false;
+        }
+        while (activityReceipts.size() > MAXIMUM_ACTIVITY_RECEIPTS) {
+            activityReceipts.remove(activityReceipts.iterator().next());
+        }
+        if (buy) {
+            states.computeIfAbsent(key(shopId, itemId),
+                    ignored -> new ItemPricingState()).addBuys(quantity);
+        } else {
+            states.computeIfAbsent(key(shopId, itemId),
+                    ignored -> new ItemPricingState()).addSells(quantity);
+        }
+        setDirty();
+        return true;
     }
 
     // ---- Pricing queries ----
@@ -70,6 +121,12 @@ public class DynamicPricingSavedData extends SavedData {
             statesTag.put(entry.getKey(), stateTag);
         }
         tag.put("States", statesTag);
+        net.minecraft.nbt.ListTag receipts =
+                new net.minecraft.nbt.ListTag();
+        for (String receipt : activityReceipts) {
+            receipts.add(net.minecraft.nbt.StringTag.valueOf(receipt));
+        }
+        tag.put("ActivityReceipts", receipts);
         return tag;
     }
 
@@ -85,6 +142,16 @@ public class DynamicPricingSavedData extends SavedData {
                 state.sellsSinceLastCalc = stateTag.getInt("sells");
                 state.currentPriceMinor = stateTag.getLong("currentPrice");
                 data.states.put(key, state);
+            }
+        }
+        net.minecraft.nbt.ListTag receipts = tag.getList(
+                "ActivityReceipts", Tag.TAG_STRING);
+        int start = Math.max(0,
+                receipts.size() - MAXIMUM_ACTIVITY_RECEIPTS);
+        for (int index = start; index < receipts.size(); index++) {
+            String receipt = receipts.getString(index);
+            if (!receipt.isBlank() && receipt.length() <= 512) {
+                data.activityReceipts.add(receipt);
             }
         }
         return data;
@@ -117,4 +184,3 @@ public class DynamicPricingSavedData extends SavedData {
         }
     }
 }
-

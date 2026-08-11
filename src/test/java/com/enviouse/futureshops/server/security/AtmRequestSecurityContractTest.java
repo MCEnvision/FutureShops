@@ -104,7 +104,7 @@ class AtmRequestSecurityContractTest {
         assertTrue(!packet.contains("EscrowCashDepositService.deposit("));
         assertTrue(depositService.indexOf(
                 "ServerRequestAction.ATM_DEPOSIT")
-                == depositService.lastIndexOf(
+                != depositService.lastIndexOf(
                 "ServerRequestAction.ATM_DEPOSIT"));
     }
 

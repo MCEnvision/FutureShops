@@ -1,8 +1,13 @@
 package com.enviouse.futureshops.server.escrow.inventory;
 
-import com.enviouse.futureshops.money.ItemStackSnapshotCodec;
+import net.minecraft.nbt.ByteArrayTag;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.IntArrayTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.LongArrayTag;
+import net.minecraft.nbt.NumericTag;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.world.item.ItemStack;
 
 import java.io.ByteArrayOutputStream;
@@ -15,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.TreeSet;
 
 final class PlayerInventoryHashes {
     static final int MAIN_SLOT_COUNT = 36;
@@ -40,14 +46,31 @@ final class PlayerInventoryHashes {
         return sha256(slotBytes(stack));
     }
 
+    static byte[] hashSlotLegacy(ItemStack stack) {
+        return sha256(legacySlotBytes(stack));
+    }
+
     static byte[] hashInventory(List<ItemStack> slots) {
+        return hashInventory(slots, false);
+    }
+
+    static byte[] hashInventoryLegacy(List<ItemStack> slots) {
+        return hashInventory(slots, true);
+    }
+
+    private static byte[] hashInventory(
+            List<ItemStack> slots,
+            boolean legacy
+    ) {
         requireSlots(slots);
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) {
                 output.writeInt(slots.size());
                 for (int index = 0; index < slots.size(); index++) {
-                    byte[] value = slotBytes(slots.get(index));
+                    byte[] value = legacy
+                            ? legacySlotBytes(slots.get(index))
+                            : slotBytes(slots.get(index));
                     output.writeInt(index);
                     output.writeInt(value.length);
                     output.write(value);
@@ -107,11 +130,115 @@ final class PlayerInventoryHashes {
         if (stack.isEmpty()) {
             return new byte[]{0};
         }
-        byte[] snapshot = ItemStackSnapshotCodec.encode(stack);
-        byte[] value = new byte[Math.addExact(snapshot.length, 1)];
-        value[0] = 1;
-        System.arraycopy(snapshot, 0, value, 1, snapshot.length);
-        return value;
+        try {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            try (DataOutputStream output = new DataOutputStream(bytes)) {
+                output.writeByte(1);
+                writeCanonicalTag(output, stack.save(new CompoundTag()));
+            }
+            return bytes.toByteArray();
+        } catch (IOException exception) {
+            throw new IllegalStateException(
+                    "Unable to hash player inventory slot", exception);
+        }
+    }
+
+    private static byte[] legacySlotBytes(ItemStack stack) {
+        Objects.requireNonNull(stack, "stack");
+        if (stack.isEmpty()) {
+            return new byte[]{0};
+        }
+        try {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            try (DataOutputStream output = new DataOutputStream(bytes)) {
+                output.writeByte(1);
+                net.minecraft.nbt.NbtIo.write(
+                        stack.save(new CompoundTag()), output);
+            }
+            return bytes.toByteArray();
+        } catch (IOException exception) {
+            throw new IllegalStateException(
+                    "Unable to hash legacy player inventory slot", exception);
+        }
+    }
+
+    private static void writeCanonicalTag(
+            DataOutputStream output,
+            Tag tag
+    ) throws IOException {
+        output.writeByte(tag.getId());
+        switch (tag.getId()) {
+            case Tag.TAG_END -> {
+            }
+            case Tag.TAG_BYTE -> output.writeByte(
+                    ((NumericTag) tag).getAsByte());
+            case Tag.TAG_SHORT -> output.writeShort(
+                    ((NumericTag) tag).getAsShort());
+            case Tag.TAG_INT -> output.writeInt(
+                    ((NumericTag) tag).getAsInt());
+            case Tag.TAG_LONG -> output.writeLong(
+                    ((NumericTag) tag).getAsLong());
+            case Tag.TAG_FLOAT -> output.writeInt(Float.floatToRawIntBits(
+                    ((NumericTag) tag).getAsFloat()));
+            case Tag.TAG_DOUBLE -> output.writeLong(Double.doubleToRawLongBits(
+                    ((NumericTag) tag).getAsDouble()));
+            case Tag.TAG_BYTE_ARRAY -> writeBytes(output,
+                    ((ByteArrayTag) tag).getAsByteArray());
+            case Tag.TAG_STRING -> writeText(output,
+                    ((StringTag) tag).getAsString());
+            case Tag.TAG_LIST -> {
+                ListTag list = (ListTag) tag;
+                output.writeInt(list.size());
+                for (Tag value : list) {
+                    writeCanonicalTag(output, value);
+                }
+            }
+            case Tag.TAG_COMPOUND -> {
+                CompoundTag compound = (CompoundTag) tag;
+                TreeSet<String> keys = new TreeSet<>(compound.getAllKeys());
+                output.writeInt(keys.size());
+                for (String key : keys) {
+                    writeText(output, key);
+                    Tag value = compound.get(key);
+                    if (value == null) {
+                        throw new IllegalStateException(
+                                "Canonical NBT key has no value");
+                    }
+                    writeCanonicalTag(output, value);
+                }
+            }
+            case Tag.TAG_INT_ARRAY -> {
+                int[] values = ((IntArrayTag) tag).getAsIntArray();
+                output.writeInt(values.length);
+                for (int value : values) {
+                    output.writeInt(value);
+                }
+            }
+            case Tag.TAG_LONG_ARRAY -> {
+                long[] values = ((LongArrayTag) tag).getAsLongArray();
+                output.writeInt(values.length);
+                for (long value : values) {
+                    output.writeLong(value);
+                }
+            }
+            default -> throw new IllegalArgumentException(
+                    "Unsupported NBT tag type " + tag.getId());
+        }
+    }
+
+    private static void writeText(
+            DataOutputStream output,
+            String value
+    ) throws IOException {
+        writeBytes(output, value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void writeBytes(
+            DataOutputStream output,
+            byte[] value
+    ) throws IOException {
+        output.writeInt(value.length);
+        output.write(value);
     }
 
     private static void requireSlots(List<ItemStack> slots) {

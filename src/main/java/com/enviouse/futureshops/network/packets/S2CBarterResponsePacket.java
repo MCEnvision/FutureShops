@@ -7,6 +7,8 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 
+import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 /** Server → client response for a barter request. */
@@ -16,7 +18,16 @@ public record S2CBarterResponsePacket(
         String recipeId,
         ShopResultCode errorCode,
         int multiplier,
-        int outputQuantity) {
+        int outputQuantity,
+        UUID requestId) {
+
+    public S2CBarterResponsePacket {
+        requestId = Objects.requireNonNull(requestId, "requestId");
+        if (requestId.equals(new UUID(0L, 0L))) {
+            throw new IllegalArgumentException(
+                    "Barter response identity is invalid");
+        }
+    }
 
     public static void encode(S2CBarterResponsePacket packet, FriendlyByteBuf buffer) {
         buffer.writeBoolean(packet.success);
@@ -26,6 +37,7 @@ public record S2CBarterResponsePacket(
         buffer.writeUtf(packet.errorCode.name());
         buffer.writeVarInt(packet.multiplier);
         buffer.writeVarInt(packet.outputQuantity);
+        buffer.writeUUID(packet.requestId);
     }
 
     public static S2CBarterResponsePacket decode(FriendlyByteBuf buffer) {
@@ -41,7 +53,8 @@ public record S2CBarterResponsePacket(
         }
         int multiplier = buffer.readVarInt();
         int outputQuantity = buffer.readVarInt();
-        return new S2CBarterResponsePacket(success, shopId, recipeId, code, multiplier, outputQuantity);
+        return new S2CBarterResponsePacket(success, shopId, recipeId,
+                code, multiplier, outputQuantity, buffer.readUUID());
     }
 
     public static void handle(S2CBarterResponsePacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
@@ -51,4 +64,3 @@ public record S2CBarterResponsePacket(
         context.setPacketHandled(true);
     }
 }
-

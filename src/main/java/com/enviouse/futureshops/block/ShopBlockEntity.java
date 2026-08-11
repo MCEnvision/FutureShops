@@ -1,6 +1,9 @@
 package com.enviouse.futureshops.block;
 
+import com.enviouse.futureshops.catalog.offer.ServerShopOfferListing;
+import com.enviouse.futureshops.catalog.offer.ServerShopOfferValidator;
 import com.enviouse.futureshops.init.ModBlockEntities;
+import com.enviouse.futureshops.server.shop.PlayerShopRegistrySavedData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -9,6 +12,7 @@ import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import software.bernie.geckolib.animatable.GeoBlockEntity;
@@ -21,13 +25,19 @@ import software.bernie.geckolib.core.object.PlayState;
 import software.bernie.geckolib.util.GeckoLibUtil;
 
 import javax.annotation.Nullable;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     private static final RawAnimation IDLE_ANIM = RawAnimation.begin().thenLoop("idle");
+    private static final String REGISTRY_SHOP_ID_KEY = "RegistryShopUUID";
+    private static final String REGISTRY_REVISION_KEY = "RegistryIdentityRevision";
+    private static final UUID ZERO_UUID = new UUID(0L, 0L);
 
     private final AnimatableInstanceCache geoCache = GeckoLibUtil.createInstanceCache(this);
     /** Default listing cap when maxListings is not overridden (-1 = unlimited). */
@@ -70,6 +80,8 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     }
 
     private UUID ownerUuid;
+    private UUID registryShopId;
+    private long registryIdentityRevision;
     /**
      * Owner's last-known username. Captured whenever {@link #setOwnerUuid(UUID, String)}
      * is called with a non-blank name. Synced to clients so the block-top
@@ -85,6 +97,7 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     private boolean barterStorageSame = true;
     private int maxListings = DEFAULT_MAX_LISTINGS; // -1 = unlimited
     private final List<Listing> listings = new ArrayList<>();
+    private boolean offerPersistenceMigrationPending;
     /**
      * Ordered, deduped list of linked stock-storage positions (cap
      * {@link #MAX_LINKED_STORAGES}). The composite of these is the shop's stock: counts
@@ -153,6 +166,38 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         return ownerUuid;
     }
 
+    @Nullable
+    public UUID getRegistryShopId() {
+        return registryShopId;
+    }
+
+    public long getRegistryIdentityRevision() {
+        return registryIdentityRevision;
+    }
+
+    public void setRegistryIdentity(UUID shopId, long revision) {
+        validateRegistryIdentity(shopId, revision);
+        if (shopId.equals(registryShopId)
+                && revision == registryIdentityRevision) {
+            return;
+        }
+        registryShopId = shopId;
+        registryIdentityRevision = revision;
+        setChanged();
+    }
+
+    public void reconcileRegistryIdentity() {
+        if (!(level instanceof ServerLevel serverLevel) || ownerUuid == null) {
+            return;
+        }
+        PlayerShopRegistrySavedData.ShopRef identity =
+                PlayerShopRegistrySavedData.get(serverLevel.getServer()).reconcile(
+                        ownerUuid, Optional.ofNullable(registryShopId),
+                        registryIdentityRevision, serverLevel.dimension().location(),
+                        worldPosition.asLong());
+        setRegistryIdentity(identity.shopId(), identity.revision());
+    }
+
     public void setOwnerUuid(UUID ownerUuid) {
         setOwnerUuid(ownerUuid, null);
     }
@@ -164,6 +209,16 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         }
         setChanged();
         syncTopItemsToClients();
+    }
+
+    @Override
+    public void onLoad() {
+        super.onLoad();
+        reconcileRegistryIdentity();
+        if (offerPersistenceMigrationPending) {
+            offerPersistenceMigrationPending = false;
+            setChanged();
+        }
     }
 
     public String getOwnerName() {
@@ -575,8 +630,14 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         if (tag.contains("Listings", Tag.TAG_LIST)) {
             listings.clear();
             ListTag listingTags = tag.getList("Listings", Tag.TAG_COMPOUND);
-            for (Tag lt : listingTags) {
-                listings.add(Listing.load((CompoundTag) lt));
+            String namespace = listingMigrationNamespace();
+            for (int index = 0; index < listingTags.size(); index++) {
+                Listing listing = Listing.load(
+                        listingTags.getCompound(index),
+                        namespace, index);
+                offerPersistenceMigrationPending |=
+                        listing.migratedOfferPersistence();
+                listings.add(listing);
             }
             if (visibleListingIndex >= listings.size()) {
                 visibleListingIndex = listings.isEmpty() ? -1 : 0;
@@ -591,6 +652,9 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         super.saveAdditional(tag);
         if (ownerUuid != null) {
             tag.putUUID("OwnerUUID", ownerUuid);
+        }
+        if (registryShopId != null) {
+            writeRegistryIdentity(tag, registryShopId, registryIdentityRevision);
         }
         if (!ownerName.isEmpty()) {
             tag.putString("OwnerName", ownerName);
@@ -630,6 +694,10 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     public void load(CompoundTag tag) {
         super.load(tag);
         ownerUuid = tag.hasUUID("OwnerUUID") ? tag.getUUID("OwnerUUID") : null;
+        Optional<PersistedRegistryIdentity> registryIdentity = readRegistryIdentity(tag);
+        registryShopId = registryIdentity.map(PersistedRegistryIdentity::shopId).orElse(null);
+        registryIdentityRevision = registryIdentity
+                .map(PersistedRegistryIdentity::revision).orElse(0L);
         ownerName = tag.getString("OwnerName");
         shopId = tag.getString("ShopId");
         if (shopId.isBlank()) {
@@ -651,10 +719,17 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         floatingIconMode = FloatingIconMode.byName(tag.getString("FloatingIconMode"));
         floatingIconItem = tag.getString("FloatingIconItem");
         listings.clear();
+        offerPersistenceMigrationPending = false;
         if (tag.contains("Listings", Tag.TAG_LIST)) {
             ListTag listingTags = tag.getList("Listings", Tag.TAG_COMPOUND);
-            for (Tag listingTag : listingTags) {
-                listings.add(Listing.load((CompoundTag) listingTag));
+            String namespace = listingMigrationNamespace();
+            for (int index = 0; index < listingTags.size(); index++) {
+                Listing listing = Listing.load(
+                        listingTags.getCompound(index),
+                        namespace, index);
+                offerPersistenceMigrationPending |=
+                        listing.migratedOfferPersistence();
+                listings.add(listing);
             }
         } else {
             String listedItemId = tag.getString("ListedItemId");
@@ -669,6 +744,10 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
                 listing.setMoneyPriceMinor(Math.max(1L, tag.getLong("MoneyPriceMinor")));
                 listing.setBarterItemId(tag.getString("BarterItemId"));
                 listing.setBarterItemCount(Math.max(1, tag.getInt("BarterItemCount")));
+                listing.listingId = Listing.migratedListingId(
+                        listingMigrationNamespace(), 0);
+                listing.migrateLegacyOffer();
+                offerPersistenceMigrationPending = true;
                 listings.add(listing);
             }
         }
@@ -688,10 +767,71 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         barterStoragePos = tag.contains("BarterStoragePos") ? BlockPos.of(tag.getLong("BarterStoragePos")) : null;
     }
 
+    private String listingMigrationNamespace() {
+        if (registryShopId != null) {
+            return registryShopId.toString();
+        }
+        String owner = ownerUuid == null
+                ? ZERO_UUID.toString() : ownerUuid.toString();
+        return owner + "." + worldPosition.asLong() + "." + shopId;
+    }
+
+    static void writeRegistryIdentity(CompoundTag tag, UUID shopId, long revision) {
+        Objects.requireNonNull(tag, "tag");
+        validateRegistryIdentity(shopId, revision);
+        tag.putUUID(REGISTRY_SHOP_ID_KEY, shopId);
+        tag.putLong(REGISTRY_REVISION_KEY, revision);
+    }
+
+    static Optional<PersistedRegistryIdentity> readRegistryIdentity(CompoundTag tag) {
+        Objects.requireNonNull(tag, "tag");
+        boolean hasId = tag.contains(REGISTRY_SHOP_ID_KEY);
+        boolean hasRevision = tag.contains(REGISTRY_REVISION_KEY);
+        if (!hasId && !hasRevision) {
+            return Optional.empty();
+        }
+        if (!tag.hasUUID(REGISTRY_SHOP_ID_KEY)
+                || !tag.contains(REGISTRY_REVISION_KEY, Tag.TAG_LONG)) {
+            throw new IllegalArgumentException("Player shop block identity is malformed");
+        }
+        return Optional.of(new PersistedRegistryIdentity(
+                tag.getUUID(REGISTRY_SHOP_ID_KEY),
+                tag.getLong(REGISTRY_REVISION_KEY)));
+    }
+
+    private static void validateRegistryIdentity(UUID shopId, long revision) {
+        if (shopId == null || ZERO_UUID.equals(shopId) || revision < 0L) {
+            throw new IllegalArgumentException("Player shop block identity is invalid");
+        }
+    }
+
+    static record PersistedRegistryIdentity(UUID shopId, long revision) {
+        PersistedRegistryIdentity {
+            validateRegistryIdentity(shopId, revision);
+        }
+    }
+
     /** Per-listing trade direction: does the shop sell, buy, or both? */
     public enum Direction { SELL, BUY, BOTH }
 
     public static final class Listing {
+        public static final int CURRENT_OFFER_SCHEMA =
+                PlayerShopOfferPersistenceCodec.CURRENT_SCHEMA;
+        private static final String OFFER_SCHEMA_KEY =
+                "OfferSchemaVersion";
+        private static final String OFFER_PAYLOAD_KEY =
+                "NormalizedOffer";
+        private static final String LEGACY_PROJECTION_KEY =
+                "LegacyOfferProjection";
+
+        private String listingId =
+                "player_listing_" + UUID.randomUUID();
+        private int offerSchemaVersion = CURRENT_OFFER_SCHEMA;
+        private ServerShopOfferListing normalizedOffer;
+        private boolean legacyOfferProjection = true;
+        private boolean offerUnavailable;
+        private byte[] preservedOfferPayload;
+        private boolean migratedOfferPersistence;
         private String itemId = "";
         private TradeMode tradeMode = TradeMode.MONEY;
         private long moneyPriceMinor = 100L;
@@ -722,34 +862,94 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         private final Promo promo = new Promo();
         private final List<BundleEntry> bundleOutputs = new ArrayList<>(); // Item 11
 
-        public Listing() {}
+        public Listing() {
+        }
 
         public Listing(String itemId) {
             this.itemId = itemId == null ? "" : itemId;
         }
 
+        public String listingId() { return listingId; }
+        public int offerSchemaVersion() { return offerSchemaVersion; }
+        public boolean offerUnavailable() { return offerUnavailable; }
+        boolean migratedOfferPersistence() {
+            return migratedOfferPersistence;
+        }
+        public Optional<ServerShopOfferListing> normalizedOffer() {
+            return offerUnavailable
+                    ? Optional.empty()
+                    : Optional.ofNullable(normalizedOffer);
+        }
+
+        public void setNormalizedOffer(ServerShopOfferListing offer) {
+            Objects.requireNonNull(offer, "offer");
+            if (!offer.listingId().equals(listingId)
+                    || !ServerShopOfferValidator.validate(offer).valid()) {
+                throw new IllegalArgumentException(
+                        "Player shop normalized offer is invalid");
+            }
+            PlayerShopOfferPersistenceCodec.encode(offer);
+            normalizedOffer = offer;
+            offerSchemaVersion = CURRENT_OFFER_SCHEMA;
+            legacyOfferProjection = false;
+            offerUnavailable = false;
+            preservedOfferPayload = null;
+        }
+
         public String itemId() { return itemId; }
-        public void setItemId(String itemId) { this.itemId = itemId == null ? "" : itemId; }
+        public void setItemId(String itemId) {
+            this.itemId = itemId == null ? "" : itemId;
+            refreshLegacyOffer();
+        }
         public TradeMode tradeMode() { return tradeMode; }
-        public void setTradeMode(TradeMode tradeMode) { this.tradeMode = tradeMode == null ? TradeMode.MONEY : tradeMode; }
+        public void setTradeMode(TradeMode tradeMode) {
+            this.tradeMode = tradeMode == null
+                    ? TradeMode.MONEY : tradeMode;
+            refreshLegacyOffer();
+        }
         public long moneyPriceMinor() { return moneyPriceMinor; }
-        public void setMoneyPriceMinor(long moneyPriceMinor) { this.moneyPriceMinor = Math.max(1L, moneyPriceMinor); }
+        public void setMoneyPriceMinor(long moneyPriceMinor) {
+            this.moneyPriceMinor = Math.max(1L, moneyPriceMinor);
+            refreshLegacyOffer();
+        }
         public String barterItemId() { return barterItemId; }
-        public void setBarterItemId(String barterItemId) { this.barterItemId = barterItemId == null ? "" : barterItemId; }
+        public void setBarterItemId(String barterItemId) {
+            this.barterItemId = barterItemId == null ? "" : barterItemId;
+            refreshLegacyOffer();
+        }
         public int barterItemCount() { return barterItemCount; }
-        public void setBarterItemCount(int barterItemCount) { this.barterItemCount = Math.max(1, barterItemCount); }
+        public void setBarterItemCount(int barterItemCount) {
+            this.barterItemCount = Math.max(1, barterItemCount);
+            refreshLegacyOffer();
+        }
         public boolean barterNbtAware() { return barterNbtAware; }
-        public void setBarterNbtAware(boolean barterNbtAware) { this.barterNbtAware = barterNbtAware; }
+        public void setBarterNbtAware(boolean barterNbtAware) {
+            this.barterNbtAware = barterNbtAware;
+            refreshLegacyOffer();
+        }
         public CompoundTag barterNbtTag() { return barterNbtTag; }
-        public void setBarterNbtTag(CompoundTag barterNbtTag) { this.barterNbtTag = barterNbtTag; }
+        public void setBarterNbtTag(CompoundTag barterNbtTag) {
+            this.barterNbtTag = barterNbtTag;
+            refreshLegacyOffer();
+        }
         public String department() { return department; }
-        public void setDepartment(String department) { this.department = department == null ? "" : department.trim(); }
+        public void setDepartment(String department) {
+            this.department = department == null
+                    ? "" : department.trim();
+            refreshLegacyOffer();
+        }
         public String listingDescription() { return listingDescription; }
-        public void setListingDescription(String desc) { this.listingDescription = desc == null ? "" : desc.trim(); }
+        public void setListingDescription(String desc) {
+            this.listingDescription = desc == null ? "" : desc.trim();
+            refreshLegacyOffer();
+        }
 
         /** Item 32: Number of items delivered per purchase unit. 0 = not configured (cannot purchase). */
         public int baseQuantity() { return baseQuantity; }
-        public void setBaseQuantity(int baseQuantity) { this.baseQuantity = Math.max(0, baseQuantity); }
+        public void setBaseQuantity(int baseQuantity) {
+            this.baseQuantity = Math.max(0, baseQuantity);
+            refreshLegacyOffer();
+        }
 
         /**
          * Item 24: Returns the effective barter cost per unit after promo discount.
@@ -779,13 +979,25 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
 
         public Promo promo() { return promo; }
         public boolean nbtAware() { return nbtAware; }
-        public void setNbtAware(boolean nbtAware) { this.nbtAware = nbtAware; }
+        public void setNbtAware(boolean nbtAware) {
+            this.nbtAware = nbtAware;
+            refreshLegacyOffer();
+        }
         public boolean hidden() { return hidden; }
-        public void setHidden(boolean hidden) { this.hidden = hidden; }
+        public void setHidden(boolean hidden) {
+            this.hidden = hidden;
+            refreshLegacyOffer();
+        }
         public boolean showcase() { return showcase; }
-        public void setShowcase(boolean showcase) { this.showcase = showcase; }
+        public void setShowcase(boolean showcase) {
+            this.showcase = showcase;
+            refreshLegacyOffer();
+        }
         public CompoundTag nbtTag() { return nbtTag; }
-        public void setNbtTag(CompoundTag nbtTag) { this.nbtTag = nbtTag; }
+        public void setNbtTag(CompoundTag nbtTag) {
+            this.nbtTag = nbtTag;
+            refreshLegacyOffer();
+        }
 
         /** Item 11: Bundle output entries (multiple items per listing). */
         public List<BundleEntry> bundleOutputs() {
@@ -795,11 +1007,13 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         public void addBundleOutput(String itemId, int count, @Nullable CompoundTag nbtTag) {
             if (bundleOutputs.size() >= MAX_BUNDLE_OUTPUTS) return;
             bundleOutputs.add(new BundleEntry(itemId, Math.max(1, count), nbtTag));
+            refreshLegacyOffer();
         }
 
         public boolean removeBundleOutput(int index) {
             if (index < 0 || index >= bundleOutputs.size()) return false;
             bundleOutputs.remove(index);
+            refreshLegacyOffer();
             return true;
         }
 
@@ -813,24 +1027,59 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
 
         // ── Buyback / direction accessors ───────────────────────────────────
         public Direction direction() { return direction == null ? Direction.SELL : direction; }
-        public void setDirection(Direction direction) { this.direction = direction == null ? Direction.SELL : direction; }
+        public void setDirection(Direction direction) {
+            this.direction = direction == null
+                    ? Direction.SELL : direction;
+            refreshLegacyOffer();
+        }
         public long buybackPriceMinor() { return buybackPriceMinor; }
-        public void setBuybackPriceMinor(long buybackPriceMinor) { this.buybackPriceMinor = Math.max(0L, buybackPriceMinor); }
+        public void setBuybackPriceMinor(long buybackPriceMinor) {
+            this.buybackPriceMinor = Math.max(0L, buybackPriceMinor);
+            refreshLegacyOffer();
+        }
         public int buybackCap() { return buybackCap; }
-        public void setBuybackCap(int buybackCap) { this.buybackCap = Math.max(0, buybackCap); }
+        public void setBuybackCap(int buybackCap) {
+            this.buybackCap = Math.max(0, buybackCap);
+            refreshLegacyOffer();
+        }
         public int buybackBought() { return buybackBought; }
         public void setBuybackBought(int buybackBought) { this.buybackBought = Math.max(0, buybackBought); }
+        public long legacyBuybackConsumedBaseline() {
+            return legacyOfferProjection ? buybackBought : 0L;
+        }
 
-        public boolean allowsSell() { return direction() == Direction.SELL || direction() == Direction.BOTH; }
-        public boolean allowsBuy()  { return direction() == Direction.BUY  || direction() == Direction.BOTH; }
+        public boolean allowsSell() {
+            return !offerUnavailable
+                    && (direction() == Direction.SELL
+                    || direction() == Direction.BOTH);
+        }
+        public boolean allowsBuy() {
+            return !offerUnavailable
+                    && (direction() == Direction.BUY
+                    || direction() == Direction.BOTH);
+        }
         public int buybackRemaining() {
             return buybackCap == 0 ? Integer.MAX_VALUE : Math.max(0, buybackCap - buybackBought);
         }
         public long effectiveBuybackUnitPriceMinor() { return buybackPriceMinor; }
         public long calculateBuybackTotal(int qty) { return effectiveBuybackUnitPriceMinor() * Math.max(0, qty); }
 
-        private CompoundTag save() {
+        CompoundTag save() {
             CompoundTag tag = new CompoundTag();
+            tag.putString("ListingId", listingId);
+            tag.putInt(OFFER_SCHEMA_KEY, offerSchemaVersion);
+            tag.putBoolean(LEGACY_PROJECTION_KEY,
+                    legacyOfferProjection);
+            if (offerUnavailable) {
+                if (preservedOfferPayload != null) {
+                    tag.putByteArray(OFFER_PAYLOAD_KEY,
+                            preservedOfferPayload.clone());
+                }
+            } else if (normalizedOffer != null) {
+                tag.putByteArray(OFFER_PAYLOAD_KEY,
+                        PlayerShopOfferPersistenceCodec.encode(
+                                normalizedOffer));
+            }
             tag.putString("ItemId", itemId);
             tag.putString("TradeMode", tradeMode.name());
             tag.putLong("MoneyPriceMinor", moneyPriceMinor);
@@ -866,48 +1115,180 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
             return tag;
         }
 
-        private static Listing load(CompoundTag tag) {
-            Listing listing = new Listing(tag.getString("ItemId"));
+        static Listing load(
+                CompoundTag tag,
+                String migrationNamespace,
+                int listingOrdinal
+        ) {
+            Objects.requireNonNull(tag, "tag");
+            Objects.requireNonNull(migrationNamespace,
+                    "migrationNamespace");
+            Listing listing = new Listing();
+            listing.legacyOfferProjection = false;
+            listing.itemId = tag.getString("ItemId");
+            boolean schemaPresent = tag.contains(OFFER_SCHEMA_KEY);
+            boolean payloadPresent = tag.contains(OFFER_PAYLOAD_KEY);
+            boolean malformedSchema = schemaPresent
+                    && !tag.contains(OFFER_SCHEMA_KEY, Tag.TAG_INT);
+            int schema = schemaPresent && !malformedSchema
+                    ? tag.getInt(OFFER_SCHEMA_KEY) : 1;
+            malformedSchema |= schemaPresent && schema < 1;
+            malformedSchema |= payloadPresent
+                    && (!schemaPresent
+                    || schema < CURRENT_OFFER_SCHEMA);
+            boolean persistedListingId = schemaPresent
+                    && (malformedSchema
+                    || schema >= CURRENT_OFFER_SCHEMA);
+            listing.listingId = persistedListingId
+                    && tag.contains(
+                    "ListingId", Tag.TAG_STRING)
+                    && !tag.getString("ListingId").isBlank()
+                    ? tag.getString("ListingId")
+                    : migratedListingId(migrationNamespace,
+                    listingOrdinal);
             try {
-                listing.setTradeMode(TradeMode.valueOf(tag.getString("TradeMode")));
+                listing.tradeMode = TradeMode.valueOf(
+                        tag.getString("TradeMode"));
             } catch (IllegalArgumentException ignored) {
-                listing.setTradeMode(TradeMode.MONEY);
+                listing.tradeMode = TradeMode.MONEY;
             }
-            listing.setMoneyPriceMinor(tag.getLong("MoneyPriceMinor"));
-            listing.setBarterItemId(tag.getString("BarterItemId"));
-            listing.setBarterItemCount(tag.getInt("BarterItemCount"));
-            listing.setDepartment(tag.getString("Department"));
-            listing.setListingDescription(tag.getString("ListingDescription"));
-            listing.setBaseQuantity(tag.contains("BaseQuantity") ? tag.getInt("BaseQuantity") : 0);
-            listing.setNbtAware(tag.getBoolean("NbtAware"));
+            listing.moneyPriceMinor = Math.max(1L,
+                    tag.getLong("MoneyPriceMinor"));
+            listing.barterItemId = tag.getString("BarterItemId");
+            listing.barterItemCount = Math.max(1,
+                    tag.getInt("BarterItemCount"));
+            listing.department = tag.getString("Department").trim();
+            listing.listingDescription = tag.getString(
+                    "ListingDescription").trim();
+            listing.baseQuantity = Math.max(0,
+                    tag.contains("BaseQuantity")
+                            ? tag.getInt("BaseQuantity") : 0);
+            listing.nbtAware = tag.getBoolean("NbtAware");
             if (tag.contains("NbtTag", Tag.TAG_COMPOUND)) {
-                listing.setNbtTag(tag.getCompound("NbtTag"));
+                listing.nbtTag = tag.getCompound("NbtTag");
             }
-            listing.setBarterNbtAware(tag.getBoolean("BarterNbtAware"));
+            listing.barterNbtAware =
+                    tag.getBoolean("BarterNbtAware");
             if (tag.contains("BarterNbtTag", Tag.TAG_COMPOUND)) {
-                listing.setBarterNbtTag(tag.getCompound("BarterNbtTag"));
+                listing.barterNbtTag =
+                        tag.getCompound("BarterNbtTag");
             }
-            listing.setHidden(tag.getBoolean("Hidden"));
-            listing.setShowcase(tag.getBoolean("Showcase"));
+            listing.hidden = tag.getBoolean("Hidden");
+            listing.showcase = tag.getBoolean("Showcase");
             if (tag.contains("Promo", Tag.TAG_COMPOUND)) {
                 listing.promo.load(tag.getCompound("Promo"));
             }
-            // Buyback / direction — legacy listings will default to SELL/0/0/0.
             if (tag.contains("Direction")) {
-                try { listing.setDirection(Direction.valueOf(tag.getString("Direction"))); }
-                catch (IllegalArgumentException ignored) { listing.setDirection(Direction.SELL); }
+                try {
+                    listing.direction = Direction.valueOf(
+                            tag.getString("Direction"));
+                } catch (IllegalArgumentException ignored) {
+                    listing.direction = Direction.SELL;
+                }
             }
-            if (tag.contains("BuybackPriceMinor")) listing.setBuybackPriceMinor(tag.getLong("BuybackPriceMinor"));
-            if (tag.contains("BuybackCap")) listing.setBuybackCap(tag.getInt("BuybackCap"));
-            if (tag.contains("BuybackBought")) listing.setBuybackBought(tag.getInt("BuybackBought"));
-            // Item 11: Load bundle outputs
+            if (tag.contains("BuybackPriceMinor")) {
+                listing.buybackPriceMinor = Math.max(0L,
+                        tag.getLong("BuybackPriceMinor"));
+            }
+            if (tag.contains("BuybackCap")) {
+                listing.buybackCap = Math.max(0,
+                        tag.getInt("BuybackCap"));
+            }
+            if (tag.contains("BuybackBought")) {
+                listing.buybackBought = Math.max(0,
+                        tag.getInt("BuybackBought"));
+            }
             if (tag.contains("BundleOutputs", Tag.TAG_LIST)) {
                 ListTag bundleTag = tag.getList("BundleOutputs", Tag.TAG_COMPOUND);
                 for (Tag bt : bundleTag) {
                     listing.bundleOutputs.add(BundleEntry.load((CompoundTag) bt));
                 }
             }
+            byte[] payload = tag.contains(
+                    OFFER_PAYLOAD_KEY, Tag.TAG_BYTE_ARRAY)
+                    ? tag.getByteArray(OFFER_PAYLOAD_KEY)
+                    : null;
+            if (malformedSchema) {
+                listing.quarantine(CURRENT_OFFER_SCHEMA, payload);
+                return listing;
+            }
+            if (schema > CURRENT_OFFER_SCHEMA) {
+                listing.quarantine(schema, payload);
+                return listing;
+            }
+            if (schema < CURRENT_OFFER_SCHEMA) {
+                listing.migrateLegacyOffer();
+                return listing;
+            }
+            listing.offerSchemaVersion = CURRENT_OFFER_SCHEMA;
+            listing.legacyOfferProjection =
+                    tag.getBoolean(LEGACY_PROJECTION_KEY);
+            if (payload == null) {
+                if (listing.legacyOfferProjection) {
+                    listing.refreshLegacyOffer();
+                    listing.migratedOfferPersistence =
+                            listing.normalizedOffer != null;
+                } else {
+                    listing.quarantine(schema, null);
+                }
+                return listing;
+            }
+            try {
+                ServerShopOfferListing offer =
+                        PlayerShopOfferPersistenceCodec.decode(
+                                schema, payload);
+                if (!offer.listingId().equals(
+                        listing.listingId)) {
+                    throw new IllegalArgumentException(
+                            "Player shop offer identity does not match");
+                }
+                listing.normalizedOffer = offer;
+            } catch (RuntimeException exception) {
+                listing.quarantine(schema, payload);
+            }
             return listing;
+        }
+
+        private void migrateLegacyOffer() {
+            offerSchemaVersion = CURRENT_OFFER_SCHEMA;
+            legacyOfferProjection = true;
+            offerUnavailable = false;
+            preservedOfferPayload = null;
+            migratedOfferPersistence = true;
+            refreshLegacyOffer();
+        }
+
+        private void refreshLegacyOffer() {
+            if (!legacyOfferProjection || offerUnavailable) {
+                return;
+            }
+            normalizedOffer = PlayerShopLegacyOfferMigration
+                    .compile(this).orElse(null);
+            offerSchemaVersion = CURRENT_OFFER_SCHEMA;
+        }
+
+        private void quarantine(int schema, byte[] payload) {
+            offerSchemaVersion = Math.max(1, schema);
+            normalizedOffer = null;
+            legacyOfferProjection = false;
+            offerUnavailable = true;
+            preservedOfferPayload = payload == null
+                    ? null : payload.clone();
+        }
+
+        private static String migratedListingId(
+                String migrationNamespace,
+                int listingOrdinal
+        ) {
+            if (listingOrdinal < 0) {
+                throw new IllegalArgumentException(
+                        "Player shop listing ordinal is invalid");
+            }
+            String seed = "futureshops.player.shop.offer.v2\u0000"
+                    + migrationNamespace + "\u0000" + listingOrdinal;
+            return "player_listing_"
+                    + UUID.nameUUIDFromBytes(
+                    seed.getBytes(StandardCharsets.UTF_8));
         }
     }
 
@@ -1188,4 +1569,3 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
 
     private final List<net.minecraft.world.item.ItemStack> clientTopStacks = new ArrayList<>();
 }
-

@@ -42,6 +42,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.nio.file.Files;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -255,13 +256,11 @@ class EscrowRuntimeCoordinatorTest {
                 UUID.randomUUID(), "seed claim", "seed", List.of(
                 new LedgerLeg(LedgerAccountId.system(LedgerAccountType.ADMIN_SOURCE), -100L),
                 new LedgerLeg(claimAccount, 100L))));
-        ClaimDeliveryCommit delivery = new ClaimDeliveryCommit(
-                ownerId, claimId, "settle claim", 100L, now.plusSeconds(1));
-        LedgerTransaction settlementLedger = new LedgerTransaction(
-                UUID.randomUUID(), delivery.requestKey(), "claim settlement", List.of(
-                new LedgerLeg(claimAccount, -100L),
-                new LedgerLeg(walletAccount, 100L)));
-        MoneyClaimSettlement settlement = new MoneyClaimSettlement(delivery, settlementLedger);
+        UUID requestId = UUID.randomUUID();
+        MoneyClaimSettlement settlement = MoneyClaimSettlement.create(
+                requestId, ownerId, claimId, 0L, 0L, 0L,
+                100L, 100L, 1L, now.plusSeconds(1));
+        LedgerTransaction settlementLedger = settlement.ledgerTransaction();
         EscrowJournalEvent event = new EscrowJournalEvent(
                 EscrowJournalEventType.MONEY_CLAIM_SETTLEMENT,
                 MoneyClaimSettlementCodec.encode(settlement));
@@ -274,7 +273,7 @@ class EscrowRuntimeCoordinatorTest {
                 });
         assertEquals(EscrowRuntimeState.READY, first.start());
         assertThrows(EscrowRuntimeException.class,
-                () -> first.commit(settlementLedger.transactionId(), event));
+                () -> first.commit(settlement.requestId(), event));
         assertEquals(100L, ledger.balance(walletAccount));
         assertEquals(100L, claims.getClaim(claimId).remainingUnits());
         assertEquals(1L, cursor.lastAppliedSequence());
@@ -313,11 +312,31 @@ class EscrowRuntimeCoordinatorTest {
     }
 
     @Test
-    void missingJournalWithPersistedCursorFailsClosed() {
+    void missingPristineBootstrapJournalCreatesNewLineage() {
         Path path = temporaryDirectory.resolve("deleted-journal.wal");
+        EscrowRuntimeSavedData cursor = new EscrowRuntimeSavedData();
+        UUID deletedLineageId = UUID.randomUUID();
+        UUID replacementLineageId = UUID.randomUUID();
+        cursor.establishLineage(deletedLineageId, 1L);
+
+        EscrowRuntimeCoordinator coordinator = new EscrowRuntimeCoordinator(
+                path, cursor, (record, mutation) -> {
+                }, () -> false, Clock.systemUTC(), () -> replacementLineageId);
+        assertEquals(EscrowRuntimeState.READY, coordinator.start());
+        assertEquals(Optional.of(replacementLineageId), cursor.journalLineage());
+        assertEquals(1L, cursor.lastAppliedSequence());
+        assertTrue(Files.exists(path));
+        assertTrue(coordinator.failure().isEmpty());
+        coordinator.close();
+    }
+
+    @Test
+    void missingJournalWithAdvancedCursorFailsClosed() {
+        Path path = temporaryDirectory.resolve("deleted-active-journal.wal");
         EscrowRuntimeSavedData cursor = new EscrowRuntimeSavedData();
         UUID lineageId = UUID.randomUUID();
         cursor.establishLineage(lineageId, 1L);
+        cursor.advance(lineageId, 2L);
 
         EscrowRuntimeCoordinator coordinator = new EscrowRuntimeCoordinator(
                 path, cursor, (record, mutation) -> {
@@ -325,6 +344,30 @@ class EscrowRuntimeCoordinatorTest {
         assertEquals(EscrowRuntimeState.MAINTENANCE, coordinator.start());
         assertTrue(coordinator.failure().isPresent());
         coordinator.close();
+    }
+
+    @Test
+    void staleBootstrapCursorAdoptsReplacementBootstrapJournal() {
+        Path path = temporaryDirectory.resolve("replacement-bootstrap.wal");
+        UUID deletedLineageId = UUID.randomUUID();
+        UUID replacementLineageId = UUID.randomUUID();
+        EscrowRuntimeCoordinator replacement = new EscrowRuntimeCoordinator(
+                path, new EscrowRuntimeSavedData(), (record, mutation) -> {
+                }, () -> false, Clock.systemUTC(), () -> replacementLineageId);
+        assertEquals(EscrowRuntimeState.READY, replacement.start());
+        replacement.close();
+
+        EscrowRuntimeSavedData staleCursor = new EscrowRuntimeSavedData();
+        staleCursor.establishLineage(deletedLineageId, 1L);
+        EscrowRuntimeCoordinator recovered = new EscrowRuntimeCoordinator(
+                path, staleCursor, (record, mutation) -> {
+                });
+
+        assertEquals(EscrowRuntimeState.READY, recovered.start());
+        assertEquals(Optional.of(replacementLineageId),
+                staleCursor.journalLineage());
+        assertEquals(1L, staleCursor.lastAppliedSequence());
+        recovered.close();
     }
 
     @Test

@@ -4,7 +4,10 @@ import com.enviouse.futureshops.Config;
 import com.enviouse.futureshops.event.BalanceChangeEvent;
 import com.enviouse.futureshops.server.economy.migration.LegacyBalanceMigrationManager;
 import com.enviouse.futureshops.server.economy.migration.WalletInitializationIds;
+import com.enviouse.futureshops.server.escrow.ledger.LedgerSavedData;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeException;
+import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeManager;
+import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowWalletService;
 import com.enviouse.futureshops.server.escrow.runtime.WalletMutationResult;
 import com.enviouse.futureshops.server.escrow.runtime.WalletMutationStatus;
@@ -14,23 +17,19 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraftforge.common.MinecraftForge;
 import org.slf4j.Logger;
 
-import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
 public class InternalEconomyProvider implements EconomyProvider {
     private static final Logger LOGGER = LogUtils.getLogger();
-    private static final ThreadLocal<Set<UUID>> ACTIVE_ACCOUNTS =
-            ThreadLocal.withInitial(HashSet::new);
+    private final MinecraftServer server;
 
     public InternalEconomyProvider(MinecraftServer server) {
-        Objects.requireNonNull(server, "server");
+        this.server = Objects.requireNonNull(server, "server");
     }
 
     @Override
@@ -38,6 +37,22 @@ public class InternalEconomyProvider implements EconomyProvider {
         Objects.requireNonNull(playerUUID, "playerUUID");
         LegacyBalanceMigrationManager.requireComplete();
         return initializedBalance(EscrowWalletService.live(), playerUUID);
+    }
+
+    public long getDisplayBalance(UUID playerUUID) {
+        Objects.requireNonNull(playerUUID, "playerUUID");
+        if (!LegacyBalanceMigrationManager.isComplete()) {
+            return LegacyBalanceMigrationManager.displayBalance(
+                    server, playerUUID,
+                    Config.economyStartingBalanceMinorUnits);
+        }
+        EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
+        if (runtime != null && runtime.isReady()) {
+            return getBalance(playerUUID);
+        }
+        return EscrowWalletService.storedBalance(
+                        LedgerSavedData.get(server), playerUUID)
+                .orElse(Config.economyStartingBalanceMinorUnits);
     }
 
     @Override
@@ -336,26 +351,21 @@ public class InternalEconomyProvider implements EconomyProvider {
     private static TransactionResult guarded(List<UUID> playerIds,
                                              UUID primaryPlayer,
                                              Supplier<TransactionResult> operation) {
-        Set<UUID> active = ACTIVE_ACCOUNTS.get();
-        List<UUID> distinct = new ArrayList<>(playerIds.stream().distinct().toList());
-        if (distinct.stream().anyMatch(active::contains)) {
+        java.util.Optional<WalletMutationGuard.Lease> optionalLease =
+                WalletMutationGuard.tryAcquire(playerIds);
+        if (optionalLease.isEmpty()) {
             return TransactionResult.error(
                     ShopResultCode.SERVER_ERROR,
                     currentBalanceWithoutInitialization(primaryPlayer));
         }
-        active.addAll(distinct);
-        try {
+        try (WalletMutationGuard.Lease ignored =
+                     optionalLease.orElseThrow()) {
             return operation.get();
         } catch (RuntimeException exception) {
             LOGGER.error("FutureShops wallet operation failed.", exception);
             return TransactionResult.error(
                     ShopResultCode.SERVER_ERROR,
                     currentBalanceWithoutInitialization(primaryPlayer));
-        } finally {
-            active.removeAll(distinct);
-            if (active.isEmpty()) {
-                ACTIVE_ACCOUNTS.remove();
-            }
         }
     }
 

@@ -3,7 +3,9 @@ package com.enviouse.futureshops.server.escrow.runtime;
 import com.enviouse.futureshops.server.escrow.checkpoint.ActiveEscrowJournal;
 import com.enviouse.futureshops.server.escrow.admin.EscrowAdministrativeAuditSavedData;
 import com.enviouse.futureshops.server.escrow.admin.EscrowAdministrativeRecord;
+import com.enviouse.futureshops.server.escrow.admin.MaintenanceExpectedState;
 import com.enviouse.futureshops.server.escrow.admin.MaintenanceRepairCommand;
+import com.enviouse.futureshops.server.escrow.admin.MaintenanceRepairPayload;
 import com.enviouse.futureshops.server.escrow.admin.MaintenanceRepairTarget;
 import com.enviouse.futureshops.server.escrow.admin.MaintenanceRepairTargetType;
 import com.enviouse.futureshops.server.escrow.admin.MaintenanceStateFingerprint;
@@ -11,6 +13,9 @@ import com.enviouse.futureshops.server.escrow.audit.EscrowConservationReport;
 import com.enviouse.futureshops.server.escrow.audit.EscrowCrossDomainConservationAudit;
 import com.enviouse.futureshops.server.escrow.checkpoint.EscrowSavedDataCheckpointBundle;
 import com.enviouse.futureshops.server.escrow.claim.ClaimSavedData;
+import com.enviouse.futureshops.server.escrow.claim.ClaimAttemptResult;
+import com.enviouse.futureshops.server.escrow.claim.ClaimKind;
+import com.enviouse.futureshops.server.escrow.claim.ClaimStatus;
 import com.enviouse.futureshops.server.escrow.claim.EscrowClaim;
 import com.enviouse.futureshops.server.escrow.custody.CustodyAdapter;
 import com.enviouse.futureshops.server.escrow.custody.CustodyBatchCommit;
@@ -31,17 +36,43 @@ import com.enviouse.futureshops.server.escrow.custody.CustodyTransferEvidence;
 import com.enviouse.futureshops.server.escrow.custody.CashClaimCustodySupport;
 import com.enviouse.futureshops.server.escrow.inventory.PlayerInventoryCustodyAdapter;
 import com.enviouse.futureshops.server.escrow.inventory.PlayerInventoryDeliveryToken;
+import com.enviouse.futureshops.server.escrow.item.runtime.DurableItemInventoryMutationGateway;
+import com.enviouse.futureshops.server.escrow.item.runtime.ExactItemInventoryRuntime;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryExecutionResult;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryExecutionStatus;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalEntry;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalStatus;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalSavedData;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryOnlineRecoveryBatch;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryQuarantineAdministration;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryQuarantineAdministrationCodec;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryQuarantineAdministrativeAction;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryQuarantineInspection;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalCompaction;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalCompactionCodec;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalCompactionResult;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryTerminalTombstone;
+import com.enviouse.futureshops.server.escrow.item.runtime.ServerPlayerItemInventoryAccess;
+import com.enviouse.futureshops.server.escrow.item.ExactItemClaimPayload;
+import com.enviouse.futureshops.server.escrow.item.ItemInventoryBatchEntry;
+import com.enviouse.futureshops.server.escrow.item.ItemInventoryBatchPlanner;
+import com.enviouse.futureshops.server.escrow.item.ItemInventoryMutationPlan;
+import com.enviouse.futureshops.server.escrow.item.ItemInventoryState;
 import com.enviouse.futureshops.money.InternalBillInventoryPlanner;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerSavedData;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerTransaction;
 import com.enviouse.futureshops.server.escrow.model.EscrowOperation;
 import com.enviouse.futureshops.server.escrow.model.EscrowAssetLotType;
+import com.enviouse.futureshops.server.escrow.model.EscrowPartyType;
 import com.enviouse.futureshops.server.escrow.model.EscrowState;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransactionId;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintEventCodec;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintJournalEvent;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintSavedData;
+import com.enviouse.futureshops.server.escrow.playershop.PlayerShopEscrowLifecycleEvent;
+import com.enviouse.futureshops.server.escrow.playershop.PlayerShopEscrowLifecycleEventCodec;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionCancellation;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionEvidence;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionIntentStore;
@@ -49,8 +80,56 @@ import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemption
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionSettlement;
 import com.enviouse.futureshops.server.escrow.store.EscrowTransactionByteCodec;
 import com.enviouse.futureshops.server.escrow.store.EscrowTransactionSavedData;
+import com.enviouse.futureshops.server.escrow.stock.CatalogStockState;
+import com.enviouse.futureshops.server.escrow.stock.StockCommandResult;
+import com.enviouse.futureshops.server.escrow.stock.StockConservationReport;
+import com.enviouse.futureshops.server.escrow.stock.StockKey;
+import com.enviouse.futureshops.server.escrow.stock.StockMutationCommand;
+import com.enviouse.futureshops.server.escrow.stock.StockMutationCommandCodec;
+import com.enviouse.futureshops.server.escrow.stock.StockMutationReceipt;
+import com.enviouse.futureshops.server.escrow.stock.StockReservation;
+import com.enviouse.futureshops.server.escrow.stock.StockSavedData;
+import com.enviouse.futureshops.server.escrow.stock.StockStoreSnapshot;
+import com.enviouse.futureshops.server.market.auction.AuctionHouseMutation;
+import com.enviouse.futureshops.server.market.auction.AuctionHouseMutationCodec;
+import com.enviouse.futureshops.server.market.auction.AuctionHouseSavedData;
+import com.enviouse.futureshops.server.market.auction.AuctionHouseSnapshot;
+import com.enviouse.futureshops.server.market.auction.AuctionListing;
+import com.enviouse.futureshops.server.market.auction.AuctionRequestReceipt;
+import com.enviouse.futureshops.server.market.auction.escrow.AuctionCreateEscrowIntent;
+import com.enviouse.futureshops.server.market.auction.escrow.AuctionEscrowCommit;
+import com.enviouse.futureshops.server.market.auction.escrow.AuctionEscrowLifecycleEvent;
+import com.enviouse.futureshops.server.market.auction.escrow.AuctionEscrowLifecycleEventCodec;
+import com.enviouse.futureshops.server.market.auction.escrow.AuctionEscrowLifecycleRepository;
+import com.enviouse.futureshops.server.market.bazaar.BazaarFill;
+import com.enviouse.futureshops.server.market.bazaar.BazaarMutation;
+import com.enviouse.futureshops.server.market.bazaar.BazaarMutationCodec;
+import com.enviouse.futureshops.server.market.bazaar.BazaarOrder;
+import com.enviouse.futureshops.server.market.bazaar.BazaarOrderBookSnapshot;
+import com.enviouse.futureshops.server.market.bazaar.BazaarProduct;
+import com.enviouse.futureshops.server.market.bazaar.BazaarRequestReceipt;
+import com.enviouse.futureshops.server.market.bazaar.BazaarSavedData;
+import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarCreateEscrowIntent;
+import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarEscrowLifecycleEvent;
+import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarEscrowLifecycleEventCodec;
+import com.enviouse.futureshops.server.market.bazaar.escrow.BazaarEscrowLifecycleRepository;
+import com.enviouse.futureshops.server.market.control.MarketControlApplyResult;
+import com.enviouse.futureshops.server.market.control.MarketControlAuditProjection;
+import com.enviouse.futureshops.server.market.control.MarketControlCommitResult;
+import com.enviouse.futureshops.server.market.control.MarketControlModule;
+import com.enviouse.futureshops.server.market.control.MarketControlMutation;
+import com.enviouse.futureshops.server.market.control.MarketControlMutationCodec;
+import com.enviouse.futureshops.server.market.control.MarketControlRequestReceipt;
+import com.enviouse.futureshops.server.market.control.MarketControlSavedData;
+import com.enviouse.futureshops.server.market.control.MarketControlState;
+import com.enviouse.futureshops.server.market.control.MarketControlTransitionCommand;
+import com.enviouse.futureshops.server.market.control.MarketModuleControl;
+import com.enviouse.futureshops.server.market.control.MarketModuleStatus;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.storage.LevelResource;
 
 import java.nio.file.Path;
@@ -73,8 +152,19 @@ public final class EscrowRuntimeService implements AutoCloseable {
     private final EscrowTransactionSavedData transactions;
     private final LedgerSavedData ledger;
     private final ClaimSavedData claims;
+    private final EscrowAdministrativeAuditSavedData administrativeAudit;
     private final CustodySavedData custody;
     private final ProtectedMintSavedData protectedMints;
+    private final StockSavedData stock;
+    private final ItemInventoryJournalSavedData itemInventoryJournal;
+    private final AuctionHouseSavedData auctionHouse;
+    private final BazaarSavedData bazaar;
+    private final ServerShopIntentSavedData serverShopIntents;
+    private final PlayerShopEscrowSavedData playerShopEscrow;
+    private final MarketControlSavedData marketControl;
+    private final EscrowItemInventoryMutationGateway itemInventoryGateway;
+    private final ExactItemInventoryRuntime exactItemInventoryRuntime;
+    private final ExactItemInventoryRuntime exactItemClaimInventoryRuntime;
     private final PlayerInventoryCustodyAdapter playerInventoryAdapter;
     private final ProtectedCashRedemptionIntentStore protectedCashIntentStore;
     private final ProtectedCashRedemptionWorkflow protectedCashWorkflow;
@@ -82,6 +172,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
     private final ForeignCashDepositWorkflow foreignCashWorkflow;
     private final EscrowRecoveryScheduler recoveryScheduler;
     private final EscrowSavedDataCheckpointBundle checkpointBundle;
+    private final PlayerPaymentHistoryProjector paymentHistoryProjector;
     private final EscrowRuntimeMaintenanceController maintenanceController;
     private final EscrowCheckpointSchedule checkpointSchedule =
             new EscrowCheckpointSchedule();
@@ -94,6 +185,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
     private CustodyExecutionScope custodyExecutionScope;
     private Throwable custodyRecoveryFailure;
     private EscrowConservationReport conservationReport;
+    private StockConservationReport stockConservationReport;
     private Throwable conservationFailure;
     private boolean conservationAuditComplete;
     private final ArrayDeque<ProtectedCashRedemptionIntentStore.Inspection>
@@ -112,6 +204,15 @@ public final class EscrowRuntimeService implements AutoCloseable {
     private final Map<UUID, ForeignCashCleanupWork>
             foreignCashCleanupWork = new LinkedHashMap<>();
     private Throwable foreignCashCleanupFailure;
+    private Throwable itemInventoryRecoveryFailure;
+    private final ArrayDeque<UUID> serverShopSellRecoveryWork =
+            new ArrayDeque<>();
+    private final ArrayDeque<UUID> serverShopBarterRecoveryWork =
+            new ArrayDeque<>();
+    private final ArrayDeque<ServerShopFundingRecoveryWork>
+            serverShopFundingRecoveryWork = new ArrayDeque<>();
+    private Throwable serverShopFundingRecoveryFailure;
+    private boolean serverShopRecoveryEnumerated;
 
     private EscrowRuntimeService(MinecraftServer ownerServer,
                                  EscrowRuntimeCoordinator coordinator,
@@ -119,8 +220,16 @@ public final class EscrowRuntimeService implements AutoCloseable {
                                  EscrowTransactionSavedData transactions,
                                  LedgerSavedData ledger,
                                  ClaimSavedData claims,
+                                 EscrowAdministrativeAuditSavedData administrativeAudit,
                                  CustodySavedData custody,
                                  ProtectedMintSavedData protectedMints,
+                                 StockSavedData stock,
+                                 ItemInventoryJournalSavedData itemInventoryJournal,
+                                 AuctionHouseSavedData auctionHouse,
+                                 BazaarSavedData bazaar,
+                                 ServerShopIntentSavedData serverShopIntents,
+                                 PlayerShopEscrowSavedData playerShopEscrow,
+                                 MarketControlSavedData marketControl,
                                  EscrowRecoveryScheduler recoveryScheduler,
                                  EscrowSavedDataCheckpointBundle checkpointBundle,
                                  EscrowRuntimeMaintenanceController maintenanceController,
@@ -132,11 +241,33 @@ public final class EscrowRuntimeService implements AutoCloseable {
         this.transactions = transactions;
         this.ledger = ledger;
         this.claims = claims;
+        this.administrativeAudit = administrativeAudit;
         this.custody = custody;
         this.protectedMints = protectedMints;
+        this.stock = stock;
+        this.itemInventoryJournal = itemInventoryJournal;
+        this.auctionHouse = auctionHouse;
+        this.bazaar = bazaar;
+        this.serverShopIntents = serverShopIntents;
+        this.playerShopEscrow = playerShopEscrow;
+        this.marketControl = marketControl;
+        this.itemInventoryGateway = coordinator == null
+                || itemInventoryJournal == null ? null
+                : new EscrowItemInventoryMutationGateway(coordinator,
+                itemInventoryJournal, claims, ownerServer::isSameThread);
+        this.exactItemInventoryRuntime = itemInventoryGateway == null
+                ? null : new ExactItemInventoryRuntime(
+                itemInventoryGateway);
+        this.exactItemClaimInventoryRuntime = itemInventoryGateway == null
+                ? null : new ExactItemInventoryRuntime(
+                itemInventoryGateway, (stack, direction) -> true,
+                java.time.Clock.systemUTC());
         this.playerInventoryAdapter = playerInventoryAdapter;
         this.recoveryScheduler = recoveryScheduler;
         this.checkpointBundle = checkpointBundle;
+        this.paymentHistoryProjector = coordinator == null ? null
+                : new PlayerPaymentHistoryProjector(
+                ownerServer, transactions, ledger, claims);
         this.maintenanceController = maintenanceController;
         this.unavailableState = unavailableState;
         this.startupFailure = startupFailure;
@@ -178,23 +309,50 @@ public final class EscrowRuntimeService implements AutoCloseable {
                     EscrowAdministrativeAuditSavedData.get(server);
             CustodySavedData custody = CustodySavedData.get(server);
             ProtectedMintSavedData protectedMints = ProtectedMintSavedData.get(server);
+            StockSavedData stock = StockSavedData.get(server);
+            ItemInventoryJournalSavedData itemInventoryJournal =
+                    ItemInventoryJournalSavedData.get(server);
+            AuctionHouseSavedData auctionHouse =
+                    AuctionHouseSavedData.get(server);
+            BazaarSavedData bazaar = BazaarSavedData.get(server);
+            ServerShopIntentSavedData serverShopIntents =
+                    ServerShopIntentSavedData.get(server);
+            PlayerShopEscrowSavedData playerShopEscrow =
+                    PlayerShopEscrowSavedData.get(server);
+            MarketControlSavedData marketControl =
+                    MarketControlSavedData.get(server);
             transactions.bindManagedMutationPermit(mutationPermit);
             ledger.bindManagedMutationPermit(mutationPermit);
             claims.bindManagedMutationPermit(mutationPermit);
             administrativeAudit.bindManagedMutationPermit(mutationPermit);
             custody.bindManagedMutationPermit(mutationPermit);
             protectedMints.bindManagedMutationPermit(mutationPermit);
+            stock.bindManagedMutationPermit(mutationPermit);
+            itemInventoryJournal.bindManagedMutationPermit(mutationPermit);
+            auctionHouse.bindManagedMutationPermit(mutationPermit);
+            bazaar.bindManagedMutationPermit(mutationPermit);
+            serverShopIntents.bindManagedMutationPermit(mutationPermit);
+            playerShopEscrow.bindManagedMutationPermit(mutationPermit);
+            marketControl.bindManagedMutationPermit(mutationPermit);
             EscrowRuntimeMaintenanceController maintenanceController =
                     new EscrowRuntimeMaintenanceController(cursor, mutationPermit);
             EscrowSavedDataMutationApplier applier = new EscrowSavedDataMutationApplier(
                     transactions, ledger, claims, administrativeAudit, custody, protectedMints,
-                    maintenanceController, AtmWithdrawalApplyFaultInjector.NONE,
-                    mutationPermit);
+                    stock, itemInventoryJournal, auctionHouse,
+                    bazaar, serverShopIntents, playerShopEscrow,
+                    marketControl,
+                    maintenanceController,
+                    AtmWithdrawalApplyFaultInjector.NONE, mutationPermit);
             EscrowRecoveryScheduler recoveryScheduler = new EscrowRecoveryScheduler(transactions);
             EscrowSavedDataCheckpointBundle checkpointBundle =
                     new EscrowSavedDataCheckpointBundle(
                             transactions, ledger, claims, administrativeAudit, custody,
-                            protectedMints, cursor, server::isSameThread, mutationPermit);
+                            protectedMints, stock, itemInventoryJournal,
+                            auctionHouse, bazaar,
+                            serverShopIntents, playerShopEscrow,
+                            marketControl,
+                            cursor, server::isSameThread,
+                            mutationPermit);
             openedCoordinator = new EscrowRuntimeCoordinator(
                     journalPath(server), cursor, applier,
                     () -> transactions.hasMaterializedState()
@@ -202,12 +360,23 @@ public final class EscrowRuntimeService implements AutoCloseable {
                             || claims.hasMaterializedState()
                             || administrativeAudit.hasMaterializedState()
                             || custody.hasMaterializedState()
-                            || protectedMints.hasMaterializedState(),
+                            || protectedMints.hasMaterializedState()
+                            || stock.hasMaterializedState()
+                            || itemInventoryJournal.hasMaterializedState()
+                            || auctionHouse.hasMaterializedState()
+                            || bazaar.hasMaterializedState()
+                            || serverShopIntents.hasMaterializedState()
+                            || playerShopEscrow.hasMaterializedState()
+                            || marketControl.hasMaterializedState(),
                     checkpointBundle, mutationPermit);
             openedCoordinator.start(initialRecoveryBatchSize);
             EscrowRuntimeService service = new EscrowRuntimeService(
-                    server, openedCoordinator, applier, transactions, ledger, claims, custody,
-                    protectedMints, recoveryScheduler, checkpointBundle,
+                    server, openedCoordinator, applier, transactions, ledger, claims,
+                    administrativeAudit, custody,
+                    protectedMints, stock, itemInventoryJournal,
+                    auctionHouse, bazaar, serverShopIntents,
+                    playerShopEscrow, marketControl,
+                    recoveryScheduler, checkpointBundle,
                     maintenanceController,
                     new PlayerInventoryCustodyAdapter(server, claims),
                     null, null);
@@ -226,8 +395,12 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 }
             }
             return new EscrowRuntimeService(
-                    server, null, null, null, null, null, null, null, null, null, null,
-                    null, EscrowRuntimeState.MAINTENANCE, exception);
+                    server, null, null, null, null, null, null, null, null,
+                    null, null, null, null, null, null, null, null, null,
+                    null,
+                    null,
+                    EscrowRuntimeState.MAINTENANCE,
+                    exception);
         }
     }
 
@@ -240,10 +413,14 @@ public final class EscrowRuntimeService implements AutoCloseable {
     }
 
     public synchronized EscrowRuntimeState state() {
+        assertServerThread();
         if (coordinator == null) {
             return unavailableState;
         }
-        EscrowRuntimeState journalState = coordinator.state();
+        EscrowRuntimeState journalState;
+        synchronized (coordinator) {
+            journalState = coordinator.state();
+        }
         if (journalState == EscrowRuntimeState.READY) {
             if (maintenanceController != null
                     && maintenanceController.maintenanceRequested()) {
@@ -252,20 +429,31 @@ public final class EscrowRuntimeService implements AutoCloseable {
             if (protectedCashDiscoveryFailure != null
                     || protectedCashCleanupFailure != null
                     || foreignCashDiscoveryFailure != null
-                    || foreignCashCleanupFailure != null) {
+                    || foreignCashCleanupFailure != null
+                    || itemInventoryRecoveryFailure != null
+                    || serverShopFundingRecoveryFailure != null) {
                 return EscrowRuntimeState.MAINTENANCE;
+            }
+            boolean schedulerRecovering;
+            boolean schedulerBlocked;
+            synchronized (recoveryScheduler) {
+                schedulerRecovering = !recoveryScheduler.enumerationComplete()
+                        || recoveryScheduler.hasRunnableWork();
+                schedulerBlocked = recoveryScheduler.hasBlockingWork()
+                        || recoveryScheduler.hasManualReviewWork();
             }
             if (!domainRecoveryInitialized || !protectedCashDiscoveryComplete
                     || !foreignCashDiscoveryComplete
-                    || !recoveryScheduler.enumerationComplete()
-                    || recoveryScheduler.hasRunnableWork()
+                    || !paymentHistoryProjector.complete()
+                    || schedulerRecovering
                     || hasResolvableCustodyRecovery()
                     || !protectedCashCleanupWork.isEmpty()
-                    || !foreignCashCleanupWork.isEmpty()) {
+                    || !foreignCashCleanupWork.isEmpty()
+                    || !serverShopFundingRecoveryWork.isEmpty()
+                    || hasOnlinePreparedItemMutations()) {
                 return EscrowRuntimeState.RECOVERING;
             }
-            if (recoveryScheduler.hasBlockingWork()
-                    || recoveryScheduler.hasManualReviewWork()
+            if (schedulerBlocked
                     || hasBlockedCustodyRecovery()
                     || protectedCashDiscoveryFailure != null) {
                 return EscrowRuntimeState.MAINTENANCE;
@@ -282,6 +470,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
     }
 
     public synchronized Optional<Throwable> failure() {
+        assertServerThread();
         if (coordinator == null) {
             return Optional.ofNullable(startupFailure);
         }
@@ -304,6 +493,12 @@ public final class EscrowRuntimeService implements AutoCloseable {
         if (custodyRecoveryFailure != null) {
             return Optional.of(custodyRecoveryFailure);
         }
+        if (itemInventoryRecoveryFailure != null) {
+            return Optional.of(itemInventoryRecoveryFailure);
+        }
+        if (serverShopFundingRecoveryFailure != null) {
+            return Optional.of(serverShopFundingRecoveryFailure);
+        }
         return Optional.ofNullable(conservationFailure);
     }
 
@@ -316,13 +511,15 @@ public final class EscrowRuntimeService implements AutoCloseable {
         EscrowRuntimeCoordinator available = requireCoordinator();
         int remaining = maximumRecords;
         int worked = 0;
-        if (available.state() == EscrowRuntimeState.RECOVERING) {
-            int journalWork = available.recoverBatch(remaining);
-            worked += journalWork;
-            remaining -= journalWork;
-        }
-        if (available.state() != EscrowRuntimeState.READY) {
-            return worked;
+        synchronized (available) {
+            if (available.state() == EscrowRuntimeState.RECOVERING) {
+                int journalWork = available.recoverBatch(remaining);
+                worked += journalWork;
+                remaining -= journalWork;
+            }
+            if (available.state() != EscrowRuntimeState.READY) {
+                return worked;
+            }
         }
         initializeDomainRecovery();
         if (remaining > 0 && !protectedCashDiscoveryComplete) {
@@ -337,12 +534,21 @@ public final class EscrowRuntimeService implements AutoCloseable {
             worked += discovered;
             remaining -= discovered;
         }
-        if (remaining > 0 && !recoveryScheduler.enumerationComplete()) {
-            int enumerationBudget = recoveryScheduler.hasRunnableWork()
-                    ? Math.max(1, remaining / 2) : remaining;
-            int enumerated = recoveryScheduler.enumerateBatch(enumerationBudget);
-            worked += enumerated;
-            remaining -= enumerated;
+        if (remaining > 0
+                && !serverShopFundingRecoveryWork.isEmpty()) {
+            int released = withRecoveryLane(
+                    this::recoverOneServerShopFunding);
+            worked += released;
+            remaining -= released;
+        }
+        synchronized (recoveryScheduler) {
+            if (remaining > 0 && !recoveryScheduler.enumerationComplete()) {
+                int enumerationBudget = recoveryScheduler.hasRunnableWork()
+                        ? Math.max(1, remaining / 2) : remaining;
+                int enumerated = recoveryScheduler.enumerateBatch(enumerationBudget);
+                worked += enumerated;
+                remaining -= enumerated;
+            }
         }
         if (maintenanceController != null
                 && maintenanceController.maintenanceRequested()) {
@@ -354,17 +560,31 @@ public final class EscrowRuntimeService implements AutoCloseable {
             }
             return worked;
         }
-        if (remaining > 0 && recoveryScheduler.hasRunnableWork()) {
-            int processingBudget = remaining;
-            EscrowRecoveryBatchResult result = withRecoveryLane(
-                    () -> recoveryScheduler.processBatch(processingBudget));
-            worked += result.examined();
-            remaining -= result.examined();
+        synchronized (recoveryScheduler) {
+            if (remaining > 0 && recoveryScheduler.hasRunnableWork()) {
+                int processingBudget = remaining;
+                EscrowRecoveryBatchResult result = withRecoveryLane(
+                        () -> recoveryScheduler.processBatch(processingBudget));
+                worked += result.examined();
+                remaining -= result.examined();
+            }
         }
         if (remaining > 0 && hasResolvableCustodyRecovery()) {
             int custodyWork = recoverOneCustodyOperation();
             worked += custodyWork;
             remaining -= custodyWork;
+        }
+        boolean schedulerComplete;
+        synchronized (recoveryScheduler) {
+            schedulerComplete = recoveryScheduler.enumerationComplete()
+                    && !recoveryScheduler.hasRunnableWork();
+        }
+        if (remaining > 0
+                && schedulerComplete
+                && !paymentHistoryProjector.complete()) {
+            int projected = paymentHistoryProjector.reconcileBatch(remaining);
+            worked += projected;
+            remaining -= projected;
         }
         if (remaining > 0 && !protectedCashCleanupWork.isEmpty()) {
             worked += recoverOneProtectedCashCleanup();
@@ -372,6 +592,13 @@ public final class EscrowRuntimeService implements AutoCloseable {
         }
         if (remaining > 0 && !foreignCashCleanupWork.isEmpty()) {
             worked += recoverOneForeignCashCleanup();
+            remaining--;
+        }
+        if (remaining > 0 && itemInventoryRecoveryFailure == null
+                && hasOnlinePreparedItemMutations()) {
+            int itemWork = recoverOnlineItemInventoryMutations(remaining);
+            worked += itemWork;
+            remaining -= itemWork;
         }
         if (worked > 0) {
             invalidateConservationAudit();
@@ -380,32 +607,84 @@ public final class EscrowRuntimeService implements AutoCloseable {
     }
 
     public synchronized boolean shouldRunRecovery() {
+        assertServerThread();
         if (coordinator == null) {
             return false;
         }
-        if (coordinator.state() == EscrowRuntimeState.RECOVERING) {
-            return true;
+        synchronized (coordinator) {
+            if (coordinator.state() == EscrowRuntimeState.RECOVERING) {
+                return true;
+            }
+            if (coordinator.state() != EscrowRuntimeState.READY) {
+                return false;
+            }
         }
-        if (coordinator.state() != EscrowRuntimeState.READY) {
-            return false;
-        }
-        if (maintenanceController != null
-                && maintenanceController.maintenanceRequested()) {
+        synchronized (recoveryScheduler) {
+            if (maintenanceController != null
+                    && maintenanceController.maintenanceRequested()) {
+                return !domainRecoveryInitialized
+                        || !protectedCashDiscoveryComplete
+                        || !foreignCashDiscoveryComplete
+                        || !paymentHistoryProjector.complete()
+                        || !recoveryScheduler.enumerationComplete()
+                        || !protectedCashCleanupWork.isEmpty()
+                        || !foreignCashCleanupWork.isEmpty()
+                        || !serverShopFundingRecoveryWork.isEmpty()
+                        || itemInventoryRecoveryFailure == null
+                        && hasOnlinePreparedItemMutations();
+            }
             return !domainRecoveryInitialized
                     || !protectedCashDiscoveryComplete
                     || !foreignCashDiscoveryComplete
+                    || !paymentHistoryProjector.complete()
                     || !recoveryScheduler.enumerationComplete()
+                    || recoveryScheduler.hasRunnableWork()
+                    || hasResolvableCustodyRecovery()
                     || !protectedCashCleanupWork.isEmpty()
-                    || !foreignCashCleanupWork.isEmpty();
+                    || !foreignCashCleanupWork.isEmpty()
+                    || !serverShopFundingRecoveryWork.isEmpty()
+                    || itemInventoryRecoveryFailure == null
+                    && hasOnlinePreparedItemMutations();
         }
-        return !domainRecoveryInitialized
-                || !protectedCashDiscoveryComplete
-                || !foreignCashDiscoveryComplete
-                || !recoveryScheduler.enumerationComplete()
-                || recoveryScheduler.hasRunnableWork()
-                || hasResolvableCustodyRecovery()
-                || !protectedCashCleanupWork.isEmpty()
-                || !foreignCashCleanupWork.isEmpty();
+    }
+
+    private int recoverOnlineItemInventoryMutations(int maximumWork) {
+        if (maximumWork <= 0
+                || maximumWork
+                > EscrowRuntimeCoordinator.MAX_RECOVERY_BATCH_SIZE) {
+            throw new IllegalArgumentException(
+                    "Invalid item inventory recovery work limit");
+        }
+        if (exactItemInventoryRuntime == null
+                || itemInventoryJournal == null) {
+            return 0;
+        }
+        List<ServerPlayerItemInventoryAccess> players =
+                ownerServer.getPlayerList().getPlayers().stream()
+                .map(ServerPlayerItemInventoryAccess::new)
+                .toList();
+        try {
+            return ItemInventoryOnlineRecoveryBatch.recover(
+                    exactItemInventoryRuntime, players, maximumWork);
+        } catch (RuntimeException exception) {
+            itemInventoryRecoveryFailure = new EscrowRuntimeException(
+                    "Online item inventory recovery failed", exception);
+            return 0;
+        }
+    }
+
+    private boolean hasOnlinePreparedItemMutations() {
+        if (itemInventoryJournal == null) {
+            return false;
+        }
+        for (ServerPlayer player
+                : ownerServer.getPlayerList().getPlayers()) {
+            if (!itemInventoryJournal.preparedForPlayer(
+                    player.getUUID(), 1).isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public synchronized boolean tickCheckpoint(int intervalSeconds) {
@@ -563,7 +842,8 @@ public final class EscrowRuntimeService implements AutoCloseable {
         recoveryScheduler.enqueue(current);
     }
 
-    synchronized boolean enqueueProtectedCashIntentRecovery(
+    synchronized CashDepositRecoveryEnqueueResult
+    enqueueProtectedCashIntentRecovery(
             ProtectedCashRedemptionEvidence evidence
     ) {
         assertServerThread();
@@ -578,7 +858,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
                         evidence.playerId(), evidence.transactionId());
         if (inspection.status()
                 == ProtectedCashRedemptionIntentStore.InspectionStatus.MISSING) {
-            return false;
+            return CashDepositRecoveryEnqueueResult.NO_DURABLE_EVIDENCE;
         }
         boolean alreadyQueued = protectedCashDiscoveryWork.stream()
                 .anyMatch(queued -> queued.transactionId()
@@ -588,7 +868,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
             protectedCashDiscoveryWork.addLast(inspection);
         }
         protectedCashDiscoveryComplete = false;
-        return true;
+        return CashDepositRecoveryEnqueueResult.QUEUED;
     }
 
     synchronized void scheduleProtectedCashCleanup(
@@ -624,7 +904,8 @@ public final class EscrowRuntimeService implements AutoCloseable {
         recoveryScheduler.enqueue(current);
     }
 
-    synchronized boolean enqueueForeignCashIntentRecovery(
+    synchronized CashDepositRecoveryEnqueueResult
+    enqueueForeignCashIntentRecovery(
             ForeignCashDepositEvidence evidence
     ) {
         assertServerThread();
@@ -638,7 +919,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
                         evidence.playerId(), evidence.transactionId());
         if (inspection.status()
                 == ForeignCashDepositIntentStore.InspectionStatus.MISSING) {
-            return false;
+            return CashDepositRecoveryEnqueueResult.NO_DURABLE_EVIDENCE;
         }
         boolean alreadyQueued = foreignCashDiscoveryWork.stream()
                 .anyMatch(queued -> queued.transactionId()
@@ -648,7 +929,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
             foreignCashDiscoveryWork.addLast(inspection);
         }
         foreignCashDiscoveryComplete = false;
-        return true;
+        return CashDepositRecoveryEnqueueResult.QUEUED;
     }
 
     synchronized void scheduleForeignCashCleanup(
@@ -676,6 +957,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
             String requestKey,
             long configRevision,
             long walletBalanceLimitMinorUnits,
+            CashDepositMode depositMode,
             Instant now
     ) {
         assertServerThread();
@@ -688,7 +970,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
         ProtectedCashRedemptionWorkflow.Outcome outcome =
                 protectedCashWorkflow.redeem(player, plan, transactionId,
                 requestKey, configRevision, walletBalanceLimitMinorUnits,
-                now);
+                depositMode, now);
         ProtectedCashRedemptionSettlement settlement = outcome.settlement();
         return new ProtectedCashRedemptionResult(transactionId,
                 settlement.amountMinorUnits(),
@@ -704,6 +986,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
             UUID transactionId,
             String requestKey,
             long walletBalanceLimitMinorUnits,
+            CashDepositMode depositMode,
             Instant now
     ) {
         assertServerThread();
@@ -715,7 +998,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
         ForeignCashDepositWorkflow.Outcome outcome =
                 foreignCashWorkflow.deposit(player, plan, requestId,
                         transactionId, requestKey,
-                        walletBalanceLimitMinorUnits, now);
+                        walletBalanceLimitMinorUnits, depositMode, now);
         ForeignCashDepositSettlement settlement = outcome.settlement();
         return new ForeignCashDepositResult(transactionId,
                 settlement.amountMinorUnits(),
@@ -757,6 +1040,63 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 .map(com.enviouse.futureshops.server.escrow.ledger.LedgerTransactionReceipt::transaction);
     }
 
+    public synchronized Optional<RecoveryInspection> inspectRecovery(
+            UUID transactionId
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(transactionId, "transactionId");
+        EscrowTransaction transaction = transactions.getTransaction(
+                new EscrowTransactionId(transactionId));
+        if (transaction == null) {
+            return Optional.empty();
+        }
+        List<EscrowClaim> transactionClaims =
+                claims.claimsForTransaction(transactionId);
+        long amountMinorUnits = transaction.assetLots().stream()
+                .flatMap(lot -> lot.money().stream())
+                .map(value -> value.minorUnits())
+                .reduce(0L, Math::addExact);
+        long assetQuantity = transaction.assetLots().stream()
+                .mapToLong(lot -> lot.quantity())
+                .reduce(0L, Math::addExact);
+        long pendingClaimUnits = transactionClaims.stream()
+                .filter(claim -> claim.status() == ClaimStatus.PENDING)
+                .map(EscrowClaim::remainingUnits)
+                .reduce(0L, Math::addExact);
+        List<String> participants = transaction.participants().stream()
+                .map(participant -> participant.party().type().name()
+                        + ":" + participant.party().id()
+                        + ":" + participant.roles().stream()
+                        .map(Enum::name).sorted()
+                        .collect(java.util.stream.Collectors.joining(",")))
+                .sorted()
+                .toList();
+        String provider = cashProvider(transaction);
+        String evidence = cashEvidence(transaction, provider);
+        String safeAction = transaction.state().isTerminal()
+                ? "NO_ACTION"
+                : transaction.state() == EscrowState.MANUAL_REVIEW
+                ? "ADMIN_REVIEW" : "AUTOMATIC_RECOVERY";
+        return Optional.of(new RecoveryInspection(
+                transactionId, transaction.requestKey().value(),
+                transaction.operation(), transaction.state(),
+                transaction.revision(), transaction.configRevision(),
+                participants, provider, evidence, amountMinorUnits,
+                assetQuantity, transactionClaims.size(),
+                pendingClaimUnits,
+                transaction.lastError().map(error -> error.code())
+                        .orElse("NONE"),
+                transaction.lastError().map(error -> error.message())
+                        .orElse("NONE"),
+                transaction.retryMetadata().attemptCount(),
+                transaction.retryMetadata().maxAttempts(),
+                transaction.retryMetadata().nextAttemptAt()
+                        .map(Instant::toString).orElse("NONE"),
+                transaction.retryMetadata().resumeState()
+                        .map(Enum::name).orElse("NONE"),
+                safeAction));
+    }
+
     synchronized Optional<EscrowTransaction> transaction(UUID transactionId) {
         assertServerThread();
         Objects.requireNonNull(transactionId, "transactionId");
@@ -770,6 +1110,67 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 transactionId, "transactionId"));
     }
 
+    private String cashProvider(EscrowTransaction transaction) {
+        if (transaction.assetLots().stream().anyMatch(lot -> lot.type()
+                == EscrowAssetLotType.PROTECTED_PHYSICAL_CURRENCY)) {
+            return "PROTECTED";
+        }
+        if (transaction.assetLots().stream().anyMatch(lot -> lot.type()
+                == EscrowAssetLotType.FOREIGN_PHYSICAL_CURRENCY)) {
+            return "FOREIGN";
+        }
+        return "NOT_CASH";
+    }
+
+    private String cashEvidence(
+            EscrowTransaction transaction,
+            String provider
+    ) {
+        Optional<UUID> playerId = transaction.participants().stream()
+                .filter(participant -> participant.party().type()
+                        == EscrowPartyType.PLAYER)
+                .map(participant -> participant.party().id())
+                .map(UUID::fromString)
+                .findFirst();
+        if (playerId.isEmpty() || provider.equals("NOT_CASH")) {
+            return "NOT_APPLICABLE";
+        }
+        UUID transactionId = transaction.transactionId().value();
+        try {
+            if (provider.equals("PROTECTED")) {
+                ProtectedCashRedemptionIntentStore.Inspection inspection =
+                        protectedCashIntentStore.inspect(ownerServer,
+                                playerId.orElseThrow(), transactionId);
+                return inspection.status().name()
+                        + inspection.evidence()
+                        .map(value -> ":" + value.phase().name())
+                        .orElse("");
+            }
+            ForeignCashDepositIntentStore.Inspection inspection =
+                    foreignCashIntentStore.inspect(ownerServer,
+                            playerId.orElseThrow(), transactionId);
+            return inspection.status().name()
+                    + inspection.evidence()
+                    .map(value -> ":" + value.phase().name())
+                    .orElse("");
+        } catch (RuntimeException exception) {
+            return "INSPECTION_FAILED:" + exception.getClass().getSimpleName();
+        }
+    }
+
+    synchronized Optional<ClaimAttemptResult> claimAttempt(
+            String requestKey
+    ) {
+        assertServerThread();
+        return claims.attempt(requestKey);
+    }
+
+    synchronized Optional<EscrowClaim> claim(UUID claimId) {
+        assertServerThread();
+        return Optional.ofNullable(claims.getClaim(
+                Objects.requireNonNull(claimId, "claimId")));
+    }
+
     synchronized EscrowCommitResult createClaim(EscrowClaim claim) {
         assertServerThread();
         Objects.requireNonNull(claim, "claim");
@@ -781,6 +1182,22 @@ public final class EscrowRuntimeService implements AutoCloseable {
         return result;
     }
 
+    synchronized EscrowCommitResult deliverPlayerShopStorageClaim(
+            UUID transactionId,
+            ClaimDeliveryCommit delivery
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(transactionId, "transactionId");
+        Objects.requireNonNull(delivery, "delivery");
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.CLAIM_DELIVERY,
+                ClaimJournalCodec.encodeDelivery(delivery));
+        EscrowCommitResult result = requireReadyCoordinator().commit(
+                transactionId, event);
+        invalidateConservationAudit();
+        return result;
+    }
+
     synchronized EscrowCommitResult settleMoneyClaim(MoneyClaimSettlement settlement) {
         assertServerThread();
         Objects.requireNonNull(settlement, "settlement");
@@ -788,7 +1205,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 EscrowJournalEventType.MONEY_CLAIM_SETTLEMENT,
                 MoneyClaimSettlementCodec.encode(settlement));
         EscrowCommitResult result = requireReadyCoordinator().commit(
-                settlement.ledgerTransaction().transactionId(), event);
+                settlement.requestId(), event);
         invalidateConservationAudit();
         return result;
     }
@@ -813,14 +1230,29 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 EscrowJournalEventType.ADMIN_AUDIT,
                 AdministrativeAuditJournalCodec.encode(audit));
         EscrowRuntimeCoordinator available = requireCoordinator();
-        if (!available.isReady()) {
-            throw new EscrowRuntimeException(
-                    "Administrative audit journal is unavailable in state " + available.state(),
-                    available.failure().orElse(null));
+        EscrowCommitResult result;
+        synchronized (available) {
+            if (!available.isReady()) {
+                throw new EscrowRuntimeException(
+                        "Administrative audit journal is unavailable in state "
+                                + available.state(),
+                        available.failure().orElse(null));
+            }
+            result = available.commit(audit.requestId(), event);
         }
-        EscrowCommitResult result = available.commit(audit.requestId(), event);
         invalidateConservationAudit();
         return result;
+    }
+
+    synchronized Optional<EscrowAdministrativeRecord>
+    administrativeAuditRecord(UUID requestId) {
+        assertServerThread();
+        if (administrativeAudit == null) {
+            throw new EscrowRuntimeException(
+                    "Administrative audit is unavailable", startupFailure);
+        }
+        return Optional.ofNullable(administrativeAudit.getRecord(
+                Objects.requireNonNull(requestId, "requestId")));
     }
 
     synchronized EscrowCommitResult commitMaintenanceRepair(
@@ -829,16 +1261,20 @@ public final class EscrowRuntimeService implements AutoCloseable {
         assertServerThread();
         Objects.requireNonNull(command, "command");
         EscrowRuntimeCoordinator available = requireCoordinator();
-        if (!available.journalHealthyAndAligned()) {
-            throw new EscrowRuntimeException(
-                    "Maintenance repair journal is unavailable in state "
-                            + available.state(), available.failure().orElse(null));
-        }
         EscrowJournalEvent event = applier.planMaintenanceRepair(command);
         MaintenanceRepairCommand plannedCommand = MaintenanceRepairJournalCodec.decode(
                 event.body()).command();
-        EscrowCommitResult result = available.commitMaintenanceRepair(
-                command.commandId(), event);
+        EscrowCommitResult result;
+        synchronized (available) {
+            if (!available.journalHealthyAndAligned()) {
+                throw new EscrowRuntimeException(
+                        "Maintenance repair journal is unavailable in state "
+                                + available.state(),
+                        available.failure().orElse(null));
+            }
+            result = available.commitMaintenanceRepair(
+                    command.commandId(), event);
+        }
         invalidateConservationAudit();
         if (plannedCommand.appliesAction()
                 && plannedCommand.target().type()
@@ -850,6 +1286,26 @@ public final class EscrowRuntimeService implements AutoCloseable {
             }
         }
         return result;
+    }
+
+    public synchronized EscrowCommitResult verifyAndResumeMaintenance(
+            UUID commandId,
+            String actor,
+            String reason,
+            long expectedRevision,
+            EscrowGlobalVerificationSnapshot verification,
+            Instant now
+    ) {
+        Objects.requireNonNull(verification, "verification");
+        MaintenanceRepairCommand command = MaintenanceRepairCommand.create(
+                commandId, actor, reason, true, now,
+                MaintenanceRepairTarget.runtime(),
+                MaintenanceExpectedState.revision(expectedRevision),
+                new MaintenanceRepairPayload.VerifyAndResume(
+                        verification.journalSequence(),
+                        verification.fingerprint()),
+                true, "Verified escrow maintenance resume");
+        return commitMaintenanceRepair(command);
     }
 
     public synchronized MaintenanceStateFingerprint maintenanceFingerprint(
@@ -876,12 +1332,19 @@ public final class EscrowRuntimeService implements AutoCloseable {
 
     public synchronized EscrowConservationReport maintenanceConservationReport() {
         assertServerThread();
-        EscrowConservationReport report = verifyConservation();
-        conservationReport = report;
-        conservationFailure = report.conserved() ? null : new EscrowRuntimeException(
-                "Escrow cross domain conservation failed");
-        conservationAuditComplete = true;
-        return report;
+        try {
+            EscrowConservationReport report = verifyConservation();
+            conservationReport = report;
+            conservationFailure = report.conserved() ? null
+                    : new EscrowRuntimeException(
+                    "Escrow cross domain conservation failed");
+            conservationAuditComplete = true;
+            return report;
+        } catch (RuntimeException exception) {
+            conservationFailure = exception;
+            conservationAuditComplete = true;
+            throw exception;
+        }
     }
 
     public synchronized CustodyBatchExecutionResult executeCustodyBatch(
@@ -996,6 +1459,1146 @@ public final class EscrowRuntimeService implements AutoCloseable {
         return result;
     }
 
+    synchronized EscrowCommitResult commitPlayerPayment(
+            PlayerPaymentCommit commit
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(commit, "commit");
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.PLAYER_PAYMENT_COMMIT,
+                PlayerPaymentCommitCodec.encode(commit));
+        EscrowCommitResult result = requireReadyCoordinator()
+                .commitPlayerPayment(commit.transactionId(), event);
+        invalidateConservationAudit();
+        return result;
+    }
+
+    synchronized EscrowCommitResult commitServerShopPurchase(
+            ServerShopPurchaseCommit commit
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(commit, "commit");
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.SERVER_SHOP_PURCHASE_COMMIT,
+                ServerShopPurchaseCommitCodec.encode(commit));
+        EscrowCommitResult result = requireReadyCoordinator()
+                .commitServerShopPurchase(commit.requestId(), event);
+        invalidateConservationAudit();
+        return result;
+    }
+
+    synchronized EscrowCommitResult commitServerShopFundingRelease(
+            ServerShopFundingRelease release
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(release, "release");
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.SERVER_SHOP_FUNDING_RELEASE,
+                ServerShopFundingReleaseCodec.encode(release));
+        EscrowCommitResult result = requireReadyCoordinator()
+                .commitServerShopFundingRelease(release.releaseId(), event);
+        invalidateConservationAudit();
+        return result;
+    }
+
+    synchronized EscrowCommitResult commitServerShopSellLifecycle(
+            ServerShopSellLifecycleEvent lifecycle
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(lifecycle, "lifecycle");
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.SERVER_SHOP_SELL_COMMIT,
+                ServerShopSellLifecycleEventCodec.encode(lifecycle));
+        EscrowCommitResult result = requireReadyCoordinator()
+                .commitServerShopSellLifecycle(
+                        lifecycle.requestId(), event);
+        invalidateConservationAudit();
+        return result;
+    }
+
+    synchronized EscrowCommitResult commitServerShopBarterLifecycle(
+            ServerShopBarterLifecycleEvent lifecycle
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(lifecycle, "lifecycle");
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.SERVER_SHOP_BARTER_COMMIT,
+                ServerShopBarterLifecycleEventCodec.encode(lifecycle));
+        EscrowCommitResult result = requireReadyCoordinator()
+                .commitServerShopBarterLifecycle(
+                        lifecycle.requestId(), event);
+        invalidateConservationAudit();
+        return result;
+    }
+
+    synchronized Optional<ServerShopSellIntent> serverShopSellIntent(
+            UUID requestId
+    ) {
+        assertServerThread();
+        if (serverShopIntents == null) {
+            return Optional.empty();
+        }
+        return serverShopIntents.sellIntent(requestId);
+    }
+
+    synchronized Optional<ServerShopBarterIntent> serverShopBarterIntent(
+            UUID requestId
+    ) {
+        assertServerThread();
+        if (serverShopIntents == null) {
+            return Optional.empty();
+        }
+        return serverShopIntents.barterIntent(requestId);
+    }
+
+    public synchronized List<ServerShopSellIntent>
+    pendingServerShopSellRecovery(int limit) {
+        assertServerThread();
+        if (serverShopIntents == null) {
+            throw new EscrowRuntimeException(
+                    "Server shop intent recovery is unavailable",
+                    startupFailure);
+        }
+        return serverShopIntents.preparedSellIntents(limit);
+    }
+
+    public synchronized List<ServerShopBarterIntent>
+    pendingServerShopBarterRecovery(int limit) {
+        assertServerThread();
+        if (serverShopIntents == null) {
+            throw new EscrowRuntimeException(
+                    "Server shop intent recovery is unavailable",
+                    startupFailure);
+        }
+        return serverShopIntents.preparedBarterIntents(limit);
+    }
+
+    synchronized AuctionHouseMutation.ApplyResult
+    commitAuctionHouseMutation(AuctionHouseMutation mutation) {
+        assertServerThread();
+        Objects.requireNonNull(mutation, "mutation");
+        if (auctionHouse == null) {
+            throw new EscrowRuntimeException(
+                    "Auction house persistence is unavailable",
+                    startupFailure);
+        }
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.AUCTION_HOUSE_MUTATION,
+                AuctionHouseMutationCodec.encode(mutation));
+        EscrowCommitResult committed = requireReadyCoordinator()
+                .commitAuctionHouseMutation(mutation.requestId(), event);
+        return new AuctionHouseMutation.ApplyResult(
+                auctionHouse.snapshot(), committed.replayed());
+    }
+
+    public synchronized AuctionEscrowLifecycleRepository.ApplyResult
+    commitAuctionEscrowLifecycle(AuctionEscrowLifecycleEvent event) {
+        assertServerThread();
+        Objects.requireNonNull(event, "event");
+        if (auctionHouse == null) {
+            throw new EscrowRuntimeException(
+                    "Auction escrow persistence is unavailable",
+                    startupFailure);
+        }
+        EscrowJournalEvent journalEvent = new EscrowJournalEvent(
+                EscrowJournalEventType.AUCTION_HOUSE_ESCROW_LIFECYCLE,
+                AuctionEscrowLifecycleEventCodec.encode(event));
+        EscrowCommitResult committed = requireReadyCoordinator()
+                .commitAuctionEscrowLifecycle(event.requestId(),
+                        journalEvent);
+        return new AuctionEscrowLifecycleRepository.ApplyResult(
+                auctionHouse.snapshot(),
+                auctionHouse.escrowLifecycleSnapshot(),
+                committed.replayed());
+    }
+
+    public synchronized AuctionHouseSnapshot auctionHouseSnapshot() {
+        assertServerThread();
+        if (auctionHouse == null) {
+            throw new EscrowRuntimeException(
+                    "Auction house persistence is unavailable",
+                    startupFailure);
+        }
+        return auctionHouse.snapshot();
+    }
+
+    public synchronized Optional<AuctionListing> auctionHouseListing(
+            UUID listingId
+    ) {
+        assertServerThread();
+        if (auctionHouse == null) {
+            throw new EscrowRuntimeException(
+                    "Auction house persistence is unavailable",
+                    startupFailure);
+        }
+        return Optional.ofNullable(auctionHouse.listing(
+                Objects.requireNonNull(listingId, "listingId")));
+    }
+
+    public synchronized Optional<AuctionRequestReceipt> auctionHouseReceipt(
+            UUID requestId
+    ) {
+        assertServerThread();
+        if (auctionHouse == null) {
+            throw new EscrowRuntimeException(
+                    "Auction house persistence is unavailable",
+                    startupFailure);
+        }
+        return Optional.ofNullable(auctionHouse.receipt(
+                Objects.requireNonNull(requestId, "requestId")));
+    }
+
+    public synchronized Optional<AuctionCreateEscrowIntent>
+    auctionCreateIntent(UUID requestId) {
+        assertServerThread();
+        if (auctionHouse == null) {
+            throw new EscrowRuntimeException(
+                    "Auction escrow persistence is unavailable",
+                    startupFailure);
+        }
+        return Optional.ofNullable(auctionHouse.createIntent(
+                Objects.requireNonNull(requestId, "requestId")));
+    }
+
+    public synchronized Optional<AuctionEscrowCommit>
+    auctionEscrowCommit(UUID requestId) {
+        assertServerThread();
+        if (auctionHouse == null) {
+            throw new EscrowRuntimeException(
+                    "Auction escrow persistence is unavailable",
+                    startupFailure);
+        }
+        return Optional.ofNullable(auctionHouse.escrowCommit(
+                Objects.requireNonNull(requestId, "requestId")));
+    }
+
+    /**
+     * Full auction escrow lifecycle state (create intents + commits). Settlement-side actions
+     * (buy-now, cancel, expire, settle) need the CREATE commit's item custody for the listing
+     * they resolve, which is keyed by the original create requestId — callers scan
+     * {@code commits()} for the CREATE commit whose listing matches.
+     */
+    public synchronized com.enviouse.futureshops.server.market.auction.escrow
+            .AuctionEscrowLifecycleState auctionEscrowLifecycleState() {
+        assertServerThread();
+        if (auctionHouse == null) {
+            throw new EscrowRuntimeException(
+                    "Auction escrow persistence is unavailable",
+                    startupFailure);
+        }
+        return auctionHouse.escrowLifecycleSnapshot();
+    }
+
+    public synchronized List<AuctionCreateEscrowIntent>
+    pendingAuctionCreateRecovery(int limit) {
+        assertServerThread();
+        if (auctionHouse == null) {
+            throw new EscrowRuntimeException(
+                    "Auction escrow recovery is unavailable",
+                    startupFailure);
+        }
+        if (limit <= 0 || limit > 10_000) {
+            throw new IllegalArgumentException(
+                    "Auction recovery limit is invalid");
+        }
+        return auctionHouse.escrowLifecycleSnapshot().createIntents()
+                .values().stream().filter(intent -> intent.status()
+                == AuctionCreateEscrowIntent.Status.PREPARED)
+                .sorted(java.util.Comparator.comparing(intent ->
+                        intent.requestId().toString())).limit(limit)
+                .toList();
+    }
+
+    public synchronized BazaarMutation.ApplyResult commitBazaarMutation(
+            BazaarMutation mutation
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(mutation, "mutation");
+        if (bazaar == null) {
+            throw new EscrowRuntimeException(
+                    "Bazaar persistence is unavailable", startupFailure);
+        }
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.BAZAAR_MUTATION,
+                BazaarMutationCodec.encode(mutation));
+        EscrowCommitResult committed = requireReadyCoordinator()
+                .commitBazaarMutation(mutation.mutationId(), event);
+        return new BazaarMutation.ApplyResult(
+                bazaar.snapshot(), committed.replayed());
+    }
+
+    public synchronized BazaarEscrowLifecycleRepository.ApplyResult
+    commitBazaarEscrowLifecycle(BazaarEscrowLifecycleEvent event) {
+        assertServerThread();
+        Objects.requireNonNull(event, "event");
+        if (bazaar == null) {
+            throw new EscrowRuntimeException(
+                    "Bazaar escrow persistence is unavailable",
+                    startupFailure);
+        }
+        EscrowJournalEvent journalEvent = new EscrowJournalEvent(
+                EscrowJournalEventType.BAZAAR_ESCROW_LIFECYCLE,
+                BazaarEscrowLifecycleEventCodec.encode(event));
+        EscrowCommitResult committed = requireReadyCoordinator()
+                .commitBazaarEscrowLifecycle(event.requestId(),
+                        journalEvent);
+        invalidateConservationAudit();
+        return new BazaarEscrowLifecycleRepository.ApplyResult(
+                bazaar.snapshot(), bazaar.escrowLifecycleSnapshot(),
+                committed.replayed());
+    }
+
+    public synchronized BazaarOrderBookSnapshot bazaarSnapshot() {
+        assertServerThread();
+        if (bazaar == null) {
+            throw new EscrowRuntimeException(
+                    "Bazaar persistence is unavailable", startupFailure);
+        }
+        return bazaar.snapshot();
+    }
+
+    public synchronized Optional<BazaarProduct> bazaarProduct(
+            String productId
+    ) {
+        assertServerThread();
+        if (bazaar == null) {
+            throw new EscrowRuntimeException(
+                    "Bazaar persistence is unavailable", startupFailure);
+        }
+        return Optional.ofNullable(bazaar.product(
+                Objects.requireNonNull(productId, "productId")));
+    }
+
+    public synchronized Optional<BazaarProduct> bazaarProductVersion(
+            String productId,
+            long version
+    ) {
+        assertServerThread();
+        if (bazaar == null) {
+            throw new EscrowRuntimeException(
+                    "Bazaar persistence is unavailable", startupFailure);
+        }
+        return Optional.ofNullable(bazaar.productVersion(
+                Objects.requireNonNull(productId, "productId"), version));
+    }
+
+    public synchronized Optional<BazaarOrder> bazaarOrder(UUID orderId) {
+        assertServerThread();
+        if (bazaar == null) {
+            throw new EscrowRuntimeException(
+                    "Bazaar persistence is unavailable", startupFailure);
+        }
+        return Optional.ofNullable(bazaar.order(
+                Objects.requireNonNull(orderId, "orderId")));
+    }
+
+    public synchronized Optional<BazaarFill> bazaarFill(UUID fillId) {
+        assertServerThread();
+        if (bazaar == null) {
+            throw new EscrowRuntimeException(
+                    "Bazaar persistence is unavailable", startupFailure);
+        }
+        return Optional.ofNullable(bazaar.fill(
+                Objects.requireNonNull(fillId, "fillId")));
+    }
+
+    public synchronized Optional<BazaarRequestReceipt> bazaarReceipt(
+            UUID requestId
+    ) {
+        assertServerThread();
+        if (bazaar == null) {
+            throw new EscrowRuntimeException(
+                    "Bazaar persistence is unavailable", startupFailure);
+        }
+        return Optional.ofNullable(bazaar.receipt(
+                Objects.requireNonNull(requestId, "requestId")));
+    }
+
+    public synchronized Optional<String> bazaarLifecycleReceipt(
+            UUID mutationId
+    ) {
+        assertServerThread();
+        if (bazaar == null) {
+            throw new EscrowRuntimeException(
+                    "Bazaar persistence is unavailable", startupFailure);
+        }
+        return Optional.ofNullable(bazaar.lifecycleReceipt(
+                Objects.requireNonNull(mutationId, "mutationId")));
+    }
+
+    public synchronized Optional<BazaarCreateEscrowIntent>
+    bazaarCreateIntent(UUID requestId) {
+        assertServerThread();
+        if (bazaar == null) {
+            throw new EscrowRuntimeException(
+                    "Bazaar escrow persistence is unavailable",
+                    startupFailure);
+        }
+        return Optional.ofNullable(bazaar.createIntent(
+                Objects.requireNonNull(requestId, "requestId")));
+    }
+
+    public synchronized List<BazaarCreateEscrowIntent>
+    pendingBazaarCreateRecovery(int limit) {
+        assertServerThread();
+        if (bazaar == null) {
+            throw new EscrowRuntimeException(
+                    "Bazaar escrow recovery is unavailable",
+                    startupFailure);
+        }
+        if (limit <= 0 || limit > 10_000) {
+            throw new IllegalArgumentException(
+                    "Bazaar recovery limit is invalid");
+        }
+        return bazaar.escrowLifecycleSnapshot().createIntents().values()
+                .stream().filter(intent -> intent.status()
+                == BazaarCreateEscrowIntent.Status.PREPARED
+                || intent.status()
+                == BazaarCreateEscrowIntent.Status.RECOVERY_REQUIRED)
+                .sorted(java.util.Comparator.comparing(intent ->
+                        intent.requestId().toString())).limit(limit)
+                .toList();
+    }
+
+    public synchronized EscrowCommitResult commitPlayerShopEscrowLifecycle(
+            PlayerShopEscrowLifecycleEvent lifecycle
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(lifecycle, "lifecycle");
+        if (playerShopEscrow == null) {
+            throw new EscrowRuntimeException(
+                    "Player shop escrow persistence is unavailable",
+                    startupFailure);
+        }
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.PLAYER_SHOP_ESCROW_LIFECYCLE,
+                PlayerShopEscrowLifecycleEventCodec.encode(lifecycle));
+        EscrowCommitResult committed = requireReadyCoordinator()
+                .commitPlayerShopEscrowLifecycle(
+                        lifecycle.eventId(), event);
+        invalidateConservationAudit();
+        return committed;
+    }
+
+    public synchronized MarketControlCommitResult
+    commitMarketControlTransition(
+            MarketControlTransitionCommand command
+    ) {
+        assertServerThread();
+        MarketControlTransitionCommand value = Objects.requireNonNull(
+                command, "command");
+        if (value.targetStatus()
+                == MarketModuleStatus.CANCEL_AND_REFUND) {
+            throw new IllegalArgumentException(
+                    "Cancel and refund requires a composite cancellation plan");
+        }
+        if (marketControl == null) {
+            throw new EscrowRuntimeException(
+                    "Market control persistence is unavailable",
+                    startupFailure);
+        }
+        MarketControlApplyResult planned =
+                marketControl.planStandalone(value);
+        if (planned.replayed()) {
+            return new MarketControlCommitResult(
+                    marketControl.snapshot(), planned.auditEntry(), true);
+        }
+        MarketControlMutation mutation =
+                planned.mutation().orElseThrow();
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.MARKET_CONTROL_MUTATION,
+                MarketControlMutationCodec.encode(mutation));
+        EscrowCommitResult committed = requireReadyCoordinator()
+                .commitMarketControlMutation(value.requestId(), event);
+        MarketControlRequestReceipt receipt = marketControl.receipt(
+                value.requestId());
+        if (receipt == null) {
+            throw new EscrowRuntimeException(
+                    "Market control receipt was not materialized");
+        }
+        return new MarketControlCommitResult(marketControl.snapshot(),
+                receipt.auditEntry(), committed.replayed());
+    }
+
+    public synchronized MarketControlState marketControlSnapshot() {
+        assertServerThread();
+        if (marketControl == null) {
+            throw new EscrowRuntimeException(
+                    "Market control persistence is unavailable",
+                    startupFailure);
+        }
+        return marketControl.snapshot();
+    }
+
+    public synchronized MarketModuleControl marketModuleControl(
+            MarketControlModule module
+    ) {
+        return marketControlSnapshot().module(
+                Objects.requireNonNull(module, "module"));
+    }
+
+    public synchronized MarketControlAuditProjection
+    marketControlAuditProjection() {
+        assertServerThread();
+        if (marketControl == null) {
+            throw new EscrowRuntimeException(
+                    "Market control persistence is unavailable",
+                    startupFailure);
+        }
+        return marketControl.auditProjection();
+    }
+
+    public synchronized Optional<PlayerShopEscrowSavedData.Entry>
+    playerShopEscrowEntry(UUID requestId) {
+        assertServerThread();
+        if (playerShopEscrow == null) {
+            throw new EscrowRuntimeException(
+                    "Player shop escrow persistence is unavailable",
+                    startupFailure);
+        }
+        return playerShopEscrow.entry(
+                Objects.requireNonNull(requestId, "requestId"));
+    }
+
+    public synchronized List<PlayerShopEscrowSavedData.Entry>
+    pendingPlayerShopRecovery(int limit) {
+        assertServerThread();
+        if (playerShopEscrow == null) {
+            throw new EscrowRuntimeException(
+                    "Player shop escrow recovery is unavailable",
+                    startupFailure);
+        }
+        return playerShopEscrow.pendingRecovery(limit);
+    }
+
+    public synchronized StockCommandResult commitStockMutation(
+            StockMutationCommand command
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(command, "command");
+        if (stock == null) {
+            throw new EscrowRuntimeException(
+                    "Escrow stock is unavailable", startupFailure);
+        }
+        EscrowJournalEvent event = new EscrowJournalEvent(
+                EscrowJournalEventType.STOCK_MUTATION,
+                StockMutationCommandCodec.encode(command));
+        EscrowCommitResult committed = requireReadyCoordinator()
+                .commitStockMutation(command.requestId(), event);
+        invalidateConservationAudit();
+        return stock.resultForRequest(command.requestId(),
+                committed.replayed());
+    }
+
+    public synchronized Optional<CatalogStockState> stockListing(StockKey key) {
+        assertServerThread();
+        if (stock == null) {
+            throw new EscrowRuntimeException(
+                    "Escrow stock is unavailable", startupFailure);
+        }
+        return Optional.ofNullable(stock.listing(
+                Objects.requireNonNull(key, "key")));
+    }
+
+    public synchronized List<StockReservation> stockReservations(
+            UUID transactionId
+    ) {
+        assertServerThread();
+        if (stock == null) {
+            throw new EscrowRuntimeException(
+                    "Escrow stock is unavailable", startupFailure);
+        }
+        return stock.reservationsForTransaction(Objects.requireNonNull(
+                transactionId, "transactionId"));
+    }
+
+    public synchronized Optional<StockMutationReceipt> stockReceipt(
+            UUID requestId
+    ) {
+        assertServerThread();
+        if (stock == null) {
+            throw new EscrowRuntimeException(
+                    "Escrow stock is unavailable", startupFailure);
+        }
+        return Optional.ofNullable(stock.receipt(Objects.requireNonNull(
+                requestId, "requestId")));
+    }
+
+    public synchronized StockStoreSnapshot stockSnapshot() {
+        assertServerThread();
+        if (stock == null) {
+            throw new EscrowRuntimeException(
+                    "Escrow stock is unavailable", startupFailure);
+        }
+        return stock.snapshot();
+    }
+
+    public synchronized StockConservationReport stockConservationReport() {
+        assertServerThread();
+        if (stock == null) {
+            throw new EscrowRuntimeException(
+                    "Escrow stock is unavailable", startupFailure);
+        }
+        return stock.conservation();
+    }
+
+    public synchronized DurableItemInventoryMutationGateway
+    itemInventoryMutationGateway() {
+        assertServerThread();
+        if (itemInventoryGateway == null) {
+            throw new EscrowRuntimeException(
+                    "Item inventory mutation gateway is unavailable",
+                    startupFailure);
+        }
+        requireReadyCoordinator();
+        return itemInventoryGateway;
+    }
+
+    public synchronized ExactItemInventoryRuntime exactItemInventoryRuntime() {
+        assertServerThread();
+        if (exactItemInventoryRuntime == null) {
+            throw new EscrowRuntimeException(
+                    "Exact item inventory runtime is unavailable",
+                    startupFailure);
+        }
+        requireReadyCoordinator();
+        return exactItemInventoryRuntime;
+    }
+
+    synchronized boolean serverShopLifecycleReady() {
+        assertServerThread();
+        return coordinator != null && isReady();
+    }
+
+    synchronized ServerShopSellItemCustody serverShopSellCustody(
+            ServerPlayer player
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(player, "player");
+        if (exactItemInventoryRuntime == null
+                || itemInventoryGateway == null) {
+            throw new EscrowRuntimeException(
+                    "Server shop sell item custody is unavailable",
+                    startupFailure);
+        }
+        return ServerShopSellItemCustody.exact(
+                exactItemInventoryRuntime,
+                new ServerPlayerItemInventoryAccess(player),
+                itemInventoryGateway);
+    }
+
+    synchronized ServerShopBarterItemCustody serverShopBarterCustody(
+            ServerPlayer player
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(player, "player");
+        if (exactItemInventoryRuntime == null
+                || itemInventoryGateway == null) {
+            throw new EscrowRuntimeException(
+                    "Server shop barter item custody is unavailable",
+                    startupFailure);
+        }
+        return ServerShopBarterItemCustody.exact(
+                exactItemInventoryRuntime,
+                new ServerPlayerItemInventoryAccess(player),
+                itemInventoryGateway);
+    }
+
+    public synchronized ExactItemClaimCollectionResult collectExactItemClaim(
+            UUID playerId,
+            UUID claimId,
+            Instant now
+    ) {
+        assertServerThread();
+        UUID player = Objects.requireNonNull(playerId, "playerId");
+        UUID claimIdentity = Objects.requireNonNull(claimId, "claimId");
+        Objects.requireNonNull(now, "now");
+        requireReadyCoordinator();
+        EscrowClaim claim = claims.getClaim(claimIdentity);
+        if (claim == null || !claim.ownerId().equals(player)) {
+            throw new EscrowRuntimeException(
+                    "Exact item claim does not belong to the player");
+        }
+        if (!ExactItemClaimDeliveryPlanner.supportedKind(claim.kind())) {
+            throw new EscrowRuntimeException(
+                    "Claim is not an exact item claim");
+        }
+        if (claim.status() == ClaimStatus.COMPLETED
+                || claim.remainingUnits() == 0L) {
+            return ExactItemClaimCollectionResult.pending(claimIdentity,
+                    ExactItemClaimCollectionStatus.NOT_PENDING, 0L);
+        }
+        if (claim.status() == ClaimStatus.QUARANTINED) {
+            return ExactItemClaimCollectionResult.pending(claimIdentity,
+                    ExactItemClaimCollectionStatus.MANUAL_REVIEW,
+                    claim.remainingUnits());
+        }
+        ExactItemClaimPayload payload;
+        ClaimAttemptSelection selection;
+        try {
+            payload = ExactItemClaimDeliveryPlanner.payload(claim);
+            selection = selectExactItemClaimAttempt(claim);
+        } catch (RuntimeException exception) {
+            return ExactItemClaimCollectionResult.pending(claimIdentity,
+                    ExactItemClaimCollectionStatus.INVALID_PAYLOAD,
+                    claim.remainingUnits());
+        }
+        if (selection.entry().isPresent()
+                && selection.entry().orElseThrow().status()
+                == ItemInventoryJournalStatus.COMMITTED) {
+            ItemInventoryJournalEntry entry = selection.entry()
+                    .orElseThrow();
+            itemInventoryGateway.appendCommittedDurably(
+                    entry.committedReceipt().orElseThrow());
+            return exactItemClaimAppliedResult(claimIdentity,
+                    selection.requestId(), true);
+        }
+        ServerPlayer online = ownerServer.getPlayerList().getPlayer(player);
+        if (online == null) {
+            return ExactItemClaimCollectionResult.pending(claimIdentity,
+                    ExactItemClaimCollectionStatus.OFFLINE_PENDING,
+                    claim.remainingUnits());
+        }
+        ServerPlayerItemInventoryAccess access =
+                new ServerPlayerItemInventoryAccess(online);
+        if (selection.entry().isPresent()) {
+            ItemInventoryJournalEntry entry = selection.entry()
+                    .orElseThrow();
+            if (entry.status() == ItemInventoryJournalStatus.QUARANTINED) {
+                return new ExactItemClaimCollectionResult(claimIdentity,
+                        ExactItemClaimCollectionStatus.MANUAL_REVIEW, 0L,
+                        claim.remainingUnits(),
+                        Optional.of(selection.requestId()), true);
+            }
+            return finishExactItemClaimExecution(claimIdentity,
+                    selection.requestId(),
+                    exactItemClaimInventoryRuntime.recover(access,
+                            selection.requestId()));
+        }
+        int remaining;
+        try {
+            remaining = Math.toIntExact(claim.remainingUnits());
+        } catch (ArithmeticException exception) {
+            return ExactItemClaimCollectionResult.pending(claimIdentity,
+                    ExactItemClaimCollectionStatus.INVALID_PAYLOAD,
+                    claim.remainingUnits());
+        }
+        ItemInventoryState state = access.capture();
+        int deliverable = exactItemClaimCapacity(state, payload, remaining,
+                selection.requestId());
+        if (deliverable == 0) {
+            return ExactItemClaimCollectionResult.pending(claimIdentity,
+                    ExactItemClaimCollectionStatus.FULL_INVENTORY,
+                    claim.remainingUnits());
+        }
+        ItemStack portion = ExactItemClaimDeliveryPlanner.portion(
+                payload, deliverable);
+        ItemInventoryBatchEntry entry = ItemInventoryBatchEntry.insert(
+                ExactItemClaimDeliveryPlanner.entryId(
+                        selection.requestId()), portion);
+        ItemInventoryExecutionResult execution =
+                exactItemClaimInventoryRuntime.execute(access,
+                        claim.transactionId(), selection.requestId(),
+                        List.of(entry));
+        return finishExactItemClaimExecution(claimIdentity,
+                selection.requestId(), execution);
+    }
+
+    public synchronized ExactItemClaimCollectionResult collectExactItemClaim(
+            ServerPlayer player,
+            UUID claimId,
+            Instant now
+    ) {
+        Objects.requireNonNull(player, "player");
+        return collectExactItemClaim(player.getUUID(), claimId, now);
+    }
+
+    public synchronized List<ExactItemClaimCollectionResult>
+    collectPendingExactItemClaims(
+            ServerPlayer player,
+            int limit,
+            Instant now
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(now, "now");
+        if (limit <= 0 || limit > 256) {
+            throw new IllegalArgumentException(
+                    "Exact item claim collection limit is invalid");
+        }
+        List<ExactItemClaimCollectionResult> results =
+                new java.util.ArrayList<>();
+        for (EscrowClaim claim : claims.pendingFor(
+                player.getUUID(), limit)) {
+            if (!ExactItemClaimDeliveryPlanner.supportedKind(
+                    claim.kind())) {
+                continue;
+            }
+            results.add(collectExactItemClaim(player, claim.claimId(), now));
+            if (results.size() == limit) {
+                break;
+            }
+        }
+        return List.copyOf(results);
+    }
+
+    private ClaimAttemptSelection selectExactItemClaimAttempt(
+            EscrowClaim claim
+    ) {
+        for (int retryIndex = 0;
+             retryIndex <= ExactItemClaimDeliveryPlanner.MAX_RETRY_INDEX;
+             retryIndex++) {
+            UUID requestId = ExactItemClaimDeliveryPlanner.requestId(
+                    claim, claim.remainingUnits(), retryIndex);
+            Optional<ItemInventoryJournalEntry> entry =
+                    itemInventoryJournal.find(requestId);
+            if (entry.isEmpty()) {
+                return new ClaimAttemptSelection(requestId, retryIndex,
+                        Optional.empty());
+            }
+            ItemInventoryJournalEntry existing = entry.orElseThrow();
+            if (!existing.intent().token().playerId().equals(
+                    claim.ownerId())
+                    || !existing.intent().token().transactionId().equals(
+                    claim.transactionId())) {
+                throw new EscrowRuntimeException(
+                        "Exact item claim request identity conflicts");
+            }
+            if (existing.status() != ItemInventoryJournalStatus.ABORTED) {
+                return new ClaimAttemptSelection(requestId, retryIndex,
+                        entry);
+            }
+        }
+        throw new EscrowRuntimeException(
+                "Exact item claim retry capacity is exhausted");
+    }
+
+    private int exactItemClaimCapacity(
+            ItemInventoryState state,
+            ExactItemClaimPayload payload,
+            int remaining,
+            UUID requestId
+    ) {
+        ItemStack full = ExactItemClaimDeliveryPlanner.portion(
+                payload, remaining);
+        if (exactItemClaimPlan(state, full, requestId).applicable()) {
+            return remaining;
+        }
+        CompoundTag saved = full.save(new CompoundTag());
+        if (saved.contains("ForgeCaps", Tag.TAG_COMPOUND)
+                && !saved.getCompound("ForgeCaps").isEmpty()) {
+            return 0;
+        }
+        int low = 1;
+        int high = remaining - 1;
+        int result = 0;
+        while (low <= high) {
+            int middle = low + (high - low) / 2;
+            ItemStack portion = ExactItemClaimDeliveryPlanner.portion(
+                    payload, middle);
+            if (exactItemClaimPlan(state, portion, requestId).applicable()) {
+                result = middle;
+                low = middle + 1;
+            } else {
+                high = middle - 1;
+            }
+        }
+        return result;
+    }
+
+    private static ItemInventoryMutationPlan exactItemClaimPlan(
+            ItemInventoryState state,
+            ItemStack stack,
+            UUID requestId
+    ) {
+        return ItemInventoryBatchPlanner.plan(state, List.of(
+                ItemInventoryBatchEntry.insert(
+                        ExactItemClaimDeliveryPlanner.entryId(requestId),
+                        stack)));
+    }
+
+    private ExactItemClaimCollectionResult finishExactItemClaimExecution(
+            UUID claimId,
+            UUID requestId,
+            ItemInventoryExecutionResult execution
+    ) {
+        return switch (execution.status()) {
+            case APPLIED -> exactItemClaimAppliedResult(
+                    claimId, requestId, false);
+            case REPLAYED -> exactItemClaimAppliedResult(
+                    claimId, requestId, true);
+            case INSUFFICIENT_CAPACITY ->
+                    ExactItemClaimCollectionResult.pending(claimId,
+                            ExactItemClaimCollectionStatus.FULL_INVENTORY,
+                            claims.getClaim(claimId).remainingUnits());
+            case MANUAL_REVIEW -> new ExactItemClaimCollectionResult(
+                    claimId, ExactItemClaimCollectionStatus.MANUAL_REVIEW,
+                    0L, claims.getClaim(claimId).remainingUnits(),
+                    Optional.of(requestId), execution.replayed());
+            case ABORTED, RECOVERY_REQUIRED, INSUFFICIENT_ITEMS,
+                 UNSUPPORTED_STACK -> new ExactItemClaimCollectionResult(
+                    claimId,
+                    ExactItemClaimCollectionStatus.RECOVERY_REQUIRED,
+                    0L, claims.getClaim(claimId).remainingUnits(),
+                    Optional.of(requestId), execution.replayed());
+        };
+    }
+
+    private ExactItemClaimCollectionResult exactItemClaimAppliedResult(
+            UUID claimId,
+            UUID requestId,
+            boolean replayed
+    ) {
+        ClaimAttemptResult attempt = claims.attempt(
+                ExactItemClaimDeliveryPlanner.requestKey(
+                        claimId, requestId)).orElseThrow(() ->
+                new EscrowRuntimeException(
+                        "Exact item claim delivery was not materialized"));
+        ExactItemClaimCollectionStatus status;
+        if (replayed) {
+            status = ExactItemClaimCollectionStatus.REPLAYED;
+        } else if (attempt.remainingUnits() == 0L) {
+            status = ExactItemClaimCollectionStatus.DELIVERED;
+        } else {
+            status = ExactItemClaimCollectionStatus.PARTIALLY_DELIVERED;
+        }
+        return new ExactItemClaimCollectionResult(claimId, status,
+                attempt.deliveredUnits(), attempt.remainingUnits(),
+                Optional.of(requestId), replayed);
+    }
+
+    private record ClaimAttemptSelection(
+            UUID requestId,
+            int retryIndex,
+            Optional<ItemInventoryJournalEntry> entry
+    ) {
+        private ClaimAttemptSelection {
+            Objects.requireNonNull(requestId, "requestId");
+            Objects.requireNonNull(entry, "entry");
+            if (retryIndex < 0
+                    || retryIndex
+                    > ExactItemClaimDeliveryPlanner.MAX_RETRY_INDEX) {
+                throw new IllegalArgumentException(
+                        "Exact item claim retry index is invalid");
+            }
+        }
+    }
+
+    public synchronized Optional<ItemInventoryJournalEntry>
+    itemInventoryMutation(UUID requestId) {
+        assertServerThread();
+        if (itemInventoryJournal == null) {
+            throw new EscrowRuntimeException(
+                    "Item inventory journal is unavailable",
+                    startupFailure);
+        }
+        return itemInventoryJournal.find(Objects.requireNonNull(
+                requestId, "requestId"));
+    }
+
+    public synchronized List<ItemInventoryJournalEntry>
+    itemInventoryMutationsForPlayer(UUID playerId, int limit) {
+        assertServerThread();
+        if (itemInventoryJournal == null) {
+            throw new EscrowRuntimeException(
+                    "Item inventory journal is unavailable",
+                    startupFailure);
+        }
+        return itemInventoryJournal.entriesForPlayer(
+                Objects.requireNonNull(playerId, "playerId"), limit);
+    }
+
+    public synchronized boolean itemInventoryPlayerQuarantined(
+            UUID playerId
+    ) {
+        assertServerThread();
+        if (itemInventoryJournal == null) {
+            throw new EscrowRuntimeException(
+                    "Item inventory journal is unavailable",
+                    startupFailure);
+        }
+        return itemInventoryJournal.playerQuarantined(
+                Objects.requireNonNull(playerId, "playerId"));
+    }
+
+    public synchronized Optional<ItemInventoryQuarantineInspection>
+    inspectItemInventoryQuarantine(UUID requestId) {
+        assertServerThread();
+        if (itemInventoryJournal == null) {
+            throw new EscrowRuntimeException(
+                    "Item inventory journal is unavailable",
+                    startupFailure);
+        }
+        return itemInventoryJournal.inspectQuarantine(
+                Objects.requireNonNull(requestId, "requestId"));
+    }
+
+    public synchronized ItemInventoryQuarantineAdministration
+    planItemInventoryQuarantineAdministration(
+            UUID commandId,
+            UUID requestId,
+            UUID actorId,
+            ItemInventoryQuarantineAdministrativeAction action,
+            Optional<EscrowClaim> refundClaim,
+            String reason,
+            Instant reviewedAt
+    ) {
+        assertServerThread();
+        ItemInventoryQuarantineInspection inspection =
+                inspectItemInventoryQuarantine(requestId).orElseThrow(() ->
+                new EscrowRuntimeException(
+                        "Item inventory quarantine is unavailable"));
+        if (inspection.resolved()) {
+            throw new EscrowRuntimeException(
+                    "Item inventory quarantine is already resolved");
+        }
+        return new ItemInventoryQuarantineAdministration(commandId,
+                requestId,
+                inspection.entry().intent().token().playerId(), actorId,
+                action, itemInventoryJournal.revision(),
+                ItemInventoryQuarantineAdministration.quarantineDigest(
+                        inspection.entry().quarantine().orElseThrow()),
+                refundClaim, reason, reviewedAt);
+    }
+
+    public synchronized ItemInventoryQuarantineInspection
+    administerItemInventoryQuarantine(
+            ItemInventoryQuarantineAdministration administration
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(administration, "administration");
+        requireReadyCoordinator().commitItemInventoryMutation(
+                administration.commandId(), new EscrowJournalEvent(
+                        EscrowJournalEventType
+                                .ITEM_INVENTORY_QUARANTINE_ADMINISTRATION,
+                        ItemInventoryQuarantineAdministrationCodec.encode(
+                                administration)));
+        return inspectItemInventoryQuarantine(
+                administration.requestId()).orElseThrow(() ->
+                new EscrowRuntimeException(
+                        "Item inventory quarantine review was not materialized"));
+    }
+
+    public synchronized ItemInventoryJournalCompaction
+    planItemInventoryJournalCompaction(
+            UUID commandId,
+            int limit
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(commandId, "commandId");
+        if (limit <= 0
+                || limit > ItemInventoryJournalCompaction
+                .MAX_TOMBSTONES_PER_COMPACTION) {
+            throw new IllegalArgumentException(
+                    "Item inventory compaction limit is invalid");
+        }
+        EscrowVerifiedItemInventoryCheckpoint verified =
+                requireReadyCoordinator().verifiedItemInventoryCheckpoint()
+                        .orElseThrow(() -> new EscrowRuntimeException(
+                                "A verified checkpoint is required for item inventory compaction"));
+        Map<UUID, ItemInventoryJournalEntry> checkpointEntries =
+                verified.snapshot().entries().stream().collect(
+                        java.util.stream.Collectors.toMap(
+                                entry -> entry.intent().token().requestId(),
+                                java.util.function.Function.identity()));
+        List<ItemInventoryTerminalTombstone> tombstones =
+                new java.util.ArrayList<>();
+        for (ItemInventoryJournalEntry current
+                : itemInventoryJournal.snapshot().entries()) {
+            if (current.status() != ItemInventoryJournalStatus.COMMITTED
+                    && current.status()
+                    != ItemInventoryJournalStatus.ABORTED) {
+                continue;
+            }
+            ItemInventoryJournalEntry checkpoint = checkpointEntries.get(
+                    current.intent().token().requestId());
+            if (!current.equals(checkpoint)) {
+                continue;
+            }
+            tombstones.add(ItemInventoryTerminalTombstone.fromEntry(
+                    current, commandId,
+                    verified.reference().checkpointId()));
+            if (tombstones.size() == limit) {
+                break;
+            }
+        }
+        if (tombstones.isEmpty()) {
+            throw new EscrowRuntimeException(
+                    "No checkpointed terminal item inventory entries are eligible");
+        }
+        var reference = verified.reference();
+        return new ItemInventoryJournalCompaction(commandId,
+                reference.checkpointId(),
+                reference.sourceJournalLineageId(),
+                reference.replacementJournalLineageId(),
+                reference.baseJournalSequence(),
+                reference.checkpointSha256(), tombstones);
+    }
+
+    public synchronized ItemInventoryJournalCompactionResult
+    compactItemInventoryJournal(
+            ItemInventoryJournalCompaction compaction
+    ) {
+        assertServerThread();
+        Objects.requireNonNull(compaction, "compaction");
+        EscrowVerifiedItemInventoryCheckpoint verified =
+                requireReadyCoordinator().verifiedItemInventoryCheckpoint()
+                        .orElseThrow(() -> new EscrowRuntimeException(
+                                "A verified checkpoint is required for item inventory compaction"));
+        var reference = verified.reference();
+        if (!compaction.matchesCheckpoint(reference.checkpointId(),
+                reference.sourceJournalLineageId(),
+                reference.replacementJournalLineageId(),
+                reference.baseJournalSequence(),
+                reference.checkpointSha256())) {
+            throw new EscrowRuntimeException(
+                    "Item inventory compaction checkpoint is stale");
+        }
+        Map<UUID, ItemInventoryJournalEntry> checkpointEntries =
+                verified.snapshot().entries().stream().collect(
+                        java.util.stream.Collectors.toMap(
+                                entry -> entry.intent().token().requestId(),
+                                java.util.function.Function.identity()));
+        int fullEntries = 0;
+        for (ItemInventoryTerminalTombstone tombstone
+                : compaction.tombstones()) {
+            ItemInventoryJournalEntry checkpoint = checkpointEntries.get(
+                    tombstone.requestId());
+            if (!tombstone.matchesEntry(checkpoint)) {
+                throw new EscrowRuntimeException(
+                        "Item inventory compaction is not proven by the checkpoint");
+            }
+            Optional<ItemInventoryJournalEntry> current =
+                    itemInventoryJournal.find(tombstone.requestId());
+            if (current.isPresent()) {
+                if (!tombstone.matchesEntry(current.orElseThrow())) {
+                    throw new EscrowRuntimeException(
+                            "Item inventory compaction current evidence conflicts");
+                }
+                fullEntries++;
+            } else if (!itemInventoryJournal.findTombstone(
+                    tombstone.requestId()).filter(tombstone::equals)
+                    .isPresent()) {
+                throw new EscrowRuntimeException(
+                        "Item inventory compaction evidence is missing");
+            }
+        }
+        if (fullEntries != 0
+                && fullEntries != compaction.tombstones().size()) {
+            throw new EscrowRuntimeException(
+                    "Item inventory compaction is partially materialized");
+        }
+        EscrowCommitResult committed = requireReadyCoordinator()
+                .commitItemInventoryMutation(compaction.commandId(),
+                        new EscrowJournalEvent(EscrowJournalEventType
+                                .ITEM_INVENTORY_JOURNAL_COMPACTION,
+                                ItemInventoryJournalCompactionCodec.encode(
+                                        compaction)));
+        return new ItemInventoryJournalCompactionResult(
+                committed.replayed() ? 0 : fullEntries,
+                committed.replayed());
+    }
+
     public List<CustodyPreparedBatch> unresolvedCustodyRecovery(int limit) {
         if (custody == null) {
             throw new EscrowRuntimeException("Escrow custody is unavailable", startupFailure);
@@ -1052,10 +2655,13 @@ public final class EscrowRuntimeService implements AutoCloseable {
 
     private EscrowRuntimeCoordinator requireReadyCoordinator() {
         EscrowRuntimeCoordinator available = requireCoordinator();
-        if (!isReady() && !(recoveryDepth.get() > 0 && available.isReady())) {
-            throw new EscrowRuntimeException(
-                    "Escrow runtime is not ready and is in state " + state(),
-                    failure().orElse(null));
+        synchronized (available) {
+            if (!isReady()
+                    && !(recoveryDepth.get() > 0 && available.isReady())) {
+                throw new EscrowRuntimeException(
+                        "Escrow runtime is not ready and is in state "
+                                + state(), failure().orElse(null));
+            }
         }
         return available;
     }
@@ -1113,15 +2719,18 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 || protectedCashCleanupFailure != null
                 || foreignCashDiscoveryFailure != null
                 || foreignCashCleanupFailure != null
+                || serverShopFundingRecoveryFailure != null
+                || itemInventoryRecoveryFailure != null
                 || conservationFailure != null);
     }
 
-    private boolean maintenanceRecoveryClear() {
+    public synchronized boolean maintenanceRecoveryClear() {
         return domainRecoveryInitialized
                 && protectedCashDiscoveryComplete
                 && protectedCashDiscoveryFailure == null
                 && foreignCashDiscoveryComplete
                 && foreignCashDiscoveryFailure == null
+                && paymentHistoryProjector.complete()
                 && recoveryScheduler.enumerationComplete()
                 && !recoveryScheduler.hasRunnableWork()
                 && !recoveryScheduler.hasBlockingWork()
@@ -1132,7 +2741,11 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 && protectedCashCleanupWork.isEmpty()
                 && protectedCashCleanupFailure == null
                 && foreignCashCleanupWork.isEmpty()
-                && foreignCashCleanupFailure == null;
+                && foreignCashCleanupFailure == null
+                && serverShopFundingRecoveryWork.isEmpty()
+                && serverShopFundingRecoveryFailure == null
+                && itemInventoryRecoveryFailure == null
+                && !hasOnlinePreparedItemMutations();
     }
 
     private boolean maintenanceConservationVerified() {
@@ -1155,15 +2768,27 @@ public final class EscrowRuntimeService implements AutoCloseable {
 
     private boolean startupConservationVerified() {
         if (conservationAuditComplete) {
-            return conservationReport != null && conservationReport.conserved();
+            return conservationFailure == null
+                    && conservationReport != null
+                    && conservationReport.conserved()
+                    && stockConservationReport != null
+                    && stockConservationReport.conserved();
         }
         return maintenanceConservationVerified();
     }
 
     private EscrowConservationReport verifyConservation() {
-        if (ledger == null || claims == null || custody == null || protectedMints == null) {
+        if (ledger == null || claims == null || custody == null
+                || protectedMints == null || stock == null) {
             throw new EscrowRuntimeException(
                     "Escrow cross domain conservation is unavailable", startupFailure);
+        }
+        StockConservationReport verifiedStock = stock.conservation();
+        stockConservationReport = verifiedStock;
+        if (!verifiedStock.conserved()) {
+            throw new EscrowRuntimeException(
+                    "Escrow stock conservation failed. "
+                            + String.join(", ", verifiedStock.violations()));
         }
         return EscrowCrossDomainConservationAudit.verify(
                 ledger, claims, custody, protectedMints);
@@ -1172,6 +2797,7 @@ public final class EscrowRuntimeService implements AutoCloseable {
     private void invalidateConservationAudit() {
         conservationAuditComplete = false;
         conservationReport = null;
+        stockConservationReport = null;
         conservationFailure = null;
     }
 
@@ -1558,6 +3184,10 @@ public final class EscrowRuntimeService implements AutoCloseable {
                                     ownerServer, this,
                                     foreignCashIntentStore,
                                     Clock.systemUTC())));
+            recoveryScheduler.register(
+                    EscrowOperation.PLAYER_PAYMENT,
+                    new PlayerPaymentRecoveryHandler(
+                            this, ledger, claims, Clock.systemUTC()));
             protectedCashDiscoveryWork.addAll(
                     protectedCashIntentStore.discover(ownerServer));
             protectedCashDiscoveryComplete =
@@ -1566,7 +3196,99 @@ public final class EscrowRuntimeService implements AutoCloseable {
                     foreignCashIntentStore.discover(ownerServer));
             foreignCashDiscoveryComplete =
                     foreignCashDiscoveryWork.isEmpty();
+            if (serverShopIntents != null) {
+                serverShopSellRecoveryWork.addAll(serverShopIntents
+                        .preparedSellIntents(
+                                ServerShopIntentSavedData.MAXIMUM_ENTRIES)
+                        .stream().map(ServerShopSellIntent::requestId)
+                        .toList());
+                serverShopBarterRecoveryWork.addAll(serverShopIntents
+                        .preparedBarterIntents(
+                                ServerShopIntentSavedData.MAXIMUM_ENTRIES)
+                        .stream().map(ServerShopBarterIntent::requestId)
+                        .toList());
+            }
+            enumerateServerShopFundingRecovery();
+            serverShopRecoveryEnumerated = true;
             domainRecoveryInitialized = true;
+        }
+    }
+
+    private void enumerateServerShopFundingRecovery() {
+        transactions.snapshotTransactions().values().stream()
+                .sorted(java.util.Comparator.comparing(value ->
+                        value.transactionId().value().toString()))
+                .forEach(transaction -> EscrowCashDepositService
+                        .serverShopPurchaseBinding(transaction)
+                        .ifPresent(purchaseRequestId -> {
+                            List<EscrowClaim> transactionClaims = claims
+                                    .claimsForTransaction(transaction
+                                            .transactionId().value());
+                            boolean purchaseEvidence = transactions
+                                    .getTransaction(
+                                    new EscrowTransactionId(
+                                            purchaseRequestId)) != null
+                                    || ledger.wasApplied(purchaseRequestId)
+                                    || !claims.claimsForTransaction(
+                                    purchaseRequestId).isEmpty()
+                                    || !stock.reservationsForTransaction(
+                                    purchaseRequestId).isEmpty();
+                            try {
+                                ServerShopFundingReleaseService
+                                        .startupCandidate(transaction,
+                                                transactionClaims,
+                                                purchaseEvidence,
+                                                (playerId, funding) ->
+                                                        ServerShopFundingReleaseService
+                                                                .startupCompletionExplained(
+                                                                        this,
+                                                                        playerId,
+                                                                        funding))
+                                        .ifPresent(funding -> {
+                                            EscrowClaim claim = claims
+                                                    .getClaim(
+                                                            funding
+                                                                    .claimId());
+                                            serverShopFundingRecoveryWork
+                                                    .addLast(
+                                                            new ServerShopFundingRecoveryWork(
+                                                                    claim.ownerId(),
+                                                                    funding));
+                                        });
+                            } catch (RuntimeException exception) {
+                                serverShopFundingRecoveryFailure =
+                                        new EscrowRuntimeException(
+                                                "Bound server shop funding discovery failed",
+                                                exception);
+                            }
+                        }));
+    }
+
+    private int recoverOneServerShopFunding() {
+        ServerShopFundingRecoveryWork work =
+                serverShopFundingRecoveryWork.removeFirst();
+        ServerShopFundingReleaseService.Result result =
+                ServerShopFundingReleaseService.release(this,
+                        work.playerId(), work.funding());
+        if (result.status()
+                != ServerShopFundingReleaseService.Status.RELEASED
+                && result.status()
+                != ServerShopFundingReleaseService.Status
+                .PURCHASE_COMMITTED) {
+            serverShopFundingRecoveryFailure =
+                    new EscrowRuntimeException(
+                            "Server shop funding startup release requires maintenance");
+        }
+        return 1;
+    }
+
+    private record ServerShopFundingRecoveryWork(
+            UUID playerId,
+            ServerShopPurchaseCommit.PhysicalFunding funding
+    ) {
+        private ServerShopFundingRecoveryWork {
+            Objects.requireNonNull(playerId, "playerId");
+            Objects.requireNonNull(funding, "funding");
         }
     }
 
@@ -1739,6 +3461,58 @@ public final class EscrowRuntimeService implements AutoCloseable {
                 && first.requestKey().equals(second.requestKey())
                 && first.operations().equals(second.operations())
                 && first.preparedAt().equals(second.preparedAt());
+    }
+
+    public record RecoveryInspection(
+            UUID transactionId,
+            String requestKey,
+            EscrowOperation operation,
+            EscrowState state,
+            long revision,
+            long configRevision,
+            List<String> participants,
+            String provider,
+            String evidence,
+            long amountMinorUnits,
+            long assetQuantity,
+            int claimCount,
+            long pendingClaimUnits,
+            String lastErrorCode,
+            String lastErrorMessage,
+            int recoveryAttempts,
+            int maximumRecoveryAttempts,
+            String nextAttemptAt,
+            String resumeState,
+            String safeAction
+    ) {
+        public RecoveryInspection {
+            Objects.requireNonNull(transactionId, "transactionId");
+            requestKey = Objects.requireNonNull(requestKey, "requestKey");
+            Objects.requireNonNull(operation, "operation");
+            Objects.requireNonNull(state, "state");
+            participants = List.copyOf(Objects.requireNonNull(
+                    participants, "participants"));
+            provider = Objects.requireNonNull(provider, "provider");
+            evidence = Objects.requireNonNull(evidence, "evidence");
+            lastErrorCode = Objects.requireNonNull(
+                    lastErrorCode, "lastErrorCode");
+            lastErrorMessage = Objects.requireNonNull(
+                    lastErrorMessage, "lastErrorMessage");
+            nextAttemptAt = Objects.requireNonNull(
+                    nextAttemptAt, "nextAttemptAt");
+            resumeState = Objects.requireNonNull(
+                    resumeState, "resumeState");
+            safeAction = Objects.requireNonNull(safeAction, "safeAction");
+            if (revision < 0L || configRevision < 0L
+                    || amountMinorUnits < 0L || assetQuantity < 0L
+                    || claimCount < 0 || pendingClaimUnits < 0L
+                    || recoveryAttempts < 0
+                    || maximumRecoveryAttempts < 0
+                    || recoveryAttempts > maximumRecoveryAttempts) {
+                throw new IllegalArgumentException(
+                        "Recovery inspection is invalid");
+            }
+        }
     }
 
     private static final class CustodyExecutionScope {

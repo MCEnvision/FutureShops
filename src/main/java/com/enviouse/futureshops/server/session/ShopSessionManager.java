@@ -11,6 +11,7 @@ import net.minecraft.server.level.ServerPlayer;
 import java.util.HashSet;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -37,6 +38,21 @@ public final class ShopSessionManager {
         ShopSession session = new ShopSession(playerUUID, shopId, shopBlockPos, System.currentTimeMillis());
         SESSIONS.put(playerUUID, session);
         return session;
+    }
+
+    public static ShopSession openWithRollback(
+            UUID playerUUID,
+            String shopId,
+            Runnable initialSync
+    ) {
+        ShopSession session = open(playerUUID, shopId);
+        try {
+            Objects.requireNonNull(initialSync, "initialSync").run();
+            return session;
+        } catch (RuntimeException | Error failure) {
+            close(playerUUID);
+            throw failure;
+        }
     }
 
     // -------------------------------------------------------------------------
