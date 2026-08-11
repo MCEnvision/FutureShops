@@ -1594,13 +1594,14 @@ The repair targets `3.0.0-beta.11` and preserves the complete exact item custody
    packaged JAR inspection, and a reporter retest with the backed up multiplayer world. The issue
    remains open until that live world confirms startup, purchase, restart, and verified resume.
 
-The beta 11 source repair and local verification are complete. Owner acceptance authorizes issue 23
-closure after the verified repair is merged into the canonical `1.20.1` branch. The compatibility
-regressions and all 1905 unit tests pass, isolated data generation succeeds, all five required GameTests pass, the
+The beta 11 source repair and local verification are complete. The compatibility regressions and all
+1905 unit tests pass, isolated data generation succeeds, all five required GameTests pass, the
 dedicated server reaches ready state, and the virtual display client completes common and client
 setup through texture atlas creation. The full build and packaged version checks pass, producing
-`futureshops-3.0.0-beta.11.jar`. The merge pull request, required checks, `1.20.1` default branch
-verification, and issue closure are the remaining integration gates.
+`futureshops-3.0.0-beta.11.jar`. Pull request 27 merged the signed repair into `1.20.1` at
+`41d403e0a8b2a5986b1d0f98066b453bd472d8ba`. All required pull request checks and the post merge
+quality workflow passed. GitHub now reports `1.20.1` as the protected default branch. Issue 23 is
+closed and its roadmap item is Done.
 
 ## 21. Completion record
 
