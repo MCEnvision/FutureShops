@@ -6,6 +6,10 @@ FutureShops is a Minecraft Forge economy and marketplace mod for server shops, p
 
 The 3.0.0 implementation is in beta on the active phase branch. Active phase branches remain test builds until the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, and recovery acceptance run is complete. Use matching FutureShops builds on the client and server.
 
+The repository default branch is `1.20.1`, which is the canonical Forge 1.20.1 integration line.
+The separate `1.21.1` branch contains the NeoForge line. Forge 1.20.1 fixes and releases target
+`1.20.1`, not the historical `master` branch.
+
 Supported runtime:
 
 | Component | Version |

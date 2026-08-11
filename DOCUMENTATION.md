@@ -37,6 +37,13 @@ The 3.0.0 implementation is in beta on the active phase branch. Its advanced tra
 
 The repository uses one Gradle module named `futureshops`. Java sources use UTF 8. Runtime and data generation launches are defined in `build.gradle`.
 
+## Supported branches
+
+`1.20.1` is the canonical default and integration branch for this Forge release line. Pull requests,
+issue fixes, verification, tags, and releases for FutureShops 3.0 target `1.20.1`. The `1.21.1`
+branch is a separate NeoForge line and is never an integration target for Forge 1.20.1 changes.
+The historical `master` branch is retained only for repository history.
+
 ## Setup and commands
 
 Install Java 17 and keep `libs/geckolib-forge-1.20.1-4.8.3.jar` available. Use the checked in wrapper. Do not replace dependency or wrapper versions to work around a local setup problem.
@@ -358,6 +365,6 @@ On Windows, directory synchronization is not exposed through the Java file chann
 5. Inspect the complete diff and Git status.
 6. Commit and push the phase branch with EnVy as sole author and committer.
 7. Publish only with explicit authorization.
-8. After explicit approval, fast forward `main` and create the lightweight phase tag.
+8. After explicit approval, merge the verified pull request into `1.20.1` through GitHub and create the signed annotated phase tag.
 
 Do not publish, tag, or approve a beta solely because it builds successfully.

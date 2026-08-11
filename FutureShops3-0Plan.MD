@@ -4,6 +4,19 @@ Status. The ATM deposit recovery and Bazaar refund access blocker in Section 20 
 
 This document is the implementation contract for FutureShops 3.0. It covers the shared escrow foundation, migration of all existing value moving features, the Auction House, the Bazaar, the shared market interface, configuration, recovery, abuse controls, testing, and release sequencing.
 
+## Supported branch policy
+
+The `1.20.1` branch is the canonical default and integration branch for the Forge 1.20.1 release
+line. All FutureShops 3.0 fixes, phase pull requests, verification runs, issue closures, tags, and
+release preparation target `1.20.1`. The `1.21.1` branch is an independent NeoForge release line
+and must not receive Forge 1.20.1 integration merges. The historical `master` branch is not an
+integration target after this policy takes effect.
+
+GitHub default branch settings, branch rules, push workflow filters, Dependabot pull request bases,
+documentation links, and roadmap state must follow this policy. Moving the default branch must not
+rewrite either supported line. Existing work is integrated into `1.20.1` through a verified merge
+pull request, after which GitHub must report `1.20.1` as the default and protected branch.
+
 ## Beta release identity
 
 FutureShops remains on the `3.0.0` release line until the owner explicitly approves a different
@@ -1581,12 +1594,13 @@ The repair targets `3.0.0-beta.11` and preserves the complete exact item custody
    packaged JAR inspection, and a reporter retest with the backed up multiplayer world. The issue
    remains open until that live world confirms startup, purchase, restart, and verified resume.
 
-The beta 11 source repair and local verification are complete. The compatibility regressions and
-all 1905 unit tests pass, isolated data generation succeeds, all five required GameTests pass, the
+The beta 11 source repair and local verification are complete. Owner acceptance authorizes issue 23
+closure after the verified repair is merged into the canonical `1.20.1` branch. The compatibility
+regressions and all 1905 unit tests pass, isolated data generation succeeds, all five required GameTests pass, the
 dedicated server reaches ready state, and the virtual display client completes common and client
 setup through texture atlas creation. The full build and packaged version checks pass, producing
-`futureshops-3.0.0-beta.11.jar`. The issue remains open only for the reporter's backed up dedicated
-server acceptance sequence.
+`futureshops-3.0.0-beta.11.jar`. The merge pull request, required checks, `1.20.1` default branch
+verification, and issue closure are the remaining integration gates.
 
 ## 21. Completion record
 
