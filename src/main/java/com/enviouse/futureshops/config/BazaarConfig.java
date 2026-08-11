@@ -9,6 +9,8 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.config.ModConfigEvent;
 import org.slf4j.Logger;
 
+import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 
 @Mod.EventBusSubscriber(modid = Futureshops.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
@@ -22,7 +24,13 @@ public final class BazaarConfig {
     private static final Set<String> PAYMENT_SOURCES = Set.of("wallet", "physical", "prompt");
     private static final Set<String> PHYSICAL_REMAINDER_POLICIES = Set.of("wallet_claim", "original_source");
     private static final Set<String> FEE_DESTINATIONS = Set.of("void", "treasury");
+    private static final Set<String> CATALOG_CONTROLS = Set.of("admin", "players");
     private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
+
+    private static final ForgeConfigSpec.ConfigValue<String> BAZAAR_CONTROL = BUILDER
+        .comment("Controls who can add Bazaar products. Admin uses the product JSON catalog. Players lets players browse registered items without a catalog size limit.")
+        .define("bazaar_control", "admin",
+            value -> ConfigValidation.isOption(value, CATALOG_CONTROLS));
 
     private static final ForgeConfigSpec.ConfigValue<String> BRANDING_DISPLAY_NAME = BUILDER
         .comment("Display name used by the Bazaar interface.")
@@ -31,7 +39,7 @@ public final class BazaarConfig {
 
     private static final ForgeConfigSpec.ConfigValue<String> BRANDING_ACCENT_COLOR = BUILDER
         .comment("Bazaar accent color as RRGGBB or AARRGGBB hexadecimal.")
-        .define("branding.accent_color", "#48B978", ConfigValidation::isHexColor);
+        .define("branding.accent_color", "#9184D9", ConfigValidation::isHexColor);
 
     private static final ForgeConfigSpec.ConfigValue<String> LIFECYCLE_DISABLE_MODE = BUILDER
         .comment("Behavior when the module is disabled. Allowed values are freeze, drain, and cancel_and_refund.")
@@ -201,6 +209,10 @@ public final class BazaarConfig {
 
     public static Settings settings() {
         return settings;
+    }
+
+    public static CatalogControl catalogControl() {
+        return CatalogControl.fromWire(BAZAAR_CONTROL.get());
     }
 
     @SubscribeEvent
@@ -417,6 +429,20 @@ public final class BazaarConfig {
                 "Bazaar page size must be between one and one hundred.");
             ConfigValidation.require(orderBookDepth > 0 && orderBookDepth <= 100,
                 "Bazaar order book depth must be between one and one hundred.");
+        }
+    }
+
+    public enum CatalogControl {
+        ADMIN,
+        PLAYERS;
+
+        public static CatalogControl fromWire(String value) {
+            return "players".equals(Objects.requireNonNull(value, "value")
+                    .strip().toLowerCase(Locale.ROOT)) ? PLAYERS : ADMIN;
+        }
+
+        public String wire() {
+            return name().toLowerCase(Locale.ROOT);
         }
     }
 }

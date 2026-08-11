@@ -4,12 +4,19 @@ import com.enviouse.futureshops.server.escrow.admin.EscrowAdministrativeAuditSav
 import com.enviouse.futureshops.server.escrow.claim.ClaimSavedData;
 import com.enviouse.futureshops.server.escrow.custody.CustodySavedData;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerSavedData;
+import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalSavedData;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintSavedData;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowCheckpointSnapshotBundle;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowPreparedCheckpointRestore;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowMutationPermit;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeSavedData;
+import com.enviouse.futureshops.server.escrow.runtime.PlayerShopEscrowSavedData;
+import com.enviouse.futureshops.server.escrow.runtime.ServerShopIntentSavedData;
 import com.enviouse.futureshops.server.escrow.store.EscrowTransactionSavedData;
+import com.enviouse.futureshops.server.escrow.stock.StockSavedData;
+import com.enviouse.futureshops.server.market.auction.AuctionHouseSavedData;
+import com.enviouse.futureshops.server.market.bazaar.BazaarSavedData;
+import com.enviouse.futureshops.server.market.control.MarketControlSavedData;
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.Collections;
@@ -27,6 +34,13 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
     private final EscrowAdministrativeAuditSavedData administrativeAudit;
     private final CustodySavedData custody;
     private final ProtectedMintSavedData protectedMints;
+    private final StockSavedData stock;
+    private final ItemInventoryJournalSavedData itemInventoryJournal;
+    private final AuctionHouseSavedData auctionHouse;
+    private final BazaarSavedData bazaar;
+    private final ServerShopIntentSavedData serverShopIntents;
+    private final PlayerShopEscrowSavedData playerShopEscrow;
+    private final MarketControlSavedData marketControl;
     private final EscrowRuntimeSavedData runtimeMetadata;
     private final BooleanSupplier serverThreadCheck;
     private final int maximumStoreBytes;
@@ -44,7 +58,9 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
             EscrowRuntimeSavedData runtimeMetadata,
             BooleanSupplier serverThreadCheck) {
         this(transactions, ledger, claims, administrativeAudit, custody, protectedMints,
-                runtimeMetadata, serverThreadCheck, EscrowCheckpoint.MAX_STORE_BYTES,
+                new StockSavedData(), new ItemInventoryJournalSavedData(),
+                runtimeMetadata, serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
                 EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES, null);
     }
 
@@ -59,9 +75,205 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
             BooleanSupplier serverThreadCheck,
             EscrowMutationPermit mutationPermit) {
         this(transactions, ledger, claims, administrativeAudit, custody, protectedMints,
-                runtimeMetadata, serverThreadCheck, EscrowCheckpoint.MAX_STORE_BYTES,
+                new StockSavedData(), new ItemInventoryJournalSavedData(),
+                runtimeMetadata, serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
                 EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES,
                 Objects.requireNonNull(mutationPermit, "mutationPermit"));
+    }
+
+    public EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            AuctionHouseSavedData auctionHouse,
+            ServerShopIntentSavedData serverShopIntents,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                serverShopIntents, runtimeMetadata, serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
+                EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES, null);
+    }
+
+    public EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            AuctionHouseSavedData auctionHouse,
+            ServerShopIntentSavedData serverShopIntents,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                serverShopIntents, runtimeMetadata, serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
+                EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES,
+                Objects.requireNonNull(mutationPermit, "mutationPermit"));
+    }
+
+    public EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            AuctionHouseSavedData auctionHouse,
+            BazaarSavedData bazaar,
+            ServerShopIntentSavedData serverShopIntents,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                bazaar, serverShopIntents, new PlayerShopEscrowSavedData(),
+                runtimeMetadata, serverThreadCheck, mutationPermit);
+    }
+
+    public EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            AuctionHouseSavedData auctionHouse,
+            BazaarSavedData bazaar,
+            ServerShopIntentSavedData serverShopIntents,
+            PlayerShopEscrowSavedData playerShopEscrow,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                bazaar, serverShopIntents, playerShopEscrow,
+                new MarketControlSavedData(), runtimeMetadata,
+                serverThreadCheck, EscrowCheckpoint.MAX_STORE_BYTES,
+                EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES,
+                Objects.requireNonNull(mutationPermit, "mutationPermit"));
+    }
+
+    public EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            AuctionHouseSavedData auctionHouse,
+            BazaarSavedData bazaar,
+            ServerShopIntentSavedData serverShopIntents,
+            PlayerShopEscrowSavedData playerShopEscrow,
+            MarketControlSavedData marketControl,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                bazaar, serverShopIntents, playerShopEscrow, marketControl,
+                runtimeMetadata, serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
+                EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES, null);
+    }
+
+    public EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            AuctionHouseSavedData auctionHouse,
+            BazaarSavedData bazaar,
+            ServerShopIntentSavedData serverShopIntents,
+            PlayerShopEscrowSavedData playerShopEscrow,
+            MarketControlSavedData marketControl,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                bazaar, serverShopIntents, playerShopEscrow, marketControl,
+                runtimeMetadata, serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
+                EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES,
+                Objects.requireNonNull(mutationPermit, "mutationPermit"));
+    }
+
+    public EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock,
+                new ItemInventoryJournalSavedData(), runtimeMetadata,
+                serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
+                EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES, null);
+    }
+
+    public EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock,
+                new ItemInventoryJournalSavedData(), runtimeMetadata,
+                serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
+                EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES,
+                Objects.requireNonNull(mutationPermit, "mutationPermit"));
+    }
+
+    public EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal,
+                runtimeMetadata, serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
+                EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES, null);
     }
 
     EscrowSavedDataCheckpointBundle(
@@ -76,7 +288,9 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
             int maximumStoreBytes,
             long maximumAggregateBytes) {
         this(transactions, ledger, claims, administrativeAudit, custody, protectedMints,
-                runtimeMetadata, serverThreadCheck, maximumStoreBytes,
+                new StockSavedData(), new ItemInventoryJournalSavedData(),
+                runtimeMetadata, serverThreadCheck,
+                maximumStoreBytes,
                 maximumAggregateBytes, null);
     }
 
@@ -92,6 +306,228 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
             int maximumStoreBytes,
             long maximumAggregateBytes,
             EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, new StockSavedData(),
+                new ItemInventoryJournalSavedData(), runtimeMetadata,
+                serverThreadCheck, maximumStoreBytes, maximumAggregateBytes,
+                mutationPermit);
+    }
+
+    EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            int maximumStoreBytes,
+            long maximumAggregateBytes,
+            EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock,
+                new ItemInventoryJournalSavedData(), runtimeMetadata,
+                serverThreadCheck, maximumStoreBytes,
+                maximumAggregateBytes, mutationPermit);
+    }
+
+    public EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal,
+                runtimeMetadata, serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
+                EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES,
+                Objects.requireNonNull(mutationPermit, "mutationPermit"));
+    }
+
+    public EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            AuctionHouseSavedData auctionHouse,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                runtimeMetadata, serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
+                EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES, null);
+    }
+
+    public EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            AuctionHouseSavedData auctionHouse,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                runtimeMetadata, serverThreadCheck,
+                EscrowCheckpoint.MAX_STORE_BYTES,
+                EscrowCheckpoint.MAX_AGGREGATE_STORE_BYTES,
+                Objects.requireNonNull(mutationPermit, "mutationPermit"));
+    }
+
+    EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            int maximumStoreBytes,
+            long maximumAggregateBytes,
+            EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal,
+                new AuctionHouseSavedData(), runtimeMetadata,
+                serverThreadCheck, maximumStoreBytes,
+                maximumAggregateBytes, mutationPermit);
+    }
+
+    EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            AuctionHouseSavedData auctionHouse,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            int maximumStoreBytes,
+            long maximumAggregateBytes,
+            EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                new ServerShopIntentSavedData(), runtimeMetadata,
+                serverThreadCheck, maximumStoreBytes,
+                maximumAggregateBytes, mutationPermit);
+    }
+
+    EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            AuctionHouseSavedData auctionHouse,
+            ServerShopIntentSavedData serverShopIntents,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            int maximumStoreBytes,
+            long maximumAggregateBytes,
+            EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                new BazaarSavedData(), serverShopIntents, runtimeMetadata,
+                serverThreadCheck, maximumStoreBytes,
+                maximumAggregateBytes, mutationPermit);
+    }
+
+    EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            AuctionHouseSavedData auctionHouse,
+            BazaarSavedData bazaar,
+            ServerShopIntentSavedData serverShopIntents,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            int maximumStoreBytes,
+            long maximumAggregateBytes,
+            EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                bazaar, serverShopIntents, new PlayerShopEscrowSavedData(),
+                runtimeMetadata, serverThreadCheck, maximumStoreBytes,
+                maximumAggregateBytes, mutationPermit);
+    }
+
+    EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            AuctionHouseSavedData auctionHouse,
+            BazaarSavedData bazaar,
+            ServerShopIntentSavedData serverShopIntents,
+            PlayerShopEscrowSavedData playerShopEscrow,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            int maximumStoreBytes,
+            long maximumAggregateBytes,
+            EscrowMutationPermit mutationPermit) {
+        this(transactions, ledger, claims, administrativeAudit, custody,
+                protectedMints, stock, itemInventoryJournal, auctionHouse,
+                bazaar, serverShopIntents, playerShopEscrow,
+                new MarketControlSavedData(), runtimeMetadata,
+                serverThreadCheck, maximumStoreBytes,
+                maximumAggregateBytes, mutationPermit);
+    }
+
+    EscrowSavedDataCheckpointBundle(
+            EscrowTransactionSavedData transactions,
+            LedgerSavedData ledger,
+            ClaimSavedData claims,
+            EscrowAdministrativeAuditSavedData administrativeAudit,
+            CustodySavedData custody,
+            ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            AuctionHouseSavedData auctionHouse,
+            BazaarSavedData bazaar,
+            ServerShopIntentSavedData serverShopIntents,
+            PlayerShopEscrowSavedData playerShopEscrow,
+            MarketControlSavedData marketControl,
+            EscrowRuntimeSavedData runtimeMetadata,
+            BooleanSupplier serverThreadCheck,
+            int maximumStoreBytes,
+            long maximumAggregateBytes,
+            EscrowMutationPermit mutationPermit) {
         this.transactions = Objects.requireNonNull(transactions, "transactions");
         this.ledger = Objects.requireNonNull(ledger, "ledger");
         this.claims = Objects.requireNonNull(claims, "claims");
@@ -99,6 +535,18 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
                 "administrativeAudit");
         this.custody = Objects.requireNonNull(custody, "custody");
         this.protectedMints = Objects.requireNonNull(protectedMints, "protectedMints");
+        this.stock = Objects.requireNonNull(stock, "stock");
+        this.itemInventoryJournal = Objects.requireNonNull(
+                itemInventoryJournal, "itemInventoryJournal");
+        this.auctionHouse = Objects.requireNonNull(
+                auctionHouse, "auctionHouse");
+        this.bazaar = Objects.requireNonNull(bazaar, "bazaar");
+        this.serverShopIntents = Objects.requireNonNull(
+                serverShopIntents, "serverShopIntents");
+        this.playerShopEscrow = Objects.requireNonNull(
+                playerShopEscrow, "playerShopEscrow");
+        this.marketControl = Objects.requireNonNull(
+                marketControl, "marketControl");
         this.runtimeMetadata = Objects.requireNonNull(runtimeMetadata, "runtimeMetadata");
         this.serverThreadCheck = Objects.requireNonNull(serverThreadCheck,
                 "serverThreadCheck");
@@ -137,6 +585,27 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
             snapshots.put(EscrowCheckpointStore.PROTECTED_MINT,
                     encode(EscrowCheckpointStore.PROTECTED_MINT,
                             protectedMints.save(new CompoundTag())));
+            snapshots.put(EscrowCheckpointStore.STOCK,
+                    encode(EscrowCheckpointStore.STOCK,
+                            stock.save(new CompoundTag())));
+            snapshots.put(EscrowCheckpointStore.ITEM_INVENTORY_JOURNAL,
+                    encode(EscrowCheckpointStore.ITEM_INVENTORY_JOURNAL,
+                            itemInventoryJournal.save(new CompoundTag())));
+            snapshots.put(EscrowCheckpointStore.AUCTION_HOUSE,
+                    encode(EscrowCheckpointStore.AUCTION_HOUSE,
+                            auctionHouse.save(new CompoundTag())));
+            snapshots.put(EscrowCheckpointStore.SERVER_SHOP_INTENTS,
+                    encode(EscrowCheckpointStore.SERVER_SHOP_INTENTS,
+                            serverShopIntents.save(new CompoundTag())));
+            snapshots.put(EscrowCheckpointStore.BAZAAR,
+                    encode(EscrowCheckpointStore.BAZAAR,
+                            bazaar.save(new CompoundTag())));
+            snapshots.put(EscrowCheckpointStore.PLAYER_SHOP_ESCROW,
+                    encode(EscrowCheckpointStore.PLAYER_SHOP_ESCROW,
+                            playerShopEscrow.save(new CompoundTag())));
+            snapshots.put(EscrowCheckpointStore.MARKET_CONTROL,
+                    encode(EscrowCheckpointStore.MARKET_CONTROL,
+                            marketControl.save(new CompoundTag())));
             snapshots.put(EscrowCheckpointStore.RUNTIME_METADATA,
                     encode(EscrowCheckpointStore.RUNTIME_METADATA,
                             runtimeMetadata.save(new CompoundTag())));
@@ -152,6 +621,19 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
         EscrowCheckpoint checkpoint = trustedCheckpoint.checkpoint();
         return prepareSnapshots(checkpoint.snapshots(),
                 checkpoint.sourceJournalLineageId(), checkpoint.baseJournalSequence());
+    }
+
+    @Override
+    public java.util.Optional<com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryJournalSnapshot>
+    trustedItemInventoryJournalSnapshot(
+            TrustedEscrowCheckpoint trustedCheckpoint
+    ) {
+        Objects.requireNonNull(trustedCheckpoint, "trustedCheckpoint");
+        ItemInventoryJournalSavedData decoded = load(
+                EscrowCheckpointStore.ITEM_INVENTORY_JOURNAL,
+                trustedCheckpoint.checkpoint().snapshots(),
+                ItemInventoryJournalSavedData::load);
+        return java.util.Optional.of(decoded.snapshot());
     }
 
     public EscrowPreparedCheckpointRestore prepareSnapshots(
@@ -190,11 +672,35 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
                 CustodySavedData::load);
         ProtectedMintSavedData decodedMints = load(EscrowCheckpointStore.PROTECTED_MINT,
                 snapshots, ProtectedMintSavedData::load);
+        StockSavedData decodedStock = load(EscrowCheckpointStore.STOCK,
+                snapshots, StockSavedData::load);
+        ItemInventoryJournalSavedData decodedItemInventoryJournal = load(
+                EscrowCheckpointStore.ITEM_INVENTORY_JOURNAL, snapshots,
+                ItemInventoryJournalSavedData::load);
+        AuctionHouseSavedData decodedAuctionHouse = load(
+                EscrowCheckpointStore.AUCTION_HOUSE, snapshots,
+                AuctionHouseSavedData::load);
+        ServerShopIntentSavedData decodedServerShopIntents = load(
+                EscrowCheckpointStore.SERVER_SHOP_INTENTS, snapshots,
+                ServerShopIntentSavedData::load);
+        BazaarSavedData decodedBazaar = load(
+                EscrowCheckpointStore.BAZAAR, snapshots,
+                BazaarSavedData::load);
+        PlayerShopEscrowSavedData decodedPlayerShopEscrow = load(
+                EscrowCheckpointStore.PLAYER_SHOP_ESCROW, snapshots,
+                PlayerShopEscrowSavedData::load);
+        MarketControlSavedData decodedMarketControl = load(
+                EscrowCheckpointStore.MARKET_CONTROL, snapshots,
+                MarketControlSavedData::load);
         EscrowRuntimeSavedData decodedRuntime = load(
                 EscrowCheckpointStore.RUNTIME_METADATA, snapshots,
                 EscrowRuntimeSavedData::load);
         return new PreparedStores(decodedTransactions, decodedLedger, decodedClaims,
-                decodedAudit, decodedCustody, decodedMints, decodedRuntime);
+                decodedAudit, decodedCustody, decodedMints, decodedStock,
+                decodedItemInventoryJournal, decodedAuctionHouse,
+                decodedBazaar, decodedServerShopIntents,
+                decodedPlayerShopEscrow, decodedMarketControl,
+                decodedRuntime);
     }
 
     private <T> T load(EscrowCheckpointStore store,
@@ -281,6 +787,16 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
         administrativeAudit.replaceFromValidated(prepared.administrativeAudit());
         custody.replaceFromValidated(prepared.custody());
         protectedMints.replaceFromValidated(prepared.protectedMints());
+        stock.replaceFromValidated(prepared.stock());
+        itemInventoryJournal.replaceFromValidated(
+                prepared.itemInventoryJournal());
+        auctionHouse.replaceFromValidated(prepared.auctionHouse());
+        bazaar.replaceFromValidated(prepared.bazaar());
+        serverShopIntents.replaceFromValidated(
+                prepared.serverShopIntents());
+        playerShopEscrow.replaceFromValidated(
+                prepared.playerShopEscrow());
+        marketControl.replaceFromValidated(prepared.marketControl());
         runtimeMetadata.replaceFromValidated(prepared.runtimeMetadata());
     }
 
@@ -306,6 +822,13 @@ public final class EscrowSavedDataCheckpointBundle implements EscrowCheckpointSn
             EscrowAdministrativeAuditSavedData administrativeAudit,
             CustodySavedData custody,
             ProtectedMintSavedData protectedMints,
+            StockSavedData stock,
+            ItemInventoryJournalSavedData itemInventoryJournal,
+            AuctionHouseSavedData auctionHouse,
+            BazaarSavedData bazaar,
+            ServerShopIntentSavedData serverShopIntents,
+            PlayerShopEscrowSavedData playerShopEscrow,
+            MarketControlSavedData marketControl,
             EscrowRuntimeSavedData runtimeMetadata) {
     }
 

@@ -1,10 +1,12 @@
 package com.enviouse.futureshops.server.shop;
 
 import com.enviouse.futureshops.Config;
+import com.enviouse.futureshops.catalog.CatalogStockAuthorityMode;
 import com.enviouse.futureshops.catalog.ItemDef;
 import com.enviouse.futureshops.catalog.ShopCatalog;
 import com.enviouse.futureshops.catalog.ShopDefinition;
 import com.enviouse.futureshops.event.StockRefreshEvent;
+import com.enviouse.futureshops.server.escrow.stock.migration.CatalogStockRuntime;
 import com.mojang.logging.LogUtils;
 import net.minecraft.server.MinecraftServer;
 import net.minecraftforge.common.MinecraftForge;
@@ -40,7 +42,9 @@ public final class StockRefreshScheduler {
      * items with stock refresh configured.
      */
     public static void onServerTick(MinecraftServer server) {
-        if (!Config.stockRefreshEnabled) {
+        if (!Config.stockRefreshEnabled
+                || ShopCatalog.stockAuthorityMode()
+                != CatalogStockAuthorityMode.DURABLE) {
             return;
         }
 
@@ -52,6 +56,20 @@ public final class StockRefreshScheduler {
         int current = tickCounter.incrementAndGet();
         if (current < checkIntervalTicks) {
             return;
+        }
+        tickCounter.set(0);
+        evaluateRefreshes(server);
+    }
+
+    public static void trigger(MinecraftServer server) {
+        if (!Config.stockRefreshEnabled
+                || ShopCatalog.stockAuthorityMode()
+                != CatalogStockAuthorityMode.DURABLE) {
+            return;
+        }
+        if (!server.isSameThread()) {
+            throw new IllegalStateException(
+                    "Stock refresh requires the server thread");
         }
         tickCounter.set(0);
         evaluateRefreshes(server);
@@ -92,14 +110,19 @@ public final class StockRefreshScheduler {
                 long intervalMillis = (long) item.stockRefreshSeconds() * 1000L;
 
                 if (elapsedMillis >= intervalMillis) {
-                    // Reset stock to the catalog-defined value
                     int configuredStock = item.stock();
-                    int currentStock = ShopCatalog.getCurrentStock(shopId, listingKey);
 
-                    if (currentStock != configuredStock) {
-                        ShopCatalog.setStock(shopId, listingKey, configuredStock);
-                        LOGGER.debug("[FutureShops] Stock refresh: {}:{} reset to {} (was {})",
-                                shopId, listingKey, configuredStock, currentStock);
+                    try {
+                        int currentStock = ShopCatalog.getCurrentStock(
+                                shopId, listingKey);
+                        if (CatalogStockRuntime.refreshStock(shopId, item)) {
+                            LOGGER.debug("[FutureShops] Stock refresh: {}:{} reset to {} (was {})",
+                                    shopId, listingKey, configuredStock, currentStock);
+                        }
+                    } catch (RuntimeException exception) {
+                        LOGGER.error("[FutureShops] Stock refresh failed for {}:{}",
+                                shopId, listingKey, exception);
+                        continue;
                     }
 
                     data.setLastRefresh(compositeKey, nowMillis);

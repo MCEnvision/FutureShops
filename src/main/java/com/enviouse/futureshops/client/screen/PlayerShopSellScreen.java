@@ -1,6 +1,8 @@
 package com.enviouse.futureshops.client.screen;
 
 import com.enviouse.futureshops.client.PlayerShopClientState;
+import com.enviouse.futureshops.client.PlayerShopResponseTracker;
+import com.enviouse.futureshops.client.ShopClientPacketHandler;
 import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.PlayerShopListingData;
 import com.enviouse.futureshops.network.ShopPackets;
@@ -172,10 +174,13 @@ public class PlayerShopSellScreen extends Screen implements ShopScreenMarker {
     }
 
     private void confirm() {
+        PlayerShopResponseTracker.PendingRequest request =
+                ShopClientPacketHandler.beginPlayerShopRequest(
+                        PlayerShopResponseTracker.Operation.BUYBACK, 0);
         ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopSellPacket(
                 PlayerShopClientState.shopPos(),
                 PlayerShopClientState.selectedListingIndex(),
-                quantity));
+                quantity, request.requestId(), request.responseToken()));
         onClose();
     }
 

@@ -4,6 +4,7 @@ import net.minecraft.nbt.CompoundTag;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -108,5 +109,48 @@ class ClaimSavedDataTest {
         assertEquals("legacy.claim." + claim.claimId(), migrated.sourceKey());
         assertEquals(deliveredAt, attempt.deliveredAt());
         assertTrue(attempt.replayed());
+    }
+
+    @Test
+    void openClaimPageSurvivesSavedDataRoundTrip() {
+        Instant now = Instant.parse("2026-07-16T12:00:00Z");
+        UUID ownerId = new UUID(12L, 1L);
+        EscrowClaim pending = new EscrowClaim(new UUID(0L, 1L),
+                UUID.randomUUID(), ownerId, "bazaar.claim.pending",
+                ClaimKind.MONEY, 10L, 10L, new byte[0],
+                ClaimStatus.PENDING, "Pending money", now, now);
+        EscrowClaim quarantined = new EscrowClaim(new UUID(0L, 2L),
+                UUID.randomUUID(), ownerId,
+                "bazaar.claim.quarantined", ClaimKind.REFUND,
+                20L, 20L, new byte[0], ClaimStatus.PENDING,
+                "Quarantined refund", now, now);
+        EscrowClaim internal = new EscrowClaim(new UUID(0L, 3L),
+                UUID.randomUUID(), ownerId, "bazaar.claim.internal",
+                ClaimKind.INTERNAL_ESCROW_MONEY, 30L, 30L,
+                new byte[0], ClaimStatus.PENDING, "Internal money",
+                now, now);
+        EscrowClaim otherSource = new EscrowClaim(new UUID(0L, 4L),
+                UUID.randomUUID(), ownerId, "auction.claim.pending",
+                ClaimKind.MONEY, 40L, 40L, new byte[0],
+                ClaimStatus.PENDING, "Auction money", now, now);
+        ClaimSavedData data = new ClaimSavedData();
+        data.createCommitted(pending);
+        data.createCommitted(quarantined);
+        data.createCommitted(internal);
+        data.createCommitted(otherSource);
+        data.quarantineCommitted(ownerId, quarantined.claimId(),
+                now.plusSeconds(1));
+
+        ClaimSavedData loaded = ClaimSavedData.load(
+                data.save(new CompoundTag()));
+        OpenClaimPage page = loaded.openPageFor(
+                ownerId, "bazaar.", 0, 10);
+
+        assertEquals(2, page.totalResults());
+        assertEquals(1, page.pageCount());
+        assertEquals(List.of(pending.claimId(), quarantined.claimId()),
+                page.claims().stream().map(EscrowClaim::claimId).toList());
+        assertEquals(ClaimStatus.QUARANTINED,
+                page.claims().get(1).status());
     }
 }

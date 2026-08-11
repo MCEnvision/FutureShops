@@ -227,6 +227,13 @@ public final class ClaimSavedData extends EscrowManagedSavedData {
         return repository.get(claimId);
     }
 
+    public synchronized java.util.Optional<ClaimAttemptResult> attempt(
+            String requestKey
+    ) {
+        return java.util.Optional.ofNullable(
+                repository.getAttempt(requestKey));
+    }
+
     public synchronized ClaimMaintenanceApplyResult preflightMaintenanceReplace(
             EscrowClaim replacement
     ) {
@@ -254,6 +261,23 @@ public final class ClaimSavedData extends EscrowManagedSavedData {
 
     public synchronized java.util.List<EscrowClaim> pendingFor(UUID ownerId, int limit) {
         return repository.pendingFor(ownerId, limit);
+    }
+
+    public synchronized OpenClaimPage openPageFor(
+            UUID ownerId,
+            String sourcePrefix,
+            int pageIndex,
+            int pageSize
+    ) {
+        return repository.openPageFor(
+                ownerId, sourcePrefix, pageIndex, pageSize);
+    }
+
+    public synchronized OpenClaimSourceCounts openSourceCountsFor(
+            UUID ownerId,
+            List<String> sourcePrefixes
+    ) {
+        return repository.openSourceCountsFor(ownerId, sourcePrefixes);
     }
 
     public synchronized java.util.List<EscrowClaim> pendingCashFor(UUID ownerId) {
@@ -357,9 +381,10 @@ public final class ClaimSavedData extends EscrowManagedSavedData {
         return tag.getInt(key);
     }
 
-    private static ClaimLiabilityCategory liabilityCategory(EscrowClaim claim) {
+    static ClaimLiabilityCategory liabilityCategory(EscrowClaim claim) {
         return switch (claim.kind()) {
-            case MONEY -> ClaimLiabilityCategory.MONEY;
+            case MONEY, INTERNAL_ESCROW_MONEY ->
+                    ClaimLiabilityCategory.MONEY;
             case ITEM -> ClaimLiabilityCategory.ITEM;
             case PROTECTED_CASH -> ClaimLiabilityCategory.PROTECTED_CASH;
             case FOREIGN_CASH -> ClaimLiabilityCategory.FOREIGN_CASH;

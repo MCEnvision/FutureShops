@@ -33,7 +33,7 @@ public final class AuctionHouseConfig {
 
     private static final ForgeConfigSpec.ConfigValue<String> BRANDING_ACCENT_COLOR = BUILDER
         .comment("Auction House accent color as RRGGBB or AARRGGBB hexadecimal.")
-        .define("branding.accent_color", "#D85B68", ConfigValidation::isHexColor);
+        .define("branding.accent_color", "#9184D9", ConfigValidation::isHexColor);
 
     private static final ForgeConfigSpec.ConfigValue<String> LIFECYCLE_DISABLE_MODE = BUILDER
         .comment("Behavior when the module is disabled. Allowed values are freeze, drain, and cancel_and_refund.")
@@ -163,11 +163,13 @@ public final class AuctionHouseConfig {
 
     private static final ForgeConfigSpec.ConfigValue<List<? extends String>> RESTRICTIONS_DENIED_ITEM_IDS = BUILDER
         .comment("Item registry identifiers that cannot be listed.")
-        .defineList("restrictions.denied_item_ids", List.of(), AuctionHouseConfig::isRegistryIdentifier);
+        .defineListAllowEmpty(
+            "restrictions.denied_item_ids", List.of(), AuctionHouseConfig::isRegistryIdentifier);
 
     private static final ForgeConfigSpec.ConfigValue<List<? extends String>> RESTRICTIONS_DENIED_ITEM_TAGS = BUILDER
         .comment("Item tag identifiers whose members cannot be listed.")
-        .defineList("restrictions.denied_item_tags", List.of(), AuctionHouseConfig::isRegistryIdentifier);
+        .defineListAllowEmpty(
+            "restrictions.denied_item_tags", List.of(), AuctionHouseConfig::isRegistryIdentifier);
 
     private static final ForgeConfigSpec.ConfigValue<String> RESTRICTIONS_CONTAINER_POLICY = BUILDER
         .comment("Container item policy. Allowed values are deny, allow_empty, and allow_all.")
@@ -336,6 +338,8 @@ public final class AuctionHouseConfig {
                 "Maximum auction duration must not be less than the minimum duration.");
             durationPresetsMinutes = ConfigValidation.requirePositiveList(
                 durationPresetsMinutes, "Auction duration presets");
+            ConfigValidation.require(durationPresetsMinutes.size() <= 8,
+                "Auction duration presets must contain no more than eight choices.");
             ConfigValidation.require(durationPresetsMinutes.stream().allMatch(
                     duration -> duration >= minimumDurationMinutes && duration <= maximumDurationMinutes),
                 "Auction duration presets must remain inside the configured duration range.");

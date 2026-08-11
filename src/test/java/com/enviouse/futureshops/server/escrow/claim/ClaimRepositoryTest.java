@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -152,6 +153,91 @@ class ClaimRepositoryTest {
         assertTrue(repository.snapshotAttempts().isEmpty());
     }
 
+    @Test
+    void openPageFiltersBeforePagingWithExactStableTotals() {
+        ClaimRepository repository = repository();
+        UUID ownerId = new UUID(10L, 1L);
+        UUID otherOwnerId = new UUID(10L, 2L);
+        for (long index = 1L; index <= 260L; index++) {
+            repository.create(claim(claimId(index), ownerId,
+                    "auction.claim." + index, ClaimKind.MONEY, 2L));
+        }
+        for (long index = 1001L; index <= 1270L; index++) {
+            repository.create(claim(claimId(index), ownerId,
+                    "bazaar.claim." + index, ClaimKind.MONEY, 2L));
+        }
+        repository.deliver(ownerId, claimId(1001L),
+                "paged partial claim", 1L, NOW,
+                (ignored, requested) -> requested);
+        EscrowClaim quarantined = repository.create(claim(
+                claimId(1271L), ownerId, "bazaar.claim.quarantined",
+                ClaimKind.REFUND, 3L));
+        repository.quarantine(ownerId, quarantined.claimId(),
+                NOW.plusSeconds(1));
+        EscrowClaim completed = repository.create(claim(
+                claimId(1272L), ownerId, "bazaar.claim.completed",
+                ClaimKind.MONEY, 1L));
+        repository.deliver(ownerId, completed.claimId(),
+                "paged completed claim", 1L, NOW,
+                (ignored, requested) -> requested);
+        repository.create(claim(claimId(1273L), ownerId,
+                "bazaar.claim.internal",
+                ClaimKind.INTERNAL_ESCROW_MONEY, 5L));
+        repository.create(claim(claimId(1274L), otherOwnerId,
+                "bazaar.claim.other.owner", ClaimKind.MONEY, 5L));
+
+        OpenClaimPage page = repository.openPageFor(
+                ownerId, "bazaar.", 2, 100);
+
+        assertEquals(ownerId, page.ownerId());
+        assertEquals("bazaar.", page.sourcePrefix());
+        assertEquals(2, page.pageIndex());
+        assertEquals(100, page.pageSize());
+        assertEquals(271, page.totalResults());
+        assertEquals(3, page.pageCount());
+        assertEquals(71, page.claims().size());
+        assertEquals(claimId(1201L), page.claims().get(0).claimId());
+        assertEquals(claimId(1271L), page.claims().get(70).claimId());
+        assertEquals(ClaimStatus.QUARANTINED,
+                page.claims().get(70).status());
+        assertTrue(page.claims().stream().allMatch(value ->
+                value.ownerId().equals(ownerId)
+                        && value.sourceKey().startsWith("bazaar.")
+                        && value.kind().publiclyVisible()));
+
+        OpenClaimPage beyond = repository.openPageFor(
+                ownerId, "bazaar.", 99, 100);
+        assertEquals(271, beyond.totalResults());
+        assertEquals(3, beyond.pageCount());
+        assertEquals(List.of(), beyond.claims());
+
+        OpenClaimPage allSources = repository.openPageFor(
+                ownerId, "", 0, 1);
+        assertEquals(531, allSources.totalResults());
+        assertEquals(531, allSources.pageCount());
+        assertEquals(claimId(1L),
+                allSources.claims().get(0).claimId());
+    }
+
+    @Test
+    void openPageRejectsUnboundedOrMalformedRequests() {
+        ClaimRepository repository = repository();
+        UUID ownerId = UUID.randomUUID();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> repository.openPageFor(ownerId, "bazaar.",
+                        -1, 10));
+        assertThrows(IllegalArgumentException.class,
+                () -> repository.openPageFor(ownerId, "bazaar.",
+                        0, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> repository.openPageFor(ownerId, "bazaar.",
+                        0, OpenClaimPage.MAXIMUM_PAGE_SIZE + 1));
+        assertThrows(IllegalArgumentException.class,
+                () -> repository.openPageFor(ownerId, " bazaar.",
+                        0, 10));
+    }
+
     private static ClaimRepository repository() {
         return new ClaimRepository(Clock.fixed(NOW, ZoneOffset.UTC));
     }
@@ -160,5 +246,21 @@ class ClaimRepositoryTest {
         return new EscrowClaim(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 "source " + UUID.randomUUID(), ClaimKind.MONEY,
                 units, units, new byte[0], ClaimStatus.PENDING, "Test claim", NOW, NOW);
+    }
+
+    private static EscrowClaim claim(
+            UUID claimId,
+            UUID ownerId,
+            String sourceKey,
+            ClaimKind kind,
+            long units
+    ) {
+        return new EscrowClaim(claimId, UUID.randomUUID(), ownerId,
+                sourceKey, kind, units, units, new byte[0],
+                ClaimStatus.PENDING, "Paged claim", NOW, NOW);
+    }
+
+    private static UUID claimId(long value) {
+        return new UUID(0L, value);
     }
 }

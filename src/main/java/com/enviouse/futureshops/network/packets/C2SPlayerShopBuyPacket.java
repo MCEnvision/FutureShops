@@ -36,7 +36,10 @@ public record C2SPlayerShopBuyPacket(BlockPos shopPos, int listingIndex, int qua
         }
         paymentMethod = requireBoundedString(paymentMethod, MAX_PAYMENT_METHOD_LENGTH, "paymentMethod");
         paymentSource = requireBoundedString(paymentSource, MAX_PAYMENT_SOURCE_LENGTH, "paymentSource");
-        requestId = requestId == null ? UNCORRELATED_REQUEST_ID : requestId;
+        requestId = Objects.requireNonNull(requestId, "requestId");
+        if (UNCORRELATED_REQUEST_ID.equals(requestId)) {
+            throw new IllegalArgumentException("requestId must be nonzero");
+        }
         if (!ShopTransactionUtil.isValidPlayerShopResponseToken(responseToken)) {
             throw new IllegalArgumentException("responseToken is outside the cart line limit");
         }
@@ -45,7 +48,7 @@ public record C2SPlayerShopBuyPacket(BlockPos shopPos, int listingIndex, int qua
     public C2SPlayerShopBuyPacket(BlockPos shopPos, int listingIndex, int quantity,
                                   String paymentMethod, String paymentSource) {
         this(shopPos, listingIndex, quantity, paymentMethod, paymentSource,
-                UNCORRELATED_REQUEST_ID, 0);
+                UUID.randomUUID(), 0);
     }
 
     public static void encode(C2SPlayerShopBuyPacket packet, FriendlyByteBuf buffer) {
@@ -72,6 +75,10 @@ public record C2SPlayerShopBuyPacket(BlockPos shopPos, int listingIndex, int qua
             String paymentMethod = buffer.readUtf(MAX_PAYMENT_METHOD_LENGTH);
             String paymentSource = buffer.readUtf(MAX_PAYMENT_SOURCE_LENGTH);
             UUID requestId = buffer.readUUID();
+            if (UNCORRELATED_REQUEST_ID.equals(requestId)) {
+                throw new DecoderException(
+                        "player shop request identity must be nonzero");
+            }
             int responseToken = buffer.readVarInt();
             if (!ShopTransactionUtil.isValidPlayerShopResponseToken(responseToken)) {
                 throw new DecoderException("player shop response token is outside the cart line limit");

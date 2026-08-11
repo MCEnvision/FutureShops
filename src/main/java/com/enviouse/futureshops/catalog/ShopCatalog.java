@@ -4,6 +4,9 @@ import com.enviouse.futureshops.data.CatalogBarterRecipe;
 import com.enviouse.futureshops.data.CatalogCategory;
 import com.enviouse.futureshops.data.CatalogItem;
 import com.enviouse.futureshops.data.CatalogPromo;
+import com.enviouse.futureshops.server.escrow.stock.migration.CatalogStockActivationCoverage;
+import com.enviouse.futureshops.server.escrow.stock.migration.CatalogStockSeedCapture;
+import com.enviouse.futureshops.server.escrow.stock.migration.CatalogStockSeedSnapshot;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.Collection;
@@ -35,6 +38,13 @@ public final class ShopCatalog {
     private static volatile Map<String, Set<String>> BARTER_TARGETS = Map.of();
     private static volatile Map<String, Map<String, List<BarterRecipeDef>>> BARTER_BY_TARGET = Map.of();
     private static volatile Map<String, Map<String, BarterRecipeDef>> BARTER_BY_ID = Map.of();
+    private static volatile CatalogStockAuthorityMode STOCK_AUTHORITY_MODE =
+            CatalogStockAuthorityMode.LEGACY;
+    private static volatile CatalogStockAuthority DURABLE_STOCK_AUTHORITY;
+    private static volatile String STOCK_CUTOVER_CHECKSUM = "";
+    private static final java.util.concurrent.locks.ReentrantReadWriteLock
+            STOCK_AUTHORITY_LOCK =
+            new java.util.concurrent.locks.ReentrantReadWriteLock();
     // Per-shop locks for stock mutations (replaces class-level `synchronized`).
     private static final ConcurrentHashMap<String, java.util.concurrent.locks.ReentrantLock> STOCK_LOCKS = new ConcurrentHashMap<>();
 
@@ -91,8 +101,81 @@ public final class ShopCatalog {
      * runtime promos before clearing and restore them after the rebuild for keys that still resolve.
      * Stock is only restored when the CONFIGURED stock is unchanged between old and new definitions;
      * if the admin deliberately edited a listing's stock, the freshly seeded configured value wins.
-     */
+    */
     public static void reload(MinecraftServer server) {
+        java.util.concurrent.locks.Lock lock =
+                STOCK_AUTHORITY_LOCK.writeLock();
+        lock.lock();
+        try {
+            if (STOCK_AUTHORITY_MODE
+                    != CatalogStockAuthorityMode.LEGACY) {
+                throw new IllegalStateException(
+                        "Catalog reload requires durable stock reconciliation");
+            }
+            reloadLocked(server, List.copyOf(
+                    ShopDefinitionLoader.loadAll()));
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public static void reloadDurable(
+            MinecraftServer server,
+            java.util.function.Consumer<List<ShopDefinition>> reconciler
+    ) {
+        java.util.concurrent.locks.Lock lock =
+                STOCK_AUTHORITY_LOCK.writeLock();
+        lock.lock();
+        try {
+            if (STOCK_AUTHORITY_MODE
+                    != CatalogStockAuthorityMode.DURABLE) {
+                throw new IllegalStateException(
+                        "Durable catalog stock is not active");
+            }
+            List<ShopDefinition> definitions = List.copyOf(
+                    ShopDefinitionLoader.loadAll());
+            java.util.Objects.requireNonNull(reconciler,
+                    "reconciler").accept(definitions);
+            publishDurableDefinitionsLocked(server, definitions);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public static void publishDurableDefinitions(
+            MinecraftServer server,
+            List<ShopDefinition> definitions
+    ) {
+        java.util.concurrent.locks.Lock lock =
+                STOCK_AUTHORITY_LOCK.writeLock();
+        lock.lock();
+        try {
+            if (STOCK_AUTHORITY_MODE
+                    != CatalogStockAuthorityMode.DURABLE) {
+                throw new IllegalStateException(
+                        "Durable catalog stock is not active");
+            }
+            publishDurableDefinitionsLocked(server,
+                    List.copyOf(java.util.Objects.requireNonNull(
+                            definitions, "definitions")));
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private static void publishDurableDefinitionsLocked(
+            MinecraftServer server,
+            List<ShopDefinition> definitions
+    ) {
+        reloadLocked(server, definitions);
+        STOCKS.clear();
+        STOCK_LOCKS.clear();
+    }
+
+    private static void reloadLocked(
+            MinecraftServer server,
+            List<ShopDefinition> definitions
+    ) {
         // Snapshot live state keyed by (shopId, resolutionKey) before wiping.
         Map<String, Map<String, Integer>> oldLiveStocks = new LinkedHashMap<>();
         STOCKS.forEach((shopId, byKey) -> oldLiveStocks.put(shopId, new java.util.HashMap<>(byKey)));
@@ -112,7 +195,7 @@ public final class ShopCatalog {
         Map<String, Map<String, List<BarterRecipeDef>>> barterByTargetIndex = new LinkedHashMap<>();
         Map<String, Map<String, BarterRecipeDef>> barterByIdIndex = new LinkedHashMap<>();
 
-        for (ShopDefinition def : ShopDefinitionLoader.loadAll()) {
+        for (ShopDefinition def : definitions) {
             CATALOG.put(def.shopId(), def);
 
             ConcurrentHashMap<String, Integer> stockMap = new ConcurrentHashMap<>();
@@ -217,18 +300,119 @@ public final class ShopCatalog {
      * world's depleted counts for any listing whose configured stock happens to match.
      */
     public static void clear() {
-        CATALOG.clear();
-        STOCKS.clear();
-        RUNTIME_PROMOS.clear();
-        RUNTIME_PROMO_CONFIGS.clear();
-        STOCK_LOCKS.clear();
-        // Reset the once-per-listing NBT warning dedup too, so a genuinely-broken listing in the
-        // next world (singleplayer) is warned about afresh rather than suppressed by a stale key.
-        NBT_WARN_EMITTED.clear();
-        CATALOG_BY_ITEM = Map.of();
-        BARTER_TARGETS = Map.of();
-        BARTER_BY_TARGET = Map.of();
-        BARTER_BY_ID = Map.of();
+        java.util.concurrent.locks.Lock lock =
+                STOCK_AUTHORITY_LOCK.writeLock();
+        lock.lock();
+        try {
+            CATALOG.clear();
+            STOCKS.clear();
+            RUNTIME_PROMOS.clear();
+            RUNTIME_PROMO_CONFIGS.clear();
+            STOCK_LOCKS.clear();
+            // Reset the NBT warning records for the next world.
+            NBT_WARN_EMITTED.clear();
+            CATALOG_BY_ITEM = Map.of();
+            BARTER_TARGETS = Map.of();
+            BARTER_BY_TARGET = Map.of();
+            BARTER_BY_ID = Map.of();
+            DURABLE_STOCK_AUTHORITY = null;
+            STOCK_CUTOVER_CHECKSUM = "";
+            STOCK_AUTHORITY_MODE = CatalogStockAuthorityMode.LEGACY;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public static void freezeStockForCutover(String checksum) {
+        java.util.concurrent.locks.Lock lock =
+                STOCK_AUTHORITY_LOCK.writeLock();
+        lock.lock();
+        try {
+            freezeStockForCutoverLocked(checksum);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public static CatalogStockSeedSnapshot captureAndFreezeStockForCutover() {
+        java.util.concurrent.locks.Lock lock =
+                STOCK_AUTHORITY_LOCK.writeLock();
+        lock.lock();
+        try {
+            if (STOCK_AUTHORITY_MODE
+                    != CatalogStockAuthorityMode.LEGACY) {
+                throw new IllegalStateException(
+                        "Catalog stock is not available for capture");
+            }
+            CatalogStockSeedSnapshot snapshot =
+                    CatalogStockSeedCapture.capture(
+                            all(), ShopCatalog::getCurrentStockLocked);
+            freezeStockForCutoverLocked(snapshot.fingerprint());
+            return snapshot;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private static void freezeStockForCutoverLocked(String checksum) {
+        String safeChecksum = requireStockChecksum(checksum);
+        if (STOCK_AUTHORITY_MODE == CatalogStockAuthorityMode.CUTOVER_FROZEN) {
+            if (!STOCK_CUTOVER_CHECKSUM.equals(safeChecksum)) {
+                throw new IllegalStateException(
+                        "Catalog stock cutover checksum conflicts");
+            }
+            return;
+        }
+        if (STOCK_AUTHORITY_MODE != CatalogStockAuthorityMode.LEGACY) {
+            throw new IllegalStateException(
+                    "Catalog stock authority is already durable");
+        }
+        STOCK_CUTOVER_CHECKSUM = safeChecksum;
+        STOCK_AUTHORITY_MODE = CatalogStockAuthorityMode.CUTOVER_FROZEN;
+    }
+
+    public static void activateDurableStockAuthority(
+            CatalogStockAuthority authority,
+            CatalogStockActivationCoverage coverage
+    ) {
+        java.util.concurrent.locks.Lock lock =
+                STOCK_AUTHORITY_LOCK.writeLock();
+        lock.lock();
+        try {
+            authority = java.util.Objects.requireNonNull(
+                    authority, "authority");
+            coverage = java.util.Objects.requireNonNull(
+                    coverage, "coverage");
+            if (!coverage.complete()) {
+                throw new IllegalStateException(
+                        "Legacy stock callers still require migration");
+            }
+            if (STOCK_AUTHORITY_MODE
+                    == CatalogStockAuthorityMode.DURABLE) {
+                if (DURABLE_STOCK_AUTHORITY != authority) {
+                    throw new IllegalStateException(
+                            "A different durable stock authority is active");
+                }
+                return;
+            }
+            if (STOCK_AUTHORITY_MODE
+                    != CatalogStockAuthorityMode.CUTOVER_FROZEN
+                    || !STOCK_CUTOVER_CHECKSUM.equals(
+                    requireStockChecksum(authority.seedChecksum()))) {
+                throw new IllegalStateException(
+                        "Catalog stock cutover is not ready for activation");
+            }
+            DURABLE_STOCK_AUTHORITY = authority;
+            STOCKS.clear();
+            STOCK_LOCKS.clear();
+            STOCK_AUTHORITY_MODE = CatalogStockAuthorityMode.DURABLE;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public static CatalogStockAuthorityMode stockAuthorityMode() {
+        return STOCK_AUTHORITY_MODE;
     }
 
     // -------------------------------------------------------------------------
@@ -240,6 +424,19 @@ public final class ShopCatalog {
      */
     public static Optional<ShopDefinition> get(String shopId) {
         return Optional.ofNullable(CATALOG.get(shopId));
+    }
+
+    public static Optional<com.enviouse.futureshops.catalog.offer
+            .ServerShopOfferListing> getOffer(
+            String shopId,
+            String listingId
+    ) {
+        if (listingId == null || listingId.isBlank()) {
+            return Optional.empty();
+        }
+        return get(shopId).flatMap(definition ->
+                definition.offers().stream().filter(offer ->
+                        offer.listingId().equals(listingId)).findFirst());
     }
 
     /** Live view of all loaded shop definitions. Read-only — do not mutate. */
@@ -350,94 +547,144 @@ public final class ShopCatalog {
     }
 
     public static int getCurrentStock(String shopId, String itemId) {
+        java.util.concurrent.locks.Lock lock =
+                STOCK_AUTHORITY_LOCK.readLock();
+        lock.lock();
+        try {
+            return getCurrentStockLocked(shopId, itemId);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private static int getCurrentStockLocked(
+            String shopId,
+            String itemId
+    ) {
         return getItem(shopId, itemId)
                 .map(item -> {
+                    CatalogStockAuthorityMode mode = STOCK_AUTHORITY_MODE;
+                    if (mode == CatalogStockAuthorityMode.CUTOVER_FROZEN) {
+                        throw new IllegalStateException(
+                                "Catalog stock is frozen for durable cutover");
+                    }
                     if (item.isUnlimited()) {
                         return -1;
                     }
+                    if (mode == CatalogStockAuthorityMode.DURABLE) {
+                        return requireDurableStockAuthority().currentStock(
+                                resolveShopId(shopId), item.resolutionKey());
+                    }
                     return STOCKS.getOrDefault(resolveShopId(shopId), new ConcurrentHashMap<>())
-                            .getOrDefault(itemId, item.stock());
+                            .getOrDefault(item.resolutionKey(), item.stock());
                 })
                 .orElse(-1);
     }
 
     public static boolean reserveStock(String shopId, String itemId, int quantity) {
-        if (quantity <= 0) {
-            return false;
-        }
-
-        Optional<ItemDef> itemOpt = getItem(shopId, itemId);
-        if (itemOpt.isEmpty()) {
-            return false;
-        }
-
-        ItemDef item = itemOpt.get();
-        if (item.isUnlimited()) {
-            return true;
-        }
-
-        String resolvedShopId = resolveShopId(shopId);
-        java.util.concurrent.locks.ReentrantLock lock = stockLockFor(resolvedShopId);
-        lock.lock();
+        java.util.concurrent.locks.Lock authorityLock =
+                STOCK_AUTHORITY_LOCK.readLock();
+        authorityLock.lock();
         try {
-            ConcurrentHashMap<String, Integer> stockMap = STOCKS.computeIfAbsent(resolvedShopId, ignored -> new ConcurrentHashMap<>());
-            int available = stockMap.getOrDefault(itemId, item.stock());
-            if (available < quantity) {
+            requireLegacyStockMutation();
+            if (quantity <= 0) {
                 return false;
             }
-            stockMap.put(itemId, available - quantity);
-            return true;
+
+            Optional<ItemDef> itemOpt = getItem(shopId, itemId);
+            if (itemOpt.isEmpty()) {
+                return false;
+            }
+
+            ItemDef item = itemOpt.get();
+            if (item.isUnlimited()) {
+                return true;
+            }
+
+            String resolvedShopId = resolveShopId(shopId);
+            java.util.concurrent.locks.ReentrantLock lock =
+                    stockLockFor(resolvedShopId);
+            lock.lock();
+            try {
+                ConcurrentHashMap<String, Integer> stockMap = STOCKS.computeIfAbsent(resolvedShopId, ignored -> new ConcurrentHashMap<>());
+                int available = stockMap.getOrDefault(itemId, item.stock());
+                if (available < quantity) {
+                    return false;
+                }
+                stockMap.put(itemId, available - quantity);
+                return true;
+            } finally {
+                lock.unlock();
+            }
         } finally {
-            lock.unlock();
+            authorityLock.unlock();
         }
     }
 
     public static void restoreStock(String shopId, String itemId, int quantity) {
-        if (quantity <= 0) {
-            return;
-        }
-
-        getItem(shopId, itemId).ifPresent(item -> {
-            if (item.isUnlimited()) {
+        java.util.concurrent.locks.Lock authorityLock =
+                STOCK_AUTHORITY_LOCK.readLock();
+        authorityLock.lock();
+        try {
+            requireLegacyStockMutation();
+            if (quantity <= 0) {
                 return;
             }
 
+            getItem(shopId, itemId).ifPresent(item -> {
+                if (item.isUnlimited()) {
+                    return;
+                }
+
+                String resolvedShopId = resolveShopId(shopId);
+                java.util.concurrent.locks.ReentrantLock lock =
+                        stockLockFor(resolvedShopId);
+                lock.lock();
+                try {
+                    ConcurrentHashMap<String, Integer> stockMap = STOCKS.computeIfAbsent(resolvedShopId, ignored -> new ConcurrentHashMap<>());
+                    stockMap.merge(itemId, quantity, Integer::sum);
+                } finally {
+                    lock.unlock();
+                }
+            });
+        } finally {
+            authorityLock.unlock();
+        }
+    }
+
+    public static boolean incrementStock(String shopId, String itemId, int quantity) {
+        java.util.concurrent.locks.Lock authorityLock =
+                STOCK_AUTHORITY_LOCK.readLock();
+        authorityLock.lock();
+        try {
+            requireLegacyStockMutation();
+            if (quantity <= 0) {
+                return false;
+            }
+
+            Optional<ItemDef> itemOpt = getItem(shopId, itemId);
+            if (itemOpt.isEmpty()) {
+                return false;
+            }
+
+            ItemDef item = itemOpt.get();
+            if (item.isUnlimited()) {
+                return true;
+            }
+
             String resolvedShopId = resolveShopId(shopId);
-            java.util.concurrent.locks.ReentrantLock lock = stockLockFor(resolvedShopId);
+            java.util.concurrent.locks.ReentrantLock lock =
+                    stockLockFor(resolvedShopId);
             lock.lock();
             try {
                 ConcurrentHashMap<String, Integer> stockMap = STOCKS.computeIfAbsent(resolvedShopId, ignored -> new ConcurrentHashMap<>());
                 stockMap.merge(itemId, quantity, Integer::sum);
+                return true;
             } finally {
                 lock.unlock();
             }
-        });
-    }
-
-    public static boolean incrementStock(String shopId, String itemId, int quantity) {
-        if (quantity <= 0) {
-            return false;
-        }
-
-        Optional<ItemDef> itemOpt = getItem(shopId, itemId);
-        if (itemOpt.isEmpty()) {
-            return false;
-        }
-
-        ItemDef item = itemOpt.get();
-        if (item.isUnlimited()) {
-            return true;
-        }
-
-        String resolvedShopId = resolveShopId(shopId);
-        java.util.concurrent.locks.ReentrantLock lock = stockLockFor(resolvedShopId);
-        lock.lock();
-        try {
-            ConcurrentHashMap<String, Integer> stockMap = STOCKS.computeIfAbsent(resolvedShopId, ignored -> new ConcurrentHashMap<>());
-            stockMap.merge(itemId, quantity, Integer::sum);
-            return true;
         } finally {
-            lock.unlock();
+            authorityLock.unlock();
         }
     }
 
@@ -445,24 +692,59 @@ public final class ShopCatalog {
      * Sets the stock for an item to an exact value. Used by the stock refresh scheduler (spec §31).
      */
     public static void setStock(String shopId, String itemId, int newStock) {
-        Optional<ItemDef> itemOpt = getItem(shopId, itemId);
-        if (itemOpt.isEmpty()) return;
-        ItemDef item = itemOpt.get();
-        if (item.isUnlimited()) return;
-
-        String resolvedShopId = resolveShopId(shopId);
-        java.util.concurrent.locks.ReentrantLock lock = stockLockFor(resolvedShopId);
-        lock.lock();
+        java.util.concurrent.locks.Lock authorityLock =
+                STOCK_AUTHORITY_LOCK.readLock();
+        authorityLock.lock();
         try {
-            ConcurrentHashMap<String, Integer> stockMap = STOCKS.computeIfAbsent(resolvedShopId, ignored -> new ConcurrentHashMap<>());
-            stockMap.put(itemId, newStock);
+            requireLegacyStockMutation();
+            Optional<ItemDef> itemOpt = getItem(shopId, itemId);
+            if (itemOpt.isEmpty()) return;
+            ItemDef item = itemOpt.get();
+            if (item.isUnlimited()) return;
+
+            String resolvedShopId = resolveShopId(shopId);
+            java.util.concurrent.locks.ReentrantLock lock =
+                    stockLockFor(resolvedShopId);
+            lock.lock();
+            try {
+                ConcurrentHashMap<String, Integer> stockMap = STOCKS.computeIfAbsent(resolvedShopId, ignored -> new ConcurrentHashMap<>());
+                stockMap.put(itemId, newStock);
+            } finally {
+                lock.unlock();
+            }
         } finally {
-            lock.unlock();
+            authorityLock.unlock();
         }
     }
 
     private static java.util.concurrent.locks.ReentrantLock stockLockFor(String resolvedShopId) {
         return STOCK_LOCKS.computeIfAbsent(resolvedShopId, ignored -> new java.util.concurrent.locks.ReentrantLock());
+    }
+
+    private static void requireLegacyStockMutation() {
+        if (STOCK_AUTHORITY_MODE != CatalogStockAuthorityMode.LEGACY) {
+            throw new IllegalStateException(
+                    "Legacy catalog stock mutation is disabled");
+        }
+    }
+
+    private static CatalogStockAuthority requireDurableStockAuthority() {
+        CatalogStockAuthority authority = DURABLE_STOCK_AUTHORITY;
+        if (authority == null) {
+            throw new IllegalStateException(
+                    "Durable catalog stock authority is unavailable");
+        }
+        return authority;
+    }
+
+    private static String requireStockChecksum(String checksum) {
+        String safeChecksum = java.util.Objects.requireNonNull(
+                checksum, "checksum");
+        if (!safeChecksum.matches("[0-9a-f]{64}")) {
+            throw new IllegalArgumentException(
+                    "Catalog stock cutover checksum is invalid");
+        }
+        return safeChecksum;
     }
 
     public static List<CatalogCategory> buildCategories(String shopId) {
@@ -589,7 +871,10 @@ public final class ShopCatalog {
         }
 
         // Look up stock map and barter targets once, outside the per-item loop.
-        ConcurrentHashMap<String, Integer> stockMap = STOCKS.get(resolvedShopId);
+        CatalogStockAuthorityMode stockMode = STOCK_AUTHORITY_MODE;
+        ConcurrentHashMap<String, Integer> stockMap =
+                stockMode == CatalogStockAuthorityMode.LEGACY
+                        ? STOCKS.get(resolvedShopId) : null;
         Set<String> barterTargets = BARTER_TARGETS.getOrDefault(resolvedShopId, Set.of());
 
         long now = nowEpochSeconds();
@@ -608,9 +893,14 @@ public final class ShopCatalog {
                     // resolution key — flag exactly the listing the recipe rewards (legacy
                     // single-variant entries have resolutionKey == itemId, so nothing changes).
                     boolean hasBarterRecipes = barterTargets.contains(item.resolutionKey());
-                    int stock = item.isUnlimited()
-                            ? -1
-                            : (stockMap == null ? item.stock() : stockMap.getOrDefault(item.resolutionKey(), item.stock()));
+                    int legacyStock = stockMap == null ? item.stock()
+                            : stockMap.getOrDefault(
+                            item.resolutionKey(), item.stock());
+                    int stock = resolveDisplayStock(
+                            item, stockMode, legacyStock,
+                            () -> getCurrentStock(
+                                    resolvedShopId,
+                                    item.resolutionKey()));
                     CatalogItem catalogItem = item.toCatalogItem(stock, hasPromo, promoPrice, hasBarterRecipes);
 
                     // Override category from admin assignments if the item has no explicit category.
@@ -633,6 +923,28 @@ public final class ShopCatalog {
                     return catalogItem;
                 })
                 .toList();
+    }
+
+    static int resolveDisplayStock(
+            ItemDef item,
+            CatalogStockAuthorityMode mode,
+            int legacyStock,
+            java.util.function.IntSupplier durableStock
+    ) {
+        if (item.isUnlimited()) {
+            return -1;
+        }
+        if (mode == CatalogStockAuthorityMode.LEGACY) {
+            return legacyStock;
+        }
+        if (mode == CatalogStockAuthorityMode.CUTOVER_FROZEN) {
+            return 0;
+        }
+        try {
+            return durableStock.getAsInt();
+        } catch (IllegalStateException exception) {
+            return 0;
+        }
     }
 
     public static long getEffectiveBuyPrice(String shopId, String itemId) {
@@ -712,27 +1024,23 @@ public final class ShopCatalog {
                     if (promoPrice > 0) unit = promoPrice;
                 }
             }
-            return unit <= 0L ? 0L : unit * quantity;
+            return unit <= 0L ? 0L : Math.multiplyExact(unit, quantity);
         }
 
         String type = config.promoType();
         if ("BUY_X_GET_Y".equals(type) && config.buyX() > 0 && config.buyY() > 0) {
-            int group = config.buyX() + config.buyY();
+            int group = Math.addExact(config.buyX(), config.buyY());
             int fullGroups = quantity / group;
             int remainder = quantity % group;
-            int payable = fullGroups * config.buyX() + Math.min(remainder, config.buyX());
-            return basePrice * payable;
+            int payable = Math.addExact(
+                    Math.multiplyExact(fullGroups, config.buyX()),
+                    Math.min(remainder, config.buyX()));
+            return Math.multiplyExact(basePrice, payable);
         }
 
-        long discounted = switch (type) {
-            case "PERCENTAGE", "FLASH" -> Math.max(0L, Math.round(basePrice * (1.0 - config.discountValue() / 100.0)));
-            case "FLAT" -> {
-                long flatMinor = Math.round(config.discountValue() * Math.pow(10, com.enviouse.futureshops.Config.economyCurrencyDecimals));
-                yield Math.max(0L, basePrice - flatMinor);
-            }
-            default -> basePrice;
-        };
-        return discounted * quantity;
+        long discounted = applyDiscount(
+                basePrice, type, config.discountValue());
+        return Math.multiplyExact(discounted, quantity);
     }
 
     /**
@@ -837,12 +1145,42 @@ public final class ShopCatalog {
     }
 
     private static long applyPromo(long basePriceMinorUnits, PromoDef promo) {
-        return switch (promo.promoType()) {
-            case "PERCENTAGE", "FLASH" ->
-                    Math.max(0L, Math.round(basePriceMinorUnits * (1.0 - promo.discountValue() / 100.0)));
+        return applyDiscount(basePriceMinorUnits, promo.promoType(),
+                promo.discountValue());
+    }
+
+    static long applyDiscount(
+            long basePriceMinorUnits,
+            String promotionType,
+            double discountValue
+    ) {
+        if (basePriceMinorUnits < 0L || !Double.isFinite(discountValue)) {
+            throw new IllegalArgumentException("Promotion price is invalid");
+        }
+        java.math.BigDecimal discount =
+                java.math.BigDecimal.valueOf(discountValue);
+        if (discount.signum() < 0) {
+            throw new IllegalArgumentException("Promotion discount is invalid");
+        }
+        return switch (promotionType) {
+            case "PERCENTAGE", "FLASH" -> {
+                java.math.BigDecimal multiplier = java.math.BigDecimal.ONE
+                        .subtract(discount.movePointLeft(2));
+                long discounted = java.math.BigDecimal
+                        .valueOf(basePriceMinorUnits)
+                        .multiply(multiplier)
+                        .setScale(0, java.math.RoundingMode.HALF_UP)
+                        .longValueExact();
+                yield Math.max(0L, discounted);
+            }
             case "FLAT" -> {
-                long flatMinor = Math.round(promo.discountValue() * Math.pow(10, com.enviouse.futureshops.Config.economyCurrencyDecimals));
-                yield Math.max(0L, basePriceMinorUnits - flatMinor);
+                long flatMinor = discount.movePointRight(
+                                com.enviouse.futureshops.Config
+                                        .economyCurrencyDecimals)
+                        .setScale(0, java.math.RoundingMode.HALF_UP)
+                        .longValueExact();
+                yield Math.max(0L,
+                        Math.subtractExact(basePriceMinorUnits, flatMinor));
             }
             default -> basePriceMinorUnits;
         };
@@ -864,4 +1202,3 @@ public final class ShopCatalog {
         }
     }
 }
-

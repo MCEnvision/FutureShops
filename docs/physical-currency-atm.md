@@ -1,7 +1,7 @@
 # Physical currency and ATM
 
 FutureShops keeps the account balance separate from the physical item used as cash. The active
-physical provider is configured in `futureshops-common.toml` with `currency.provider`.
+physical provider is configured in `config/futureshops/futureshops-common.toml` with `currency.provider`.
 
 ## Opening the ATM
 
@@ -18,6 +18,52 @@ The ATM advertises up to 32 denominations from a custom provider (largest first)
 network request bounded while still allowing far more bill types than a practical currency needs.
 
 The existing `/withdraw <amount> [yes|no]` command uses the same withdrawal engine as the ATM.
+
+## Depositing physical currency
+
+Select **Deposit**, choose Inventory, Main hand, or Off hand, and enter an exact amount. Leave the
+amount blank to deposit all eligible currency from the selected source. The server binds the
+request UUID to the provider signature, source, amount, player, and deterministic escrow
+transaction before inventory mutation. A replay can inspect the original request but cannot
+create a second credit.
+
+Protected FutureShops bills retain exact mint evidence through intent, inventory mutation,
+settlement, and cleanup. Foreign provider items use the same durable request and inventory
+reconciliation contract, but FutureShops cannot prove how the foreign mod created those items.
+
+## Deposit recovery
+
+Protocol 57 retains the server authoritative ATM recovery summary introduced by protocol 52
+whenever the player has active deposit evidence. It contains the original request UUID,
+deterministic transaction UUID, amount, and recovery state. Reopening the ATM or reconnecting
+adopts this identity before another deposit can be enabled.
+
+- **Check recovery** sends only the original request and transaction UUID. It cannot submit an
+  amount or currency source and cannot consume a second deposit.
+- Deposit and Withdrawal tabs remain usable while recovery is retryable.
+- **Collect cash** remains available for committed physical cash claims while deposit recovery is
+  retryable.
+- The deposit panel wraps the recovery state and complete transaction UUID. **Copy** places the
+  full handle on the clipboard.
+- `COMPLETED` refreshes the wallet and claims. `REFUNDED` reports the exact value that remained
+  in the original physical currency inventory. `MANUAL_REVIEW` stops client retries and requires
+  operator inspection.
+
+Operators can run `/marketadmin inspect <transactionId>` with the copied handle. The command is
+read only and reports the request, transaction state, participants, currency provider, durable
+evidence phase, amount, claims, retry schedule, last error, and safe next action. Do not delete
+player data, escrow data, journals, checkpoints, or claims to clear a recovery banner.
+
+Cash claim delivery hashes item NBT canonically, including capability data, and verifies only the
+inventory slots changed by that delivery. Unrelated modded items can therefore normalize or change
+without turning a completed cash receipt into an unknown result. Version one receipts remain
+readable under their original hash contract.
+
+If the escrow runtime enters maintenance, use `/marketadmin maintenance status` and
+`/marketadmin maintenance verify`. Resume only with
+`/marketadmin maintenance resume confirm <reason>` after the verification reports both recovery
+clear and conservation verified. The command uses the current journal sequence and global state
+fingerprint. It cannot force past an unsafe condition.
 
 ## Built-in protected money
 

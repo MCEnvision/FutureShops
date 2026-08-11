@@ -179,6 +179,8 @@ public final class MaintenanceRepairCommandCodec {
                             readExact(input, MaintenanceStateFingerprint.BYTE_LENGTH)),
                     readCustodyDisposition(input.readUnsignedByte()));
             case QUARANTINE_CUSTODY -> new MaintenanceRepairPayload.CustodyQuarantine();
+            case BALANCE_MUTATION -> throw new IllegalArgumentException(
+                    "Balance audit is not a maintenance payload");
         };
     }
 
@@ -252,6 +254,8 @@ public final class MaintenanceRepairCommandCodec {
             case REPAIR_CLAIM -> 7;
             case RECONCILE_CUSTODY -> 8;
             case QUARANTINE_CUSTODY -> 9;
+            case BALANCE_MUTATION -> throw new IllegalArgumentException(
+                    "Balance audit is not a maintenance action");
         };
     }
 

@@ -52,6 +52,28 @@ class EscrowJournalCodecTest {
                 .PROTECTED_CASH_REDEMPTION_SETTLEMENT.wireId());
         assertEquals(19, EscrowJournalEventType
                 .PROTECTED_CASH_REDEMPTION_CANCELLATION.wireId());
+        assertEquals(23,
+                EscrowJournalEventType.PLAYER_PAYMENT_COMMIT.wireId());
+        assertEquals(24,
+                EscrowJournalEventType.STOCK_MUTATION.wireId());
+        assertEquals(25, EscrowJournalEventType
+                .SERVER_SHOP_PURCHASE_COMMIT.wireId());
+        assertEquals(26, EscrowJournalEventType
+                .ITEM_INVENTORY_MUTATION.wireId());
+        assertEquals(27, EscrowJournalEventType
+                .EXACT_ITEM_CLAIM_DELIVERY_COMMIT.wireId());
+        assertEquals(28, EscrowJournalEventType
+                .ITEM_INVENTORY_QUARANTINE_ADMINISTRATION.wireId());
+        assertEquals(29, EscrowJournalEventType
+                .ITEM_INVENTORY_JOURNAL_COMPACTION.wireId());
+        assertEquals(32, EscrowJournalEventType
+                .AUCTION_HOUSE_MUTATION.wireId());
+        assertEquals(34, EscrowJournalEventType
+                .AUCTION_HOUSE_ESCROW_LIFECYCLE.wireId());
+        assertEquals(37, EscrowJournalEventType
+                .MARKET_CONTROL_MUTATION.wireId());
+        assertEquals(38, EscrowJournalEventType
+                .SERVER_SHOP_FUNDING_RELEASE.wireId());
         assertEquals(EscrowJournalEventType.ATM_WITHDRAWAL_COMMIT,
                 EscrowJournalEventType.fromWireId(14));
         assertEquals(
@@ -69,6 +91,32 @@ class EscrowJournalCodecTest {
         assertEquals(EscrowJournalEventType
                         .PROTECTED_CASH_REDEMPTION_CANCELLATION,
                 EscrowJournalEventType.fromWireId(19));
+        assertEquals(EscrowJournalEventType.PLAYER_PAYMENT_COMMIT,
+                EscrowJournalEventType.fromWireId(23));
+        assertEquals(EscrowJournalEventType.STOCK_MUTATION,
+                EscrowJournalEventType.fromWireId(24));
+        assertEquals(EscrowJournalEventType.SERVER_SHOP_PURCHASE_COMMIT,
+                EscrowJournalEventType.fromWireId(25));
+        assertEquals(EscrowJournalEventType.ITEM_INVENTORY_MUTATION,
+                EscrowJournalEventType.fromWireId(26));
+        assertEquals(EscrowJournalEventType
+                        .EXACT_ITEM_CLAIM_DELIVERY_COMMIT,
+                EscrowJournalEventType.fromWireId(27));
+        assertEquals(EscrowJournalEventType
+                        .ITEM_INVENTORY_QUARANTINE_ADMINISTRATION,
+                EscrowJournalEventType.fromWireId(28));
+        assertEquals(EscrowJournalEventType
+                        .ITEM_INVENTORY_JOURNAL_COMPACTION,
+                EscrowJournalEventType.fromWireId(29));
+        assertEquals(EscrowJournalEventType.AUCTION_HOUSE_MUTATION,
+                EscrowJournalEventType.fromWireId(32));
+        assertEquals(EscrowJournalEventType
+                        .AUCTION_HOUSE_ESCROW_LIFECYCLE,
+                EscrowJournalEventType.fromWireId(34));
+        assertEquals(EscrowJournalEventType.MARKET_CONTROL_MUTATION,
+                EscrowJournalEventType.fromWireId(37));
+        assertEquals(EscrowJournalEventType.SERVER_SHOP_FUNDING_RELEASE,
+                EscrowJournalEventType.fromWireId(38));
     }
 
     @Test
@@ -164,14 +212,11 @@ class EscrowJournalCodecTest {
     void moneyClaimSettlementRoundTrips() {
         UUID owner = UUID.randomUUID();
         UUID claim = UUID.randomUUID();
-        UUID transaction = UUID.randomUUID();
-        ClaimDeliveryCommit delivery = new ClaimDeliveryCommit(
-                owner, claim, "claim one", 25L,
+        UUID request = UUID.randomUUID();
+        MoneyClaimSettlement settlement = MoneyClaimSettlement.create(
+                request, owner, claim, 0L, 0L, 0L,
+                25L, 100L, 4L,
                 Instant.parse("2026-07-16T12:00:00.123456789Z"));
-        LedgerTransaction ledger = new LedgerTransaction(transaction, "claim one", "claim", List.of(
-                new LedgerLeg(new LedgerAccountId(LedgerAccountType.PLAYER_CLAIM, claim.toString()), -25L),
-                new LedgerLeg(new LedgerAccountId(LedgerAccountType.PLAYER_WALLET, owner.toString()), 25L)));
-        MoneyClaimSettlement settlement = new MoneyClaimSettlement(delivery, ledger);
 
         assertEquals(settlement, MoneyClaimSettlementCodec.decode(MoneyClaimSettlementCodec.encode(settlement)));
     }
@@ -186,15 +231,19 @@ class EscrowJournalCodecTest {
     void moneyClaimSettlementRequiresOneSharedRequestKey() {
         UUID owner = UUID.randomUUID();
         UUID claim = UUID.randomUUID();
+        UUID request = UUID.randomUUID();
         ClaimDeliveryCommit delivery = new ClaimDeliveryCommit(
                 owner, claim, "claim one", 25L,
                 Instant.parse("2026-07-16T12:00:00.123456789Z"));
-        LedgerTransaction ledger = new LedgerTransaction(UUID.randomUUID(), "ledger one", "claim", List.of(
+        LedgerTransaction ledger = new LedgerTransaction(request, "ledger one",
+                MoneyClaimSettlement.LEDGER_REASON, List.of(
                 new LedgerLeg(new LedgerAccountId(LedgerAccountType.PLAYER_CLAIM, claim.toString()), -25L),
                 new LedgerLeg(new LedgerAccountId(LedgerAccountType.PLAYER_WALLET, owner.toString()), 25L)));
 
         assertThrows(IllegalArgumentException.class,
-                () -> new MoneyClaimSettlement(delivery, ledger));
+                () -> new MoneyClaimSettlement(
+                        request, 0L, 0L, 0L, 25L,
+                        100L, 4L, delivery, ledger));
     }
 
     @Test

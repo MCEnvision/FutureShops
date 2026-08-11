@@ -11,6 +11,7 @@ import com.enviouse.futureshops.server.escrow.custody.CustodyTransferEvidence;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.junit.jupiter.api.BeforeAll;
@@ -28,6 +29,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -64,6 +66,26 @@ class PlayerInventoryDeliveryTest {
     }
 
     @Test
+    void semanticNbtHashIgnoresCompoundInsertionOrder() {
+        ItemStack first = new ItemStack(Items.EMERALD, 1);
+        CompoundTag firstCapability = new CompoundTag();
+        firstCapability.putString("zeta", "same");
+        firstCapability.putInt("alpha", 7);
+        first.getOrCreateTag().put("ForgeCaps", firstCapability);
+
+        ItemStack second = new ItemStack(Items.EMERALD, 1);
+        CompoundTag secondCapability = new CompoundTag();
+        secondCapability.putInt("alpha", 7);
+        secondCapability.putString("zeta", "same");
+        second.getOrCreateTag().put("ForgeCaps", secondCapability);
+
+        assertArrayEquals(PlayerInventoryHashes.hashSlot(first),
+                PlayerInventoryHashes.hashSlot(second));
+        assertArrayEquals(PlayerInventoryHashes.hashSlot(first),
+                PlayerInventoryHashes.hashSlot(first.copy()));
+    }
+
+    @Test
     void fullInventoryRejectsWithoutAChangedSlot() {
         List<ItemStack> inventory = new ArrayList<>();
         for (int index = 0;
@@ -79,6 +101,34 @@ class PlayerInventoryDeliveryTest {
         assertFalse(plan.fullyFits());
         assertEquals(0, plan.insertedCount());
         assertTrue(plan.changes().isEmpty());
+    }
+
+    @Test
+    void applyingAndRestoringPreserveUnrelatedSlots() {
+        Inventory inventory = new Inventory(null);
+        inventory.items.set(35, new ItemStack(Items.STONE, 1));
+        PlayerInventoryInsertionPlan plan =
+                PlayerInventoryInsertionPlan.plan(
+                        PlayerInventoryInsertionPlan.mainSlots(inventory),
+                        new ItemStack(Items.EMERALD, 2));
+
+        inventory.items.set(35, new ItemStack(Items.DIAMOND, 3));
+        assertTrue(plan.matchesBefore(inventory));
+        plan.apply(inventory);
+
+        assertEquals(2, inventory.items.get(0).getCount());
+        assertEquals(Items.EMERALD, inventory.items.get(0).getItem());
+        assertEquals(3, inventory.items.get(35).getCount());
+        assertEquals(Items.DIAMOND, inventory.items.get(35).getItem());
+
+        inventory.items.set(35, new ItemStack(Items.GOLD_INGOT, 4));
+        assertTrue(plan.matchesAfter(inventory));
+        plan.restore(inventory);
+
+        assertTrue(inventory.items.get(0).isEmpty());
+        assertEquals(4, inventory.items.get(35).getCount());
+        assertEquals(Items.GOLD_INGOT,
+                inventory.items.get(35).getItem());
     }
 
     @Test
@@ -137,12 +187,86 @@ class PlayerInventoryDeliveryTest {
                 inspection.status());
         assertEquals(receipt, inspection.receipt().orElseThrow());
 
+        List<ItemStack> unrelatedChange = new ArrayList<>(
+                insertion.resultSlots());
+        unrelatedChange.set(35, new ItemStack(Items.STONE, 1));
+        NbtIo.writeCompressed(playerData(unrelatedChange, receipt),
+                playerFile.toFile());
+        PlayerInventoryReceiptInspection unrelatedInspection =
+                new PlayerInventoryReceiptStore().inspect(
+                        playerFile, token);
+        assertEquals(CustodyAdapterInspectionStatus.APPLIED,
+                unrelatedInspection.status());
+
+        List<ItemStack> changedDeliverySlot = new ArrayList<>(
+                unrelatedChange);
+        changedDeliverySlot.set(insertion.changes().get(0).slot(),
+                new ItemStack(Items.DIAMOND, 1));
+        NbtIo.writeCompressed(playerData(changedDeliverySlot, receipt),
+                playerFile.toFile());
+        PlayerInventoryReceiptInspection ambiguousInspection =
+                new PlayerInventoryReceiptStore().inspect(
+                        playerFile, token);
+        assertEquals(CustodyAdapterInspectionStatus.UNKNOWN,
+                ambiguousInspection.status());
+
         CompoundTag tampered = receipt.toTag();
         byte[] digest = tampered.getByteArray("digest");
         digest[0] ^= 1;
         tampered.putByteArray("digest", digest);
         assertThrows(IllegalArgumentException.class,
                 () -> PlayerInventoryDeliveryReceipt.fromTag(tampered));
+    }
+
+    @Test
+    void legacyVersionOneReceiptRemainsReadable() throws Exception {
+        List<ItemStack> before = emptyInventory();
+        List<ItemStack> after = new ArrayList<>(before);
+        after.set(0, new ItemStack(Items.EMERALD, 3));
+        UUID playerId = UUID.randomUUID();
+        UUID claimId = UUID.randomUUID();
+        UUID transactionId = UUID.randomUUID();
+        UUID batchId = UUID.randomUUID();
+        UUID lotId = UUID.randomUUID();
+        String requestKey = "legacy.cash.claim." + claimId;
+        byte[] asset = PlayerInventoryHashes.hashText("legacy asset");
+        PlayerInventoryDeliveryToken token =
+                PlayerInventoryDeliveryToken.createLegacy(
+                        playerId, claimId, transactionId, batchId, lotId,
+                        requestKey, asset,
+                        PlayerInventoryHashes.hashInventoryLegacy(before),
+                        PlayerInventoryHashes.hashInventoryLegacy(after));
+        PlayerInventorySlotChange change =
+                new PlayerInventorySlotChange(0,
+                        PlayerInventoryHashes.hashSlotLegacy(before.get(0)),
+                        PlayerInventoryHashes.hashSlotLegacy(after.get(0)));
+        CustodyTransferEvidence evidence = new CustodyTransferEvidence(
+                new CustodyEndpointEvidence("legacy.source",
+                        CustodyAdapterCapability.RECONCILABLE,
+                        playerId.toString(), claimId.toString(),
+                        PlayerInventoryHashes.hashText("held before"),
+                        PlayerInventoryHashes.hashText("held after"),
+                        "legacy source token"),
+                new CustodyEndpointEvidence(
+                        "futureshops.player_inventory",
+                        CustodyAdapterCapability.RECONCILABLE,
+                        playerId.toString(), "inventory.main",
+                        token.beforeInventoryHash(),
+                        token.afterInventoryHash(), token.encode()));
+        PlayerInventoryDeliveryReceipt receipt =
+                PlayerInventoryDeliveryReceipt.create(token, requestKey,
+                        List.of(change), evidence,
+                        Instant.parse("2026-07-18T14:00:00Z"));
+
+        assertEquals(1, receipt.version());
+        assertEquals(receipt,
+                PlayerInventoryDeliveryReceipt.fromTag(receipt.toTag()));
+        Path playerFile = temporaryDirectory.resolve(playerId + ".dat");
+        NbtIo.writeCompressed(playerData(after, receipt),
+                playerFile.toFile());
+        assertEquals(CustodyAdapterInspectionStatus.APPLIED,
+                new PlayerInventoryReceiptStore().inspect(
+                        playerFile, token).status());
     }
 
     @Test

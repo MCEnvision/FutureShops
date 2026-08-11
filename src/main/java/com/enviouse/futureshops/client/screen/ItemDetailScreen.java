@@ -1,7 +1,14 @@
 package com.enviouse.futureshops.client.screen;
 
 import com.enviouse.futureshops.client.ShopClientState;
+import com.enviouse.futureshops.client.ShopClientPacketHandler;
 import com.enviouse.futureshops.client.ShopColors;
+import com.enviouse.futureshops.catalog.offer.AcquireOfferOption;
+import com.enviouse.futureshops.catalog.offer.OfferAction;
+import com.enviouse.futureshops.catalog.offer.OfferItemComponent;
+import com.enviouse.futureshops.catalog.offer.OfferLimitPolicy;
+import com.enviouse.futureshops.catalog.offer.SellOfferOption;
+import com.enviouse.futureshops.catalog.offer.ServerShopOfferListing;
 import com.enviouse.futureshops.data.CatalogBarterIngredient;
 import com.enviouse.futureshops.data.CatalogBarterRecipe;
 import com.enviouse.futureshops.data.CatalogItem;
@@ -17,6 +24,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Item detail view — redesigned with bottom-aligned controls and modern layout.
@@ -47,6 +55,10 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
 
     // Spec §8: Confirmation modal overlay
     private ConfirmationModal confirmationModal = null;
+    private java.util.UUID pendingSellRequestId;
+    private java.util.UUID pendingOfferRequestId;
+    private int bundleComponentScroll;
+    private int[] bundleComponentRect;
 
     public ItemDetailScreen(Screen parent, String listingId) {
         super(Component.translatable("gui.futureshops.detail.title"));
@@ -56,6 +68,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
 
     @Override
     protected void init() {
+        int preservedQuantity = quantityBox == null ? 1 : getQuantity();
         // Centered dialog (Nocturne item-detail): a compact box over the dimmed ground, capped so
         // it reads as a modal rather than a full-screen takeover. Layout supports down to 280 wide.
         guiW = Math.min(Math.max(300, this.width - 20), 380);
@@ -73,7 +86,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
 
         quantityBox = new EditBox(this.font, previewCenterX - 30, qtyY, 36, 14,
                 Component.translatable("gui.futureshops.detail.quantity"));
-        quantityBox.setValue("1");
+        quantityBox.setValue(Integer.toString(preservedQuantity));
         quantityBox.setMaxLength(4);
         // Only allow digits — prevents junk input without fighting the user mid-type.
         quantityBox.setFilter(s -> s.isEmpty() || s.chars().allMatch(Character::isDigit));
@@ -121,11 +134,278 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                 I18n.get("gui.futureshops.item_detail.earn", totalStr, ShopClientState.getCurrencyName()),
                 modal -> {
                     modal.setProcessing();
+                    pendingSellRequestId = java.util.UUID.randomUUID();
                     ShopPackets.CHANNEL.sendToServer(new C2SSellRequestPacket(
-                            ShopClientState.getActiveShopId(), item.listingId(), qty));
+                            ShopClientState.getActiveShopId(), item.listingId(),
+                            qty, pendingSellRequestId));
                 },
                 () -> confirmationModal = null
         );
+    }
+
+    void openAcquireOfferConfirm(AcquireOfferOption option) {
+        ServerShopOfferListing offer = currentOffer();
+        if (offer == null || option == null
+                || !offer.acquireOptions().contains(option)) {
+            return;
+        }
+        int quantity = getQuantity();
+        List<ConfirmationModal.SummaryLine> summary =
+                offer.outputs().stream().map(component ->
+                        componentLine(component,
+                                Math.multiplyExact(
+                                        component.count(),
+                                        option.outputMultiplier()
+                                                * quantity),
+                                "gui.futureshops.offer.receive"))
+                        .collect(java.util.stream.Collectors
+                                .toCollection(ArrayList::new));
+        prependOfferContext(summary, offer,
+                option.label().isBlank()
+                        ? option.optionId() : option.label(),
+                option.limits(), option.schedule(), quantity,
+                option.moneyCostPresent());
+        if (!option.itemCosts().isEmpty()) {
+            summary.add(ConfirmationModal.SummaryLine.text(
+                    I18n.get("gui.futureshops.offer.all_required")));
+            option.itemCosts().forEach(component -> summary.add(
+                    componentLine(component,
+                            Math.multiplyExact(component.count(), quantity),
+                            "gui.futureshops.offer.give")));
+        }
+        String total = acquireTotal(option, quantity);
+        Runnable cancel = () -> confirmationModal = null;
+        if (option.moneyCostPresent()) {
+            confirmationModal = new ConfirmationModal(
+                    offerActionTitle(option), summary, total,
+                    (modal, source) -> submitAcquireOffer(
+                            modal, offer, option, quantity,
+                            Optional.of(source)), cancel);
+        } else {
+            confirmationModal = new ConfirmationModal(
+                    offerActionTitle(option), summary, total,
+                    modal -> submitAcquireOffer(
+                            modal, offer, option, quantity,
+                            Optional.empty()), cancel);
+        }
+    }
+
+    void addAcquireOfferToCart(AcquireOfferOption option) {
+        ServerShopOfferListing offer = currentOffer();
+        if (offer == null || option == null
+                || !offer.acquireOptions().contains(option)) {
+            return;
+        }
+        ShopClientState.addOfferToCart(
+                offer.listingId(),
+                option.optionId(),
+                getQuantity(),
+                offer.revision());
+    }
+
+    void openSellOfferConfirm(SellOfferOption option) {
+        ServerShopOfferListing offer = currentOffer();
+        if (offer == null || option == null
+                || !offer.sellOptions().contains(option)) {
+            return;
+        }
+        int quantity = getQuantity();
+        List<ConfirmationModal.SummaryLine> summary =
+                new ArrayList<>();
+        prependOfferContext(summary, offer,
+                option.label().isBlank()
+                        ? option.optionId() : option.label(),
+                option.limits(), option.schedule(), quantity, false);
+        option.itemInputs().forEach(component -> summary.add(
+                componentLine(component,
+                        Math.multiplyExact(component.count(), quantity),
+                        "gui.futureshops.offer.give")));
+        String payout = ShopUiUtil.formatMinorUnits(
+                Math.multiplyExact(
+                        option.moneyPayoutMinorUnits(), quantity));
+        confirmationModal = new ConfirmationModal(
+                I18n.get("gui.futureshops.offer.sell_to_shop"),
+                summary,
+                I18n.get("gui.futureshops.item_detail.earn",
+                        payout, ShopClientState.getCurrencyName()),
+                modal -> {
+                    modal.setProcessing();
+                    Optional<com.enviouse.futureshops.client
+                            .ServerShopOfferResponseTracker.PendingRequest>
+                            pending = ShopClientPacketHandler
+                            .submitServerShopOffer(
+                                    ShopClientState.getActiveShopId(),
+                                    offer.listingId(), option.optionId(),
+                                    OfferAction.SELL_TO_SHOP, quantity,
+                                    offer.revision(), Optional.empty());
+                    pendingOfferRequestId = pending
+                            .map(value -> value.requestId()).orElse(null);
+                    if (pendingOfferRequestId == null) {
+                        modal.setFailed(I18n.get(
+                                "gui.futureshops.offer.result.unavailable"));
+                    }
+                },
+                () -> confirmationModal = null);
+    }
+
+    private void prependOfferContext(
+            List<ConfirmationModal.SummaryLine> summary,
+            ServerShopOfferListing offer,
+            String optionLabel,
+            OfferLimitPolicy optionLimits,
+            com.enviouse.futureshops.catalog.offer.OfferSchedule optionSchedule,
+            int quantity,
+            boolean paymentSourceRequired
+    ) {
+        List<ConfirmationModal.SummaryLine> context = new ArrayList<>();
+        context.add(ConfirmationModal.SummaryLine.text(
+                I18n.get("gui.futureshops.offer.context.option_quantity",
+                        optionLabel, quantity)));
+        CatalogItem item = currentItem();
+        if (item != null) {
+            context.add(ConfirmationModal.SummaryLine.text(
+                    item.unlimited()
+                            ? I18n.get(
+                            "gui.futureshops.offer.context.stock_unlimited")
+                            : I18n.get(
+                            "gui.futureshops.offer.context.stock",
+                            item.stock())));
+        }
+        int maximum = Math.min(offer.limits().maximumPerRequest(),
+                optionLimits.maximumPerRequest());
+        context.add(ConfirmationModal.SummaryLine.text(
+                I18n.get("gui.futureshops.offer.context.maximum",
+                        maximum)));
+        long lifetime = positiveMinimum(
+                offer.limits().lifetimeLimit(),
+                optionLimits.lifetimeLimit());
+        if (lifetime > 0L) {
+            context.add(ConfirmationModal.SummaryLine.text(
+                    I18n.get("gui.futureshops.offer.context.lifetime",
+                            lifetime)));
+        }
+        long periodQuantity = positiveMinimum(
+                offer.limits().periodLimit(),
+                optionLimits.periodLimit());
+        long periodSeconds = positiveMinimum(
+                offer.limits().periodSeconds(),
+                optionLimits.periodSeconds());
+        if (periodQuantity > 0L && periodSeconds > 0L) {
+            context.add(ConfirmationModal.SummaryLine.text(
+                    I18n.get("gui.futureshops.offer.context.period",
+                            periodQuantity, periodSeconds)));
+        }
+        long cooldown = Math.max(offer.limits().cooldownSeconds(),
+                optionLimits.cooldownSeconds());
+        if (cooldown > 0L) {
+            context.add(ConfirmationModal.SummaryLine.text(
+                    I18n.get("gui.futureshops.offer.context.cooldown",
+                            cooldown)));
+        }
+        appendScheduleContext(context, offer.schedule(),
+                I18n.get("gui.futureshops.offer.context.listing"));
+        appendScheduleContext(context, optionSchedule,
+                I18n.get("gui.futureshops.offer.context.option"));
+        if (paymentSourceRequired) {
+            context.add(ConfirmationModal.SummaryLine.text(
+                    I18n.get("gui.futureshops.offer.context.payment_source",
+                            I18n.get(
+                                    "gui.futureshops.modal.inventory_cash"),
+                            I18n.get(
+                                    "gui.futureshops.modal.wallet_balance"))));
+        }
+        summary.addAll(0, context);
+    }
+
+    private static long positiveMinimum(long first, long second) {
+        if (first <= 0L) {
+            return Math.max(0L, second);
+        }
+        if (second <= 0L) {
+            return first;
+        }
+        return Math.min(first, second);
+    }
+
+    private static void appendScheduleContext(
+            List<ConfirmationModal.SummaryLine> summary,
+            com.enviouse.futureshops.catalog.offer.OfferSchedule schedule,
+            String label
+    ) {
+        if (schedule.startsAtEpoch() > 0L) {
+            summary.add(ConfirmationModal.SummaryLine.text(
+                    I18n.get("gui.futureshops.offer.context.starts",
+                            label, java.time.Instant.ofEpochSecond(
+                                    schedule.startsAtEpoch()))));
+        }
+        if (schedule.endsAtEpoch() > 0L) {
+            summary.add(ConfirmationModal.SummaryLine.text(
+                    I18n.get("gui.futureshops.offer.context.ends",
+                            label, java.time.Instant.ofEpochSecond(
+                                    schedule.endsAtEpoch()))));
+        }
+    }
+
+    private void submitAcquireOffer(
+            ConfirmationModal modal,
+            ServerShopOfferListing offer,
+            AcquireOfferOption option,
+            int quantity,
+            Optional<com.enviouse.futureshops.money.PaymentSource> source
+    ) {
+        modal.setProcessing();
+        Optional<com.enviouse.futureshops.client
+                .ServerShopOfferResponseTracker.PendingRequest> pending =
+                ShopClientPacketHandler.submitServerShopOffer(
+                        ShopClientState.getActiveShopId(),
+                        offer.listingId(), option.optionId(),
+                        OfferAction.ACQUIRE_FROM_SHOP, quantity,
+                        offer.revision(), source);
+        pendingOfferRequestId = pending
+                .map(value -> value.requestId()).orElse(null);
+        if (pendingOfferRequestId == null) {
+            modal.setFailed(I18n.get(
+                    "gui.futureshops.offer.result.unavailable"));
+        }
+    }
+
+    private ConfirmationModal.SummaryLine componentLine(
+            OfferItemComponent component,
+            int count,
+            String translation
+    ) {
+        String name = ShopUiUtil.getItemDisplayNameWithNbt(
+                component.itemId(), component.exactNbt());
+        return ConfirmationModal.SummaryLine.item(
+                component.itemId(),
+                I18n.get(translation, name, count),
+                component.exactNbt());
+    }
+
+    private String acquireTotal(
+            AcquireOfferOption option,
+            int quantity
+    ) {
+        if (option.free()) {
+            return I18n.get("gui.futureshops.offer.free");
+        }
+        if (!option.moneyCostPresent()) {
+            return I18n.get("gui.futureshops.offer.barter_only");
+        }
+        String money = ShopUiUtil.formatMinorUnits(
+                Math.multiplyExact(
+                        option.moneyCostMinorUnits(), quantity));
+        return option.hasItemCosts()
+                ? I18n.get("gui.futureshops.offer.money_and_items",
+                money, ShopClientState.getCurrencyName())
+                : I18n.get("gui.futureshops.item_detail.total_cost",
+                money, ShopClientState.getCurrencyName());
+    }
+
+    private String offerActionTitle(AcquireOfferOption option) {
+        return option.free()
+                ? I18n.get("gui.futureshops.offer.claim_free")
+                : I18n.get("gui.futureshops.item_detail.confirm_buy_title");
     }
 
     @Override
@@ -148,7 +428,7 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.renderAccentLine(graphics, guiLeft + 2, guiTop, guiW - 4);
 
         renderPreviewPanel(graphics, item, mouseX, mouseY);
-        renderInfoPanel(graphics, item);
+        renderInfoPanel(graphics, item, mouseX, mouseY);
         renderBottomArea(graphics, item);
         ShopUiUtil.renderStatusPanel(graphics, this.font, guiLeft, Math.max(4, guiTop - 22), guiW);
         renderActionButtons(graphics, item, mouseX, mouseY);
@@ -201,10 +481,34 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                 this.font.plainSubstrByWidth(ownedStr, PREVIEW_W - 10),
                 leftX + PREVIEW_W / 2, panelY + 80, ShopColors.TEXT_MUTED);
 
-        // Total cost — currency amber, right below the qty controls
-        long effectiveBuyPrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
-        String total = Component.translatable("gui.futureshops.cart.total_line",
-                ShopUiUtil.formatMinorUnits(effectiveBuyPrice * getQuantity())).getString();
+        ServerShopOfferListing offer = currentOffer();
+        String total;
+        if (offer != null && offer.sellOnly()) {
+            total = offer.sellOptions().size() == 1
+                    ? I18n.get("gui.futureshops.item_detail.earn",
+                    ShopUiUtil.formatMinorUnits(Math.multiplyExact(
+                            offer.sellOptions().get(0)
+                                    .moneyPayoutMinorUnits(),
+                            getQuantity())),
+                    ShopClientState.getCurrencyName())
+                    : I18n.get("gui.futureshops.offer.option_count",
+                    offer.sellOptions().size());
+        } else if (offer != null
+                && offer.acquireOptions().size() == 1) {
+            total = acquireTotal(offer.acquireOptions().get(0),
+                    getQuantity());
+        } else if (offer != null) {
+            total = I18n.get("gui.futureshops.offer.option_count",
+                    offer.acquireOptions().size());
+        } else {
+            long effectiveBuyPrice = item.hasPromo()
+                    ? item.promoPrice() : item.buyPrice();
+            total = Component.translatable(
+                    "gui.futureshops.cart.total_line",
+                    ShopUiUtil.formatMinorUnits(
+                            effectiveBuyPrice * getQuantity()))
+                    .getString();
+        }
         graphics.drawCenteredString(this.font, total, leftX + PREVIEW_W / 2, panelY + panelH - 26, ShopColors.TEXT_CURRENCY);
 
         // Quantity label — below Total
@@ -212,7 +516,13 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                 leftX + PREVIEW_W / 2, panelY + panelH - 14, ShopColors.TEXT_FAINT);
     }
 
-    private void renderInfoPanel(GuiGraphics graphics, CatalogItem item) {
+    private void renderInfoPanel(
+            GuiGraphics graphics,
+            CatalogItem item,
+            int mouseX,
+            int mouseY
+    ) {
+        ServerShopOfferListing offer = currentOffer();
         int infoX = guiLeft + PREVIEW_W + 18;
         int infoY = guiTop + 24;
         int infoW = guiW - PREVIEW_W - 26;
@@ -232,34 +542,68 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         graphics.drawString(this.font, this.font.plainSubstrByWidth(item.displayName(), (int) (contentW / 1.2f)), 0, 0, ShopColors.TEXT_STRONG, true);
         graphics.pose().popPose();
 
-        // Description placeholder — wrapped
-        ShopUiUtil.drawWrappedString(graphics, this.font,
-                Component.translatable("gui.futureshops.detail.no_description"),
-                contentX, infoY + 24, contentW, ShopColors.TEXT_MUTED, 10);
+        Component description = offer != null
+                && !offer.description().isBlank()
+                ? Component.literal(offer.description())
+                : Component.translatable(
+                "gui.futureshops.detail.no_description");
+        List<net.minecraft.util.FormattedCharSequence> descriptionLines =
+                this.font.split(description, contentW);
+        int descriptionY = infoY + 24;
+        int renderedDescriptionLines = Math.min(2,
+                descriptionLines.size());
+        for (int index = 0; index < renderedDescriptionLines; index++) {
+            graphics.drawString(this.font,
+                    descriptionLines.get(index), contentX,
+                    descriptionY + index * 10,
+                    ShopColors.TEXT_MUTED, false);
+        }
+        if (descriptionLines.size() > renderedDescriptionLines
+                && mouseX >= contentX
+                && mouseX < contentX + contentW
+                && mouseY >= descriptionY
+                && mouseY < descriptionY
+                + renderedDescriptionLines * 10) {
+            pendingButtonTooltip = description;
+        }
 
-        int nextY = infoY + 38;
+        int nextY = descriptionY
+                + Math.max(1, renderedDescriptionLines) * 10 + 4;
 
         // Divider
         graphics.fill(contentX, nextY, contentX + contentW, nextY + 1, ShopColors.BORDER_MUTED);
         nextY += 6;
 
-        // Buy price — with inline "(-X%)" suffix when promo is active.
-        // We deliberately skip the animated discount badge in the info panel: the price
-        // line is the pricing source of truth, and a duplicate badge next to it was
-        // visually noisy.  The suffix is plain §7 text so it reads as secondary info.
-        String buyStr = effectiveBuyPrice <= 0
-                ? Component.translatable("gui.futureshops.player_shop_block.confirm.free").getString()
-                : ShopUiUtil.formatMinorUnits(effectiveBuyPrice);
-        if (item.hasPromo() && promoPercent > 0 && effectiveBuyPrice > 0) {
-            buyStr = buyStr + " §7(-" + promoPercent + "%)";
+        if (offer == null || !offer.sellOnly()) {
+            String buyStr = offer == null
+                    ? effectiveBuyPrice <= 0
+                    ? Component.translatable(
+                    "gui.futureshops.player_shop_block.confirm.free").getString()
+                    : ShopUiUtil.formatMinorUnits(effectiveBuyPrice)
+                    : acquireSummary(offer);
+            if (item.hasPromo() && promoPercent > 0
+                    && effectiveBuyPrice > 0) {
+                buyStr = buyStr + " §7(-" + promoPercent + "%)";
+            }
+            drawInfoLine(graphics,
+                    Component.translatable(
+                            "gui.futureshops.item_detail.buy_label")
+                            .getString(),
+                    buyStr, contentX, contentW, nextY,
+                    ShopColors.TEXT_CURRENCY);
+            nextY += 12;
         }
-        drawInfoLine(graphics, Component.translatable("gui.futureshops.item_detail.buy_label").getString(), buyStr, contentX, contentW, nextY, ShopColors.TEXT_CURRENCY);
-        nextY += 12;
 
         // Sell price
-        String sellStr = item.sellPrice() > 0L ? ShopUiUtil.formatMinorUnits(item.sellPrice()) : "—";
+        String sellStr = offer == null
+                ? item.sellPrice() > 0L
+                ? ShopUiUtil.formatMinorUnits(item.sellPrice()) : "—"
+                : sellSummary(offer);
         drawInfoLine(graphics, Component.translatable("gui.futureshops.item_detail.sell_label").getString(), sellStr, contentX, contentW, nextY,
-                item.sellPrice() > 0L ? ShopColors.TEXT_CURRENCY : ShopColors.TEXT_FAINT);
+                offer != null && !offer.sellOptions().isEmpty()
+                        || item.sellPrice() > 0L
+                        ? ShopColors.TEXT_CURRENCY
+                        : ShopColors.TEXT_FAINT);
         nextY += 12;
 
         // Stock
@@ -271,14 +615,169 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         graphics.drawString(this.font, this.font.plainSubstrByWidth(stockLabel, contentW), contentX, nextY, ShopColors.TEXT_MUTED, false);
         nextY += 14;
 
+        bundleComponentRect = null;
+        if (offer != null) {
+            nextY = renderOfferBadges(graphics, offer, contentX,
+                    contentW, nextY);
+            Optional<com.enviouse.futureshops.catalog.offer
+                    .ServerShopBundleSavings.Snapshot> savings =
+                    calculateBundleSavings(offer);
+            if (savings.isPresent()) {
+                String value = I18n.get(
+                        "gui.futureshops.offer.savings",
+                        ShopUiUtil.formatMinorUnits(
+                                savings.get()
+                                        .individualTotalMinorUnits()),
+                        ShopUiUtil.formatMinorUnits(
+                                savings.get()
+                                        .bundleTotalMinorUnits()),
+                        ShopUiUtil.formatMinorUnits(
+                                savings.get().savingsMinorUnits()),
+                        savings.get().savingsBasisPoints() / 100.0D);
+                graphics.drawString(this.font,
+                        this.font.plainSubstrByWidth(value, contentW),
+                        contentX, nextY, ShopColors.SUCCESS, false);
+                nextY += 12;
+            }
+            if (offer.bundle() && !offer.outputs().isEmpty()) {
+                renderBundleComponents(graphics, offer, contentX,
+                        nextY, contentW, infoY + infoH - 6);
+            }
+        }
+
         // Barter preview
-        if (item.hasBarterRecipes()) {
+        if (offer == null && item.hasBarterRecipes()) {
             ShopUiUtil.renderPill(graphics, this.font, contentX, nextY,
                     Component.translatable("gui.futureshops.item_detail.barter_available").getString(),
                     ShopColors.SURFACE_OVERLAY, ShopColors.TEXT_BARTER_SOFT, ShopColors.TEXT_BARTER_SOFT);
             nextY += 16;
             renderBarterPreview(graphics, item, contentX, contentW, nextY, infoY + infoH - 20);
         }
+    }
+
+    private int renderOfferBadges(
+            GuiGraphics graphics,
+            ServerShopOfferListing offer,
+            int x,
+            int width,
+            int y
+    ) {
+        List<String> badges = offerBadges(offer);
+        int cursorX = x;
+        int cursorY = y;
+        for (String badge : badges) {
+            int badgeWidth = Math.max(24, this.font.width(badge) + 12);
+            if (cursorX > x && cursorX + badgeWidth > x + width) {
+                cursorX = x;
+                cursorY += 14;
+            }
+            ShopUiUtil.renderPill(graphics, this.font,
+                    cursorX, cursorY, badge,
+                    ShopColors.SURFACE_OVERLAY,
+                    ShopColors.ACCENT_PRIMARY,
+                    ShopColors.ACCENT_PRIMARY);
+            cursorX += badgeWidth + 4;
+        }
+        return cursorY + (badges.isEmpty() ? 0 : 16);
+    }
+
+    private List<String> offerBadges(ServerShopOfferListing offer) {
+        List<String> badges = new ArrayList<>();
+        if (offer.sellOnly()) {
+            badges.add(I18n.get("gui.futureshops.offer.sell_only"));
+        } else {
+            boolean free = offer.acquireOptions().stream()
+                    .anyMatch(AcquireOfferOption::free);
+            boolean compound = offer.acquireOptions().stream()
+                    .anyMatch(AcquireOfferOption::compound);
+            boolean money = offer.acquireOptions().stream()
+                    .anyMatch(AcquireOfferOption::moneyCostPresent);
+            boolean barter = offer.acquireOptions().stream()
+                    .anyMatch(AcquireOfferOption::hasItemCosts);
+            if (free) {
+                badges.add(I18n.get("gui.futureshops.offer.free"));
+            }
+            if (compound) {
+                badges.add(I18n.get(
+                        "gui.futureshops.offer.money_and_barter"));
+            } else {
+                if (money) {
+                    badges.add(I18n.get(
+                            "gui.futureshops.offer.money"));
+                }
+                if (barter) {
+                    badges.add(I18n.get(
+                            "gui.futureshops.offer.barter"));
+                }
+            }
+        }
+        if (offer.bundle()) {
+            badges.add(I18n.get("gui.futureshops.offer.bundle"));
+        }
+        return badges;
+    }
+
+    private Optional<com.enviouse.futureshops.catalog.offer
+            .ServerShopBundleSavings.Snapshot> calculateBundleSavings(
+            ServerShopOfferListing offer
+    ) {
+        return offer.acquireOptions().stream()
+                .filter(AcquireOfferOption::moneyCostPresent)
+                .map(option ->
+                        com.enviouse.futureshops.catalog.offer
+                                .ServerShopBundleSavings.calculate(
+                                        offer, option, getQuantity(),
+                                        ShopClientState.getCatalogOffers()
+                                                .stream()
+                                                .collect(java.util.stream
+                                                        .Collectors.toMap(
+                                                                ServerShopOfferListing::listingId,
+                                                                value -> value,
+                                                                (first, second) ->
+                                                                        first)),
+                                        java.time.Instant.now()))
+                .flatMap(Optional::stream)
+                .findFirst();
+    }
+
+    private void renderBundleComponents(
+            GuiGraphics graphics,
+            ServerShopOfferListing offer,
+            int x,
+            int y,
+            int width,
+            int bottom
+    ) {
+        int height = bottom - y;
+        if (height < 10) {
+            return;
+        }
+        int rowHeight = 10;
+        int visible = Math.max(1, height / rowHeight);
+        bundleComponentScroll = Math.max(0,
+                Math.min(bundleComponentScroll,
+                        Math.max(0, offer.outputs().size() - visible)));
+        bundleComponentRect = new int[]{x, y, width, height};
+        graphics.enableScissor(x, y, x + width, bottom);
+        for (int row = 0; row < visible; row++) {
+            int index = bundleComponentScroll + row;
+            if (index >= offer.outputs().size()) {
+                break;
+            }
+            OfferItemComponent component = offer.outputs().get(index);
+            String name = ShopUiUtil.getItemDisplayNameWithNbt(
+                    component.itemId(), component.exactNbt());
+            String line = I18n.get("gui.futureshops.offer.receive",
+                    name, component.count());
+            graphics.drawString(this.font,
+                    this.font.plainSubstrByWidth(line, width - 10),
+                    x, y + row * rowHeight,
+                    ShopColors.TEXT_SECONDARY, false);
+        }
+        graphics.disableScissor();
+        ShopUiUtil.renderScrollIndicators(graphics, this.font,
+                x, y, width, height, bundleComponentScroll,
+                visible, offer.outputs().size());
     }
 
     private void renderBottomArea(GuiGraphics graphics, CatalogItem item) {
@@ -319,7 +818,14 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         int totalBtnW = btnW * 4 + gap * 3;
         int startX = guiLeft + (guiW - totalBtnW) / 2;
 
-        boolean buyEnabled = item.buyPrice() > 0L && (item.unlimited() || item.stock() > 0);
+        ServerShopOfferListing offer = currentOffer();
+        boolean buyEnabled = offer == null
+                ? item.buyPrice() > 0L
+                && (item.unlimited() || item.stock() > 0)
+                : !offer.acquireOptions().isEmpty()
+                && (item.unlimited() || item.stock() > 0)
+                && ShopClientPacketHandler.pendingServerShopOffer()
+                .isEmpty();
         // NBT-strict count: the server sell path only accepts the listing's exact tagged variant.
         // Fall back to the server-pushed owned count (blank-NBT listings only, since that count is
         // not NBT-aware) so the Sell button lights up right after a buy without waiting for the
@@ -328,7 +834,72 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         if (owned == 0 && (item.nbtJson() == null || item.nbtJson().isBlank())) {
             owned = ShopClientState.getOwnedCount(item.itemId());
         }
-        boolean sellEnabled = item.sellPrice() > 0L && owned > 0;
+        boolean sellEnabled = offer == null
+                ? item.sellPrice() > 0L && owned > 0
+                : offer.sellOptions().stream().anyMatch(
+                        this::hasSellInputs)
+                && ShopClientPacketHandler.pendingServerShopOffer()
+                .isEmpty();
+
+        if (offer != null) {
+            AcquireOfferOption acquire =
+                    offer.acquireOptions().size() == 1
+                            ? offer.acquireOptions().get(0) : null;
+            Component acquireLabel = acquire != null && acquire.free()
+                    ? Component.translatable(
+                    "gui.futureshops.offer.get")
+                    : offer.acquireOptions().size() > 1
+                    ? Component.translatable(
+                    "gui.futureshops.offer.options")
+                    : Component.translatable(
+                    "gui.futureshops.item_detail.buy");
+            Component sellLabel = offer.sellOptions().size() > 1
+                    ? Component.translatable(
+                    "gui.futureshops.offer.sell_options")
+                    : Component.translatable(
+                    "gui.futureshops.offer.sell_to_shop");
+            boolean showAcquire = !offer.acquireOptions().isEmpty();
+            boolean showCart =
+                    ServerShopOfferVisitorActionPolicy
+                            .showsAcquireCart(offer);
+            boolean showSell = !offer.sellOptions().isEmpty();
+            int actionCount = (showCart ? 1 : 0)
+                    + (showAcquire ? 1 : 0)
+                    + (showSell ? 1 : 0);
+            int actionWidth = Math.min(82,
+                    (guiW - 24 - gap * Math.max(0, actionCount - 1))
+                            / Math.max(1, actionCount));
+            int actionX = guiLeft
+                    + (guiW - actionWidth * actionCount
+                    - gap * Math.max(0, actionCount - 1)) / 2;
+            if (showCart) {
+                renderOfferActionButton(graphics, mouseX, mouseY,
+                        actionX, bottomY, actionWidth,
+                        Component.translatable(
+                                "gui.futureshops.item_detail.add_cart"),
+                        ShopUiUtil.ButtonStyle.PRIMARY, buyEnabled,
+                        () -> openAcquireCartOptions(offer),
+                        buyDisabledReason(item));
+                actionX += actionWidth + gap;
+            }
+            if (showAcquire) {
+                renderOfferActionButton(graphics, mouseX, mouseY,
+                        actionX, bottomY, actionWidth, acquireLabel,
+                        ShopUiUtil.ButtonStyle.PRIMARY, buyEnabled,
+                        () -> openAcquireOptions(offer),
+                        buyDisabledReason(item));
+                actionX += actionWidth + gap;
+            }
+            if (showSell) {
+                renderOfferActionButton(graphics, mouseX, mouseY,
+                        actionX, bottomY, actionWidth, sellLabel,
+                        ShopUiUtil.ButtonStyle.SECONDARY, sellEnabled,
+                        () -> openSellOptions(offer),
+                        Component.translatable(
+                                "gui.futureshops.offer.result.rejected"));
+            }
+            return;
+        }
 
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 startX, bottomY, btnW, 14, Component.translatable("gui.futureshops.item_detail.add_cart"),
@@ -347,6 +918,37 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                     ShopUiUtil.ButtonStyle.SECONDARY, true,
                     () -> { CatalogItem it = currentItem(); if (it != null) this.minecraft.setScreen(new BarterScreen(this, it.itemId())); });
         }
+    }
+
+    private void renderOfferActionButton(
+            GuiGraphics graphics,
+            int mouseX,
+            int mouseY,
+            int x,
+            int y,
+            int width,
+            Component label,
+            ShopUiUtil.ButtonStyle style,
+            boolean enabled,
+            Runnable action,
+            Component disabledReason
+    ) {
+        ShopUiUtil.button(graphics, this.font, clickZones,
+                mouseX, mouseY, x, y, width, 14, label,
+                style, enabled, action);
+        if (!enabled && mouseX >= x && mouseX < x + width
+                && mouseY >= y && mouseY < y + 14) {
+            pendingButtonTooltip = disabledReason;
+        }
+    }
+
+    private Component buyDisabledReason(CatalogItem item) {
+        if (!item.unlimited() && item.stock() <= 0) {
+            return Component.translatable(
+                    "gui.futureshops.offer.result.out_of_stock");
+        }
+        return Component.translatable(
+                "gui.futureshops.offer.result.unavailable");
     }
 
     private void renderBarterPreview(GuiGraphics graphics, CatalogItem item, int contentX, int contentW, int startY, int maxY) {
@@ -390,6 +992,92 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         graphics.drawString(this.font, clipped, x + Math.max(36, w - this.font.width(clipped) - 4), y, valueColor, false);
     }
 
+    private String acquireSummary(ServerShopOfferListing offer) {
+        if (offer.acquireOptions().isEmpty()) {
+            return "—";
+        }
+        if (offer.acquireOptions().size() > 1) {
+            return I18n.get("gui.futureshops.offer.option_count",
+                    offer.acquireOptions().size());
+        }
+        return ServerShopOfferPresentation.acquireCostSummary(
+                offer.acquireOptions().get(0),
+                ShopClientState.getCurrencyName());
+    }
+
+    private String sellSummary(ServerShopOfferListing offer) {
+        if (offer.sellOptions().isEmpty()) {
+            return "—";
+        }
+        if (offer.sellOptions().size() > 1) {
+            return I18n.get("gui.futureshops.offer.option_count",
+                    offer.sellOptions().size());
+        }
+        return ServerShopOfferPresentation.sellPayoutSummary(
+                offer.sellOptions().get(0),
+                ShopClientState.getCurrencyName());
+    }
+
+    private void openAcquireOptions(ServerShopOfferListing offer) {
+        if (offer.acquireOptions().size() == 1) {
+            openAcquireOfferConfirm(offer.acquireOptions().get(0));
+            return;
+        }
+        if (this.minecraft != null) {
+            this.minecraft.setScreen(new ServerShopOfferOptionScreen(
+                    this, offer.listingId(),
+                    OfferAction.ACQUIRE_FROM_SHOP));
+        }
+    }
+
+    private void openAcquireCartOptions(ServerShopOfferListing offer) {
+        if (offer.acquireOptions().size() == 1) {
+            addAcquireOfferToCart(offer.acquireOptions().get(0));
+            return;
+        }
+        if (this.minecraft != null) {
+            this.minecraft.setScreen(new ServerShopOfferOptionScreen(
+                    this, offer.listingId(),
+                    OfferAction.ACQUIRE_FROM_SHOP, true));
+        }
+    }
+
+    private void openSellOptions(ServerShopOfferListing offer) {
+        List<SellOfferOption> available = offer.sellOptions().stream()
+                .filter(this::hasSellInputs).toList();
+        if (available.isEmpty()) {
+            return;
+        }
+        if (available.size() == 1) {
+            openSellOfferConfirm(available.get(0));
+            return;
+        }
+        if (this.minecraft != null) {
+            this.minecraft.setScreen(new ServerShopOfferOptionScreen(
+                    this, offer.listingId(),
+                    OfferAction.SELL_TO_SHOP, false,
+                    available.stream().map(SellOfferOption::optionId)
+                            .toList()));
+        }
+    }
+
+    private boolean hasSellInputs(SellOfferOption option) {
+        int quantity = getQuantity();
+        return option.itemInputs().stream().allMatch(component ->
+                ShopUiUtil.countPlayerInventoryNbt(
+                        component.itemId(), component.exactNbt(),
+                        component.exactMatch())
+                        >= (long) component.count() * quantity);
+    }
+
+    private Optional<ServerShopOfferListing> currentOfferOptional() {
+        return ShopClientState.getCatalogOffer(listingId);
+    }
+
+    private ServerShopOfferListing currentOffer() {
+        return currentOfferOptional().orElse(null);
+    }
+
     private CatalogItem currentItem() {
         return ShopClientState.getCatalogItem(listingId).orElse(null);
     }
@@ -410,6 +1098,46 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         CatalogItem item = currentItem();
         if (item == null) return 1;
 
+        ServerShopOfferListing offer = currentOffer();
+        if (offer != null) {
+            int listingMaximum = Math.min(
+                    OfferLimitPolicy.DEFAULT_MAXIMUM_PER_REQUEST,
+                    offer.limits().maximumPerRequest());
+            int acquireMaximum = offer.acquireOptions().stream()
+                    .mapToInt(option -> {
+                        int maximum = Math.min(listingMaximum,
+                                option.limits().maximumPerRequest());
+                        if (!item.unlimited()) {
+                            maximum = Math.min(maximum,
+                                    item.stock()
+                                            / option.outputMultiplier());
+                        }
+                        return maximum;
+                    }).max().orElse(0);
+            int sellMaximum = offer.sellOptions().stream()
+                    .mapToInt(option -> {
+                        int maximum = Math.min(listingMaximum,
+                                option.limits().maximumPerRequest());
+                        if (option.capacity() > 0L) {
+                            maximum = (int) Math.min(maximum,
+                                    option.capacity());
+                        }
+                        for (OfferItemComponent component
+                                : option.itemInputs()) {
+                            int owned = ShopUiUtil
+                                    .countPlayerInventoryNbt(
+                                            component.itemId(),
+                                            component.exactNbt(),
+                                            component.exactMatch());
+                            maximum = Math.min(maximum,
+                                    owned / component.count());
+                        }
+                        return maximum;
+                    }).max().orElse(0);
+            return Math.max(1,
+                    Math.max(acquireMaximum, sellMaximum));
+        }
+
         // For selling: limited by how many the player has in inventory (NBT-strict, matching the server)
         int sellLimit = ShopUiUtil.countPlayerInventoryNbt(item.itemId(), item.nbtJson(), true);
         return PurchaseQuantityPolicy.serverShopMaximum(
@@ -427,6 +1155,38 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
         }
         if (ShopUiUtil.dispatchClicks(clickZones, mouseX, mouseY)) return true;
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseScrolled(
+            double mouseX,
+            double mouseY,
+            double delta
+    ) {
+        if (confirmationModal != null
+                && confirmationModal.mouseScrolled(
+                mouseX, mouseY, delta)) {
+            return true;
+        }
+        if (inRect(bundleComponentRect, mouseX, mouseY)) {
+            bundleComponentScroll = Math.max(0,
+                    bundleComponentScroll
+                            + (delta < 0.0D ? 1 : -1));
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    private static boolean inRect(
+            int[] rectangle,
+            double mouseX,
+            double mouseY
+    ) {
+        return rectangle != null
+                && mouseX >= rectangle[0]
+                && mouseX < rectangle[0] + rectangle[2]
+                && mouseY >= rectangle[1]
+                && mouseY < rectangle[1] + rectangle[3];
     }
 
     @Override
@@ -450,6 +1210,45 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                 confirmationModal.setFailed(message);
             }
         }
+    }
+
+    public void onSellTransactionResult(
+            java.util.UUID requestId,
+            boolean success,
+            String message
+    ) {
+        if (requestId == null || !requestId.equals(pendingSellRequestId)) {
+            return;
+        }
+        pendingSellRequestId = null;
+        onTransactionResult(success, message);
+    }
+
+    public void onOfferTransactionResult(
+            java.util.UUID requestId,
+            boolean success,
+            String message,
+            com.enviouse.futureshops.server.escrow.runtime
+                    .ServerShopOfferService.Status status
+    ) {
+        if (requestId == null
+                || !requestId.equals(pendingOfferRequestId)) {
+            return;
+        }
+        if (status
+                != com.enviouse.futureshops.server.escrow.runtime
+                .ServerShopOfferService.Status.RECOVERY_REQUIRED
+                && status
+                != com.enviouse.futureshops.server.escrow.runtime
+                .ServerShopOfferService.Status.QUARANTINED) {
+            pendingOfferRequestId = null;
+        }
+        if (status == com.enviouse.futureshops.server.escrow.runtime
+                .ServerShopOfferService.Status.STALE_REVISION) {
+            message = I18n.get(
+                    "gui.futureshops.offer.quote_changed");
+        }
+        onTransactionResult(success, message);
     }
 
     @Override

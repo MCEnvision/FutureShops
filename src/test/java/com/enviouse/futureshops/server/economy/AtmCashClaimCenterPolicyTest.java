@@ -8,6 +8,8 @@ import com.enviouse.futureshops.server.escrow.runtime.ProtectedCashClaimPayload;
 import com.enviouse.futureshops.server.escrow.runtime.ProtectedCashClaimPayloadCodec;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -18,6 +20,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AtmCashClaimCenterPolicyTest {
+    private static final Path CLAIM_CENTER_SOURCE = Path.of(
+            "src/main/java/com/enviouse/futureshops/server/economy/AtmCashClaimCenter.java");
+    private static final Path ATM_SERVICE_SOURCE = Path.of(
+            "src/main/java/com/enviouse/futureshops/server/economy/AtmService.java");
+    private static final Path COORDINATOR_SOURCE = Path.of(
+            "src/main/java/com/enviouse/futureshops/server/escrow/runtime/EscrowRuntimeCoordinator.java");
     private static final UUID PLAYER_ID = UUID.fromString(
             "52000000-0000-0000-0000-000000000001");
     private static final UUID CLAIM_ONE = UUID.fromString(
@@ -30,6 +38,25 @@ class AtmCashClaimCenterPolicyTest {
             "52000000-0000-0000-0000-000000000021");
     private static final Instant CREATED = Instant.parse(
             "2026-07-18T18:00:00.123456789Z");
+
+    @Test
+    void cashCollectionAndMaintenanceFailuresStayObservable()
+            throws Exception {
+        String claimCenter = Files.readString(CLAIM_CENTER_SOURCE);
+        String atmService = Files.readString(ATM_SERVICE_SOURCE);
+        String coordinator = Files.readString(COORDINATOR_SOURCE);
+
+        assertFalse(claimCenter.contains(
+                "catch (RuntimeException ignored)"));
+        assertTrue(claimCenter.contains(
+                "ATM cash claim delivery was not applied"));
+        assertTrue(claimCenter.contains(
+                "ATM cash claim delivery failed"));
+        assertTrue(atmService.contains(
+                "ATM cash collection was rejected by the request gate"));
+        assertTrue(coordinator.contains(
+                "Escrow runtime entered maintenance"));
+    }
 
     @Test
     void requestBindingRejectsDifferentClaimsWithoutCacheState() {

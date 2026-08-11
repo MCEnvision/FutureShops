@@ -1,6 +1,8 @@
 package com.enviouse.futureshops.client.screen;
 
 import com.enviouse.futureshops.client.PlayerShopClientState;
+import com.enviouse.futureshops.client.PlayerShopResponseTracker;
+import com.enviouse.futureshops.client.ShopClientPacketHandler;
 import com.enviouse.futureshops.client.ShopColors;
 import com.enviouse.futureshops.data.PlayerShopListingData;
 import com.enviouse.futureshops.network.ShopPackets;
@@ -296,12 +298,16 @@ public class PlayerShopBarterScreen extends Screen implements ShopScreenMarker {
         // guard (which rejects blank paymentMethod for BOTH listings) can tell
         // a genuine compound intent apart from a missing/legacy field.
         String paymentMethod = "MONEY_AND_BARTER".equalsIgnoreCase(mode) ? "MONEY_AND_BARTER" : "BARTER";
+        PlayerShopResponseTracker.PendingRequest request =
+                ShopClientPacketHandler.beginPlayerShopRequest(
+                        PlayerShopResponseTracker.Operation.PURCHASE, 0);
         ShopPackets.CHANNEL.sendToServer(new C2SPlayerShopBuyPacket(
                 PlayerShopClientState.shopPos(),
                 PlayerShopClientState.selectedListingIndex(),
                 quantity,
                 paymentMethod,
-                paymentSource.wire()));
+                paymentSource.wire(), request.requestId(),
+                request.responseToken()));
     }
 
     private void showBarterConfirmation() {

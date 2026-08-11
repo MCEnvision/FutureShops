@@ -6,6 +6,7 @@ import com.enviouse.futureshops.client.CartResponsePolicy;
 import com.enviouse.futureshops.data.CatalogItem;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
+import com.enviouse.futureshops.network.packets.C2SServerShopOfferCartPacket;
 import com.enviouse.futureshops.money.PaymentSource;
 import com.enviouse.futureshops.network.packets.C2SVerifyAdminCartPacket;
 import com.enviouse.futureshops.network.packets.S2CVerifyCartResponsePacket;
@@ -14,6 +15,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public class CartScreen extends Screen implements ShopScreenMarker {
@@ -79,24 +81,168 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         List<ConfirmationModal.SummaryLine> lines = new java.util.ArrayList<>();
         for (ShopClientState.CartEntry entry : entries) {
             CatalogItem item = ShopClientState.getCatalogItem(entry.listingId()).orElse(null);
-            String name = item != null ? item.displayName() : entry.listingId();
+            com.enviouse.futureshops.catalog.offer.ServerShopOfferListing
+                    offer = ShopClientState.getCatalogOffer(
+                    entry.listingId()).orElse(null);
+            if (entry.normalized() && offer != null) {
+                appendOfferSummary(lines, entry, offer);
+                continue;
+            }
+            String name = item != null ? item.displayName()
+                    : offer != null ? offer.displayName()
+                    : entry.listingId();
             // Icon id must be a registry itemId (a valid ResourceLocation); the listingId is only the
             // cart key and may not parse. Fall back to the listingId string only when the row is unknown.
-            String iconId = item != null ? item.itemId() : entry.listingId();
-            String nbt = item != null ? item.nbtJson() : "";
+            String iconId = item != null ? item.itemId()
+                    : offer != null ? offer.iconItemId()
+                    : entry.listingId();
+            String nbt = item != null ? item.nbtJson()
+                    : offer != null ? offer.iconNbt() : "";
             lines.add(ConfirmationModal.SummaryLine.item(iconId, name + " ×" + entry.quantity(), nbt));
         }
-        String totalStr = ShopUiUtil.formatMinorUnits(ShopClientState.getCartTotalMinorUnits());
-        confirmationModal = new ConfirmationModal(
-                Component.translatable("gui.futureshops.cart.confirm.title").getString(),
-                lines,
-                Component.translatable("gui.futureshops.item_detail.total_cost", totalStr, ShopClientState.getCurrencyName()).getString(),
-                (modal, paymentSource) -> {
-                    modal.setProcessing();
-                    sendCheckout(paymentSource);
-                },
-                () -> confirmationModal = null
-        );
+        boolean requiresMoney = entries.stream()
+                .anyMatch(this::requiresMoney);
+        String totalText;
+        if (requiresMoney) {
+            String totalStr = ShopUiUtil.formatMinorUnits(
+                    ShopClientState.getCartTotalMinorUnits());
+            totalText = Component.translatable(
+                    "gui.futureshops.item_detail.total_cost",
+                    totalStr, ShopClientState.getCurrencyName()).getString();
+        } else {
+            boolean requiresItems = entries.stream().anyMatch(entry ->
+                    entry.normalized()
+                            && ShopClientState.getCatalogOffer(
+                            entry.listingId()).stream()
+                            .flatMap(offer ->
+                                    offer.acquireOptions().stream())
+                            .anyMatch(option ->
+                                    option.optionId().equals(
+                                            entry.optionId())
+                                            && option.hasItemCosts()));
+            totalText = Component.translatable(requiresItems
+                    ? "gui.futureshops.offer.barter_only"
+                    : "gui.futureshops.offer.free").getString();
+        }
+        if (requiresMoney) {
+            confirmationModal = new ConfirmationModal(
+                    Component.translatable(
+                            "gui.futureshops.cart.confirm.title")
+                            .getString(),
+                    lines, totalText,
+                    (modal, paymentSource) -> {
+                        modal.setProcessing();
+                        sendCheckout(Optional.of(paymentSource));
+                    },
+                    () -> confirmationModal = null);
+        } else {
+            confirmationModal = new ConfirmationModal(
+                    Component.translatable(
+                            "gui.futureshops.cart.confirm.title")
+                            .getString(),
+                    lines, totalText,
+                    modal -> {
+                        modal.setProcessing();
+                        sendCheckout(Optional.empty());
+                    },
+                    () -> confirmationModal = null);
+        }
+    }
+
+    private void appendOfferSummary(
+            List<ConfirmationModal.SummaryLine> lines,
+            ShopClientState.CartEntry entry,
+            com.enviouse.futureshops.catalog.offer
+                    .ServerShopOfferListing offer
+    ) {
+        var option = offer.acquireOptions().stream()
+                .filter(candidate -> candidate.optionId()
+                        .equals(entry.optionId()))
+                .findFirst().orElse(null);
+        if (option == null) {
+            lines.add(ConfirmationModal.SummaryLine.text(
+                    Component.translatable(
+                            "gui.futureshops.offer.quote_changed")
+                            .getString()));
+            return;
+        }
+        lines.add(ConfirmationModal.SummaryLine.text(
+                offer.displayName() + " ×" + entry.quantity()));
+        for (var output : offer.outputs()) {
+            int count = Math.multiplyExact(
+                    Math.multiplyExact(output.count(),
+                            option.outputMultiplier()),
+                    entry.quantity());
+            lines.add(offerComponentLine(output, count,
+                    "gui.futureshops.offer.receive"));
+        }
+        if (option.moneyCostPresent()
+                || !option.itemCosts().isEmpty()) {
+            lines.add(ConfirmationModal.SummaryLine.text(
+                    Component.translatable(
+                            "gui.futureshops.offer.all_required")
+                            .getString()));
+        }
+        if (option.moneyCostPresent()) {
+            long total = Math.multiplyExact(
+                    option.moneyCostMinorUnits(),
+                    (long) entry.quantity());
+            lines.add(ConfirmationModal.SummaryLine.text(
+                    Component.translatable(
+                            "gui.futureshops.item_detail.total_cost",
+                            ShopUiUtil.formatMinorUnits(total),
+                            ShopClientState.getCurrencyName())
+                            .getString()));
+        }
+        for (var input : option.itemCosts()) {
+            lines.add(offerComponentLine(input,
+                    Math.multiplyExact(
+                            input.count(), entry.quantity()),
+                    "gui.futureshops.offer.give"));
+        }
+        var listings = ShopClientState.getCatalogOffers().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        com.enviouse.futureshops.catalog.offer
+                                .ServerShopOfferListing::listingId,
+                        value -> value,
+                        (left, right) -> left,
+                        java.util.LinkedHashMap::new));
+        com.enviouse.futureshops.catalog.offer.ServerShopBundleSavings
+                .calculate(offer, option, entry.quantity(), listings,
+                        java.time.Instant.now())
+                .ifPresent(savings -> lines.add(
+                        ConfirmationModal.SummaryLine.text(
+                                Component.translatable(
+                                        "gui.futureshops.offer.savings",
+                                        ShopUiUtil.formatMinorUnits(
+                                                savings
+                                                        .individualTotalMinorUnits()),
+                                        ShopUiUtil.formatMinorUnits(
+                                                savings
+                                                        .bundleTotalMinorUnits()),
+                                        ShopUiUtil.formatMinorUnits(
+                                                savings
+                                                        .savingsMinorUnits()),
+                                        savings.savingsBasisPoints()
+                                                / 100.0D)
+                                        .getString())));
+    }
+
+    private ConfirmationModal.SummaryLine offerComponentLine(
+            com.enviouse.futureshops.catalog.offer.OfferItemComponent
+                    component,
+            int count,
+            String translation
+    ) {
+        return ConfirmationModal.SummaryLine.item(
+                component.itemId(),
+                Component.translatable(
+                        translation,
+                        ShopUiUtil.getItemDisplayNameWithNbt(
+                                component.itemId(),
+                                component.exactNbt()),
+                        count).getString(),
+                component.exactNbt());
     }
 
     @Override
@@ -156,22 +302,29 @@ public class CartScreen extends Screen implements ShopScreenMarker {
 
         // Footer buttons — flat Nocturne primitives at their former bounds.
         boolean checkoutTracked = ShopClientState.hasTrackedCartCheckout();
-        boolean canCheckout = !ShopClientState.getCartEntries().isEmpty()
-                && !checkoutTracked
-                && !awaitingVerification;
+        boolean checkoutPending = ShopClientState.isCartCheckoutPending();
+        boolean canCheckout = !awaitingVerification
+                && (checkoutTracked
+                ? !checkoutPending
+                : !ShopClientState.getCartEntries().isEmpty());
+        Component checkoutLabel = Component.translatable(
+                checkoutTracked
+                        ? "gui.futureshops.cart.check_result_btn"
+                        : "gui.futureshops.cart.checkout_btn");
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + 10, guiTop + guiH - 24, 48, 18,
                 Component.translatable("gui.futureshops.cart.back"), ShopUiUtil.ButtonStyle.SECONDARY, true, this::onClose);
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + 64, guiTop + guiH - 24, 48, 18,
                 Component.translatable("gui.futureshops.cart.clear_btn"), ShopUiUtil.ButtonStyle.DANGER,
-                !checkoutTracked, () -> {
-                    ShopClientState.clearCart();
+                !checkoutPending, () -> {
+                    ShopClientState.clearCartContents();
                     ShopClientState.clearCartVerification();
                 });
         ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                 guiLeft + guiW - 100, guiTop + guiH - 24, 90, 18,
-                Component.translatable("gui.futureshops.cart.checkout_btn"), ShopUiUtil.ButtonStyle.PRIMARY, canCheckout, this::requestVerifyAndCheckout);
+                checkoutLabel, ShopUiUtil.ButtonStyle.PRIMARY,
+                canCheckout, this::requestVerifyAndCheckout);
 
         super.render(graphics, mouseX, mouseY, partialTick);
 
@@ -207,7 +360,7 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         ShopUiUtil.renderCard(graphics, listX, listY, listW, listH);
 
         List<ShopClientState.CartEntry> entries = ShopClientState.getCartEntries();
-        boolean checkoutTracked = ShopClientState.hasTrackedCartCheckout();
+        boolean checkoutPending = ShopClientState.isCartCheckoutPending();
         if (entries.isEmpty()) {
             graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.cart.empty"), listX + listW / 2, listY + listH / 2 - 8, ShopColors.TEXT_MUTED);
             graphics.drawCenteredString(this.font, Component.translatable("gui.futureshops.cart.empty_hint"), listX + listW / 2, listY + listH / 2 + 6, ShopColors.TEXT_FAINT);
@@ -220,16 +373,25 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         for (int row = 0; row < visibleRows && row + scrollIndex < entries.size(); row++) {
             ShopClientState.CartEntry entry = entries.get(row + scrollIndex);
             CatalogItem item = ShopClientState.getCatalogItem(entry.listingId()).orElse(null);
-            if (item == null) continue;
+            com.enviouse.futureshops.catalog.offer.ServerShopOfferListing
+                    offer = ShopClientState.getCatalogOffer(
+                    entry.listingId()).orElse(null);
+            if (item == null && offer == null) continue;
             int y = rowY + row * 28;
             int rowBg = row % 2 == 0 ? ShopColors.SURFACE_RAISED : ShopColors.SURFACE_OVERLAY;
             ShopUiUtil.renderPanel(graphics, listX + 6, y, listW - 12, 22, rowBg, ShopColors.BORDER_SUBTLE);
             // NBT-aware icon: BEWLR items (TacZ guns etc.) resolve their model
             // from the listing tag and render as a missing texture without it.
-            ShopUiUtil.renderItemIconWithNbt(graphics, this.font, item.itemId(), item.nbtJson(), listX + 10, y + 3);
+            ShopUiUtil.renderItemIconWithNbt(
+                    graphics, this.font,
+                    item != null ? item.itemId() : offer.iconItemId(),
+                    item != null ? item.nbtJson() : offer.iconNbt(),
+                    listX + 10, y + 3);
 
             // Name — scrolls (ping-pong) when too long so modded items with lengthy names stay readable.
-            ShopUiUtil.renderScrollingString(graphics, this.font, item.displayName(),
+            ShopUiUtil.renderScrollingString(graphics, this.font,
+                    item != null ? item.displayName()
+                            : offer.displayName(),
                     listX + 30, y + 7, listW - 240, ShopColors.TEXT_STRONG);
 
             // Quantity controls — flat mini steppers ([−] [N] [+]) with registered ClickZones.
@@ -237,8 +399,9 @@ public class CartScreen extends Screen implements ShopScreenMarker {
             int ctrlX = listX + listW - 130;
             ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                     ctrlX, y + 3, 14, 16, Component.literal("-"), ShopUiUtil.ButtonStyle.SECONDARY,
-                    !checkoutTracked,
-                    () -> ShopClientState.setCartQuantity(rowEntry.listingId(), rowEntry.quantity() - 1));
+                    !checkoutPending,
+                    () -> ShopClientState.setCartQuantity(
+                            rowEntry, rowEntry.quantity() - 1));
             // Wider (18px) qty window between the steppers so 3-4 digit quantities no longer
             // slide under the "+"; the value is clipped and centered inside that window.
             int qtyWinX = ctrlX + 16;
@@ -247,22 +410,15 @@ public class CartScreen extends Screen implements ShopScreenMarker {
             graphics.drawString(this.font, qtyStr, qtyWinX + (qtyWinW - this.font.width(qtyStr)) / 2, y + 7, ShopColors.TEXT_STRONG, false);
             boolean plusHover = ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                     ctrlX + 34, y + 3, 14, 16, Component.literal("+"), ShopUiUtil.ButtonStyle.SECONDARY,
-                    !checkoutTracked,
+                    !checkoutPending,
                     () -> {
                         if (hasShiftDown()) {
-                            CatalogItem it = ShopClientState.getCatalogItem(rowEntry.listingId()).orElse(null);
-                            int max = 2304;
-                            if (it != null) {
-                                if (!it.unlimited()) max = Math.min(max, Math.max(1, it.stock()));
-                                long price = it.hasPromo() ? it.promoPrice() : it.buyPrice();
-                                if (price > 0) {
-                                    long bal = ShopClientState.getCurrentBalanceMinorUnits();
-                                    max = Math.min(max, (int) Math.min(bal / price, 2304));
-                                }
-                            }
-                            ShopClientState.setCartQuantity(rowEntry.listingId(), Math.max(1, max));
+                            ShopClientState.setCartQuantity(
+                                    rowEntry,
+                                    maximumQuantity(rowEntry));
                         } else {
-                            ShopClientState.setCartQuantity(rowEntry.listingId(), rowEntry.quantity() + 1);
+                            ShopClientState.setCartQuantity(
+                                    rowEntry, rowEntry.quantity() + 1);
                         }
                     });
             if (plusHover) {
@@ -271,7 +427,7 @@ public class CartScreen extends Screen implements ShopScreenMarker {
             }
 
             // Price — currency amber
-            long unitPrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
+            long unitPrice = unitMoneyCost(entry);
             // Start clear of the shifted "+" stepper (now ends at listW-82) and clip a touch
             // tighter so the price still stops short of the remove button.
             String priceStr = this.font.plainSubstrByWidth(ShopUiUtil.formatMinorUnits(unitPrice * entry.quantity()), 54);
@@ -280,8 +436,8 @@ public class CartScreen extends Screen implements ShopScreenMarker {
             // Remove — flat DANGER "✕" button with a registered ClickZone.
             ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                     listX + listW - 24, y + 3, 16, 16, Component.literal("✕"), ShopUiUtil.ButtonStyle.DANGER,
-                    !checkoutTracked,
-                    () -> ShopClientState.removeFromCart(rowEntry.listingId()));
+                    !checkoutPending,
+                    () -> ShopClientState.removeFromCart(rowEntry));
         }
     }
 
@@ -306,13 +462,24 @@ public class CartScreen extends Screen implements ShopScreenMarker {
     private void requestVerifyAndCheckout() {
         if (ShopClientState.isCartCheckoutPending() || awaitingVerification) return;
         if (ShopClientState.hasTrackedCartCheckout()) {
-            onTransactionResult(false,
-                    Component.translatable(
-                            "gui.futureshops.cart.checkout_awaiting_result").getString());
+            checkOriginalCheckout();
             return;
         }
         List<ShopClientState.CartEntry> entries = ShopClientState.getCartEntries();
         if (entries.isEmpty()) return;
+        boolean normalized = entries.stream()
+                .anyMatch(ShopClientState.CartEntry::normalized);
+        boolean legacy = entries.stream()
+                .anyMatch(entry -> !entry.normalized());
+        if (normalized && legacy) {
+            onTransactionResult(false, Component.translatable(
+                    "gui.futureshops.cart.mixed_legacy").getString());
+            return;
+        }
+        if (normalized) {
+            showCheckoutModal();
+            return;
+        }
 
         // If we already have warnings (user saw them), force checkout on second click
         if (!ShopClientState.getCartWarnings().isEmpty()) {
@@ -339,7 +506,17 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         ShopPackets.CHANNEL.sendToServer(new C2SVerifyAdminCartPacket(shopId, lines));
     }
 
-    private void sendCheckout(PaymentSource paymentSource) {
+    private void checkOriginalCheckout() {
+        ShopClientState.retryCartCheckout(System.currentTimeMillis())
+                .ifPresentOrElse(
+                        this::sendCheckoutSubmission,
+                        () -> onTransactionResult(false,
+                                Component.translatable(
+                                        "gui.futureshops.cart.checkout_pending")
+                                        .getString()));
+    }
+
+    private void sendCheckout(Optional<PaymentSource> paymentSource) {
         long nowMillis = System.currentTimeMillis();
         if (ShopClientState.hasTrackedCartCheckout()) {
             onTransactionResult(false,
@@ -351,7 +528,9 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         if (!cartEntries.isEmpty()) {
             UUID requestId = UUID.randomUUID();
             CartResponsePolicy.BeginDecision decision = ShopClientState.beginCartCheckout(
-                    requestId, cartEntries, paymentSource.wire(), nowMillis);
+                    requestId, cartEntries,
+                    paymentSource.map(PaymentSource::wire)
+                            .orElse(""), nowMillis);
             if (decision != CartResponsePolicy.BeginDecision.STARTED) {
                 onTransactionResult(false,
                         Component.translatable("gui.futureshops.cart.checkout_pending").getString());
@@ -359,11 +538,34 @@ public class CartScreen extends Screen implements ShopScreenMarker {
             }
             sendCheckoutSubmission(new ShopClientState.CartCheckoutSubmission(
                     requestId, ShopClientState.getActiveShopId(),
-                    cartEntries, paymentSource.wire()));
+                    cartEntries, paymentSource
+                    .map(PaymentSource::wire).orElse("")));
         }
     }
 
     private void sendCheckoutSubmission(ShopClientState.CartCheckoutSubmission submission) {
+        if (submission.entries().stream()
+                .allMatch(ShopClientState.CartEntry::normalized)) {
+            Optional<PaymentSource> source =
+                    submission.paymentSource().isBlank()
+                            ? Optional.empty()
+                            : PaymentSource.fromWire(
+                            submission.paymentSource());
+            ShopPackets.CHANNEL.sendToServer(
+                    new C2SServerShopOfferCartPacket(
+                            submission.shopId(),
+                            submission.entries().stream()
+                                    .map(entry ->
+                                            new C2SServerShopOfferCartPacket
+                                                    .Line(
+                                                    entry.listingId(),
+                                                    entry.optionId(),
+                                                    entry.quantity(),
+                                                    entry.observedRevision()))
+                                    .toList(),
+                            submission.requestId(), source));
+            return;
+        }
         List<C2SBuyRequestPacket.LineItem> lines = submission.entries().stream()
                 .map(entry -> new C2SBuyRequestPacket.LineItem(
                         entry.listingId(), entry.quantity()))
@@ -371,6 +573,89 @@ public class CartScreen extends Screen implements ShopScreenMarker {
         ShopPackets.CHANNEL.sendToServer(new C2SBuyRequestPacket(
                 submission.shopId(), true, lines,
                 submission.paymentSource(), submission.requestId()));
+    }
+
+    private boolean requiresMoney(ShopClientState.CartEntry entry) {
+        if (!entry.normalized()) {
+            return unitMoneyCost(entry) > 0L;
+        }
+        return ShopClientState.getCatalogOffer(entry.listingId())
+                .stream().flatMap(listing ->
+                        listing.acquireOptions().stream())
+                .filter(option -> option.optionId()
+                        .equals(entry.optionId()))
+                .anyMatch(com.enviouse.futureshops.catalog.offer
+                        .AcquireOfferOption::moneyCostPresent);
+    }
+
+    private long unitMoneyCost(ShopClientState.CartEntry entry) {
+        if (!entry.normalized()) {
+            CatalogItem item = ShopClientState.getCatalogItem(
+                    entry.listingId()).orElse(null);
+            return item == null ? 0L
+                    : item.hasPromo()
+                    ? item.promoPrice() : item.buyPrice();
+        }
+        return ShopClientState.getCatalogOffer(entry.listingId())
+                .stream().flatMap(listing ->
+                        listing.acquireOptions().stream())
+                .filter(option -> option.optionId()
+                        .equals(entry.optionId()))
+                .filter(com.enviouse.futureshops.catalog.offer
+                        .AcquireOfferOption::moneyCostPresent)
+                .mapToLong(com.enviouse.futureshops.catalog.offer
+                        .AcquireOfferOption::moneyCostMinorUnits)
+                .findFirst().orElse(0L);
+    }
+
+    private int maximumQuantity(ShopClientState.CartEntry entry) {
+        int maximum = 2304;
+        if (!entry.normalized()) {
+            CatalogItem item = ShopClientState.getCatalogItem(
+                    entry.listingId()).orElse(null);
+            if (item != null && !item.unlimited()) {
+                maximum = Math.min(maximum,
+                        Math.max(1, item.stock()));
+            }
+        } else {
+            com.enviouse.futureshops.catalog.offer
+                    .ServerShopOfferListing listing =
+                    ShopClientState.getCatalogOffer(
+                            entry.listingId()).orElse(null);
+            if (listing != null) {
+                if (listing.stockPolicy().type()
+                        != com.enviouse.futureshops.catalog.offer
+                        .OfferStockPolicy.Type.UNLIMITED) {
+                    maximum = Math.min(maximum,
+                            (int) Math.max(1L,
+                                    listing.stockPolicy().quantity()));
+                }
+                com.enviouse.futureshops.catalog.offer
+                        .AcquireOfferOption option =
+                        listing.acquireOptions().stream()
+                                .filter(value -> value.optionId()
+                                        .equals(entry.optionId()))
+                                .findFirst().orElse(null);
+                if (option != null) {
+                    maximum = Math.min(maximum,
+                            Math.min(
+                                    listing.limits()
+                                            .maximumPerRequest(),
+                                    option.limits()
+                                            .maximumPerRequest()));
+                }
+            }
+        }
+        long unitCost = unitMoneyCost(entry);
+        if (unitCost > 0L) {
+            maximum = Math.min(maximum,
+                    (int) Math.min(
+                            ShopClientState
+                                    .getCurrentBalanceMinorUnits()
+                                    / unitCost,
+                            2304L));
+        }
+        return Math.max(1, maximum);
     }
 
     @Override

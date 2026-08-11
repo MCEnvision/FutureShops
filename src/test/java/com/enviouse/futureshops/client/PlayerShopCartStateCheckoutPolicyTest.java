@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PlayerShopCartStateCheckoutPolicyTest {
     @BeforeEach
@@ -22,7 +24,7 @@ class PlayerShopCartStateCheckoutPolicyTest {
     }
 
     @Test
-    void timedOutCheckoutRetainsOriginalLinesTokensAndPaymentSource() {
+    void timedOutCheckoutAllowsEditsAndRetainsOriginalSubmission() {
         PlayerShopCartState.addToCart(
                 new BlockPos(4, 70, 8), 3, 2,
                 "minecraft:diamond", "Diamonds", 500L, 1,
@@ -37,12 +39,83 @@ class PlayerShopCartStateCheckoutPolicyTest {
                 PlayerShopCartState.expireCheckout(16_000L));
 
         PlayerShopCartState.setQuantity(0, 9);
-        assertEquals(original, PlayerShopCartState.getEntries());
+        assertEquals(9, PlayerShopCartState.getEntries().get(0).quantity());
+        assertEquals(CartResponsePolicy.BeginDecision.ALREADY_PENDING,
+                PlayerShopCartState.beginCheckout(
+                        UUID.randomUUID(),
+                        PlayerShopCartState.getEntries(),
+                        "WALLET", 16_001L));
         PlayerShopCartState.CheckoutSubmission retry =
                 PlayerShopCartState.retryCheckout(16_001L).orElseThrow();
         assertEquals(requestId, retry.requestId());
         assertEquals(original, retry.entries());
         assertEquals("WALLET", retry.paymentSource());
+        PlayerShopCartState.setQuantity(0, 10);
+        assertEquals(9, PlayerShopCartState.getEntries().get(0).quantity());
+    }
+
+    @Test
+    void timedOutCheckoutCanClearVisibleCartWithoutLosingOriginalSubmission() {
+        PlayerShopCartState.addToCart(
+                new BlockPos(4, 70, 8), 3, 2,
+                "minecraft:diamond", "Diamonds", 500L, 1,
+                "MONEY", "", 0, "", "", false);
+        List<PlayerShopCartState.CartEntry> original =
+                PlayerShopCartState.getEntries();
+        UUID requestId = UUID.randomUUID();
+
+        PlayerShopCartState.beginCheckout(
+                requestId, original, "WALLET", 1_000L);
+        PlayerShopCartState.expireCheckout(16_000L);
+        PlayerShopCartState.clearEntries();
+
+        assertTrue(PlayerShopCartState.getEntries().isEmpty());
+        assertTrue(PlayerShopCartState.hasTrackedCheckout());
+        PlayerShopCartState.CheckoutSubmission retry =
+                PlayerShopCartState.retryCheckout(16_001L).orElseThrow();
+        assertEquals(original, retry.entries());
+        PlayerShopCartState.applyCheckoutResponse(
+                requestId, 0, true);
+        assertTrue(PlayerShopCartState.getEntries().isEmpty());
+        assertFalse(PlayerShopCartState.hasTrackedCheckout());
+    }
+
+    @Test
+    void activeCheckoutStillBlocksVisibleCartClear() {
+        PlayerShopCartState.addToCart(
+                new BlockPos(4, 70, 8), 3, 2,
+                "minecraft:diamond", "Diamonds", 500L, 1,
+                "MONEY", "", 0, "", "", false);
+        List<PlayerShopCartState.CartEntry> original =
+                PlayerShopCartState.getEntries();
+
+        PlayerShopCartState.beginCheckout(
+                UUID.randomUUID(), original, "WALLET", 1_000L);
+        PlayerShopCartState.clearEntries();
+
+        assertEquals(original, PlayerShopCartState.getEntries());
+    }
+
+    @Test
+    void terminalCheckoutFailureUnlocksCartWithoutRemovingItems() {
+        PlayerShopCartState.addToCart(
+                new BlockPos(4, 70, 8), 3, 2,
+                "minecraft:diamond", "Diamonds", 500L, 1,
+                "MONEY", "", 0, "", "", false);
+        List<PlayerShopCartState.CartEntry> original =
+                PlayerShopCartState.getEntries();
+        UUID requestId = UUID.randomUUID();
+
+        PlayerShopCartState.beginCheckout(
+                requestId, original, "WALLET",
+                System.currentTimeMillis());
+        PlayerShopCartState.applyCheckoutResponse(
+                requestId, 0, false);
+
+        assertFalse(PlayerShopCartState.hasTrackedCheckout());
+        assertEquals(original, PlayerShopCartState.getEntries());
+        PlayerShopCartState.setQuantity(0, 3);
+        assertEquals(3, PlayerShopCartState.getEntries().get(0).quantity());
     }
 
     @Test

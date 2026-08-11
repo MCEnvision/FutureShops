@@ -1,0 +1,23 @@
+package com.enviouse.futureshops.server.market.auction;
+
+public enum AuctionOperationStatus {
+    APPLIED,
+    NOT_FOUND,
+    LISTING_EXISTS,
+    CAPACITY_EXCEEDED,
+    REQUEST_CONFLICT,
+    IDENTITY_CONFLICT,
+    STALE_REVISION,
+    NOT_ACTIVE,
+    DEADLINE_PASSED,
+    SELLER_SELF_ACTION,
+    NOT_SELLER,
+    BID_TOO_LOW,
+    BID_AT_OR_ABOVE_BUYOUT,
+    HOLD_MISMATCH,
+    BUYOUT_UNAVAILABLE,
+    CANCELLATION_DENIED,
+    DEADLINE_NOT_REACHED,
+    NOT_FROZEN,
+    INVALID_TRANSITION
+}

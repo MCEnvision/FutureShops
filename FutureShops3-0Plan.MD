@@ -1,8 +1,369 @@
 # FutureShops 3.0 Plan
 
-Status. Approved for implementation.
+Status. The ATM deposit recovery and Bazaar refund access blocker in Section 20 is implemented on the active 3.0 beta branch. The `3.0.0-beta.4` gameplay maintenance, `3.0.0-beta.5` dependency audit closure, and `3.0.0-beta.6` dependency maintenance followup below are implemented, verified, and merged. Community delivery and the remaining live multiplayer, reconnect, restart, and recovery fault acceptance checks still block release approval.
 
 This document is the implementation contract for FutureShops 3.0. It covers the shared escrow foundation, migration of all existing value moving features, the Auction House, the Bazaar, the shared market interface, configuration, recovery, abuse controls, testing, and release sequencing.
+
+## Supported branch policy
+
+The `1.20.1` branch is the canonical default and integration branch for the Forge 1.20.1 release
+line. All FutureShops 3.0 fixes, phase pull requests, verification runs, issue closures, tags, and
+release preparation target `1.20.1`. The `1.21.1` branch is an independent NeoForge release line
+and must not receive Forge 1.20.1 integration merges. The historical `master` branch is not an
+integration target after this policy takes effect.
+
+GitHub default branch settings, branch rules, push workflow filters, Dependabot pull request bases,
+documentation links, and roadmap state must follow this policy. Moving the default branch must not
+rewrite either supported line. Existing work is integrated into `1.20.1` through a verified merge
+pull request, after which GitHub must report `1.20.1` as the default and protected branch.
+
+## Beta release identity
+
+FutureShops remains on the `3.0.0` release line until the owner explicitly approves a different
+release line. Feature plan names, merged feature groups, and network protocol revisions do not
+change the public mod version by themselves.
+
+Every bug fix increments only the final beta build number by exactly one. Artifact names use
+`futureshops-3.0.0-beta.<n>.jar`. The correction recorded by this plan changes the current build
+from the incorrect `3.1.0-beta.1` identity to `3.0.0-beta.3`. Future bug fixes continue with
+`3.0.0-beta.4`, `3.0.0-beta.5`, and so on unless the owner explicitly changes the release line.
+
+The Gradle project version is the single source of the beta identity. Packaging must project the
+same value into the JAR filename, the expanded `META-INF/mods.toml`, and the manifest
+`Implementation-Version`. Documentation and release notes must use the same release line. Network
+compatibility remains governed by the independent FutureShops protocol number.
+
+This maintenance change does not alter gameplay, persistence, configuration schemas, packet
+formats, or the release publication state. It adds a build policy regression test and requires a
+clean build followed by packaged JAR inspection. Acceptance requires all of the following.
+
+- `gradle.properties` declares `mod_version=3.0.0-beta.5` for the next verified bug fix artifact.
+- The produced artifact is named `futureshops-3.0.0-beta.5.jar`.
+- The expanded mod metadata and manifest both report `3.0.0-beta.5`.
+- Repository documentation no longer describes the current artifact as `3.1.0`.
+- The release line regression test rejects a version outside `3.0.0-beta.<positive integer>`.
+- Publishing, tagging, and changing the release line remain separate owner authorized actions.
+
+Implementation status. Implemented and verified on `envy/version-3-0-beta-3` on July 30, 2026,
+but not yet merged. The clean test run passed 1,874 tests with no failures, errors, or skips. The
+build and beta identity verification passed. The packaged JAR filename, expanded mod metadata,
+manifest version, logo, mixin configuration, and refmap were inspected. A dedicated server reached
+ready state with FutureShops `3.0.0-beta.3` loaded, and the virtual display client reached
+FutureShops client setup and the render thread. The existing development world reported Forge's
+expected version difference from the incorrect `3.1.0-beta.1` label and then reached ready state.
+There were no implementation deviations. Release publication and release line approval remain
+unchanged.
+
+### Beta 4 issue maintenance
+
+Objective. Resolve the reproducible selling and cart checkout regressions reported against the
+current beta, classify every open dependency alert without weakening the pinned Forge platform,
+and publish the result only as the next `3.0.0` beta artifact.
+
+Current evidence.
+
+- Server shop sell quotes currently return zero because the shared money quote helper only prices
+  acquire options. The sell intent rejects that zero payout as invalid. The same defect affects
+  direct Sell to Shop and the server shop Sell Inventory workflow.
+- Admin and player shop carts retain an immutable request after a response timeout, which is
+  required for replay safety. Their mutation guards and buttons currently treat any tracked
+  request as actively processing, so a missing response permanently prevents clearing, reducing,
+  or editing the cart.
+- GitHub reports 25 transitive dependency alerts from the submitted Gradle graph. The affected
+  libraries are inherited from Minecraft 1.20.1, Forge 47.4.20, ForgeGradle, or their tooling.
+  FutureShops does not package those libraries inside its mod JAR. Changing only the development
+  graph would not update libraries supplied to players by the pinned platform.
+
+Scope and architecture.
+
+1. Quote a Sell to Shop option from its configured per unit payout with checked integer
+   multiplication. Keep acquire pricing delegated to the existing server pricing policy. Both
+   direct and bulk selling must consume the same authoritative quote.
+2. Distinguish an actively pending cart request from a timed out but still tracked request. Active
+   requests continue to block cart mutations. After timeout, players may edit or clear the visible
+   cart contents while the immutable original submission and request UUID remain available for an
+   exact idempotent result check. A different checkout cannot start until the original request
+   reaches a terminal result.
+3. The cart result check must resend the original snapshot and payment source, never the edited
+   cart. Delayed or replayed success subtracts only the acknowledged original quantities from the
+   current cart. Terminal failure clears the tracker without removing cart contents.
+4. Record every dependency alert with its advisory, vulnerable dependency, resolved graph,
+   runtime or build classification, reachability evidence, patched boundary, and disposition.
+   Do not add direct dependency constraints unless they update the real shipped runtime and remain
+   compatible with Minecraft 1.20.1 and Forge 47.4.20.
+5. Review Dependabot coverage for Gradle and GitHub Actions. Existing unrelated or untracked
+   workflow work must not be overwritten. Default branch coverage that cannot be safely integrated
+   on this branch remains an explicit repository maintenance gate rather than a false gameplay
+   completion claim.
+
+Compatibility, failure, and recovery behavior.
+
+- No catalog, offer, escrow, claim, configuration, or persistent schema changes are permitted.
+- No packet identifier or payload shape changes are required. Existing request UUID replay and
+  server authoritative validation remain mandatory.
+- Checked payout overflow fails safely as an invalid request before inventory or money mutation.
+- A cart timeout never creates a second request identity. Editing the visible cart does not cancel
+  or replace the unresolved economic request.
+- Platform owned dependency alerts that require a Minecraft or Forge upgrade remain documented
+  and open. A development only override must not be presented as a player security fix.
+
+Verification and acceptance.
+
+- Focused tests prove direct and bulk sell quotes use the configured positive payout and preserve
+  free, barter, and acquire pricing behavior.
+- Focused tests prove timed out admin and player shop carts can be edited and cleared, retry the
+  immutable original submission, reject a different checkout, handle delayed success by exact
+  quantity, and unlock normally on terminal failure.
+- Interface tests or source contracts prove both cart screens expose the result check and enable
+  mutation controls only after the active timeout ends.
+- The dependency record covers all 25 alerts and JAR inspection proves the reported third party
+  packages are not bundled by FutureShops.
+- The complete test suite, build, dedicated server smoke test, client smoke test, multiplayer
+  request and response checks, packaged JAR inspection, and final diff inspection pass.
+- The artifact, expanded metadata, manifest, documentation, and release notes all report
+  `3.0.0-beta.4`. Issues remain open and in review until the fix is merged and its acceptance gates
+  pass on the approved default branch.
+
+Implementation status on July 31, 2026. The sell quote path now uses the configured server shop
+payout for sell actions and fails closed on multiplication overflow. Both cart implementations
+distinguish an actively pending request from an unresolved timed out request. A timed out cart can
+be edited or cleared while retaining its immutable original submission, and the Check Result
+action resends only that original request. Delayed success removes only acknowledged original
+quantities, while terminal failure preserves current cart contents.
+
+Local verification passed 1,886 unit and source contract tests, all 5 required GameTests, the
+Gradle build, dedicated server startup, client startup, JAR metadata inspection, third party class
+inspection, JSON validation, and final diff checks. The resulting artifact is
+`futureshops-3.0.0-beta.4.jar`, and both its expanded mod metadata and manifest report
+`3.0.0-beta.4`. The dependency record classifies all 25 open alerts. Those inherited platform and
+tooling alerts are not falsely marked remediated because replacing their runtime libraries requires
+a separately planned compatible Minecraft, Forge, and ForgeGradle upgrade. Dependabot coverage is
+prepared for Gradle and GitHub Actions. The gameplay issues remain in review until merge and live
+multiplayer confirmation.
+
+### Beta 5 dependency audit closure
+
+Objective. Complete GitHub issue 9 as an evidence based supply chain audit, enforce the boundary
+between the FutureShops artifact and launcher supplied libraries, activate reviewed dependency
+monitoring on the default branch, and produce the next `3.0.0` beta artifact for community
+retesting.
+
+Current evidence and decision.
+
+- All 25 alerts originate from the `settings.gradle` dependency snapshot. They resolve through
+  Minecraft 1.20.1, Forge 47.4.20, ForgeGradle 6.0.54, or MixinGradle 0.7 snapshot rather than a
+  direct FutureShops library declaration.
+- Netty, Log4j, Commons IO, Commons Compress, Commons Lang, and Guava exist on the game runtime.
+  Plexus Utils and older Commons versions also exist in Forge runtime tooling or the build plugin
+  graph. FutureShops directly uses only bounded Netty buffer and decoder exception APIs.
+- The affected Netty handlers and codecs, Log4j layouts and appenders, archive readers, class name
+  parser, XML reader, and Guava temporary file helpers are not selected by FutureShops. Minecraft,
+  Forge, server operators, and the build tools can still reach platform owned library code, so the
+  submitted graph is not a false positive.
+- A normal Forge mod cannot replace libraries already selected by the launcher. Adding patched
+  copies with Jar in Jar would introduce duplicate or split packages and would not safely replace
+  bootstrap classes. Development only constraints would leave player installations unchanged.
+  Therefore no direct constraint or bundled replacement is permitted in this beta.
+- Alerts that require a Minecraft, Forge, or ForgeGradle upgrade receive an explicit accepted risk
+  disposition with the pinned platform boundary and the first patched version. Dismissal means the
+  audit is resolved for this release line, not that the upstream component was patched.
+
+Scope and implementation.
+
+1. Publish a beta 5 dependency disposition record that maps each alert number and advisory to its
+   resolved version, runtime or build classification, FutureShops reachability, first patched
+   version, GitHub disposition, and future remediation boundary.
+2. Add a deterministic packaged dependency boundary gate. It must fail if the FutureShops JAR
+   contains Netty, Apache Commons, Guava, Log4j, or Plexus class files or Forge Jar in Jar metadata.
+3. Retain weekly Dependabot coverage for Gradle and GitHub Actions. Group only minor and patch
+   updates. Keep major platform changes visible for explicit compatibility planning.
+4. Bump the artifact, expanded mod metadata, manifest, documentation, and release notes to
+   `3.0.0-beta.5` without changing the Minecraft, Forge, Java, mappings, loader, or protocol
+   boundary.
+5. After deterministic verification passes, merge through the protected pull request workflow so
+   Dependabot coverage exists on the default branch. Reconcile GitHub issue 9 and its 25 alert
+   dispositions only after the merged state is verified.
+6. Send the verified JAR and checksum to each accessible active Discord support thread. Ask the
+   reporter to replace both client and server copies, restart fully, reproduce the original issue,
+   and return the latest log if it persists. If Discord access is unavailable, record the exact
+   delivery blocker and provide the ready to send message without claiming outreach succeeded.
+
+Compatibility, security, and recovery behavior.
+
+- This work does not change gameplay, persistent schemas, configuration, packets, catalog data, or
+  escrow behavior.
+- Platform alert acceptance does not weaken packet validation, server authority, artifact
+  inspection, or future upgrade obligations.
+- A future compatible platform upgrade must reopen the record, remove obsolete accepted risks,
+  and pass the complete compatibility and multiplayer matrix before release.
+- No GitHub alert may be marked inaccurate or not used when the submitted graph remains vulnerable
+  or platform code can still reach the dependency.
+
+Verification and acceptance.
+
+- A source contract proves every current alert and advisory is present exactly once with a runtime
+  or build classification, reachability statement, patched boundary, and disposition.
+- The packaged dependency boundary task passes against the exact release JAR and remains part of
+  `check`.
+- Unit tests, all required GameTests, the Gradle build, dedicated server startup, client startup,
+  JAR metadata inspection, JSON validation, secret and generated output inspection, and complete
+  Git diff inspection pass.
+- The artifact is named `futureshops-3.0.0-beta.5.jar`. Its expanded mod metadata and manifest both
+  report `3.0.0-beta.5`.
+- `.github/dependabot.yml` exists on the verified default branch and covers both Gradle and GitHub
+  Actions.
+- GitHub issue 9 is closed only after its acceptance criteria pass on the default branch. Discord
+  delivery is reported accurately and is not treated as complete when no authorized integration is
+  available.
+
+Implementation status on July 31, 2026. The beta 5 record classifies all 25 alerts and records the
+accepted risk at the pinned platform boundary. No direct dependency override or duplicate packaged
+library was added. The new packaged dependency gate is part of `check` and rejects the affected
+class namespaces and Forge Jar in Jar metadata.
+
+Local verification passed 1,887 unit and source contract tests, all 5 required GameTests, the
+Gradle build, dedicated server ready state, client setup and render thread startup, expanded mod
+metadata and manifest inspection, JSON validation, forbidden package inspection, and final diff
+checks. The resulting artifact is `futureshops-3.0.0-beta.5.jar`. The final delivery checksum must
+be calculated from the verified artifact after the last build because Forge reobfuscation rewrites
+the archive during packaging. Default branch integration, GitHub alert reconciliation, issue
+closure, and Discord delivery remain pending and must not be reported as complete before their
+external state is verified.
+
+### Beta 6 dependency maintenance
+
+Objective. Reconcile the open Dependabot pull requests without crossing the pinned Forge platform
+boundary, keep the JUnit test runtime internally compatible, and produce the next `3.0.0` beta
+artifact only after the updated default branch passes the complete Gradle verification gate.
+
+Current evidence and decisions.
+
+- Pull request 14 replaces the moving MixinGradle `0.7-SNAPSHOT` selector with the fixed `0.7.38`
+  release. Its Gradle and secret checks pass against beta 5.
+- Pull request 16 updates the Foojay toolchain resolver convention from `0.7.0` to `1.0.0`. The
+  plugin requires Java 17 or newer, which matches this project, and its Gradle and secret checks
+  pass against beta 5.
+- Pull requests 13 and 17 independently update JUnit Jupiter and the JUnit Platform launcher from
+  the aligned `5.10.2` and `1.10.2` generation to `6.1.2`. Either pull request alone leaves an
+  incompatible mixed JUnit runtime. The update must be combined by declaring JUnit Jupiter
+  `6.1.2` and allowing its JUnit BOM to supply the matching launcher version.
+- Pull request 15 updates the wrapper from Gradle `8.14.4` to `9.6.1`. ForgeGradle rejects Gradle 9
+  during plugin application, before project compilation. The wrapper remains pinned to `8.14.4`,
+  and Dependabot must ignore that incompatible major line until a separately approved ForgeGradle
+  migration supports it.
+
+Scope and implementation.
+
+1. Merge the MixinGradle and Foojay updates through their existing Dependabot pull requests after
+   their current heads and required checks are verified.
+2. Repair the JUnit Jupiter pull request so Jupiter and the launcher resolve through the same JUnit
+   `6.1.2` BOM. Close the separate launcher pull request as superseded only after the repaired pull
+   request is verified.
+3. Close the Gradle 9 wrapper pull request as incompatible and record the exact ForgeGradle failure.
+   Do not modify the wrapper, ForgeGradle, Minecraft, Forge, Java, mappings, or loader boundary.
+4. Increment the beta artifact identity once to `3.0.0-beta.6`. Keep the JAR filename, expanded mod
+   metadata, manifest, documentation, and release notes aligned with that version.
+5. After all compatible pull requests merge, update local `master` from `origin/master` and run the
+   full Gradle test and build gates from the exact merged default branch.
+
+Compatibility, security, and recovery behavior.
+
+- These dependencies affect build configuration and test execution only. They do not change the
+  shipped gameplay runtime, packets, persistent schemas, configuration, escrow, or market state.
+- The packaged dependency boundary remains mandatory and must prove that no build or test library
+  enters the FutureShops JAR.
+- A failed pull request check, incompatible dependency graph, unresolved review, or nonmatching
+  JUnit generation blocks merge. No required check or review is bypassed.
+- The existing untracked local workflows and generated run data remain outside this maintenance
+  change.
+
+Verification and acceptance.
+
+- Pull requests 14 and 16 merge with their successful checks intact.
+- The repaired JUnit pull request resolves Jupiter and the launcher to `6.1.2`, passes all required
+  checks, and merges. The separate launcher pull request closes as superseded.
+- The Gradle 9 wrapper pull request closes without merge and records ForgeGradle's explicit Gradle
+  9 incompatibility.
+- `test`, `check`, and `build` pass from updated `master`. The final test count is recorded from the
+  generated JUnit results.
+- The packaged JAR is named `futureshops-3.0.0-beta.6.jar`. Its expanded `mods.toml` and manifest
+  report `3.0.0-beta.6`, and the forbidden packaged dependency gate passes.
+- GitHub shows no remaining open Dependabot pull request from this update batch. Any future major
+  platform proposal remains review only.
+
+Implementation status on July 31, 2026. Pull requests 14 and 16 merged the fixed MixinGradle
+`0.7.38` and Foojay resolver `1.0.0` updates. Pull request 13 merged the aligned JUnit `6.1.2`
+runtime after both review findings were corrected and every required GitHub check passed. Pull
+request 17 closed as superseded. Pull request 15 closed without merge because ForgeGradle rejects
+Gradle 9 during plugin application, and Dependabot was instructed to ignore that major line.
+
+Verification on merged `master` passed `clean`, `test`, `check`, and `build` with 1,887 tests and
+no failures, errors, or skips. Dependency insight resolves JUnit Jupiter and the JUnit Platform
+launcher to `6.1.2` through the same BOM. The wrapper remains Gradle `8.14.4`. Packaged dependency
+validation passed, and the JAR contains the expected logo, mixin configuration, and refmap. The
+verified artifact is `futureshops-3.0.0-beta.6.jar`. Its expanded mod metadata and manifest report
+`3.0.0-beta.6`. Its SHA-256 is
+`d667668845e10ef30c89103c84411e46a1c2bc753aa03a5b5060fb81de0849fa`, and its SHA-512 is
+`05e9a8fbc47d14c94ad9a9e4cfa5e0b99e4b0ae67d95cb488ca2bfa884019bda24fbdfdd7af5708e6afb5f830f6f075b2710a32da8ff553cae92bfdbb8b08b0d`.
+No Dependabot pull request from this batch remains open. Gameplay, network, persistence,
+configuration, escrow, and release publication behavior did not change.
+
+### Issue 18 escrow lifecycle concurrency review
+
+Objective. Resolve the twenty high severity CodeQL time of check and time of use findings on the
+merged beta 6 baseline without weakening escrow readiness, replay protection, recovery,
+checkpoints, claims, wallets, or logical server authority.
+
+Release boundary. This security bug fix increments the test artifact once to `3.0.0-beta.7`.
+Minecraft, Forge, ForgeGradle, Gradle, mappings, Java, and network protocol versions remain pinned.
+
+Current evidence. The findings cover runtime acquisition in cash deposit and money claim flows,
+runtime lifecycle checks in `EscrowRuntimeManager`, scheduler and coordinator state checks inside
+`EscrowRuntimeService`, and Server Shop replay compaction. Runtime value mutation is already
+confined to the owning logical server thread, and the relevant runtime methods are synchronized.
+CodeQL cannot infer that thread confinement across separate method calls. The unbound static
+runtime lookup is still a weak boundary because it does not prove that its caller owns the server
+lifecycle. Nested synchronized resources also make their atomicity implicit instead of local to
+the check and use.
+
+Implementation.
+
+1. Add server scoped runtime lookup and readiness methods that require the owning server thread,
+   reject a mismatched server, and fail closed during quiescence. Use them for the reported money
+   claim and cash deposit value paths.
+2. Keep the no argument lookup only for existing read only status paths that have no server
+   context. Do not broaden its use in value moving code.
+3. Make each reported state check and dependent use atomic on the same runtime, coordinator,
+   scheduler, or replay store monitor. Preserve the owning server thread assertion as a second
+   invariant rather than relying on monitor locking alone.
+4. Add source contracts and focused concurrency tests for the server bound lookup, wrong server
+   rejection, off thread rejection, lifecycle quiescence, and replay retention locking. Do not
+   change persistent data, journals, packets, configuration, pricing, or replay formats.
+5. Run CodeQL on the exact pull request commit. Fix every valid finding. Dismiss a remaining false
+   positive only with exact server thread and monitor evidence recorded on that alert.
+
+Verification and acceptance.
+
+- Focused runtime lifecycle and source contract tests compile and pass.
+- The full unit suite, all GameTests, `check`, `build`, dedicated server smoke test, client smoke
+  test, packaged JAR inspection, and complete diff inspection pass.
+- The exact pull request commit receives successful Gradle, dependency review, secret scan, and
+  Java CodeQL checks.
+- Zero unexplained open findings remain for `java/toctou-race-condition`. Issue 18 stays open until
+  the reviewed pull request is merged and the default branch scan confirms the final state.
+- Issues 10 and 11 remain open until their original Discord reporters receive and test the exact
+  distributable JAR. Their test evidence does not authorize release publication.
+
+Implementation status. Signed commit `a41bec43137d0256d36dcb401e3928515bf140c4` passes all 1,888
+unit and architecture tests, all five required GameTests, `check`, `build`, dedicated server startup
+on an isolated port, headless client setup and atlas creation, metadata inspection, and dependency
+boundary verification on node1. The resulting `futureshops-3.0.0-beta.7.jar` is 5,730,621 bytes.
+Its SHA-256 is `04d03bee881fa7a1a3dfa4d7f07d1a099d40998d2b052bfe2592c131847b0c95`, and its
+SHA-512 is `8ca549a6f163d3926809187c19ffd8a3441c0bed3fbfb0ad979d845c9524a02d8c9ecd36d925c1e1edaf737cae7abc837593a6492402152b84551eaf5d1334b1`.
+Source contract tests normalize platform line endings so the same verification gate runs on Windows
+and Linux checkouts.
+Pull request checks, CodeQL confirmation, merge, default branch scanning, and reporter testing remain
+open gates.
 
 The required build order is.
 
@@ -402,7 +763,7 @@ Sources.
 - Wallet balance.
 - Inventory cash using the active provider.
 - Optional automatic priority policy.
-- Optional mixed wallet and physical payment in a later phase.
+- Configurable wallet or physical payment with an explicit per-purchase choice.
 
 The confirmation displays.
 
@@ -513,7 +874,10 @@ Commands include the short and long Auction House commands plus create, mine, bi
 
 ### Screens
 
-The Auction House uses the red themed shared shell.
+The Auction House uses the exact shared Nocturne shell used by `/shop`. Server Shop, Player Shops,
+Bazaar, and Auction House remain in one stable top navigation row with the same blurple palette,
+logo, wordmark, search, balance, profile, and close controls. A client theme override recolors the
+whole marketplace consistently instead of assigning a different color to each module.
 
 Tabs.
 
@@ -526,7 +890,12 @@ Tabs.
 
 Categories and saved filters live in the left rail. Sorting includes ending soon, newest, lowest price, highest current bid, most bids, seller, price range, enchantment, exact variant, mod ID, and category.
 
-Listing cards show exact item, seller, buy now or current bid, minimum next bid, bid count, remaining time, watched state, and listing status.
+Listing cards show the exact item, seller name and skin head, buy now or current bid, minimum next
+bid, bid count, remaining time, watched state, listing status, live listing count, and recent market
+activity. Hovering the item shows the complete vanilla tooltip from the escrowed item snapshot,
+including enchantments, lore, damage, custom names, and other NBT. Hovering a seller shows their
+UUID and transaction participant context. Details show the top bidder or buyer, hourly and daily
+activity, average price, units sold, and a bounded recent price graph.
 
 The footer shows Create Listing, active listing count, active bid holds, outbid notifications, and claim count.
 
@@ -625,7 +994,9 @@ Commands include the short and long Bazaar commands plus orders and claims route
 
 ### Screens
 
-The Bazaar uses the green themed shared shell.
+The Bazaar uses the same exact shared Nocturne shell and stable top navigation as `/shop` and the
+Auction House. A theme choice applies to the entire marketplace so switching modules never changes
+the navigation language or visual identity.
 
 Tabs.
 
@@ -636,7 +1007,10 @@ Tabs.
 - Claims.
 - History.
 
-Product cards show item, instant buy, instant sell, spread, recent volume, trend, and market status.
+Product cards show item, instant buy, instant sell, spread, recent volume, trend, market status,
+live buy and sell order counts, hourly trades, daily units, average price, and recent price history.
+Player owned order and fill views resolve display names instead of exposing UUIDs as labels. UUIDs
+remain available in identity tooltips for administrators and players who need exact diagnostics.
 
 Product detail shows identity, order books, recent trades, quantity presets, price, total, fees, slippage, availability, payment source, average execution estimate, worst allowed execution, and claimable fills.
 
@@ -895,6 +1269,10 @@ The following behaviors are checked before escrow work and after every major int
 - ATM planning works for internal and external providers.
 - Internal ATM minting registers protected bills.
 - Foreign ATM minting does not claim internal protection.
+- A retryable ATM deposit recovery can be resumed with the original request identity and never asks the player to create a new economic request.
+- Pending ATM deposit recovery never blocks collection of an already committed cash claim.
+- Closing, reopening, reconnecting, and restarting reconcile ATM recovery from server state without duplicating consumption or credit.
+- Bazaar cancellation reports the exact unfilled refund amount, identifies Claims as its destination, refreshes the claim count, and provides a direct route to collection.
 
 ## 17. Testing strategy
 
@@ -915,6 +1293,10 @@ Network tests cover round trips, protocol constant, invalid enums, oversized fie
 Interface tests cover the regression gate, GUI scale 2, 3, and 4, wide and narrow layouts, keyboard use, long translations, both time formats, themes, accessibility, Back, X, Escape, resize, and stale response handling.
 
 Performance tests cover thousands of auctions, tens of thousands of orders, large partial fill counts, claim queues, startup rebuild, recovery, search, pagination, and expiration spikes. Matching, expiry, and recovery use bounded work per tick.
+
+ATM recovery tests inject failures before and after intent persistence, reservation, inventory removal, settlement, evidence cleanup, and recovery enqueue. Each test repeats the original request, reopens the ATM, reconnects, and restarts the server. The assertions prove that bills are consumed at most once, wallet value is credited at most once, exact terminal state is reported, stale evidence is durably removed only when it is proven safe, and unrelated cash claims remain collectible.
+
+Bazaar cancellation tests cover unfilled and partially filled buy orders funded by wallet and Inventory Cash. The response, refreshed claim count, Claims route, exact pending amount, collection, maximum wallet handling, module disable behavior, reconnect, and restart must agree with the durable `BUYER_REFUND_CLAIM`.
 
 ## 18. Implementation phases
 
@@ -1023,6 +1405,7 @@ Branch. envy slash markets hardening.
 - Permission examples.
 - API events.
 - Compatibility matrix.
+- ATM deposit recovery and claim access release blocker from Section 20.
 - Final complete regression pass.
 
 ## 19. Recommended defaults
@@ -1049,6 +1432,247 @@ Branch. envy slash markets hardening.
 - Bazaar executes at maker price.
 - Claims do not expire automatically.
 - Initial release is single server.
-- Shop is blurple, Bazaar green, and Auction House red with theme overrides.
+- Shop, Player Shops, Bazaar, and Auction House share one blurple Nocturne schema. Optional client
+  theme and accessibility overrides recolor the entire marketplace consistently.
 
 These defaults maximize safety while retaining server and client customization. FutureShops does not claim control over foreign currency supply or arbitrary third party storage behavior that it cannot technically enforce.
+
+## 20. Release blocker. ATM deposit recovery and refund access
+
+Issue status. Fixed in the active 3.0 implementation. Live acceptance remains pending.
+
+The pre fix audit reproduced the reported single player deposit failure from the former control flow. The ATM showed `RECOVERY_REQUIRED`, retained the original deposit request, and offered Retry deposit. The retry correctly reused the same request UUID, but a stored nonterminal transaction or active player evidence was classified as `RECOVERY_REQUIRED` again without a client visible reconciliation result. This could become an endless status loop even though creating a new request was correctly forbidden.
+
+The former screen could display an already committed cash claim while making it unreachable. `AtmScreen` enabled Collect cash only while no deposit request was pending and while withdrawal mode was selected. It also prevented switching between Deposit and Withdrawal while that request was pending. A retryable deposit recovery could therefore disable Collect cash and prevent the player from entering the mode that would enable it. Back remained available, but reopening restored the static client tracker, so leaving the screen did not resolve the dead end.
+
+The former recovery enqueue path contained a confirmed false success result. `ProtectedCashRedemptionWorkflow.enqueueIntentRecovery` caught a runtime failure from the runtime queue and returned `true`. `ForeignCashDepositWorkflow.enqueueIntentRecovery` had the same behavior. Their callers interpreted `true` as successfully queued recovery, so a failed enqueue could leave live evidence attached to the player while no recovery work was accepted. Future deposits then detected that evidence and returned `RECOVERY_REQUIRED`.
+
+Bazaar cancellation was a related discoverability problem, not the same claim type as the ATM screenshot. Canceling an unfilled or partially filled buy order releases the remaining hold into a durable `BUYER_REFUND_CLAIM`. `BazaarEscrowLifecyclePlanner` stores it as a pending `ClaimKind.MONEY` claim labeled `Bazaar buyer refund`. This is a Claims balance, not an ATM physical cash claim, including when Inventory Cash first funded the order under the current refund policy. The former success text said that remaining value returned through Claims, but it did not report the exact amount, open Claims, or guarantee that the refreshed claim badge made the refund obvious. The screenshot's Collect cash count represents a separate cash claim and must not be presented as proof that the Bazaar refund is available there.
+
+The implementation now preserves and synchronizes the exact request and transaction identity, uses explicit recovery enqueue results, performs bounded exact recovery checks, fails ambiguous evidence into manual review, keeps unrelated ATM navigation and cash claim collection available, and exposes `/marketadmin inspect <transactionId>`. Bazaar buy order cancellation reports the exact durable refund, refreshes capabilities, and opens Claims directly. Network protocol 52 carries the authoritative ATM recovery snapshot used after open and reconnect.
+
+### 20.1 Server recovery contract
+
+1. Preserve the original deposit request UUID and deterministic recovery transaction UUID. Retry, screen reopen, reconnect, and restart must inspect or resume that exact transaction. They must never create a replacement economic request.
+2. Replace the boolean recovery enqueue result with an explicit result such as `QUEUED`, `NO_DURABLE_EVIDENCE`, or `FAILED`. A thrown enqueue operation can never be reported as queued.
+3. Apply the same result contract to protected FutureShops bills and foreign currency deposits.
+4. Distinguish a safe orphaned intent from evidence recorded after reservation or inventory mutation. An intent may be discarded only when the exact evidence matches, no reservation or transaction exists, and the live inventory still matches the recorded state before mutation.
+5. Make safe orphan cleanup durable. Remove only the matching evidence and force the player data save before reporting that the recovery block is gone.
+6. Never discard evidence after a reservation, physical removal, settlement decision, or ambiguous failure. Queue exact recovery or enter explicit manual review.
+7. Make a recovery check actively inspect, enqueue, or resume the exact transaction before responding. Repeated checks must converge on a terminal result or an actionable manual review state instead of returning an undifferentiated recovery result forever.
+8. Expose explicit server authoritative states for completed credit, refunded value, cash claim ready, recovery pending, manual review, and request conflict. Every terminal result includes the credited or returned amount and its destination.
+9. Include active ATM recovery identity and state in the ATM data snapshot. Opening the ATM or reconnecting must adopt server state and clear stale client tracking after the server proves a terminal result.
+10. Keep new deposits blocked while earlier evidence is genuinely nonterminal, but do not block unrelated claim collection, navigation, inspection, or administrative recovery.
+11. Add an administrator inspection path keyed by the full recovery transaction UUID. It reports the request, player, currency provider, evidence stage, reservation, inventory mutation, settlement, claim, last recovery attempt, and safe next action without exposing unrelated player data.
+
+### 20.2 ATM interface requirements
+
+1. Replace Retry deposit with Check recovery or Resume recovery while the server owns a nonterminal recovery. The action reuses the original request and explains that it cannot charge or consume again.
+2. Keep Deposit and Withdrawal navigation usable while recovery is pending. Disable only actions that would create a conflicting ATM value mutation.
+3. Keep Collect cash available whenever a committed cash claim can be delivered and no cash collection request is already awaiting a response. Deposit recovery state alone cannot disable it.
+4. When returned cash is ready, make Collect returned cash the primary recovery action and show the exact amount and claim count.
+5. Wrap recovery messages inside the available panel. Show the full recovery handle and provide a copy action so the player can give an administrator an exact identifier.
+6. On open, reopen, reconnect, and server restart, reconcile the local tracker against the server snapshot before enabling Deposit, Retry, or Check recovery.
+7. After a terminal result, clear the pending tracker, refresh balance and claims, preserve a concise receipt, and return normal controls without requiring logout.
+
+### 20.3 Bazaar refund requirements
+
+1. A successful buy order cancellation response reports the exact unfilled refund amount and says that it is pending in Claims.
+2. The client immediately refreshes capabilities, open claim count, and the Claims page after the durable cancel commit.
+3. The success notice provides a direct View refund action. It must remain available when Bazaar is frozen or disabled because claims and cancellation are resolution actions.
+4. The Claims row identifies `Bazaar buyer refund`, the order, the amount, the original payment source, and whether collection credited the wallet or left a remainder because of the maximum balance.
+5. Wallet funded and Inventory Cash funded orders use the configured refund policy consistently. The interface must not imply that a money claim is collectible from the ATM as physical cash.
+6. Partial fill cancellation reports only the remaining reserve. Filled quantity, fees, price improvement, and earlier claims remain separate and conserve exactly.
+
+### 20.4 Required verification matrix
+
+- Normal protected bill deposit in single player and on a dedicated server.
+- Normal foreign currency deposit with every supported provider.
+- Failure before and after intent persistence, reservation, inventory removal, settlement persistence, settlement commit, and evidence cleanup.
+- Recovery queue rejection and thrown recovery enqueue for protected and foreign deposits.
+- Safe orphan cleanup followed by an immediate player save and restart.
+- Ambiguous post mutation evidence entering recovery or manual review without evidence deletion.
+- Same request replay before and after every recovery state transition.
+- Close and reopen, logout and reconnect, client restart, and server restart.
+- Full inventory, maximum wallet, partial wallet capacity, and a cash claim ready during deposit recovery.
+- Recovery started from Deposit mode and Withdrawal mode at every supported GUI scale.
+- Corrupt, mismatched, and unknown evidence with a complete administrator recovery handle.
+- Two rapid retry packets, delayed duplicate responses, packet loss, and request conflict.
+- No double bill consumption, no double wallet credit, no duplicate claim, and no silent value loss.
+- Bazaar cancel before any fill, after a partial fill, after full fill, and concurrent with a fill boundary.
+- Bazaar refunds funded by wallet and Inventory Cash, collected normally and at maximum wallet balance.
+- Bazaar disabled after order placement with cancellation and Claims still available.
+
+### 20.5 Exact item delivery tick budget
+
+Issue 23 demonstrates that the automatic claim delivery limit does not represent the real cost of exact item delivery. A purchase of about 2300 items produces about 36 exact stack claims. The current default can process 32 claims in one server tick, and every successful exact item delivery persists the player and forces the player data file before the claim is committed. This can place dozens of durable saves in one tick and reduce a healthy dedicated server to about 10 TPS until the delivery completes.
+
+The repair is a maintenance extension of the existing bounded work and no value loss contracts.
+
+1. Automatic exact item delivery must enforce a non bypassable durability operation budget per server tick. Existing configuration values from earlier 3.0 builds must not permit a burst of player saves after upgrade.
+2. Delivery remains automatic and fair across online players and pending claims. Excess claims remain durable and pending for later ticks. The repair must not delete value, drop items into the world, merge unlike item data, or convert exact items into money.
+3. A full inventory produces a pending claim without repeated durable writes. Manual claim collection remains available and uses the same exact item identity and replay protection.
+4. Money claims and exact item claims share the configured scan budget. Every exact item delivery attempt consumes the durability operation budget because recovery can perform durable work even when the final result is not delivered. Failure and retry logging remains bounded.
+5. The public configuration must describe the expensive operation being limited. Existing configurations automatically receive `claims.exact_item_delivery_operations_per_tick = 1`. The older general `claims.delivery_work_per_tick` setting remains compatible but cannot bypass the exact item durability limit.
+6. Regression coverage must prove that a large pending claim set cannot execute more than the safe exact item delivery budget in one server tick, that work resumes on later eligible ticks, and that fairness rotation is preserved.
+7. Verification requires the formatter, static checks, unit tests, relevant GameTests, data validation, the full Gradle build, dedicated server startup through FutureShops initialization, and a final artifact inspection. A live dedicated server acceptance run should confirm stable tick time while delivering more items than one inventory can hold.
+
+Implementation status. The source repair adds a dedicated exact item operation limit of one per tick, applies it to immediate purchase and barter delivery, and preserves the larger general scan budget for money claims. Selection rotates across pending claims and online players. Focused regression tests, the complete unit suite, data generation, all five GameTests, packaged dependency checks, and the full build pass on Java 17. The GameTest server reaches FutureShops ready state and shuts down cleanly. Final acceptance still requires the reporter's Windows server and large purchase scenario after the issue 25 recovery repair is integrated.
+
+This work is separate from the issue 25 startup recovery repair. The issue 23 log also shows escrow remaining in `RECOVERING`, which is addressed by the issue 25 beta artifact. Issue 23 remains open until both the recovery repair and this delivery budget repair are tested against the reporter's world and large purchase scenario.
+
+### 20.6 Issue 23 ATM evidence and administrator recovery
+
+The reporter's dedicated server trace proves that commit `b954755d8891` addresses only the large exact item delivery tick spike. ATM cash collection can still insert bills and then classify the same delivery as unknown because inventory evidence is based on byte serialization of the complete main inventory. Forge capability compounds may serialize in a different key order after an `ItemStack.copy()` or player data round trip, and an unrelated modded stack may normalize between the live inventory and the saved player file. The current ATM path also discards the custody rejection detail and one runtime exception, while maintenance mode has no command that invokes the implemented verified resume workflow.
+
+The issue 23 recovery repair must preserve fail closed escrow behavior without producing false unknown outcomes.
+
+1. New player inventory delivery evidence uses a deterministic semantic NBT encoding. Compound keys are ordered before hashing, list order and exact primitive values remain significant, and Forge capability data remains part of the item identity. The exact custody snapshot codec remains unchanged.
+2. The insertion plan computes before and after evidence from the final defensive copies owned by the plan. It must not hash one object graph and later compare a second copy with potentially different serialization order.
+3. Delivery confirmation uses the recorded changed slots as the authoritative before and after proof. Unrelated inventory slots must not invalidate a completed receipt or make an untouched plan appear applied. A changed slot that matches neither state remains unknown and enters quarantine.
+4. Existing version one delivery tokens and receipts remain readable. Version two records identify the canonical hash contract. Legacy records use their original hash contract and the narrowest safe changed slot proof available. No migration may reinterpret an old digest with the new algorithm.
+5. ATM collection, custody rejection, packet rejection, and entry into maintenance produce bounded actionable logs with the player, claim or request identity, stable error code, and recovery handle. Logs must not contain private inventory contents or unbounded NBT.
+6. `/marketadmin maintenance status` reports runtime state, incident, recovery backlog, conservation verification, current revision, journal sequence, and verification fingerprint. `/marketadmin maintenance verify` performs a read only verification and prints the exact resume preconditions. `/marketadmin maintenance resume confirm <reason>` invokes the existing `VerifyAndResume` processor with the current revision and global verification snapshot. It requires escrow administrator permission, explicit confirmation, and an audit reason. A failed precondition leaves maintenance active and reports the blocking reason.
+7. Recovery commands never delete claims, receipts, journal records, checkpoints, or custody evidence. They remain available while market modules are disabled because maintenance is an escrow runtime concern rather than a module navigation action.
+8. Regression coverage must reproduce semantically equal capability compounds with different insertion order, defensive copy normalization, unrelated slot changes, changed slot ambiguity, legacy version one decoding, ATM exception diagnostics, and verified maintenance resume success and refusal.
+
+### 20.7 Issue 23 admin shop catalog maintenance
+
+Large admin shops need an operator controlled catalog ceiling and a recovery path when a removed mod leaves unknown item identifiers in `config/futureshops/shops/admin.json`.
+
+1. `admin_shop.maximum_listings` is added to `futureshops-common.toml`. It defaults to 512 for compatibility and is bounded from 1 through 10000. Loading and admin editing enforce the configured value. The network protocol retains an independent hard ceiling of 10000 and a bounded payload size so a configuration increase cannot create an unbounded packet.
+2. `/marketadmin adminshop validate` is read only. It validates every listing, reports the total error count, listing identifier, item identifier, field path, and stable validation code, and reports when the configured listing ceiling is exceeded. Output is paged or bounded so a catalog with thousands of failures cannot flood chat or logs.
+3. `/marketadmin adminshop quarantine_missing confirm <reason>` moves listings containing missing registry items from the active `listings` array into a timestamped recovery file under `config/futureshops/shops/recovery/`, then atomically writes and reloads the valid catalog. The recovery file preserves the complete original listing JSON and source metadata. Existing backups remain intact.
+4. The repair command requires escrow administrator permission, explicit confirmation, and an audit reason. It is idempotent when no missing item listings remain. Parse failures, duplicate identifiers, invalid NBT, and unrelated validation errors are reported but are not silently removed by the missing item repair.
+5. The editor must identify the other invalid listing by stable listing identifier and validation path instead of only reporting that another listing is invalid. An operator can run the validation command, quarantine only missing item listings, and resume editing without manually searching thousands of entries.
+6. Configuration reload rejects values outside the bound and preserves the last valid runtime setting. Increasing the configured ceiling does not rewrite an existing catalog and does not weaken per listing, component, NBT, or packet size validation.
+7. Regression coverage must include the default 512 limit, a configured catalog above 512, the 10000 hard ceiling, a missing output, cost, icon, and sell input item, dry validation, confirmed quarantine, recovery file contents, reload success, repeat execution, path containment, and write or reload rollback.
+
+This issue 23 maintenance extension targets `3.0.0-beta.10`. It remains isolated from concurrent issue work and must not merge or publish until the earlier beta phase is integrated. Completion requires focused tests, the complete unit suite, data validation, relevant GameTests, the full build, dedicated server and client startup, multiplayer and reconnect checks for ATM receipt proof, final JAR inspection, and the reporter's Windows dedicated server confirmation.
+
+The source blockers described above are implemented. The focused issue 23 tests, complete unit suite, data generation, all five required GameTests including `atm_multiplayer`, packaged dependency checks, full build, final JAR inspection, standalone dedicated server startup, and virtual display client startup pass on Java 17. The final safety review also confirms that applying or restoring a delivery plan writes only its changed slots, so unrelated inventory changes are neither rejected nor overwritten. Release approval still requires the reporter's Windows dedicated server multiplayer, reconnect, restart, and fault drills from the matrix above.
+
+### 20.8 Issue 23 legacy exact item journal compatibility
+
+The reporter's `3.0.0-beta.10` logs prove a second startup blocker. Both the first launch and the
+restart reject `futureshops_escrow_item_inventory_journal` before a shop purchase can run. A
+persisted item inventory intent reaches `ItemInventoryMutationIntent` with valid framing and
+identity but fails its slot evidence hash check. The Auction House checkpoint then fails for the
+same dependent snapshot, and escrow enters maintenance during server startup. A normal maintenance
+verification cannot resume because the journal never reaches an aligned state.
+
+The repair targets `3.0.0-beta.11` and preserves the complete exact item custody contract.
+
+1. A persisted slot snapshot is validated as complete semantic item data rather than by requiring
+   byte for byte equality with a decode and reencode cycle. Registry ID, count, item tag, Forge
+   capability data, nested compound values, list order, and primitive values remain significant.
+   Compound key insertion order alone is not item identity.
+2. Legacy slot change hashes are verified against the exact serialized evidence bytes stored with
+   that intent. This validates the original signed proof instead of recomputing a potentially
+   normalized copy. Existing token IDs, digests, receipts, journal events, and checkpoint bytes are
+   not rewritten or reinterpreted.
+3. New item inventory states retain one owned serialized snapshot per slot. Inventory hashes, slot
+   hashes, token changes, and intent evidence derive from those same owned snapshots so a defensive
+   `ItemStack.copy()` cannot create two different proofs for one plan.
+4. Live recovery compares only the recorded changed slots against their complete semantic before
+   and after snapshots. Unrelated modded inventory slots are neither inspected as mutation proof
+   nor overwritten. A changed slot with different item or capability data remains unknown and
+   fails closed.
+5. Successfully decoded legacy work continues through the existing bounded replay and verified
+   maintenance workflow. No command may clear the maintenance flag, delete a checkpoint, discard
+   an intent, or bypass conservation merely to make the market available. Failed alignment or
+   ambiguous changed slot evidence leaves maintenance active with an actionable recovery handle.
+6. The supplied combined patch is treated as diagnostic input. Compatible semantic identity and
+   bounded diagnostic changes may be integrated. Its unverified force clear path and unrelated
+   lifecycle, replay, packet ceiling, or catalog changes are excluded from this repair.
+7. Regression coverage must load legacy noncanonical compound ordering through the intent and
+   journal codecs, validate legacy raw slot hashes, preserve Forge capability differences, reject
+   malformed or lossy snapshots, recover before and after slot images, and prove restart decoding
+   no longer places a valid legacy checkpoint into maintenance.
+8. Acceptance requires focused compatibility and recovery tests, the complete unit suite, data
+   validation, all required GameTests, the full build, dedicated server and client startup,
+   packaged JAR inspection, and a reporter retest with the backed up multiplayer world. The issue
+   remains open until that live world confirms startup, purchase, restart, and verified resume.
+
+The beta 11 source repair and local verification are complete. Owner acceptance authorizes issue 23
+closure after the verified repair is merged into the canonical `1.20.1` branch. The compatibility
+regressions and all 1905 unit tests pass, isolated data generation succeeds, all five required GameTests pass, the
+dedicated server reaches ready state, and the virtual display client completes common and client
+setup through texture atlas creation. The full build and packaged version checks pass, producing
+`futureshops-3.0.0-beta.11.jar`. The merge pull request, required checks, `1.20.1` default branch
+verification, and issue closure are the remaining integration gates.
+
+## 21. Completion record
+
+The record below describes the implemented 3.0 scope together with the completed Section 20 source fixes. The active phase remains a beta until the remaining live acceptance checks are complete.
+
+The implementation covers the escrow foundation, migrated shop and currency flows, shared market
+shell, independently configurable Auction House and Bazaar modules, wallet and inventory cash
+funding, protected and foreign currency handling, claims, administrative recovery, permissions,
+module lifecycle controls, analytics, alerts, API events, migrations, backup guidance, and bounded
+performance tests described above.
+
+Release verification includes the complete automated regression suite, packet round trips,
+durability and replay fixtures, corruption and recovery drills, module disable and re enable tests,
+exact item identity tests, administrative cancellation with standing bid refunds, and restore
+soaks with 2000 auctions and 10000 Bazaar orders. The supported platform and integration boundaries
+are documented in [docs/compatibility-matrix.md](docs/compatibility-matrix.md).
+
+The post release market usability pass adds `bazaar_control` with admin and players modes. Admin
+mode keeps the curated JSON product registry and reconciliation rules. Players mode preserves the
+durable registry and provides a complete registered item browser without a per player catalog
+quota. Search covers localized item names, registry identifiers, predictive mod filters, and
+predictive item tag filters. A player can select an item they do not possess, create or reuse its
+market, and fund a buy order entirely through escrow. Every sell still requires matching inventory
+items to enter custody. Both modes retain escrow, versioning, circuit breakers, request rate limits,
+and history.
+
+Auction listing creation now presents the exact server listing fee before payment selection and
+reconciles the result against the durable escrow commit before showing a recovery warning. The
+shared market shell now calls the exact `/shop` header renderer for its logo, wordmark, Server Shop,
+Player Shops, Bazaar and Auction House tabs, search, balance, profile, and close controls. All market
+surfaces use one Nocturne theme, contain empty states inside the content region, and use responsive
+detail panels for exact item data, seller identity and skin, bidder or buyer status, price, timing,
+state, live supply, hourly activity, daily volume, average price, recent price graphs, and actions.
+
+The market body now mirrors the Server Shop structure as well as its header. Bazaar and Auction
+House routes use the shared segmented control for their local views and the shared Departments
+panel for All and category rows, including market wide category counts and the same selection,
+hover, scrolling, spacing, and accent treatment. Routine escrow ready banners are intentionally
+hidden. Escrow remains mandatory, while a temporary readiness or recovery failure produces a
+deduplicated chat warning and an explicit Retry control that resubmits only the safe read request
+or invites the player to repeat an economic action only after the server confirms that nothing
+changed.
+
+The Auction House creation route now exposes Create Listing both in the route content and in the
+footer, so the listing wizard remains discoverable even when the route has no cards. Auction detail
+pages use the available space for exact item condition and data, listing type, bid count, buyout
+distance, abbreviated identity, seller context, live activity, and a black chart surface. Recorded
+price history is drawn with gold, green, and red movement segments. When recorded history is not
+available, the chart is explicitly labeled as a bid ladder and displays only the current bid, next
+bid, and buyout. Market prices and fees use a configurable currency symbol, with the dollar sign as
+the default, and gold price text across cards, details, payment prompts, and creation fees.
+
+The community navigation and presentation followup keeps parent navigation visible on both owner
+and visitor player shop block screens while the close control still closes the complete interface.
+The shared marketplace header uses the player skin for the compact profile control and identifies
+Marketplace Profile and Transaction History on hover. Bazaar and Auction House breadcrumbs use the
+same Marketplace path formatting as the Server Shop, and Back appears only on detail routes instead
+of replaying ordinary local tab history. Auction creation owns a complete market workspace so
+underlying department and toolbar surfaces do not show through it. ATM deposit safety guidance wraps
+inside the available panel. The Bazaar footer identifies admin JSON catalog control or player catalog
+control and explains where Browse Items is available. Admin item tag search matches both registry
+namespaces and normalized Forge mod display names, including aliases such as Applied Energistics and
+Macaw mod families.
+
+The Player Shops skin followup keeps every rendered face bound to the same UUID and player name
+shown by its card or selected shop block. Franchise cards resolve the franchise leader identity so
+the displayed name and head cannot refer to different members, while offline owners retain their
+last known block identity as a fallback.
+
+The compatibility warning followup uses the FutureShops network protocol for the multiplayer server
+list instead of requiring identical release labels. Compatible builds therefore remain joinable
+without a false warning. A failed handshake now distinguishes a missing client installation, a
+missing server installation, an older client protocol, an older server protocol, and an unknown
+incompatible protocol. Each case explains the correct recovery action without assuming that the
+client always needs an update.

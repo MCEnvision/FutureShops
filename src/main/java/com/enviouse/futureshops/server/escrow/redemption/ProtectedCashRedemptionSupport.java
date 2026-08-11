@@ -9,6 +9,7 @@ import com.enviouse.futureshops.money.MoneyNbtKeys;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountId;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintBatch;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
@@ -29,7 +30,6 @@ import java.security.NoSuchAlgorithmException;
 import java.time.DateTimeException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -266,9 +266,36 @@ final class ProtectedCashRedemptionSupport {
     static UUID reservationId(UUID playerId,
                               LedgerAccountId destinationAccount,
                               long walletBalanceLimitMinorUnits,
+                              CashDepositMode depositMode,
                               byte[] inventoryBeforeHash,
                               EscrowTransaction transaction,
                               InternalBillInventoryPlanner.ExactPlan plan) {
+        Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(destinationAccount, "destinationAccount");
+        Objects.requireNonNull(depositMode, "depositMode");
+        requireHash(inventoryBeforeHash,
+                "Protected cash reservation inventory hash");
+        Objects.requireNonNull(transaction, "transaction");
+        String material = "futureshops protected cash reservation v4 "
+                + playerId + " " + transaction.transactionId().value() + " "
+                + transaction.requestKey().value() + " "
+                + destinationAccount.type().name() + " "
+                + destinationAccount.ownerKey() + " "
+                + walletBalanceLimitMinorUnits + " "
+                + depositMode + " "
+                + hex(inventoryBeforeHash) + " "
+                + hex(sha256(encodePlan(plan)));
+        return UUID.nameUUIDFromBytes(material.getBytes(StandardCharsets.UTF_8));
+    }
+
+    static UUID legacyReservationId(
+            UUID playerId,
+            LedgerAccountId destinationAccount,
+            long walletBalanceLimitMinorUnits,
+            byte[] inventoryBeforeHash,
+            EscrowTransaction transaction,
+            InternalBillInventoryPlanner.ExactPlan plan
+    ) {
         Objects.requireNonNull(playerId, "playerId");
         Objects.requireNonNull(destinationAccount, "destinationAccount");
         requireHash(inventoryBeforeHash,
@@ -282,7 +309,8 @@ final class ProtectedCashRedemptionSupport {
                 + walletBalanceLimitMinorUnits + " "
                 + hex(inventoryBeforeHash) + " "
                 + hex(sha256(encodePlan(plan)));
-        return UUID.nameUUIDFromBytes(material.getBytes(StandardCharsets.UTF_8));
+        return UUID.nameUUIDFromBytes(material.getBytes(
+                StandardCharsets.UTF_8));
     }
 
     static UUID lotId(UUID transactionId,
@@ -564,7 +592,8 @@ final class ProtectedCashRedemptionSupport {
                 || stack.getItem() != ModItems.MONEY_ITEM.get()
                 || !registryId.equals(Futureshops.MODID + ":money")
                 || stack.getCount() != portion.originalStackCount()
-                || !Arrays.equals(encoded, ItemStackSnapshotCodec.encode(stack))) {
+                || !ItemStackSnapshotCodec.snapshotMatchesIdentity(
+                encoded, stack)) {
             throw new IllegalArgumentException(
                     "Protected cash stack is not registered protected money");
         }

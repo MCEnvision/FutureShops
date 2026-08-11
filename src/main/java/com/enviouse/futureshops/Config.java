@@ -11,6 +11,7 @@ import net.minecraftforge.fml.event.config.ModConfigEvent;
 
 @Mod.EventBusSubscriber(modid = Futureshops.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
 public class Config {
+    public static final String FILE_NAME = "futureshops-common.toml";
     public static final String FOREIGN_CURRENCY_WARNING = "WARNING. Changing the currency provider from futureshops disables all FutureShops physical currency duplication protection. Currency items from other mods are spawned and accepted without mint ids, checksums, or spent mint tracking.";
 
     private static final Set<String> MODULE_IDS = Set.of("shop", "bazaar", "auction_house");
@@ -18,11 +19,11 @@ public class Config {
 
     private static final ForgeConfigSpec.BooleanValue MODULES_BAZAAR_ENABLED = BUILDER
         .comment("Enable the Bazaar module. Disabling it preserves existing orders, custody, refunds, and claims.")
-        .define("modules.bazaar_enabled", true);
+        .define("modules.bazaar_enabled", false);
 
     private static final ForgeConfigSpec.BooleanValue MODULES_AUCTION_HOUSE_ENABLED = BUILDER
         .comment("Enable the Auction House module. Disabling it preserves existing listings, bids, custody, refunds, and claims.")
-        .define("modules.auction_house_enabled", true);
+        .define("modules.auction_house_enabled", false);
 
     private static final ForgeConfigSpec.BooleanValue MODULES_SHOW_MODULE_NAVIGATION = BUILDER
         .comment("Show navigation between Shop, Bazaar, and Auction House when those modules are available.")
@@ -48,6 +49,14 @@ public class Config {
     private static final ForgeConfigSpec.LongValue ECONOMY_MAX_BALANCE_MINOR_UNITS = BUILDER
         .comment("Maximum allowed balance in minor units")
         .defineInRange("economy.max_balance_minor_units", 99999999999L, 0L, Long.MAX_VALUE);
+
+    private static final ForgeConfigSpec.IntValue PERMISSIONS_MARKET_USE_OP_LEVEL = BUILDER
+        .comment("Operator fallback level for market browsing and trading when no permission plugin overrides FutureShops nodes.")
+        .defineInRange("permissions.market_use_op_level", 0, 0, 4);
+
+    private static final ForgeConfigSpec.IntValue PERMISSIONS_MARKET_ADMIN_OP_LEVEL = BUILDER
+        .comment("Operator fallback level for FutureShops market administration nodes.")
+        .defineInRange("permissions.market_admin_op_level", 2, 0, 4);
 
     private static final ForgeConfigSpec.BooleanValue ECONOMY_ALLOW_NEGATIVE = BUILDER
         .comment(
@@ -84,7 +93,7 @@ public class Config {
             "Pick values so no crafting recipe in the source mod can combine cheap items into a dearer one",
             "at a profit, or players get a money printer."
         )
-        .defineList("currency.items", List.of(), o -> o instanceof String s && s.contains("="));
+        .defineListAllowEmpty("currency.items", List.of(), o -> o instanceof String s && s.contains("="));
 
     private static final ForgeConfigSpec.ConfigValue<List<? extends String>> CURRENCY_ACCEPT_ONLY_ITEMS = BUILDER
         .comment(
@@ -93,7 +102,8 @@ public class Config {
             "Setting this OR currency.items non-empty replaces the ENTIRE \"apocalypsenow\" preset",
             "(both lists), so keep the two lists consistent with each other."
         )
-        .defineList("currency.accept_only_items", List.of(), o -> o instanceof String s && s.contains("="));
+        .defineListAllowEmpty("currency.accept_only_items", List.of(),
+            o -> o instanceof String s && s.contains("="));
 
     private static final ForgeConfigSpec.ConfigValue<String> MONEY_CHECKSUM_SALT = BUILDER
         .comment("Server-side salt used for MoneyItem checksum generation")
@@ -176,47 +186,57 @@ public class Config {
         )
         .defineInRange("local_listings.scan_radius_blocks", 64, 0, 1024);
 
+    private static final ForgeConfigSpec.IntValue ADMIN_SHOP_MAXIMUM_LISTINGS = BUILDER
+        .comment(
+            "Maximum listings allowed in the admin shop catalog.",
+            "The default remains 512 for compatibility. The protocol hard limit is 10000."
+        )
+        .defineInRange("admin_shop.maximum_listings", 512, 1, 10000);
+
     public static final ForgeConfigSpec SPEC = BUILDER.build();
 
     private static volatile ModuleSettings moduleSettings = ModuleSettings.defaults();
 
-    public static String economyCurrencyName;
-    public static int economyCurrencyDecimals;
-    public static long economyStartingBalanceMinorUnits;
-    public static long economyMaxBalanceMinorUnits;
-    public static boolean economyAllowNegative;
+    public static String economyCurrencyName = "Coins";
+    public static int economyCurrencyDecimals = 2;
+    public static long economyStartingBalanceMinorUnits = 100000L;
+    public static long economyMaxBalanceMinorUnits = 99999999999L;
+    public static boolean economyAllowNegative = false;
+    public static int permissionsMarketUseOpLevel = 0;
+    public static int permissionsMarketAdminOpLevel = 2;
 
-    public static String currencyProvider;
-    public static List<? extends String> currencyItems;
-    public static List<? extends String> currencyAcceptOnlyItems;
+    public static String currencyProvider = "futureshops";
+    public static List<? extends String> currencyItems = List.of();
+    public static List<? extends String> currencyAcceptOnlyItems = List.of();
 
-    public static String moneyChecksumSalt;
-    public static String moneyMintServerId;
-    public static int moneyMaxAgeDays;
+    public static String moneyChecksumSalt = "change-me-before-production";
+    public static String moneyMintServerId = "futureshops-dev";
+    public static int moneyMaxAgeDays = 365;
 
-    public static int playerShopMaxLinkDistanceBlocks;
+    public static int playerShopMaxLinkDistanceBlocks = 8;
 
-    public static int sessionMaxDistanceBlocks;
-    public static boolean sessionCloseOnDamage;
+    public static int sessionMaxDistanceBlocks = 8;
+    public static boolean sessionCloseOnDamage = false;
 
     // Dynamic Pricing
-    public static boolean dynamicPricingEnabled;
-    public static int dynamicPricingRecalcIntervalSec;
-    public static double dynamicPricingMaxIncreasePct;
-    public static double dynamicPricingMaxDecreasePct;
-    public static double dynamicPricingDemandWeight;
-    public static double dynamicPricingSupplyWeight;
-    public static double dynamicPricingDecayRate;
+    public static boolean dynamicPricingEnabled = false;
+    public static int dynamicPricingRecalcIntervalSec = 300;
+    public static double dynamicPricingMaxIncreasePct = 50.0D;
+    public static double dynamicPricingMaxDecreasePct = 30.0D;
+    public static double dynamicPricingDemandWeight = 0.6D;
+    public static double dynamicPricingSupplyWeight = 0.4D;
+    public static double dynamicPricingDecayRate = 0.95D;
 
     // Stock Refresh (spec §31)
-    public static int stockRefreshCheckIntervalSec;
-    public static boolean stockRefreshEnabled;
+    public static int stockRefreshCheckIntervalSec = 60;
+    public static boolean stockRefreshEnabled = true;
 
     // Events (spec §33)
-    public static boolean eventsTransactionEnabled;
+    public static boolean eventsTransactionEnabled = true;
 
     // Local Listings
-    public static int localListingsScanRadiusBlocks;
+    public static int localListingsScanRadiusBlocks = 64;
+    public static int adminShopMaximumListings = 512;
 
     public static ModuleSettings moduleSettings() {
         return moduleSettings;
@@ -239,7 +259,7 @@ public class Config {
     }
 
     @SubscribeEvent
-    static void onLoad(final ModConfigEvent event) {
+    public static void onLoad(final ModConfigEvent event) {
         // This subscriber also sees the separate client presentation config. Only read values from
         // this COMMON spec when its own file loads/reloads; otherwise Forge may report an early get.
         if (event.getConfig().getSpec() != SPEC) {
@@ -258,6 +278,10 @@ public class Config {
                     economyStartingBalanceMinorUnits = ECONOMY_STARTING_BALANCE_MINOR_UNITS.get();
                     economyMaxBalanceMinorUnits = ECONOMY_MAX_BALANCE_MINOR_UNITS.get();
                     economyAllowNegative = ECONOMY_ALLOW_NEGATIVE.get();
+                    permissionsMarketUseOpLevel =
+                            PERMISSIONS_MARKET_USE_OP_LEVEL.get();
+                    permissionsMarketAdminOpLevel =
+                            PERMISSIONS_MARKET_ADMIN_OP_LEVEL.get();
 
                     currencyProvider = CURRENCY_PROVIDER.get();
                     currencyItems = CURRENCY_ITEMS.get();
@@ -285,6 +309,7 @@ public class Config {
                     eventsTransactionEnabled = EVENTS_TRANSACTION_ENABLED.get();
 
                     localListingsScanRadiusBlocks = LOCAL_LISTINGS_SCAN_RADIUS_BLOCKS.get();
+                    adminShopMaximumListings = ADMIN_SHOP_MAXIMUM_LISTINGS.get();
 
                     // A running server rebuilds the physical currency adapter.
                     // Initial loading waits for registered items and server startup.
@@ -312,7 +337,7 @@ public class Config {
         }
 
         public static ModuleSettings defaults() {
-            return new ModuleSettings(true, true, true, "shop");
+            return new ModuleSettings(false, false, true, "shop");
         }
 
         public String effectiveDefaultModule() {

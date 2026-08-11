@@ -211,7 +211,10 @@ public final class PlayerInventoryReceiptStore {
                     java.util.Optional.of(found),
                     "Player inventory receipt proves delivery");
         }
-        byte[] currentHash = PlayerInventoryHashes.hashInventory(inventory);
+        byte[] currentHash = token.version()
+                == PlayerInventoryDeliveryToken.LEGACY_VERSION
+                ? PlayerInventoryHashes.hashInventoryLegacy(inventory)
+                : PlayerInventoryHashes.hashInventory(inventory);
         if (PlayerInventoryHashes.equal(
                 currentHash, token.beforeInventoryHash())) {
             return new PlayerInventoryReceiptInspection(

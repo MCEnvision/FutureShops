@@ -66,29 +66,44 @@ public final class CurrencyManager {
         String provider = Config.currencyProvider == null
                 ? PROVIDER_INTERNAL
                 : Config.currencyProvider.trim().toLowerCase(Locale.ROOT);
-        current = switch (provider) {
-            case PROVIDER_INTERNAL -> new InternalCurrencyAdapter();
-            case PROVIDER_APOCALYPSENOW -> {
-                // Overriding EITHER config list replaces BOTH preset halves.
-                // Mixing config items with preset blocks would be exploit-prone:
-                // retuning money below 100 while the preset still accepts
-                // money_block at 900 turns the 9-money block craft into a money
-                // printer. All-or-nothing fails safe — un-relisted blocks are
-                // simply not depositable.
-                boolean overridden = !Config.currencyItems.isEmpty() || !Config.currencyAcceptOnlyItems.isEmpty();
-                yield buildItemValueAdapter(PROVIDER_APOCALYPSENOW,
-                        overridden ? parseConfig(Config.currencyItems) : APOC_ITEMS,
-                        overridden ? parseConfig(Config.currencyAcceptOnlyItems) : APOC_ACCEPT_ONLY);
-            }
-            case PROVIDER_CUSTOM -> buildItemValueAdapter(PROVIDER_CUSTOM,
-                    parseConfig(Config.currencyItems),
-                    parseConfig(Config.currencyAcceptOnlyItems));
-            default -> {
-                LOGGER.error("Unknown currency.provider '{}' — falling back to the built-in FutureShops currency",
-                        provider);
-                yield new InternalCurrencyAdapter();
-            }
-        };
+        List<? extends String> currencyItems =
+                safeEntries(Config.currencyItems);
+        List<? extends String> acceptOnlyItems =
+                safeEntries(Config.currencyAcceptOnlyItems);
+        PhysicalCurrencyAdapter previous = current;
+        try {
+            current = switch (provider) {
+                case PROVIDER_INTERNAL -> new InternalCurrencyAdapter();
+                case PROVIDER_APOCALYPSENOW -> {
+                    // Overriding EITHER config list replaces BOTH preset halves.
+                    // Mixing config items with preset blocks would be exploit-prone:
+                    // retuning money below 100 while the preset still accepts
+                    // money_block at 900 turns the 9-money block craft into a money
+                    // printer. All-or-nothing fails safe — un-relisted blocks are
+                    // simply not depositable.
+                    boolean overridden = !currencyItems.isEmpty()
+                            || !acceptOnlyItems.isEmpty();
+                    yield buildItemValueAdapter(PROVIDER_APOCALYPSENOW,
+                            overridden ? parseConfig(currencyItems) : APOC_ITEMS,
+                            overridden ? parseConfig(acceptOnlyItems)
+                                    : APOC_ACCEPT_ONLY);
+                }
+                case PROVIDER_CUSTOM -> buildItemValueAdapter(PROVIDER_CUSTOM,
+                        parseConfig(currencyItems),
+                        parseConfig(acceptOnlyItems));
+                default -> {
+                    LOGGER.error("Unknown currency.provider '{}' — falling back to the built-in FutureShops currency",
+                            provider);
+                    yield new InternalCurrencyAdapter();
+                }
+            };
+        } catch (RuntimeException exception) {
+            current = previous == null
+                    ? new InternalCurrencyAdapter() : previous;
+            LOGGER.error(
+                    "Rejected physical currency configuration. Keeping provider '{}'.",
+                    current.id(), exception);
+        }
         LOGGER.info("FutureShops physical currency provider: {}", current.id());
         if (!current.isInternal()) {
             LOGGER.warn("WARNING: physical currency provider '{}' is UNPROTECTED. FutureShops checksum, "
@@ -96,6 +111,12 @@ public final class CurrencyManager {
                     + "their source mod controls recipes, loot, and duplication behavior.", current.id());
         }
         configurationGeneration = nextGeneration(configurationGeneration);
+    }
+
+    static List<? extends String> safeEntries(
+            List<? extends String> entries
+    ) {
+        return entries == null ? List.of() : List.copyOf(entries);
     }
 
     public static void clear() {

@@ -9,6 +9,7 @@ import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountId;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountType;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerTransaction;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionCancellation.InventoryNoMutationProof;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionCancellation.SlotObservation;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionSettlement.InventoryMutationReceipt;
@@ -21,6 +22,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -36,7 +38,7 @@ public final class ForeignCashDepositCodec {
     private static final int SETTLEMENT_MAGIC = 0x46434453;
     private static final int CANCELLATION_MAGIC = 0x46434443;
     private static final int PLAN_MAGIC = 0x46434450;
-    private static final int SCHEMA = 1;
+    private static final int SCHEMA = 2;
     private static final int MAX_STRING_BYTES = 8192;
 
     private ForeignCashDepositCodec() {
@@ -56,6 +58,7 @@ public final class ForeignCashDepositCodec {
                     reservation.destinationAccount().ownerKey());
             output.writeLong(
                     reservation.walletBalanceLimitMinorUnits());
+            output.writeInt(reservation.depositMode().ordinal());
             writeBytes(output, reservation.inventoryBeforeHash(), 32);
             writeBytes(output, encodePlan(reservation.plan()),
                     ForeignCashDepositPlan.MAX_TOTAL_SNAPSHOT_BYTES
@@ -70,7 +73,7 @@ public final class ForeignCashDepositCodec {
             byte[] encoded
     ) {
         return decode(encoded, MAX_RESERVATION_BYTES, input -> {
-            requireHeader(input, RESERVATION_MAGIC);
+            int schema = requireHeader(input, RESERVATION_MAGIC);
             UUID reservationId = readUuid(input);
             UUID requestId = readUuid(input);
             UUID playerId = readUuid(input);
@@ -79,6 +82,9 @@ public final class ForeignCashDepositCodec {
             LedgerAccountId destination = new LedgerAccountId(type,
                     readString(input));
             long walletLimit = input.readLong();
+            CashDepositMode depositMode = schema >= 2
+                    ? readEnum(input.readInt(), CashDepositMode.values())
+                    : CashDepositMode.PUBLIC_WALLET;
             byte[] inventoryHash = readBytes(input, 32);
             ForeignCashDepositPlan plan = decodePlan(readBytes(input,
                     ForeignCashDepositPlan.MAX_TOTAL_SNAPSHOT_BYTES
@@ -88,6 +94,7 @@ public final class ForeignCashDepositCodec {
             List<CustodyMutation> custody = readMutations(input);
             return new ForeignCashDepositReservation(reservationId,
                     requestId, playerId, destination, walletLimit,
+                    depositMode,
                     inventoryHash, plan, held, custody);
         }, ForeignCashDepositCodec::encodeReservation);
     }
@@ -125,10 +132,11 @@ public final class ForeignCashDepositCodec {
             byte[] encoded
     ) {
         return decode(encoded, MAX_TERMINAL_BYTES, input -> {
-            requireHeader(input, SETTLEMENT_MAGIC);
+            int schema = requireHeader(input, SETTLEMENT_MAGIC);
             ForeignCashDepositReservation reservation =
                     decodeReservation(readBytes(input,
                             MAX_RESERVATION_BYTES));
+            requireLegacyPublicMode(schema, reservation.depositMode());
             EscrowTransaction completed =
                     EscrowTransactionByteCodec.decode(readBytes(input,
                             MAX_RESERVATION_BYTES));
@@ -168,10 +176,11 @@ public final class ForeignCashDepositCodec {
             byte[] encoded
     ) {
         return decode(encoded, MAX_TERMINAL_BYTES, input -> {
-            requireHeader(input, CANCELLATION_MAGIC);
+            int schema = requireHeader(input, CANCELLATION_MAGIC);
             ForeignCashDepositReservation reservation =
                     decodeReservation(readBytes(input,
                             MAX_RESERVATION_BYTES));
+            requireLegacyPublicMode(schema, reservation.depositMode());
             EscrowTransaction refunded = EscrowTransactionByteCodec.decode(
                     readBytes(input, MAX_RESERVATION_BYTES));
             InventoryNoMutationProof proof = readProof(input);
@@ -201,6 +210,12 @@ public final class ForeignCashDepositCodec {
                         ItemStackSnapshotCodec.MAXIMUM_BYTES);
             }
         }, ForeignCashDepositPlan.MAX_TOTAL_SNAPSHOT_BYTES + 65_536);
+    }
+
+    static byte[] encodeLegacyPlanIdentity(ForeignCashDepositPlan plan) {
+        byte[] encoded = encodePlan(plan);
+        ByteBuffer.wrap(encoded).putInt(Integer.BYTES, 1);
+        return encoded;
     }
 
     static ForeignCashDepositPlan decodePlan(byte[] encoded) {
@@ -391,8 +406,12 @@ public final class ForeignCashDepositCodec {
         try (DataInputStream input = new DataInputStream(
                 new ByteArrayInputStream(encoded))) {
             T result = reader.read(input);
+            boolean currentSchema = encoded.length >= Integer.BYTES * 2
+                    && ByteBuffer.wrap(encoded, Integer.BYTES,
+                    Integer.BYTES).getInt() == SCHEMA;
             if (input.read() != -1
-                    || !Arrays.equals(encoded, encoder.apply(result))) {
+                    || currentSchema
+                    && !Arrays.equals(encoded, encoder.apply(result))) {
                 throw new IllegalArgumentException(
                         "Foreign cash deposit encoding is not canonical");
             }
@@ -404,16 +423,39 @@ public final class ForeignCashDepositCodec {
             if (exception instanceof IllegalArgumentException invalid) {
                 throw invalid;
             }
+            if (exception instanceof IllegalStateException newer) {
+                throw newer;
+            }
             throw new IllegalArgumentException(
                     "Foreign cash deposit encoding is invalid", exception);
         }
     }
 
-    private static void requireHeader(DataInputStream input, int magic)
+    private static int requireHeader(DataInputStream input, int magic)
             throws IOException {
-        if (input.readInt() != magic || input.readInt() != SCHEMA) {
+        if (input.readInt() != magic) {
             throw new IllegalArgumentException(
                     "Foreign cash deposit encoding header is invalid");
+        }
+        int schema = input.readInt();
+        if (schema > SCHEMA) {
+            throw new IllegalStateException(
+                    "Foreign cash deposit encoding schema is newer than this build");
+        }
+        if (schema < 1) {
+            throw new IllegalArgumentException(
+                    "Foreign cash deposit encoding schema is unsupported");
+        }
+        return schema;
+    }
+
+    private static void requireLegacyPublicMode(
+            int schema,
+            CashDepositMode depositMode
+    ) {
+        if (schema == 1 && depositMode != CashDepositMode.PUBLIC_WALLET) {
+            throw new IllegalArgumentException(
+                    "Legacy foreign cash deposit mode is invalid");
         }
     }
 

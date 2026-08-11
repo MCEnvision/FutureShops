@@ -2,16 +2,22 @@ package com.enviouse.futureshops.network.packets;
 
 import com.enviouse.futureshops.client.ShopClientPacketHandler;
 import com.enviouse.futureshops.data.PlayerShopListingData;
+import com.enviouse.futureshops.data.PlayerShopNormalizedOfferData;
 import com.enviouse.futureshops.data.PlayerShopStorageEntry;
+import com.enviouse.futureshops.network.ServerShopOfferNetworkCodec;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.DecoderException;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 
-import java.util.function.Supplier;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 public record S2CPlayerShopDataPacket(
         BlockPos shopPos,
@@ -36,7 +42,18 @@ public record S2CPlayerShopDataPacket(
         String floatingIconItem,
         List<PlayerShopStorageEntry> linkedStorages,
         // Owner Payouts tab: names of the viewer's persistent saved shop configs.
-        List<String> savedConfigNames) {
+        List<String> savedConfigNames,
+        List<PlayerShopNormalizedOfferData> normalizedOffers) {
+
+    public S2CPlayerShopDataPacket {
+        normalizedOffers = List.copyOf(Objects.requireNonNull(
+                normalizedOffers, "normalizedOffers"));
+        if (normalizedOffers.size()
+                > ServerShopOfferNetworkCodec.MAX_LISTINGS) {
+            throw new IllegalArgumentException(
+                    "Player shop normalized offer count is invalid");
+        }
+    }
 
     public static void encode(S2CPlayerShopDataPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.shopPos());
@@ -59,6 +76,7 @@ public record S2CPlayerShopDataPacket(
         buffer.writeUtf(packet.floatingIconItem());
         buffer.writeCollection(packet.linkedStorages(), PlayerShopStorageEntry::encode);
         buffer.writeCollection(packet.savedConfigNames(), FriendlyByteBuf::writeUtf);
+        writeNormalizedOffers(buffer, packet.normalizedOffers());
     }
 
     public static S2CPlayerShopDataPacket decode(FriendlyByteBuf buffer) {
@@ -82,7 +100,71 @@ public record S2CPlayerShopDataPacket(
                 buffer.readUtf(),
                 buffer.readUtf(),
                 buffer.readList(PlayerShopStorageEntry::decode),
-                buffer.readList(FriendlyByteBuf::readUtf));
+                buffer.readList(FriendlyByteBuf::readUtf),
+                readNormalizedOffers(buffer));
+    }
+
+    private static List<PlayerShopNormalizedOfferData>
+    readNormalizedOffers(FriendlyByteBuf buffer) {
+        byte[] payload;
+        try {
+            payload = buffer.readByteArray(
+                    ServerShopOfferNetworkCodec
+                            .MAX_ENCODED_CATALOG_BYTES);
+        } catch (RuntimeException exception) {
+            throw new DecoderException(
+                    "Player shop normalized offer payload is too large",
+                    exception);
+        }
+        FriendlyByteBuf encoded = new FriendlyByteBuf(
+                Unpooled.wrappedBuffer(payload));
+        try {
+            int count = encoded.readVarInt();
+            if (count < 0
+                    || count
+                    > ServerShopOfferNetworkCodec.MAX_LISTINGS) {
+                throw new DecoderException(
+                        "Player shop normalized offer count is invalid");
+            }
+            List<PlayerShopNormalizedOfferData> offers =
+                    new ArrayList<>(count);
+            for (int index = 0; index < count; index++) {
+                offers.add(PlayerShopNormalizedOfferData.decode(
+                        encoded));
+            }
+            if (encoded.isReadable()) {
+                throw new DecoderException(
+                        "Player shop normalized offers have trailing bytes");
+            }
+            return List.copyOf(offers);
+        } finally {
+            encoded.release();
+        }
+    }
+
+    private static void writeNormalizedOffers(
+            FriendlyByteBuf buffer,
+            List<PlayerShopNormalizedOfferData> offers
+    ) {
+        FriendlyByteBuf encoded = new FriendlyByteBuf(
+                Unpooled.buffer(256,
+                        ServerShopOfferNetworkCodec
+                                .MAX_ENCODED_CATALOG_BYTES));
+        try {
+            encoded.writeVarInt(offers.size());
+            for (PlayerShopNormalizedOfferData offer : offers) {
+                PlayerShopNormalizedOfferData.encode(encoded, offer);
+            }
+            byte[] payload = new byte[encoded.readableBytes()];
+            encoded.readBytes(payload);
+            buffer.writeByteArray(payload);
+        } catch (IndexOutOfBoundsException exception) {
+            throw new IllegalArgumentException(
+                    "Player shop normalized offer payload is too large",
+                    exception);
+        } finally {
+            encoded.release();
+        }
     }
 
     public static void handle(S2CPlayerShopDataPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

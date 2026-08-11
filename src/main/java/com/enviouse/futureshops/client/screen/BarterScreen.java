@@ -41,6 +41,7 @@ public class BarterScreen extends Screen implements ShopScreenMarker {
 
     // Spec §8: Confirmation modal overlay
     private ConfirmationModal confirmationModal = null;
+    private java.util.UUID pendingRequestId;
 
     public BarterScreen(Screen parent, String targetItemId) {
         super(Component.translatable("gui.futureshops.barter.title"));
@@ -356,10 +357,12 @@ public class BarterScreen extends Screen implements ShopScreenMarker {
     private void sendConfirm() {
         List<CatalogBarterRecipe> recipes = recipes();
         if (recipes.isEmpty()) return;
+        pendingRequestId = java.util.UUID.randomUUID();
         ShopPackets.CHANNEL.sendToServer(new C2SBarterRequestPacket(
                 ShopClientState.getActiveShopId(),
                 recipes.get(selectedIndex).recipeId(),
-                multiplier));
+                multiplier,
+                pendingRequestId));
     }
 
     private void showBarterConfirmation() {
@@ -393,7 +396,15 @@ public class BarterScreen extends Screen implements ShopScreenMarker {
         );
     }
 
-    public void onTransactionResult(boolean success, String message) {
+    public void onTransactionResult(
+            java.util.UUID requestId,
+            boolean success,
+            String message
+    ) {
+        if (requestId == null || !requestId.equals(pendingRequestId)) {
+            return;
+        }
+        pendingRequestId = null;
         if (confirmationModal != null) {
             if (success) {
                 confirmationModal.setSuccess(message);

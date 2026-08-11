@@ -47,12 +47,12 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
     public static C2SBuyRequestPacket single(String shopId, String listingId, int quantity,
                                              PaymentSource paymentSource) {
         return new C2SBuyRequestPacket(shopId, false, List.of(new LineItem(listingId, quantity)),
-                paymentSource.wire(), UNCORRELATED_REQUEST_ID);
+                paymentSource.wire(), UUID.randomUUID());
     }
 
     public static C2SBuyRequestPacket cart(String shopId, List<LineItem> lineItems,
                                            PaymentSource paymentSource) {
-        return cart(shopId, lineItems, paymentSource, UNCORRELATED_REQUEST_ID);
+        return cart(shopId, lineItems, paymentSource, UUID.randomUUID());
     }
 
     public static C2SBuyRequestPacket cart(String shopId, List<LineItem> lineItems,

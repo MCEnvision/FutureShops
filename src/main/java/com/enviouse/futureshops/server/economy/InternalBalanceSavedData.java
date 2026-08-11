@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.UUID;
 
 public class InternalBalanceSavedData extends SavedData {
@@ -126,6 +127,14 @@ public class InternalBalanceSavedData extends SavedData {
 
     public synchronized Map<UUID, Long> snapshotBalances() {
         return Collections.unmodifiableMap(new HashMap<>(balances));
+    }
+
+    public synchronized OptionalLong findBalance(UUID playerUUID) {
+        Long balance = balances.get(Objects.requireNonNull(
+                playerUUID, "playerUUID"));
+        return balance == null
+                ? OptionalLong.empty()
+                : OptionalLong.of(balance);
     }
 
     public synchronized void sealMigrationSource(String snapshotFingerprint) {

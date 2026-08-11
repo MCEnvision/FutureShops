@@ -7,6 +7,8 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 
+import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 /** Server → client response for a sell request. */
@@ -17,7 +19,16 @@ public record S2CSellResponsePacket(
         ShopResultCode errorCode,
         long resultingBalanceMinorUnits,
         int quantity,
-        long totalMinorUnits) {
+        long totalMinorUnits,
+        UUID requestId) {
+
+    public S2CSellResponsePacket {
+        requestId = Objects.requireNonNull(requestId, "requestId");
+        if (requestId.equals(new UUID(0L, 0L))) {
+            throw new IllegalArgumentException(
+                    "Sell response identity is invalid");
+        }
+    }
 
     public static void encode(S2CSellResponsePacket packet, FriendlyByteBuf buffer) {
         buffer.writeBoolean(packet.success);
@@ -28,6 +39,7 @@ public record S2CSellResponsePacket(
         buffer.writeLong(packet.resultingBalanceMinorUnits);
         buffer.writeVarInt(packet.quantity);
         buffer.writeLong(packet.totalMinorUnits);
+        buffer.writeUUID(packet.requestId);
     }
 
     public static S2CSellResponsePacket decode(FriendlyByteBuf buffer) {
@@ -44,7 +56,8 @@ public record S2CSellResponsePacket(
         long bal = buffer.readLong();
         int qty = buffer.readVarInt();
         long totalMu = buffer.readLong();
-        return new S2CSellResponsePacket(success, shopId, itemId, code, bal, qty, totalMu);
+        return new S2CSellResponsePacket(success, shopId, itemId, code,
+                bal, qty, totalMu, buffer.readUUID());
     }
 
     public static void handle(S2CSellResponsePacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
@@ -54,4 +67,3 @@ public record S2CSellResponsePacket(
         context.setPacketHandled(true);
     }
 }
-

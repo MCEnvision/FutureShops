@@ -32,6 +32,7 @@ import com.enviouse.futureshops.server.escrow.model.EscrowState;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransactionId;
 import com.enviouse.futureshops.server.escrow.model.MoneyAmount;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
 
 import java.math.BigInteger;
 import java.time.Instant;
@@ -54,10 +55,12 @@ public final class ProtectedCashRedemptionFactory {
             long walletBalanceLimitMinorUnits,
             InternalBillInventoryPlanner.ExactPlan plan,
             ProtectedCashInventoryState beforeInventory,
+            CashDepositMode depositMode,
             Instant now
     ) {
         LedgerAccountId destination = new LedgerAccountId(
                 LedgerAccountType.PLAYER_WALLET, playerId.toString());
+        java.util.Objects.requireNonNull(depositMode, "depositMode");
         ProtectedCashRedemptionSupport.PlanFacts facts =
                 ProtectedCashRedemptionSupport.analyze(plan);
         List<CustodyMutation> custody = new ArrayList<>();
@@ -121,6 +124,7 @@ public final class ProtectedCashRedemptionFactory {
                     ProtectedCashRedemptionReservation.assetAttributes(
                             portion, destination,
                             walletBalanceLimitMinorUnits,
+                            depositMode,
                             beforeInventory.hash())));
         }
         EscrowTransaction held = EscrowTransaction.create(
@@ -143,10 +147,26 @@ public final class ProtectedCashRedemptionFactory {
                 .toList();
         UUID reservationId = ProtectedCashRedemptionReservation.reservationId(
                 playerId, destination, walletBalanceLimitMinorUnits,
-                beforeInventory.hash(), held, plan);
+                depositMode, beforeInventory.hash(), held, plan);
         return new ProtectedCashRedemptionReservation(reservationId, playerId,
                 destination, walletBalanceLimitMinorUnits,
-                beforeInventory.hash(), plan, held, custody, mints);
+                depositMode, beforeInventory.hash(), plan, held, custody,
+                mints);
+    }
+
+    public static ProtectedCashRedemptionReservation walletReservation(
+            UUID playerId,
+            UUID transactionId,
+            String requestKey,
+            long configRevision,
+            long walletBalanceLimitMinorUnits,
+            InternalBillInventoryPlanner.ExactPlan plan,
+            ProtectedCashInventoryState beforeInventory,
+            Instant now
+    ) {
+        return walletReservation(playerId, transactionId, requestKey,
+                configRevision, walletBalanceLimitMinorUnits, plan,
+                beforeInventory, CashDepositMode.PUBLIC_WALLET, now);
     }
 
     public static ProtectedCashRedemptionSettlement settlement(
@@ -218,7 +238,8 @@ public final class ProtectedCashRedemptionFactory {
                     reservation.transactionId(), reservation.playerId(),
                     ProtectedCashRedemptionSettlement
                             .overflowClaimSourceKey(reservation),
-                    ClaimKind.MONEY, claimCredit, claimCredit, new byte[0],
+                    overflowClaimKind(reservation), claimCredit,
+                    claimCredit, new byte[0],
                     ClaimStatus.PENDING,
                     ProtectedCashRedemptionSettlement.OVERFLOW_CLAIM_LABEL,
                     now, now));
@@ -237,6 +258,13 @@ public final class ProtectedCashRedemptionFactory {
                 reservation.destinationAccount(),
                 walletBalanceBeforeMinorUnits,
                 walletReservedBeforeMinorUnits, overflow, ledger);
+    }
+
+    private static ClaimKind overflowClaimKind(
+            ProtectedCashRedemptionReservation reservation
+    ) {
+        return reservation.depositMode() == CashDepositMode.INTERNAL_ESCROW
+                ? ClaimKind.INTERNAL_ESCROW_MONEY : ClaimKind.MONEY;
     }
 
     public static ProtectedCashRedemptionCancellation cancellation(

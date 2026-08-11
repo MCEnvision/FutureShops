@@ -23,6 +23,7 @@ import com.enviouse.futureshops.server.escrow.model.EscrowProtectionLevel;
 import com.enviouse.futureshops.server.escrow.model.EscrowOperation;
 import com.enviouse.futureshops.server.escrow.model.EscrowState;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -42,6 +43,7 @@ public record ProtectedCashRedemptionReservation(
         UUID playerId,
         LedgerAccountId destinationAccount,
         long walletBalanceLimitMinorUnits,
+        CashDepositMode depositMode,
         byte[] inventoryBeforeHash,
         InternalBillInventoryPlanner.ExactPlan plan,
         EscrowTransaction heldTransaction,
@@ -57,10 +59,28 @@ public record ProtectedCashRedemptionReservation(
     public static final String CURRENCY_ID =
             ProtectedCashRedemptionSupport.CURRENCY_ID;
 
+    public ProtectedCashRedemptionReservation(
+            UUID reservationId,
+            UUID playerId,
+            LedgerAccountId destinationAccount,
+            long walletBalanceLimitMinorUnits,
+            byte[] inventoryBeforeHash,
+            InternalBillInventoryPlanner.ExactPlan plan,
+            EscrowTransaction heldTransaction,
+            List<CustodyMutation> custodyReservations,
+            List<ProtectedMintJournalEvent> mintReservations
+    ) {
+        this(reservationId, playerId, destinationAccount,
+                walletBalanceLimitMinorUnits,
+                CashDepositMode.PUBLIC_WALLET, inventoryBeforeHash, plan,
+                heldTransaction, custodyReservations, mintReservations);
+    }
+
     public ProtectedCashRedemptionReservation {
         Objects.requireNonNull(reservationId, "reservationId");
         Objects.requireNonNull(playerId, "playerId");
         Objects.requireNonNull(destinationAccount, "destinationAccount");
+        Objects.requireNonNull(depositMode, "depositMode");
         ProtectedCashRedemptionSupport.requireHash(inventoryBeforeHash,
                 "Protected cash reservation inventory hash");
         inventoryBeforeHash = inventoryBeforeHash.clone();
@@ -78,8 +98,16 @@ public record ProtectedCashRedemptionReservation(
         requireHeldTransaction(heldTransaction, playerId, destinationAccount);
         UUID expectedReservationId = reservationId(
                 playerId, destinationAccount, walletBalanceLimitMinorUnits,
-                inventoryBeforeHash, heldTransaction, plan);
-        if (!reservationId.equals(expectedReservationId)) {
+                depositMode, inventoryBeforeHash, heldTransaction, plan);
+        boolean legacyPublicIdentity = depositMode
+                == CashDepositMode.PUBLIC_WALLET
+                && reservationId.equals(
+                ProtectedCashRedemptionSupport.legacyReservationId(
+                        playerId, destinationAccount,
+                        walletBalanceLimitMinorUnits, inventoryBeforeHash,
+                        heldTransaction, plan));
+        if (!reservationId.equals(expectedReservationId)
+                && !legacyPublicIdentity) {
             throw new IllegalArgumentException(
                     "Protected cash reservation identity is invalid");
         }
@@ -90,8 +118,9 @@ public record ProtectedCashRedemptionReservation(
         mintReservations = canonicalMints(mintReservations,
                 destinationAccount, heldTransaction, facts);
         requireEscrowAssets(heldTransaction, playerId, reservationId,
-                destinationAccount, walletBalanceLimitMinorUnits,
-                inventoryBeforeHash, plan, custodyReservations);
+                destinationAccount, walletBalanceLimitMinorUnits, depositMode,
+                inventoryBeforeHash, plan, custodyReservations,
+                legacyPublicIdentity);
     }
 
     public UUID transactionId() {
@@ -110,13 +139,28 @@ public record ProtectedCashRedemptionReservation(
             UUID playerId,
             LedgerAccountId destinationAccount,
             long walletBalanceLimitMinorUnits,
+            CashDepositMode depositMode,
             byte[] inventoryBeforeHash,
             EscrowTransaction heldTransaction,
             InternalBillInventoryPlanner.ExactPlan plan
     ) {
         return ProtectedCashRedemptionSupport.reservationId(
                 playerId, destinationAccount, walletBalanceLimitMinorUnits,
-                inventoryBeforeHash, heldTransaction, plan);
+                depositMode, inventoryBeforeHash, heldTransaction, plan);
+    }
+
+    public static UUID reservationId(
+            UUID playerId,
+            LedgerAccountId destinationAccount,
+            long walletBalanceLimitMinorUnits,
+            byte[] inventoryBeforeHash,
+            EscrowTransaction heldTransaction,
+            InternalBillInventoryPlanner.ExactPlan plan
+    ) {
+        return reservationId(playerId, destinationAccount,
+                walletBalanceLimitMinorUnits,
+                CashDepositMode.PUBLIC_WALLET, inventoryBeforeHash,
+                heldTransaction, plan);
     }
 
     public static UUID custodyLotId(
@@ -148,6 +192,34 @@ public record ProtectedCashRedemptionReservation(
             InternalBillInventoryPlanner.Portion portion,
             LedgerAccountId destinationAccount,
             long walletBalanceLimitMinorUnits,
+            CashDepositMode depositMode,
+            byte[] inventoryBeforeHash
+    ) {
+        Objects.requireNonNull(portion, "portion");
+        Objects.requireNonNull(destinationAccount, "destinationAccount");
+        Objects.requireNonNull(depositMode, "depositMode");
+        ProtectedCashRedemptionSupport.requireHash(inventoryBeforeHash,
+                "Protected cash reservation inventory hash");
+        return Map.of(
+                "authority", "protected",
+                "contract", ProtectedCashRedemptionSupport.fingerprint(
+                        (destinationAccount.type().name() + "\u0000"
+                                + destinationAccount.ownerKey() + "\u0000"
+                                + walletBalanceLimitMinorUnits + "\u0000"
+                                + ProtectedCashRedemptionSupport.hex(
+                                inventoryBeforeHash)).getBytes(
+                                java.nio.charset.StandardCharsets.UTF_8)),
+                "mint_id", portion.mintId(),
+                "selected_count", Integer.toString(portion.selectedCount()),
+                "slot", portion.slot().container().name() + "."
+                        + portion.slot().index(),
+                "deposit_mode", depositMode.name());
+    }
+
+    static Map<String, String> legacyAssetAttributes(
+            InternalBillInventoryPlanner.Portion portion,
+            LedgerAccountId destinationAccount,
+            long walletBalanceLimitMinorUnits,
             byte[] inventoryBeforeHash
     ) {
         Objects.requireNonNull(portion, "portion");
@@ -167,6 +239,17 @@ public record ProtectedCashRedemptionReservation(
                 "selected_count", Integer.toString(portion.selectedCount()),
                 "slot", portion.slot().container().name() + "."
                         + portion.slot().index());
+    }
+
+    public static Map<String, String> assetAttributes(
+            InternalBillInventoryPlanner.Portion portion,
+            LedgerAccountId destinationAccount,
+            long walletBalanceLimitMinorUnits,
+            byte[] inventoryBeforeHash
+    ) {
+        return assetAttributes(portion, destinationAccount,
+                walletBalanceLimitMinorUnits,
+                CashDepositMode.PUBLIC_WALLET, inventoryBeforeHash);
     }
 
     private static void requireHeldTransaction(
@@ -430,9 +513,11 @@ public record ProtectedCashRedemptionReservation(
             UUID reservationId,
             LedgerAccountId destinationAccount,
             long walletBalanceLimitMinorUnits,
+            CashDepositMode depositMode,
             byte[] inventoryBeforeHash,
             InternalBillInventoryPlanner.ExactPlan plan,
-            List<CustodyMutation> custody
+            List<CustodyMutation> custody,
+            boolean legacyPublicIdentity
     ) {
         Map<UUID, EscrowAssetLot> cashLots = new LinkedHashMap<>();
         for (EscrowAssetLot lot : transaction.assetLots()) {
@@ -468,7 +553,12 @@ public record ProtectedCashRedemptionReservation(
                     CustodyMutationCodec.encode(mutation))
                     || !asset.attributes().equals(assetAttributes(portion,
                     destinationAccount, walletBalanceLimitMinorUnits,
-                    inventoryBeforeHash))) {
+                    depositMode, inventoryBeforeHash))
+                    && (!legacyPublicIdentity
+                    || !asset.attributes().equals(legacyAssetAttributes(
+                    portion, destinationAccount,
+                    walletBalanceLimitMinorUnits,
+                    inventoryBeforeHash)))) {
                 throw new IllegalArgumentException(
                         "Protected cash escrow asset does not match its custody lot");
             }

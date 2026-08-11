@@ -207,6 +207,19 @@ public final class RefinedStorage2StorageAdapter implements ExternalStorageAdapt
     }
 
     @Override
+    public List<ItemStack> previewExtract(BlockEntity blockEntity, Item item,
+                                          int count, boolean nbtAware,
+                                          @Nullable CompoundTag requiredTag) {
+        Object network = resolveNetwork(blockEntity);
+        if (network != null) {
+            return previewExtractViaNetwork(network, item, count, nbtAware,
+                    requiredTag);
+        }
+        return previewExtractViaHandler(blockEntity, item, count, nbtAware,
+                requiredTag);
+    }
+
+    @Override
     public boolean canInsert(BlockEntity blockEntity, List<ItemStack> stacks) {
         Object network = resolveNetwork(blockEntity);
         if (network != null) {
@@ -378,6 +391,43 @@ public final class RefinedStorage2StorageAdapter implements ExternalStorageAdapt
         }
     }
 
+    private List<ItemStack> previewExtractViaNetwork(
+            Object network, Item item, int count, boolean nbtAware,
+            @Nullable CompoundTag requiredTag) {
+        List<ItemStack> result = new ArrayList<>();
+        try {
+            if (nbtAware) {
+                ItemStack probe = new ItemStack(item, 1);
+                if (requiredTag != null) probe.setTag(requiredTag.copy());
+                ItemStack extracted = (ItemStack) extractItemMethod.invoke(
+                        network, probe, count, COMPARE_NBT,
+                        actionSimulate);
+                if (extracted != null && !extracted.isEmpty()) {
+                    result.add(extracted.copy());
+                }
+            } else {
+                Collection<?> entries = getNetworkStacks(network);
+                if (entries == null) return List.of();
+                int remaining = count;
+                for (Object entry : entries) {
+                    if (remaining <= 0) break;
+                    ItemStack stack = entryStack(entry);
+                    if (!stackMatches(stack, item, false, null)) continue;
+                    ItemStack extracted = (ItemStack) extractItemMethod.invoke(
+                            network, stack.copyWithCount(1), remaining,
+                            COMPARE_NBT, actionSimulate);
+                    if (extracted == null || extracted.isEmpty()) continue;
+                    remaining -= extracted.getCount();
+                    result.add(extracted.copy());
+                }
+            }
+            int total = result.stream().mapToInt(ItemStack::getCount).sum();
+            return total == count ? result : List.of();
+        } catch (Throwable throwable) {
+            return List.of();
+        }
+    }
+
     private void rollbackExtracted(Object network, List<ItemStack> extractedStacks) {
         for (ItemStack taken : extractedStacks) {
             try {
@@ -470,6 +520,24 @@ public final class RefinedStorage2StorageAdapter implements ExternalStorageAdapt
         return remaining <= 0 ? result : List.of();
     }
 
+    private List<ItemStack> previewExtractViaHandler(
+            BlockEntity blockEntity, Item item, int count,
+            boolean nbtAware, @Nullable CompoundTag requiredTag) {
+        IItemHandler handler = getHandler(blockEntity);
+        if (handler == null || count <= 0) return List.of();
+        List<ItemStack> result = new ArrayList<>();
+        int remaining = count;
+        for (int i = 0; i < handler.getSlots() && remaining > 0; i++) {
+            ItemStack probe = handler.extractItem(i, remaining, true);
+            if (probe.isEmpty()
+                    || !NbtMatchUtil.matches(probe, item, nbtAware,
+                    requiredTag)) continue;
+            remaining -= probe.getCount();
+            result.add(probe.copy());
+        }
+        return remaining == 0 ? result : List.of();
+    }
+
     private boolean canInsertViaHandler(BlockEntity blockEntity, List<ItemStack> stacks) {
         IItemHandler handler = getHandler(blockEntity);
         if (handler == null) return false;
@@ -524,4 +592,3 @@ public final class RefinedStorage2StorageAdapter implements ExternalStorageAdapt
         return null;
     }
 }
-

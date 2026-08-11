@@ -78,6 +78,10 @@ public final class EscrowConfig {
         .comment("Maximum automatic claim delivery attempts during one server tick.")
         .defineInRange("claims.delivery_work_per_tick", 32, 1, 10000);
 
+    private static final ForgeConfigSpec.IntValue CLAIMS_EXACT_ITEM_DELIVERY_OPERATIONS_PER_TICK = BUILDER
+        .comment("Maximum exact item claim delivery operations during one server tick. Each operation may force player data to durable storage.")
+        .defineInRange("claims.exact_item_delivery_operations_per_tick", 1, 1, 1);
+
     private static final ForgeConfigSpec.IntValue ASSETS_MAX_PER_TRANSACTION = BUILDER
         .comment("Maximum asset lots stored by one transaction.")
         .defineInRange("assets.max_per_transaction", 256, 1, 4096);
@@ -169,6 +173,22 @@ public final class EscrowConfig {
             REQUEST_SECURITY_DEFAULTS.atmDeposit().refillPeriod().toMillis(),
             50L, 3600000L);
 
+    private static final ForgeConfigSpec.IntValue REQUEST_SECURITY_PAY_CAPACITY = BUILDER
+        .comment("Player payment request burst capacity per player.")
+        .defineInRange("request_security.pay.capacity",
+            REQUEST_SECURITY_DEFAULTS.pay().capacity(), 1, 1000);
+
+    private static final ForgeConfigSpec.IntValue REQUEST_SECURITY_PAY_REFILL_TOKENS = BUILDER
+        .comment("Player payment tokens restored each refill period. This value cannot exceed capacity.")
+        .defineInRange("request_security.pay.refill_tokens",
+            REQUEST_SECURITY_DEFAULTS.pay().refillTokens(), 1, 1000);
+
+    private static final ForgeConfigSpec.LongValue REQUEST_SECURITY_PAY_REFILL_PERIOD_MILLIS = BUILDER
+        .comment("Player payment token refill period in milliseconds.")
+        .defineInRange("request_security.pay.refill_period_millis",
+            REQUEST_SECURITY_DEFAULTS.pay().refillPeriod().toMillis(),
+            50L, 3600000L);
+
     private static final ForgeConfigSpec.ConfigValue<String> CURRENCY_PHYSICAL_REFUND_POLICY = BUILDER
         .comment(
             Config.FOREIGN_CURRENCY_WARNING,
@@ -227,6 +247,7 @@ public final class EscrowConfig {
             CLAIMS_AUTOMATIC_DELIVERY.get(),
             CLAIMS_MAX_ENTRIES_PER_REQUEST.get(),
             CLAIMS_DELIVERY_WORK_PER_TICK.get(),
+            CLAIMS_EXACT_ITEM_DELIVERY_OPERATIONS_PER_TICK.get(),
             ASSETS_MAX_PER_TRANSACTION.get(),
             ASSETS_MAX_NBT_BYTES.get(),
             ASSETS_MAX_TOTAL_NBT_BYTES.get(),
@@ -258,7 +279,11 @@ public final class EscrowConfig {
             new ServerRequestSecuritySettings.ActionLimit(
                 REQUEST_SECURITY_ATM_DEPOSIT_CAPACITY.get(),
                 REQUEST_SECURITY_ATM_DEPOSIT_REFILL_TOKENS.get(),
-                Duration.ofMillis(REQUEST_SECURITY_ATM_DEPOSIT_REFILL_PERIOD_MILLIS.get()))
+                Duration.ofMillis(REQUEST_SECURITY_ATM_DEPOSIT_REFILL_PERIOD_MILLIS.get())),
+            new ServerRequestSecuritySettings.ActionLimit(
+                REQUEST_SECURITY_PAY_CAPACITY.get(),
+                REQUEST_SECURITY_PAY_REFILL_TOKENS.get(),
+                Duration.ofMillis(REQUEST_SECURITY_PAY_REFILL_PERIOD_MILLIS.get()))
         );
     }
 
@@ -276,6 +301,7 @@ public final class EscrowConfig {
         boolean automaticClaimDelivery,
         int maximumClaimEntriesPerRequest,
         int claimDeliveryWorkPerTick,
+        int exactItemDeliveryOperationsPerTick,
         int maximumAssetsPerTransaction,
         int maximumAssetNbtBytes,
         int maximumTotalAssetNbtBytes,
@@ -308,6 +334,8 @@ public final class EscrowConfig {
                 "Maximum claim entries per request must be positive.");
             ConfigValidation.require(claimDeliveryWorkPerTick > 0,
                 "Claim delivery work per tick must be positive.");
+            ConfigValidation.require(exactItemDeliveryOperationsPerTick == 1,
+                "Exact item delivery operations per tick must be one.");
             ConfigValidation.require(maximumAssetsPerTransaction > 0,
                 "Maximum assets per transaction must be positive.");
             ConfigValidation.require(maximumAssetNbtBytes > 0, "Maximum asset NBT bytes must be positive.");
@@ -323,7 +351,7 @@ public final class EscrowConfig {
         public static Settings defaults() {
             return new Settings(
                 64, 20, 1200, 100000, 256, 30, 2, 67108864L, 50000, 365,
-                true, 64, 32, 256, 1048576, 8388608,
+                true, 64, 32, 1, 256, 1048576, 8388608,
                 true, "wallet_claim", "standard", true, true,
                 ServerRequestSecuritySettings.defaults()
             );

@@ -24,7 +24,8 @@ public enum EscrowOperation {
     BAZAAR_CANCEL(false),
     CLAIM(false),
     ADMIN_BALANCE_MUTATION(false),
-    ADMIN_RECOVERY(false);
+    ADMIN_RECOVERY(false),
+    SERVER_SHOP_FUNDING_RELEASE(false);
 
     private final boolean shopReferenceRequired;
 

@@ -27,7 +27,6 @@ import net.minecraftforge.registries.ForgeRegistries;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -176,8 +175,8 @@ public final class CashClaimDeliveryPlanner {
                 || !registryId.toString().equals(payload.registryItemId())
                 || stack.getCount() != payload.stackCount()
                 || payload.stackCount() > stack.getMaxStackSize()
-                || !Arrays.equals(ItemStackSnapshotCodec.encode(stack),
-                payload.serializedItemStackNbt())) {
+                || !ItemStackSnapshotCodec.snapshotMatchesIdentity(
+                payload.serializedItemStackNbt(), stack)) {
             throw new IllegalArgumentException(
                     "Foreign cash claim stack does not match its payload");
         }

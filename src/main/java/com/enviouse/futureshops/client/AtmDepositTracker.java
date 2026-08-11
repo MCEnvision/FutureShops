@@ -20,7 +20,8 @@ public final class AtmDepositTracker {
     public enum PendingState {
         NONE,
         AWAITING,
-        RETRYABLE
+        RETRYABLE,
+        BLOCKED
     }
 
     public enum ResultDecision {
@@ -36,6 +37,7 @@ public final class AtmDepositTracker {
             String currencySignature,
             C2SAtmDepositPacket.Source source,
             OptionalLong requestedMinorUnits,
+            Optional<UUID> recoveryTransactionId,
             int attempts,
             long lastSentAtNanos
     ) {
@@ -46,10 +48,16 @@ public final class AtmDepositTracker {
             Objects.requireNonNull(source, "source");
             requestedMinorUnits = Objects.requireNonNull(
                     requestedMinorUnits, "requestedMinorUnits");
+            recoveryTransactionId = Objects.requireNonNull(
+                    recoveryTransactionId, "recoveryTransactionId");
             if (requestId.equals(new UUID(0L, 0L))
                     || !SIGNATURE.matcher(currencySignature).matches()
                     || requestedMinorUnits.isPresent()
                     && requestedMinorUnits.getAsLong() <= 0L
+                    || recoveryTransactionId.filter(
+                    value -> value.equals(new UUID(0L, 0L))).isPresent()
+                    || recoveryTransactionId.isPresent()
+                    && requestedMinorUnits.isPresent()
                     || attempts <= 0) {
                 throw new IllegalArgumentException(
                         "ATM deposit pending request is invalid");
@@ -58,7 +66,8 @@ public final class AtmDepositTracker {
 
         private PendingRequest retried(long now) {
             return new PendingRequest(requestId, currencySignature, source,
-                    requestedMinorUnits, Math.addExact(attempts, 1), now);
+                    requestedMinorUnits, recoveryTransactionId,
+                    Math.addExact(attempts, 1), now);
         }
     }
 
@@ -77,6 +86,7 @@ public final class AtmDepositTracker {
 
     private PendingRequest pending;
     private boolean serverRetryable;
+    private boolean serverBlocked;
     private long retryDelayStartedAtNanos;
     private long retryDelayNanos;
 
@@ -114,14 +124,56 @@ public final class AtmDepositTracker {
                 requestIds.get(), "requestId");
         PendingRequest request = new PendingRequest(
                 requestId, currencySignature, source, requestedMinorUnits,
-                1, clock.getAsLong());
+                Optional.empty(), 1, clock.getAsLong());
         if (completed.containsKey(requestId)) {
             throw new IllegalStateException(
                     "ATM deposit request ID is unavailable");
         }
         pending = request;
         serverRetryable = false;
+        serverBlocked = false;
         retryDelayStartedAtNanos = 0L;
+        retryDelayNanos = 0L;
+        pendingResultKeys.clear();
+        return request;
+    }
+
+    public synchronized PendingRequest adoptRecovery(
+            UUID requestId,
+            String currencySignature,
+            UUID transactionId
+    ) {
+        return adoptRecovery(
+                requestId, currencySignature, transactionId, false);
+    }
+
+    public synchronized PendingRequest adoptBlockedRecovery(
+            UUID requestId,
+            String currencySignature,
+            UUID transactionId
+    ) {
+        return adoptRecovery(
+                requestId, currencySignature, transactionId, true);
+    }
+
+    private PendingRequest adoptRecovery(
+            UUID requestId,
+            String currencySignature,
+            UUID transactionId,
+            boolean blocked
+    ) {
+        Objects.requireNonNull(requestId, "requestId");
+        Objects.requireNonNull(transactionId, "transactionId");
+        PendingRequest request = new PendingRequest(
+                requestId, currencySignature,
+                C2SAtmDepositPacket.Source.INVENTORY,
+                OptionalLong.empty(), Optional.of(transactionId),
+                1, clock.getAsLong());
+        completed.remove(requestId);
+        pending = request;
+        serverRetryable = !blocked;
+        serverBlocked = blocked;
+        retryDelayStartedAtNanos = request.lastSentAtNanos();
         retryDelayNanos = 0L;
         pendingResultKeys.clear();
         return request;
@@ -134,6 +186,9 @@ public final class AtmDepositTracker {
     public synchronized PendingState state() {
         if (pending == null) {
             return PendingState.NONE;
+        }
+        if (serverBlocked) {
+            return PendingState.BLOCKED;
         }
         long now = clock.getAsLong();
         if (serverRetryable) {
@@ -155,6 +210,7 @@ public final class AtmDepositTracker {
         }
         pending = pending.retried(clock.getAsLong());
         serverRetryable = false;
+        serverBlocked = false;
         retryDelayStartedAtNanos = 0L;
         retryDelayNanos = 0L;
         pendingResultKeys.clear();
@@ -190,6 +246,7 @@ public final class AtmDepositTracker {
         }
         if (retryable) {
             serverRetryable = true;
+            serverBlocked = false;
             retryDelayStartedAtNanos = clock.getAsLong();
             retryDelayNanos = Math.multiplyExact(
                     retryAfterMillis, 1_000_000L);
@@ -201,15 +258,56 @@ public final class AtmDepositTracker {
         }
         pending = null;
         serverRetryable = false;
+        serverBlocked = false;
         retryDelayStartedAtNanos = 0L;
         retryDelayNanos = 0L;
         pendingResultKeys.clear();
         return ResultDecision.ACCEPT_TERMINAL;
     }
 
+    public synchronized boolean reconcileTerminalRecovery(
+            UUID requestId,
+            UUID transactionId
+    ) {
+        Objects.requireNonNull(requestId, "requestId");
+        Objects.requireNonNull(transactionId, "transactionId");
+        if (pending == null
+                || !pending.requestId().equals(requestId)
+                || pending.recoveryTransactionId().isPresent()
+                && !pending.recoveryTransactionId().orElseThrow()
+                .equals(transactionId)) {
+            return false;
+        }
+        completed.put(requestId, Boolean.TRUE);
+        while (completed.size() > completedLimit) {
+            completed.remove(completed.keySet().iterator().next());
+        }
+        pending = null;
+        serverRetryable = false;
+        serverBlocked = false;
+        retryDelayStartedAtNanos = 0L;
+        retryDelayNanos = 0L;
+        pendingResultKeys.clear();
+        return true;
+    }
+
+    public synchronized boolean reconcileNoRecovery() {
+        if (pending == null || pending.recoveryTransactionId().isEmpty()) {
+            return false;
+        }
+        pending = null;
+        serverRetryable = false;
+        serverBlocked = false;
+        retryDelayStartedAtNanos = 0L;
+        retryDelayNanos = 0L;
+        pendingResultKeys.clear();
+        return true;
+    }
+
     public synchronized void clear() {
         pending = null;
         serverRetryable = false;
+        serverBlocked = false;
         retryDelayStartedAtNanos = 0L;
         retryDelayNanos = 0L;
         pendingResultKeys.clear();

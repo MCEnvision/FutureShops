@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://futureshops.local/schema/bazaar-product-v1.json",
+  "title": "FutureShops Bazaar product catalog",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/singleFile"
+    },
+    {
+      "$ref": "#/$defs/collectionFile"
+    }
+  ],
+  "$defs": {
+    "resourceId": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[a-z0-9_.-]+:[a-z0-9/._-]+$"
+    },
+    "productId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 96,
+      "pattern": "^[a-z0-9_.]+$"
+    },
+    "categoryId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 96,
+      "pattern": "^[a-z0-9_.-]+$"
+    },
+    "restrictions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowDamaged": {
+          "type": "boolean",
+          "default": false
+        },
+        "allowNamed": {
+          "type": "boolean",
+          "default": false
+        },
+        "allowEnchanted": {
+          "type": "boolean",
+          "default": false
+        },
+        "allowContainers": {
+          "type": "boolean",
+          "default": false
+        },
+        "allowCapabilities": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "product": {
+      "type": "object",
+      "required": [
+        "id",
+        "version",
+        "item"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/productId"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "item": {
+          "$ref": "#/$defs/resourceId"
+        },
+        "exactNbt": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "category": {
+          "$ref": "#/$defs/categoryId",
+          "default": "misc"
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "iconItem": {
+          "$ref": "#/$defs/resourceId"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "halted",
+            "retired"
+          ],
+          "default": "active"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "identityPolicy": {
+          "type": "string",
+          "enum": [
+            "commodity",
+            "exact"
+          ],
+          "default": "commodity"
+        },
+        "lotSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "priceTickMinor": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "minimumPriceMinor": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maximumPriceMinor": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maximumQuantity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "allowedDimensions": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/resourceId"
+          }
+        },
+        "restrictions": {
+          "$ref": "#/$defs/restrictions"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "identityPolicy": {
+                "const": "exact"
+              }
+            },
+            "required": [
+              "identityPolicy"
+            ]
+          },
+          "then": {
+            "required": [
+              "exactNbt"
+            ]
+          }
+        }
+      ]
+    },
+    "singleFile": {
+      "unevaluatedProperties": false,
+      "allOf": [
+        {
+          "$ref": "#/$defs/product"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema": {
+              "const": 1
+            }
+          }
+        }
+      ]
+    },
+    "collectionFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "products"
+      ],
+      "properties": {
+        "schema": {
+          "const": 1
+        },
+        "products": {
+          "type": "array",
+          "maxItems": 2048,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/product"
+              }
+            ],
+            "unevaluatedProperties": false
+          }
+        }
+      }
+    }
+  }
+}

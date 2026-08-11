@@ -10,6 +10,10 @@ import com.enviouse.futureshops.server.escrow.ledger.LedgerAccountType;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerLeg;
 import com.enviouse.futureshops.server.escrow.ledger.LedgerTransaction;
 import com.enviouse.futureshops.server.escrow.mint.ProtectedMintJournalEvent;
+import com.enviouse.futureshops.server.escrow.claim.ClaimKind;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
+import com.enviouse.futureshops.server.escrow.model.EscrowAssetLot;
+import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import net.minecraft.world.item.ItemStack;
@@ -81,6 +85,127 @@ class ProtectedCashRedemptionCodecTest {
     }
 
     @Test
+    void internalEscrowModeRoundTripsAndCreatesOnlyInternalMoney() {
+        var baseline = ProtectedCashRedemptionTestFixtures
+                .productionScenario();
+        ProtectedCashRedemptionReservation reservation =
+                ProtectedCashRedemptionFactory.walletReservation(
+                        ProtectedCashRedemptionTestFixtures.PLAYER_ID,
+                        UUID.fromString(
+                                "a1000000-0000-0000-0000-000000000001"),
+                        "protected.cash.internal.mode",
+                        4L,
+                        ProtectedCashRedemptionTestFixtures
+                                .WALLET_BALANCE_LIMIT,
+                        ProtectedCashRedemptionTestFixtures.plan(),
+                        baseline.before(),
+                        CashDepositMode.INTERNAL_ESCROW,
+                        ProtectedCashRedemptionTestFixtures.HELD_AT);
+        var baselineReceipt = baseline.settlement()
+                .inventoryMutation();
+        var receipt = ProtectedCashRedemptionSettlement
+                .InventoryMutationReceipt.create(
+                        reservation.playerId(), reservation.transactionId(),
+                        reservation.reservationId(),
+                        ProtectedCashRedemptionSettlement
+                                .inventoryMutationRequestKey(
+                                reservation.transactionId(),
+                                reservation.destinationAccount()),
+                        baselineReceipt.mutations(),
+                        baselineReceipt.beforeInventoryHash(),
+                        baselineReceipt.afterInventoryHash(),
+                        baselineReceipt.occurredAt());
+        ProtectedCashRedemptionSettlement settlement =
+                ProtectedCashRedemptionFactory.settlement(reservation,
+                        receipt, reservation.walletBalanceLimitMinorUnits(),
+                        0L,
+                        ProtectedCashRedemptionTestFixtures.COMPLETED_AT);
+
+        assertEquals(CashDepositMode.INTERNAL_ESCROW,
+                ProtectedCashRedemptionReservationCodec.decode(
+                        ProtectedCashRedemptionReservationCodec.encode(
+                                reservation)).depositMode());
+        assertEquals(ClaimKind.INTERNAL_ESCROW_MONEY,
+                settlement.overflowClaim().orElseThrow().kind());
+        assertEquals(settlement,
+                ProtectedCashRedemptionSettlementCodec.decode(
+                ProtectedCashRedemptionSettlementCodec.encode(
+                        settlement)));
+    }
+
+    @Test
+    void schemaThreeReservationAndNestedWalTerminalsDecodeAsPublicWallet() {
+        ProtectedCashRedemptionTestFixtures.ProductionScenario baseline =
+                ProtectedCashRedemptionTestFixtures.productionScenario();
+        ProtectedCashRedemptionReservation legacy = legacyReservation(
+                baseline.reservation());
+        var baselineReceipt = baseline.settlement().inventoryMutation();
+        var receipt = ProtectedCashRedemptionSettlement
+                .InventoryMutationReceipt.create(
+                        legacy.playerId(), legacy.transactionId(),
+                        legacy.reservationId(), baselineReceipt.requestKey(),
+                        baselineReceipt.mutations(),
+                        baselineReceipt.beforeInventoryHash(),
+                        baselineReceipt.afterInventoryHash(),
+                        baselineReceipt.occurredAt());
+        ProtectedCashRedemptionSettlement settlement =
+                ProtectedCashRedemptionFactory.settlement(legacy, receipt,
+                        legacy.walletBalanceLimitMinorUnits(), 0L,
+                        ProtectedCashRedemptionTestFixtures.COMPLETED_AT);
+        ProtectedCashRedemptionCancellation cancellation =
+                ProtectedCashRedemptionFactory.cancellation(legacy,
+                        baseline.before(),
+                        ProtectedCashRedemptionTestFixtures.REFUNDED_AT);
+        byte[] reservationBytes = legacyReservationBytes(legacy);
+        byte[] settlementBytes = replaceNestedReservation(
+                ProtectedCashRedemptionSettlementCodec.encode(settlement),
+                reservationBytes);
+        byte[] cancellationBytes = replaceNestedReservation(
+                ProtectedCashRedemptionCancellationCodec.encode(
+                        cancellation), reservationBytes);
+
+        ProtectedCashRedemptionReservation decodedReservation =
+                ProtectedCashRedemptionReservationCodec.decode(
+                        reservationBytes);
+        ProtectedCashRedemptionSettlement decodedSettlement =
+                ProtectedCashRedemptionSettlementCodec.decode(
+                        settlementBytes);
+        ProtectedCashRedemptionCancellation decodedCancellation =
+                ProtectedCashRedemptionCancellationCodec.decode(
+                        cancellationBytes);
+
+        assertEquals(legacy, decodedReservation);
+        assertEquals(settlement, decodedSettlement);
+        assertEquals(cancellation, decodedCancellation);
+        assertEquals(CashDepositMode.PUBLIC_WALLET,
+                decodedReservation.depositMode());
+        assertEquals(ClaimKind.MONEY,
+                decodedSettlement.overflowClaim().orElseThrow().kind());
+    }
+
+    @Test
+    void schemaThreeCannotEraseInternalEscrowModeEvidence() {
+        ProtectedCashRedemptionTestFixtures.ProductionScenario baseline =
+                ProtectedCashRedemptionTestFixtures.productionScenario();
+        ProtectedCashRedemptionReservation internal =
+                ProtectedCashRedemptionFactory.walletReservation(
+                        ProtectedCashRedemptionTestFixtures.PLAYER_ID,
+                        UUID.fromString(
+                                "a1000000-0000-0000-0000-000000000002"),
+                        "protected.cash.internal.legacy.rejected",
+                        4L,
+                        ProtectedCashRedemptionTestFixtures
+                                .WALLET_BALANCE_LIMIT,
+                        ProtectedCashRedemptionTestFixtures.plan(),
+                        baseline.before(), CashDepositMode.INTERNAL_ESCROW,
+                        ProtectedCashRedemptionTestFixtures.HELD_AT);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> ProtectedCashRedemptionReservationCodec.decode(
+                        legacyReservationBytes(internal)));
+    }
+
+    @Test
     void constructorCanonicalizesAllBatchAndLotOrdering() {
         ProtectedCashRedemptionReservation valid =
                 ProtectedCashRedemptionTestFixtures.reservation();
@@ -138,7 +263,8 @@ class ProtectedCashRedemptionCodecTest {
                 () -> ProtectedCashRedemptionReservationCodec.decode(
                         badReservationMagic));
         byte[] newerReservation = reservation.clone();
-        newerReservation[7] = 4;
+        ByteBuffer.wrap(newerReservation).putInt(Integer.BYTES,
+                ProtectedCashRedemptionReservationCodec.CURRENT_SCHEMA + 1);
         assertThrows(IllegalStateException.class,
                 () -> ProtectedCashRedemptionReservationCodec.decode(
                         newerReservation));
@@ -566,5 +692,79 @@ class ProtectedCashRedemptionCodecTest {
                 settlement.walletBalanceBeforeMinorUnits(),
                 settlement.walletReservedBeforeMinorUnits(),
                 settlement.overflowClaim(), settlement.ledgerTransaction());
+    }
+
+    private static ProtectedCashRedemptionReservation legacyReservation(
+            ProtectedCashRedemptionReservation current
+    ) {
+        List<EscrowAssetLot> assets = new ArrayList<>();
+        for (int index = 0; index < current.plan().portions().size();
+             index++) {
+            EscrowAssetLot asset = current.heldTransaction().assetLots()
+                    .get(index);
+            assets.add(new EscrowAssetLot(asset.lotId(), asset.type(),
+                    asset.protectionLevel(), asset.source(),
+                    asset.destination(), asset.quantity(), asset.money(),
+                    asset.serializedPayload(),
+                    ProtectedCashRedemptionReservation
+                            .legacyAssetAttributes(
+                                    current.plan().portions().get(index),
+                                    current.destinationAccount(),
+                                    current.walletBalanceLimitMinorUnits(),
+                                    current.inventoryBeforeHash())));
+        }
+        EscrowTransaction transaction = current.heldTransaction();
+        EscrowTransaction held = new EscrowTransaction(
+                transaction.transactionId(),
+                transaction.parentTransactionId(), transaction.requestKey(),
+                transaction.operation(), transaction.state(),
+                transaction.participants(), assets, transaction.timestamps(),
+                transaction.revision(), transaction.configRevision(),
+                transaction.lastError(), transaction.retryMetadata(),
+                transaction.shopReference());
+        UUID reservationId = ProtectedCashRedemptionSupport
+                .legacyReservationId(current.playerId(),
+                        current.destinationAccount(),
+                        current.walletBalanceLimitMinorUnits(),
+                        current.inventoryBeforeHash(), held, current.plan());
+        return new ProtectedCashRedemptionReservation(reservationId,
+                current.playerId(), current.destinationAccount(),
+                current.walletBalanceLimitMinorUnits(),
+                CashDepositMode.PUBLIC_WALLET,
+                current.inventoryBeforeHash(), current.plan(), held,
+                current.custodyReservations(), current.mintReservations());
+    }
+
+    private static byte[] legacyReservationBytes(
+            ProtectedCashRedemptionReservation reservation
+    ) {
+        byte[] current = ProtectedCashRedemptionReservationCodec.encode(
+                reservation);
+        int ownerLength = ByteBuffer.wrap(current).getInt(44);
+        int modeOffset = 56 + ownerLength;
+        byte[] legacy = new byte[current.length - Integer.BYTES];
+        System.arraycopy(current, 0, legacy, 0, modeOffset);
+        System.arraycopy(current, modeOffset + Integer.BYTES, legacy,
+                modeOffset, legacy.length - modeOffset);
+        ByteBuffer.wrap(legacy).putInt(Integer.BYTES, 3);
+        return legacy;
+    }
+
+    private static byte[] replaceNestedReservation(
+            byte[] current,
+            byte[] legacyReservation
+    ) {
+        int currentReservationLength = ByteBuffer.wrap(current).getInt(8);
+        int currentTailOffset = 12 + currentReservationLength;
+        byte[] legacy = new byte[current.length
+                - currentReservationLength + legacyReservation.length];
+        System.arraycopy(current, 0, legacy, 0, 8);
+        ByteBuffer.wrap(legacy).putInt(8, legacyReservation.length);
+        System.arraycopy(legacyReservation, 0, legacy, 12,
+                legacyReservation.length);
+        System.arraycopy(current, currentTailOffset, legacy,
+                12 + legacyReservation.length,
+                current.length - currentTailOffset);
+        return legacy;
     }
 }

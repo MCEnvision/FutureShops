@@ -57,6 +57,12 @@ public interface ExternalStorageAdapter {
         return extract(blockEntity, item, count);
     }
 
+    default List<ItemStack> previewExtract(BlockEntity blockEntity, Item item,
+                                           int count, boolean nbtAware,
+                                           @Nullable CompoundTag requiredTag) {
+        return List.of();
+    }
+
     /**
      * Checks if all stacks can be inserted.
      */
@@ -67,4 +73,3 @@ public interface ExternalStorageAdapter {
      */
     boolean insert(BlockEntity blockEntity, List<ItemStack> stacks);
 }
-

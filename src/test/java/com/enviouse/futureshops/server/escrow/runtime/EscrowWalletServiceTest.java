@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -196,6 +197,25 @@ class EscrowWalletServiceTest {
         assertFalse(balances.containsKey(UUID.randomUUID()));
     }
 
+    @Test
+    void storedBalanceReadDoesNotInitializeMissingWallet() {
+        LedgerSavedData ledger = new LedgerSavedData();
+        EscrowWalletService service = new EscrowWalletService(
+                new MemoryBackend(ledger));
+
+        assertEquals(OptionalLong.empty(),
+                EscrowWalletService.storedBalance(ledger, FIRST));
+        assertTrue(service.initialize(
+                UUID.randomUUID(), FIRST, 75L, false, "starting").success());
+        assertTrue(service.initialize(
+                UUID.randomUUID(), SECOND, -20L, true, "legacy").success());
+
+        assertEquals(OptionalLong.of(75L),
+                EscrowWalletService.storedBalance(ledger, FIRST));
+        assertEquals(OptionalLong.of(-20L),
+                EscrowWalletService.storedBalance(ledger, SECOND));
+    }
+
     private static EscrowWalletService service() {
         return new EscrowWalletService(new MemoryBackend());
     }
@@ -206,7 +226,15 @@ class EscrowWalletServiceTest {
     }
 
     private static final class MemoryBackend implements WalletLedgerBackend {
-        private final LedgerSavedData ledger = new LedgerSavedData();
+        private final LedgerSavedData ledger;
+
+        private MemoryBackend() {
+            this(new LedgerSavedData());
+        }
+
+        private MemoryBackend(LedgerSavedData ledger) {
+            this.ledger = ledger;
+        }
 
         @Override
         public long balance(LedgerAccountId account) {

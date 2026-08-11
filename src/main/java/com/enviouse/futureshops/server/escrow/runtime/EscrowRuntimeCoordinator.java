@@ -23,6 +23,11 @@ import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemption
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionSettlementCodec;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionCancellation;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionCancellationCodec;
+import com.enviouse.futureshops.server.market.control.MarketControlMutation;
+import com.enviouse.futureshops.server.market.control.MarketControlMutationCodec;
+import com.enviouse.futureshops.server.market.control.MarketModuleStatus;
+import com.mojang.logging.LogUtils;
+import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -39,6 +44,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 public final class EscrowRuntimeCoordinator implements AutoCloseable {
+    private static final Logger LOGGER = LogUtils.getLogger();
     public static final int DEFAULT_RECOVERY_BATCH_SIZE = 256;
     public static final int MAX_RECOVERY_BATCH_SIZE = 10_000;
 
@@ -252,6 +258,52 @@ public final class EscrowRuntimeCoordinator implements AutoCloseable {
             throw new IllegalArgumentException(
                     "Cash deposit requires its scoped composite lane");
         }
+        if (event.type()
+                == EscrowJournalEventType.PLAYER_PAYMENT_COMMIT) {
+            throw new IllegalArgumentException(
+                    "Player payment requires its scoped composite lane");
+        }
+        if (event.type() == EscrowJournalEventType.STOCK_MUTATION) {
+            throw new IllegalArgumentException(
+                    "Stock mutation requires its scoped stock lane");
+        }
+        if (event.type()
+                == EscrowJournalEventType.SERVER_SHOP_PURCHASE_COMMIT) {
+            throw new IllegalArgumentException(
+                    "Server shop purchase requires its scoped composite lane");
+        }
+        if (event.type()
+                == EscrowJournalEventType.SERVER_SHOP_SELL_COMMIT
+                || event.type()
+                == EscrowJournalEventType.SERVER_SHOP_BARTER_COMMIT) {
+            throw new IllegalArgumentException(
+                    "Server shop lifecycle requires its scoped composite lane");
+        }
+        if (isItemInventoryEvent(event.type())) {
+            throw new IllegalArgumentException(
+                    "Item inventory mutation requires its scoped item lane");
+        }
+        if (event.type()
+                == EscrowJournalEventType.AUCTION_HOUSE_MUTATION
+                || event.type() == EscrowJournalEventType
+                .AUCTION_HOUSE_ESCROW_LIFECYCLE) {
+            throw new IllegalArgumentException(
+                    "Auction house mutation requires its scoped market lane");
+        }
+        if (event.type() == EscrowJournalEventType.BAZAAR_MUTATION) {
+            throw new IllegalArgumentException(
+                    "Bazaar mutation requires its scoped market lane");
+        }
+        if (event.type()
+                == EscrowJournalEventType.PLAYER_SHOP_ESCROW_LIFECYCLE) {
+            throw new IllegalArgumentException(
+                    "Player shop escrow requires its scoped lifecycle lane");
+        }
+        if (event.type()
+                == EscrowJournalEventType.MARKET_CONTROL_MUTATION) {
+            throw new IllegalArgumentException(
+                    "Market control mutation requires its scoped control lane");
+        }
         return commitReady(transactionId, event);
     }
 
@@ -275,6 +327,221 @@ public final class EscrowRuntimeCoordinator implements AutoCloseable {
         return type == EscrowJournalEventType.ATM_WITHDRAWAL_COMMIT
                 || type == EscrowJournalEventType
                 .FOREIGN_ATM_WITHDRAWAL_COMMIT;
+    }
+
+    synchronized EscrowCommitResult commitPlayerPayment(
+            UUID transactionId,
+            EscrowJournalEvent event
+    ) {
+        Objects.requireNonNull(transactionId, "transactionId");
+        Objects.requireNonNull(event, "event");
+        requireReady();
+        if (event.type()
+                != EscrowJournalEventType.PLAYER_PAYMENT_COMMIT) {
+            throw new IllegalArgumentException(
+                    "Scoped player payment lane only accepts player payment commits");
+        }
+        return commitReady(transactionId, event);
+    }
+
+    synchronized EscrowCommitResult commitStockMutation(
+            UUID requestId,
+            EscrowJournalEvent event
+    ) {
+        Objects.requireNonNull(requestId, "requestId");
+        Objects.requireNonNull(event, "event");
+        requireReady();
+        if (event.type() != EscrowJournalEventType.STOCK_MUTATION) {
+            throw new IllegalArgumentException(
+                    "Scoped stock lane only accepts stock mutations");
+        }
+        return commitReady(requestId, event);
+    }
+
+    synchronized EscrowCommitResult commitServerShopPurchase(
+            UUID transactionId,
+            EscrowJournalEvent event
+    ) {
+        Objects.requireNonNull(transactionId, "transactionId");
+        Objects.requireNonNull(event, "event");
+        requireReady();
+        if (event.type()
+                != EscrowJournalEventType.SERVER_SHOP_PURCHASE_COMMIT) {
+            throw new IllegalArgumentException(
+                    "Scoped server shop lane only accepts purchase commits");
+        }
+        return commitReady(transactionId, event);
+    }
+
+    synchronized EscrowCommitResult commitServerShopFundingRelease(
+            UUID releaseId,
+            EscrowJournalEvent event
+    ) {
+        Objects.requireNonNull(releaseId, "releaseId");
+        Objects.requireNonNull(event, "event");
+        requireReady();
+        if (event.type()
+                != EscrowJournalEventType.SERVER_SHOP_FUNDING_RELEASE) {
+            throw new IllegalArgumentException(
+                    "Scoped server shop release lane only accepts funding releases");
+        }
+        return commitReady(releaseId, event);
+    }
+
+    synchronized EscrowCommitResult commitServerShopSellLifecycle(
+            UUID requestId,
+            EscrowJournalEvent event
+    ) {
+        Objects.requireNonNull(requestId, "requestId");
+        Objects.requireNonNull(event, "event");
+        requireReady();
+        if (event.type()
+                != EscrowJournalEventType.SERVER_SHOP_SELL_COMMIT) {
+            throw new IllegalArgumentException(
+                    "Scoped server shop sell lane only accepts sell lifecycle events");
+        }
+        return commitReady(requestId, event);
+    }
+
+    synchronized EscrowCommitResult commitServerShopBarterLifecycle(
+            UUID requestId,
+            EscrowJournalEvent event
+    ) {
+        Objects.requireNonNull(requestId, "requestId");
+        Objects.requireNonNull(event, "event");
+        requireReady();
+        if (event.type()
+                != EscrowJournalEventType.SERVER_SHOP_BARTER_COMMIT) {
+            throw new IllegalArgumentException(
+                    "Scoped server shop barter lane only accepts barter lifecycle events");
+        }
+        return commitReady(requestId, event);
+    }
+
+    synchronized EscrowCommitResult commitItemInventoryMutation(
+            UUID requestId,
+            EscrowJournalEvent event
+    ) {
+        Objects.requireNonNull(requestId, "requestId");
+        Objects.requireNonNull(event, "event");
+        requireReady();
+        if (!isItemInventoryEvent(event.type())) {
+            throw new IllegalArgumentException(
+                    "Scoped item lane only accepts item inventory mutations");
+        }
+        return commitReady(requestId, event);
+    }
+
+    private static boolean isItemInventoryEvent(
+            EscrowJournalEventType type
+    ) {
+        return type == EscrowJournalEventType.ITEM_INVENTORY_MUTATION
+                || type == EscrowJournalEventType
+                .EXACT_ITEM_CLAIM_DELIVERY_COMMIT
+                || type == EscrowJournalEventType
+                .ITEM_INVENTORY_QUARANTINE_ADMINISTRATION
+                || type == EscrowJournalEventType
+                .ITEM_INVENTORY_JOURNAL_COMPACTION;
+    }
+
+    synchronized EscrowCommitResult commitAuctionHouseMutation(
+            UUID requestId,
+            EscrowJournalEvent event
+    ) {
+        Objects.requireNonNull(requestId, "requestId");
+        Objects.requireNonNull(event, "event");
+        requireReady();
+        if (event.type()
+                != EscrowJournalEventType.AUCTION_HOUSE_MUTATION) {
+            throw new IllegalArgumentException(
+                    "Scoped auction house lane only accepts auction house mutations");
+        }
+        return commitReady(requestId, event);
+    }
+
+    synchronized EscrowCommitResult commitAuctionEscrowLifecycle(
+            UUID requestId,
+            EscrowJournalEvent event
+    ) {
+        Objects.requireNonNull(requestId, "requestId");
+        Objects.requireNonNull(event, "event");
+        requireReady();
+        if (event.type() != EscrowJournalEventType
+                .AUCTION_HOUSE_ESCROW_LIFECYCLE) {
+            throw new IllegalArgumentException(
+                    "Scoped auction escrow lane only accepts auction escrow lifecycle events");
+        }
+        return commitReady(requestId, event);
+    }
+
+    synchronized EscrowCommitResult commitBazaarMutation(
+            UUID mutationId,
+            EscrowJournalEvent event
+    ) {
+        Objects.requireNonNull(mutationId, "mutationId");
+        Objects.requireNonNull(event, "event");
+        requireReady();
+        if (event.type() != EscrowJournalEventType.BAZAAR_MUTATION) {
+            throw new IllegalArgumentException(
+                    "Scoped Bazaar lane only accepts Bazaar mutations");
+        }
+        return commitReady(mutationId, event);
+    }
+
+    synchronized EscrowCommitResult commitBazaarEscrowLifecycle(
+            UUID requestId,
+            EscrowJournalEvent event
+    ) {
+        Objects.requireNonNull(requestId, "requestId");
+        Objects.requireNonNull(event, "event");
+        requireReady();
+        if (event.type() != EscrowJournalEventType
+                .BAZAAR_ESCROW_LIFECYCLE) {
+            throw new IllegalArgumentException(
+                    "Scoped Bazaar escrow lane only accepts Bazaar escrow lifecycle events");
+        }
+        return commitReady(requestId, event);
+    }
+
+    synchronized EscrowCommitResult commitPlayerShopEscrowLifecycle(
+            UUID eventId,
+            EscrowJournalEvent event
+    ) {
+        Objects.requireNonNull(eventId, "eventId");
+        Objects.requireNonNull(event, "event");
+        requireReady();
+        if (event.type()
+                != EscrowJournalEventType.PLAYER_SHOP_ESCROW_LIFECYCLE) {
+            throw new IllegalArgumentException(
+                    "Scoped player shop lane only accepts lifecycle events");
+        }
+        return commitReady(eventId, event);
+    }
+
+    synchronized EscrowCommitResult commitMarketControlMutation(
+            UUID requestId,
+            EscrowJournalEvent event
+    ) {
+        Objects.requireNonNull(requestId, "requestId");
+        Objects.requireNonNull(event, "event");
+        requireReady();
+        if (event.type()
+                != EscrowJournalEventType.MARKET_CONTROL_MUTATION) {
+            throw new IllegalArgumentException(
+                    "Scoped control lane only accepts control mutations");
+        }
+        MarketControlMutation mutation =
+                MarketControlMutationCodec.decode(event.body());
+        if (!requestId.equals(mutation.auditEntry().requestId())) {
+            throw new IllegalArgumentException(
+                    "Market control request identity does not match");
+        }
+        if (mutation.nextModule().status()
+                == MarketModuleStatus.CANCEL_AND_REFUND) {
+            throw new IllegalArgumentException(
+                    "Cancel and refund requires a composite cancellation plan");
+        }
+        return commitReady(requestId, event);
     }
 
     public synchronized EscrowCommitResult commitProtectedCashReservation(
@@ -446,6 +713,18 @@ public final class EscrowRuntimeCoordinator implements AutoCloseable {
         return Optional.ofNullable(lineageId);
     }
 
+    public synchronized Optional<EscrowVerifiedItemInventoryCheckpoint>
+    verifiedItemInventoryCheckpoint() {
+        requireReady();
+        if (activeJournal == null || snapshotBundle == null) {
+            return Optional.empty();
+        }
+        return snapshotBundle.trustedItemInventoryJournalSnapshot(
+                activeJournal.trustedCheckpoint()).map(snapshot ->
+                new EscrowVerifiedItemInventoryCheckpoint(
+                        activeJournal.checkpointReference(), snapshot));
+    }
+
     public synchronized long lastAppliedSequence() {
         return cursor.lastAppliedSequence();
     }
@@ -532,10 +811,17 @@ public final class EscrowRuntimeCoordinator implements AutoCloseable {
     }
 
     private void initializeJournal() throws IOException {
-        if (cursor.journalLineage().isPresent() || cursor.lastAppliedSequence() != 0L) {
-            throw new EscrowRuntimeException("Escrow journal is missing for its persisted cursor");
+        boolean materializedState = materializedStateExists.getAsBoolean();
+        if (cursor.journalLineage().isPresent()
+                || cursor.lastAppliedSequence() != 0L) {
+            if (materializedState || !cursor.isPristineBootstrap()) {
+                throw new EscrowRuntimeException(
+                        "Escrow journal is missing for its persisted cursor at sequence "
+                                + cursor.lastAppliedSequence());
+            }
+            mutateCursor(cursor::resetPristineBootstrap);
         }
-        if (materializedStateExists.getAsBoolean()) {
+        if (materializedState) {
             throw new EscrowRuntimeException("Escrow journal is missing for materialized state");
         }
         JournalLineage lineage = new JournalLineage(
@@ -574,7 +860,13 @@ public final class EscrowRuntimeCoordinator implements AutoCloseable {
         Optional<UUID> persistedLineage = cursor.journalLineage();
         if (persistedLineage.isPresent()
                 && !persistedLineage.orElseThrow().equals(lineage.lineageId())) {
-            throw new EscrowRuntimeException("Escrow persisted lineage does not match the journal");
+            if (scan.lastSequence() != 1L
+                    || materializedStateExists.getAsBoolean()
+                    || !cursor.isPristineBootstrap()) {
+                throw new EscrowRuntimeException(
+                        "Escrow persisted lineage does not match the journal");
+            }
+            mutateCursor(cursor::resetPristineBootstrap);
         }
         if (cursor.lastAppliedSequence() > scan.lastSequence()) {
             throw new EscrowRuntimeException("Escrow cursor is ahead of the journal");
@@ -859,6 +1151,10 @@ public final class EscrowRuntimeCoordinator implements AutoCloseable {
     private void enterMaintenance(Throwable cause) {
         if (failure == null) {
             failure = Objects.requireNonNull(cause, "cause");
+            LOGGER.error(
+                    "Escrow runtime entered maintenance. journal {}, state {}, recovery offset {}, expected sequence {}.",
+                    journalPath, state, recoveryOffset,
+                    recoveryExpectedSequence, cause);
         }
         state = EscrowRuntimeState.MAINTENANCE;
     }

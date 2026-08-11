@@ -31,6 +31,7 @@ import com.enviouse.futureshops.server.escrow.model.EscrowState;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransaction;
 import com.enviouse.futureshops.server.escrow.model.EscrowTransactionId;
 import com.enviouse.futureshops.server.escrow.model.MoneyAmount;
+import com.enviouse.futureshops.server.escrow.model.CashDepositMode;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashInventoryState;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionCancellation.InventoryNoMutationProof;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashRedemptionCancellation.SlotObservation;
@@ -59,12 +60,14 @@ final class ForeignCashDepositFactory {
             UUID transactionId,
             String requestKey,
             long walletBalanceLimitMinorUnits,
+            CashDepositMode depositMode,
             ForeignCashDepositPlan plan,
             ProtectedCashInventoryState beforeInventory,
             Instant now
     ) {
         LedgerAccountId destination = new LedgerAccountId(
                 LedgerAccountType.PLAYER_WALLET, playerId.toString());
+        java.util.Objects.requireNonNull(depositMode, "depositMode");
         List<CustodyMutation> custody = new ArrayList<>();
         for (ForeignCashDepositPlan.Portion portion : plan.portions()) {
             UUID lotId = ForeignCashDepositReservation.custodyLotId(
@@ -133,6 +136,7 @@ final class ForeignCashDepositFactory {
                             + portion.slot().index(),
                     "inventory_hash", HexFormat.of().formatHex(
                             beforeInventory.hash()),
+                    "deposit_mode", depositMode.name(),
                     "dupe_protection_warning",
                             Config.FOREIGN_CURRENCY_WARNING)));
         }
@@ -147,11 +151,26 @@ final class ForeignCashDepositFactory {
                 .transitionTo(EscrowState.HELD, now);
         UUID reservationId = ForeignCashDepositReservation.reservationId(
                 requestId, playerId, destination,
-                walletBalanceLimitMinorUnits, beforeInventory.hash(), plan,
-                held);
+                walletBalanceLimitMinorUnits, depositMode,
+                beforeInventory.hash(), plan, held);
         return new ForeignCashDepositReservation(reservationId, requestId,
                 playerId, destination, walletBalanceLimitMinorUnits,
-                beforeInventory.hash(), plan, held, custody);
+                depositMode, beforeInventory.hash(), plan, held, custody);
+    }
+
+    static ForeignCashDepositReservation reservation(
+            UUID requestId,
+            UUID playerId,
+            UUID transactionId,
+            String requestKey,
+            long walletBalanceLimitMinorUnits,
+            ForeignCashDepositPlan plan,
+            ProtectedCashInventoryState beforeInventory,
+            Instant now
+    ) {
+        return reservation(requestId, playerId, transactionId, requestKey,
+                walletBalanceLimitMinorUnits,
+                CashDepositMode.PUBLIC_WALLET, plan, beforeInventory, now);
     }
 
     static ForeignCashDepositSettlement settlement(
@@ -211,7 +230,8 @@ final class ForeignCashDepositFactory {
                     reservation.transactionId(), reservation.playerId(),
                     ForeignCashDepositSettlement
                             .overflowClaimSourceKey(reservation),
-                    ClaimKind.MONEY, claimCredit, claimCredit, new byte[0],
+                    overflowClaimKind(reservation), claimCredit,
+                    claimCredit, new byte[0],
                     ClaimStatus.PENDING, OVERFLOW_CLAIM_LABEL, now, now));
             legs.add(new LedgerLeg(new LedgerAccountId(
                     LedgerAccountType.PLAYER_CLAIM, claimId.toString()),
@@ -225,6 +245,13 @@ final class ForeignCashDepositFactory {
         return new ForeignCashDepositSettlement(reservation, completed,
                 receipt, consumptions, walletBalanceBeforeMinorUnits,
                 walletReservedBeforeMinorUnits, overflow, ledger);
+    }
+
+    private static ClaimKind overflowClaimKind(
+            ForeignCashDepositReservation reservation
+    ) {
+        return reservation.depositMode() == CashDepositMode.INTERNAL_ESCROW
+                ? ClaimKind.INTERNAL_ESCROW_MONEY : ClaimKind.MONEY;
     }
 
     static ForeignCashDepositCancellation cancellation(

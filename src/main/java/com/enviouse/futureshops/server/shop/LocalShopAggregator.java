@@ -39,7 +39,8 @@ public final class LocalShopAggregator {
         PlayerShopRegistrySavedData registry = PlayerShopRegistrySavedData.get(player.getServer());
         FranchiseSavedData franchiseData = FranchiseSavedData.get(player.getServer());
 
-        Map<Long, PlayerShopRegistrySavedData.ShopRecord> allShops = registry.getAllShops();
+        Map<PlayerShopRegistrySavedData.ShopLocation,
+                PlayerShopRegistrySavedData.ShopRecord> allShops = registry.getAllShops();
         int scanRadius = Config.localListingsScanRadiusBlocks;
         boolean unlimited = scanRadius <= 0;
         long scanRadiusSq = (long) scanRadius * scanRadius;
@@ -50,12 +51,14 @@ public final class LocalShopAggregator {
         Map<UUID, Double> closestDistance = new HashMap<>();
         Map<UUID, String> groupDisplayName = new HashMap<>();
         Map<UUID, String> groupFranchiseName = new HashMap<>();
+        Map<UUID, String> knownOwnerNames = new HashMap<>();
 
-        for (Map.Entry<Long, PlayerShopRegistrySavedData.ShopRecord> entry : allShops.entrySet()) {
+        for (Map.Entry<PlayerShopRegistrySavedData.ShopLocation,
+                PlayerShopRegistrySavedData.ShopRecord> entry : allShops.entrySet()) {
             PlayerShopRegistrySavedData.ShopRecord record = entry.getValue();
             if (!currentDimension.equals(record.dimension())) continue;
 
-            BlockPos shopPos = BlockPos.of(entry.getKey());
+            BlockPos shopPos = BlockPos.of(entry.getKey().posLong());
             double distSq = center.distSqr(shopPos);
             if (!unlimited && distSq > (double) scanRadiusSq) continue;
             if (!level.hasChunkAt(shopPos)) continue;
@@ -65,6 +68,9 @@ public final class LocalShopAggregator {
             if (shop.getOwnerUuid() == null || shop.getListings().isEmpty()) continue;
 
             UUID ownerUuid = shop.getOwnerUuid();
+            if (!shop.getOwnerName().isBlank()) {
+                knownOwnerNames.put(ownerUuid, shop.getOwnerName());
+            }
 
             // Determine group key: use franchise leader UUID if in franchise, else owner UUID
             UUID groupKey = ownerUuid;
@@ -86,9 +92,6 @@ public final class LocalShopAggregator {
             shopsByGroup.computeIfAbsent(groupKey, k -> new ArrayList<>())
                     .add(new ShopInfo(shopPos, shop, dist));
 
-            if (!groupDisplayName.containsKey(groupKey)) {
-                groupDisplayName.put(groupKey, resolveOwnerName(player, ownerUuid));
-            }
         }
 
         // Build aggregated entries
@@ -97,6 +100,8 @@ public final class LocalShopAggregator {
             if (owners.size() >= MAX_OWNERS) break;
             UUID groupKey = groupEntry.getKey();
             List<ShopInfo> shops = groupEntry.getValue();
+            groupDisplayName.put(groupKey, resolveOwnerName(player, groupKey,
+                    knownOwnerNames.getOrDefault(groupKey, "Player")));
 
             // Aggregate departments across all shop blocks
             Map<String, List<LocalListing>> deptMap = new LinkedHashMap<>();
@@ -179,17 +184,20 @@ public final class LocalShopAggregator {
         ShopPackets.sendToPlayer(player, new S2CLocalShopsPacket(owners));
     }
 
-    private static String resolveOwnerName(ServerPlayer viewer, UUID ownerUuid) {
+    private static String resolveOwnerName(ServerPlayer viewer, UUID ownerUuid,
+                                           String fallbackName) {
+        ServerPlayer online = viewer.getServer().getPlayerList().getPlayer(ownerUuid);
+        if (online != null) {
+            return online.getGameProfile().getName();
+        }
         var profile = viewer.getServer().getProfileCache();
         if (profile != null) {
             var opt = profile.get(ownerUuid);
             if (opt.isPresent()) return opt.get().getName();
         }
-        return "Player";
+        return fallbackName == null || fallbackName.isBlank() ? "Player" : fallbackName;
     }
 
     private record ShopInfo(BlockPos pos, ShopBlockEntity shop, double distance) {}
 }
-
-
 
