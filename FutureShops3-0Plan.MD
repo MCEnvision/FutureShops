@@ -103,10 +103,11 @@ Implementation status. The release identity and documentation are prepared on
 `envy/3.0.0-beta.1-release`. The clean unit suite passed 1,905 tests with no failures, errors, or
 skips. Data generation, all five required GameTests, the complete build, beta identity validation,
 packaged dependency validation, JSON validation, dedicated server startup, virtual display client
-startup, and JAR inspection passed. The long running server and client Gradle tasks ended with
-status 143 only after their verified processes were deliberately stopped. Pull request checks,
-merge into `1.20.1`, final merged commit checksums, release broker preview, and platform publication
-remain pending and must not be marked complete early.
+startup, and JAR inspection passed. The dedicated server stopped through its console command and
+saved every dimension. The client stopped through its standard window close protocol. Both Gradle
+runtime tasks completed successfully. Pull request checks, merge into `1.20.1`, final merged commit
+checksums, release broker preview, and platform publication remain pending and must not be marked
+complete early.
 
 ### Beta 4 issue maintenance
 
