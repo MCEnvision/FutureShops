@@ -1,6 +1,6 @@
 # FutureShops 3.0 Plan
 
-Status. The ATM deposit recovery and Bazaar refund access blocker in Section 20 is implemented on the active 3.0 beta branch. The `3.0.0-beta.4` gameplay maintenance, `3.0.0-beta.5` dependency audit closure, and `3.0.0-beta.6` dependency maintenance followup below are implemented, verified, and merged. On August 14, 2026, the owner selected `3.0.0-beta.1` as the new public beta identity for CurseForge and Modrinth. Community delivery and the remaining live multiplayer, reconnect, restart, and recovery fault acceptance checks still block a stable release.
+Status. The ATM deposit recovery and Bazaar refund access blocker in Section 20 is implemented on the active 3.0 beta branch. The `3.0.0-beta.4` gameplay maintenance, `3.0.0-beta.5` dependency audit closure, and `3.0.0-beta.6` dependency maintenance followup below are implemented, verified, and merged. On August 14, 2026, the owner selected `3.0.0-beta.1` as the new public beta identity and published the identical verified artifact to CurseForge and Modrinth as a beta. Community delivery and the remaining live multiplayer, reconnect, restart, and recovery fault acceptance checks still block a stable release.
 
 This document is the implementation contract for FutureShops 3.0. It covers the shared escrow foundation, migration of all existing value moving features, the Auction House, the Bazaar, the shared market interface, configuration, recovery, abuse controls, testing, and release sequencing.
 
@@ -99,15 +99,19 @@ Verification and publication gates.
   verified. Partial success is reported accurately and retried without duplicating a successful
   upload.
 
-Implementation status. The release identity and documentation are prepared on
-`envy/3.0.0-beta.1-release`. The clean unit suite passed 1,905 tests with no failures, errors, or
-skips. Data generation, all five required GameTests, the complete build, beta identity validation,
-packaged dependency validation, JSON validation, dedicated server startup, virtual display client
-startup, and JAR inspection passed. The dedicated server stopped through its console command and
-saved every dimension. The client stopped through its standard window close protocol. Both Gradle
-runtime tasks completed successfully. Pull request checks, merge into `1.20.1`, final merged commit
-checksums, release broker preview, and platform publication remain pending and must not be marked
-complete early.
+Implementation status. Pull request 30 merged the release identity and documentation into
+`1.20.1` at commit `519114f648946f1d6932d86376511f5da47a1754`, and the signed
+`3.0.0-beta.1` tag identifies that merged commit. The clean unit suite passed 1,905 tests with no
+failures, errors, or skips. Data generation, all five required GameTests, the complete build, beta
+identity validation, packaged dependency validation, JSON validation, dedicated server startup,
+virtual display client startup, and JAR inspection passed. The dedicated server stopped through
+its console command and saved every dimension. The client stopped through its standard window
+close protocol. Both Gradle runtime tasks completed successfully. The final artifact SHA-512 is
+`19edd3060d577e4a611543c8ff2fa9695dbf93d742120289f88ef39ec1419ca2f4a0bdfdf4769f6071a29ff2ffee2303f3598c74409c99779d1ae28967e56119`.
+Modrinth accepted version `mordTCRQ`, and CurseForge accepted file `8651722` after the release
+broker supplied the required Client and Server environment values. The announcement was posted
+for the published project page. No GitHub release or stable platform release was created. Live
+reporter acceptance remains open and continues to block stable release approval.
 
 ### Beta 4 issue maintenance
 

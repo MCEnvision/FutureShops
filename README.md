@@ -4,7 +4,7 @@ FutureShops is a Minecraft Forge economy and marketplace mod for server shops, p
 
 ## Status
 
-The `3.0.0-beta.1` build is prepared as a beta for live validation. It is not a stable release. Use matching FutureShops builds on the client and server, preserve a complete backup before upgrading, and report multiplayer, reconnect, restart, migration, or recovery failures with the relevant logs and recovery handles.
+The `3.0.0-beta.1` build is published as a beta for live validation on [CurseForge](https://www.curseforge.com/minecraft/mc-mods/future-shops/files/8651722) and [Modrinth](https://modrinth.com/mod/future-shops/version/mordTCRQ). It is not a stable release. Use matching FutureShops builds on the client and server, preserve a complete backup before upgrading, and report multiplayer, reconnect, restart, migration, or recovery failures with the relevant logs and recovery handles.
 
 The repository default branch is `1.20.1`, which is the canonical Forge 1.20.1 integration line.
 The separate `1.21.1` branch contains the NeoForge line. Forge 1.20.1 fixes and releases target
@@ -57,7 +57,8 @@ and evidence from one owned snapshot per slot. The repair does not clear mainten
 discard escrow evidence. A world that recorded maintenance during beta 10 can use the verified
 maintenance resume command after `3.0.0-beta.1` loads and aligns the journal. This remains a beta
 artifact until the reporter's backed up dedicated server passes startup, purchase, restart, and
-recovery testing. The 3.0.0 beta is prepared for that live validation and is not a stable release.
+recovery testing. The published 3.0.0 beta is intended for that live validation and is not a stable
+release.
 
 Worlds previously opened with the incorrectly labeled `3.1.0-beta.1` build can report a Forge
 version difference when first opened with `3.0.0-beta.3`. This corrects the public artifact label
