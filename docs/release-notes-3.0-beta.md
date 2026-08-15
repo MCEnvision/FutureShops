@@ -1,6 +1,15 @@
 # FutureShops 3.0.0 beta release notes
 
-FutureShops 3.0.0 beta replaces separate special case shop trades with one clear offer model. This is a beta build for Minecraft 1.20.1 and Forge 47.4.20. Client and server must use the same build because the network protocol is now 57.
+FutureShops `3.0.0-beta.1` packages the complete merged 3.0 implementation for live validation. It replaces separate special case shop trades with one clear offer model and includes the recovery, catalog, dependency, concurrency, interface, and transaction fixes from the historical 3.0 beta builds. This is a beta build for Minecraft 1.20.1 and Forge 47.4.20, not a stable release. Client and server must use the same build because the network protocol is 57.
+
+## 3.0.0 beta 1
+
+* The public artifact and metadata version is `3.0.0-beta.1`.
+* The same verified JAR must be distributed on CurseForge and Modrinth as a beta for client and server installations.
+* Existing `3.0.0` beta worlds remain compatible. Back up the complete world and configuration before upgrading, and do not delete escrow recovery data.
+* Minecraft remains `1.20.1`, Forge remains `47.4.20`, Java remains 17, and the network protocol remains 57.
+* This beta includes every repair listed below through the legacy exact item journal compatibility work from `3.0.0-beta.11`.
+* Open reporter validation remains tracked separately. This beta publication does not claim stable release acceptance.
 
 ## Issue 23 ATM and catalog recovery
 
@@ -15,7 +24,7 @@ FutureShops 3.0.0 beta replaces separate special case shop trades with one clear
 * `/marketadmin maintenance status`, `/marketadmin maintenance verify`, and `/marketadmin maintenance resume confirm <reason>` expose the existing verified and journaled maintenance recovery workflow.
 * `admin_shop.maximum_listings` defaults to 512 and can be configured up to the hard limit of 10000.
 * `/marketadmin adminshop validate` identifies exact invalid listings and fields. `/marketadmin adminshop quarantine_missing confirm <reason>` preserves complete removed mod listings in a recovery file before updating and reloading the active catalog.
-* The development artifact and metadata version is `3.0.0-beta.11`.
+* This repair was first verified in the historical `3.0.0-beta.11` build and is included in the new public `3.0.0-beta.1` build.
 
 ## Exact item delivery maintenance
 
@@ -23,7 +32,7 @@ FutureShops 3.0.0 beta replaces separate special case shop trades with one clear
 * Automatic delivery permits one exact item durability operation per tick while continuing to service bounded money claims.
 * Existing configurations receive the safe exact item operation limit automatically. The older general delivery work setting cannot override it.
 * Full inventories continue preserving exact items as durable claims. No item value is dropped, deleted, or converted.
-* The maintenance artifact and metadata version is `3.0.0-beta.9`. It must be rebased onto the approved beta 8 recovery repair before release or reporter distribution.
+* This repair was first verified in the historical `3.0.0-beta.9` build and is included with the later recovery work in the new public `3.0.0-beta.1` build.
 
 ## Beta 7 escrow concurrency maintenance
 
@@ -112,4 +121,4 @@ An enabled Bazaar or Auction House remains visible while its escrow or lifecycle
 * Direct market listing from third party storage remains unsupported without deterministic transaction receipts.
 * Server Shop `LINKED` bundle stock is rejected until atomic linked component reservation is available.
 * Fractional item counts, fuzzy NBT, recursive offers, negative prices, partial fulfillment, and cross shop bundle references are unsupported.
-* Live multiplayer, reconnect, restart, migration, and injected recovery acceptance must pass before this beta is approved for release.
+* Live multiplayer, reconnect, restart, migration, and injected recovery acceptance must pass before a stable release is approved.

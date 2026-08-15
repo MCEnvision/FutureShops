@@ -1,6 +1,6 @@
 # FutureShops 3.0 Plan
 
-Status. The ATM deposit recovery and Bazaar refund access blocker in Section 20 is implemented on the active 3.0 beta branch. The `3.0.0-beta.4` gameplay maintenance, `3.0.0-beta.5` dependency audit closure, and `3.0.0-beta.6` dependency maintenance followup below are implemented, verified, and merged. Community delivery and the remaining live multiplayer, reconnect, restart, and recovery fault acceptance checks still block release approval.
+Status. The ATM deposit recovery and Bazaar refund access blocker in Section 20 is implemented on the active 3.0 beta branch. The `3.0.0-beta.4` gameplay maintenance, `3.0.0-beta.5` dependency audit closure, and `3.0.0-beta.6` dependency maintenance followup below are implemented, verified, and merged. On August 14, 2026, the owner selected `3.0.0-beta.1` as the new public beta identity for CurseForge and Modrinth. Community delivery and the remaining live multiplayer, reconnect, restart, and recovery fault acceptance checks still block a stable release.
 
 This document is the implementation contract for FutureShops 3.0. It covers the shared escrow foundation, migration of all existing value moving features, the Auction House, the Bazaar, the shared market interface, configuration, recovery, abuse controls, testing, and release sequencing.
 
@@ -19,23 +19,26 @@ pull request, after which GitHub must report `1.20.1` as the default and protect
 
 ## Beta release identity
 
-FutureShops remains on the `3.0.0` release line until the owner explicitly approves a different
-release line. Feature plan names, merged feature groups, and network protocol revisions do not
-change the public mod version by themselves.
+FutureShops remains on the `3.0.0` release line. On August 14, 2026, the owner superseded the
+proposed `3.0.1-beta.1` identity and selected `3.0.0-beta.1` as the new public beta name. Feature
+plan names, merged feature groups, historical internal beta artifacts, and network protocol
+revisions do not change the public mod version by themselves.
 
-Every bug fix increments only the final beta build number by exactly one. Artifact names use
-`futureshops-3.0.0-beta.<n>.jar`. The correction recorded by this plan changes the current build
-from the incorrect `3.1.0-beta.1` identity to `3.0.0-beta.3`. Future bug fixes continue with
-`3.0.0-beta.4`, `3.0.0-beta.5`, and so on unless the owner explicitly changes the release line.
+Every bug fix increments only the final beta build number by exactly one within its approved
+release line after this new public baseline. Historical internal artifacts used
+`futureshops-3.0.0-beta.<n>.jar` through `3.0.0-beta.11`. The owner approved resetting the public
+candidate identity to `futureshops-3.0.0-beta.1.jar`; the next public bug fix therefore uses
+`3.0.0-beta.2` unless the owner explicitly changes the release line again.
 
 The Gradle project version is the single source of the beta identity. Packaging must project the
 same value into the JAR filename, the expanded `META-INF/mods.toml`, and the manifest
 `Implementation-Version`. Documentation and release notes must use the same release line. Network
 compatibility remains governed by the independent FutureShops protocol number.
 
-This maintenance change does not alter gameplay, persistence, configuration schemas, packet
-formats, or the release publication state. It adds a build policy regression test and requires a
-clean build followed by packaged JAR inspection. Acceptance requires all of the following.
+This historical maintenance change did not alter gameplay, persistence, configuration schemas,
+packet formats, or the release publication state. It added a build policy regression test and
+required a clean build followed by packaged JAR inspection. Its acceptance required all of the
+following.
 
 - `gradle.properties` declares `mod_version=3.0.0-beta.5` for the next verified bug fix artifact.
 - The produced artifact is named `futureshops-3.0.0-beta.5.jar`.
@@ -53,6 +56,58 @@ FutureShops client setup and the render thread. The existing development world r
 expected version difference from the incorrect `3.1.0-beta.1` label and then reached ready state.
 There were no implementation deviations. Release publication and release line approval remain
 unchanged.
+
+### 3.0.0 beta 1 publication
+
+Objective. Publish the complete merged Forge 1.20.1 implementation as the new `3.0.0` beta 1 on
+CurseForge and Modrinth without presenting it as a stable release.
+
+Scope and release decisions.
+
+1. Change the Gradle project version to `3.0.0-beta.1` and project that exact value into the JAR
+   filename, expanded `META-INF/mods.toml`, and manifest `Implementation-Version`.
+2. Update current user facing version and release documentation while preserving historical
+   `3.0.0-beta.<n>` records and recovery guidance.
+3. Build from a dedicated release branch created from the latest approved `1.20.1` commit. Do not
+   include unrelated local workflow files, generated run data, or unmerged dependency work.
+4. Publish one identical verified JAR to CurseForge project `1523201` and Modrinth project
+   `ACiEe8jY`. Use Minecraft `1.20.1`, Forge, required client and server environments, and the beta
+   channel on both platforms.
+5. Do not create a stable platform release or a GitHub release. Platform publication remains a
+   beta distribution for live verification.
+
+Compatibility and migration.
+
+- This release identity change does not alter protocol 57, Minecraft, Forge, Java, mappings,
+  configuration schemas, persistent data, escrow journals, catalogs, or gameplay behavior.
+- Existing `3.0.0` beta worlds remain compatible. Operators must back up the complete world and
+  configuration, install the same JAR on client and server, and retain recovery data.
+- Open issues 22 and 25 remain open. Beta publication does not claim their independent reporter
+  acceptance criteria are complete.
+
+Verification and publication gates.
+
+- The complete unit suite, data generation, required GameTests, Gradle build, dedicated server
+  startup, and client startup pass from the exact release commit.
+- Packaged dependency validation, metadata inspection, JSON validation, secret and generated file
+  inspection, and complete Git diff inspection pass.
+- The artifact is named `futureshops-3.0.0-beta.1.jar`. Expanded mod metadata and the manifest both
+  report `3.0.0-beta.1`, and SHA-256 and SHA-512 checksums are recorded after final reobfuscation.
+- The release broker preview identifies the exact commit, artifact, checksum, game version,
+  loader, environments, platform project IDs, beta channel, and changelog before publication.
+- Publication succeeds independently on both platforms and the resulting file metadata is
+  verified. Partial success is reported accurately and retried without duplicating a successful
+  upload.
+
+Implementation status. The release identity and documentation are prepared on
+`envy/3.0.0-beta.1-release`. The clean unit suite passed 1,905 tests with no failures, errors, or
+skips. Data generation, all five required GameTests, the complete build, beta identity validation,
+packaged dependency validation, JSON validation, dedicated server startup, virtual display client
+startup, and JAR inspection passed. The dedicated server stopped through its console command and
+saved every dimension. The client stopped through its standard window close protocol. Both Gradle
+runtime tasks completed successfully. Pull request checks, merge into `1.20.1`, final merged commit
+checksums, release broker preview, and platform publication remain pending and must not be marked
+complete early.
 
 ### Beta 4 issue maintenance
 

@@ -220,7 +220,7 @@ tasks.register('verifyBetaReleaseIdentity') {
         String currentVersion = mod_version.toString()
         if (!(currentVersion ==~ /3\.0\.0-beta\.[1-9][0-9]*/)) {
             throw new GradleException(
-                    "FutureShops bug fix builds must use 3.0.0-beta.<positive integer>, found ${currentVersion}")
+                    "FutureShops beta builds must use 3.0.0-beta.<positive integer>, found ${currentVersion}")
         }
 
         String expectedArtifact = "${mod_id}-${currentVersion}.jar"

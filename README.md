@@ -4,7 +4,7 @@ FutureShops is a Minecraft Forge economy and marketplace mod for server shops, p
 
 ## Status
 
-The 3.0.0 implementation is in beta on the active phase branch. Active phase branches remain test builds until the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, and recovery acceptance run is complete. Use matching FutureShops builds on the client and server.
+The `3.0.0-beta.1` build is prepared as a beta for live validation. It is not a stable release. Use matching FutureShops builds on the client and server, preserve a complete backup before upgrading, and report multiplayer, reconnect, restart, migration, or recovery failures with the relevant logs and recovery handles.
 
 The repository default branch is `1.20.1`, which is the canonical Forge 1.20.1 integration line.
 The separate `1.21.1` branch contains the NeoForge line. Forge 1.20.1 fixes and releases target
@@ -14,7 +14,7 @@ Supported runtime:
 
 | Component | Version |
 | --- | --- |
-| FutureShops | 3.0.0 beta 6 |
+| FutureShops | 3.0.0 beta 1 |
 | Minecraft | 1.20.1 |
 | Forge | 47.4.20 |
 | Java | 17 |
@@ -49,15 +49,15 @@ The Bazaar and Auction House are disabled on a new installation. Enable either m
 
 For 3.0 beta upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
 
-The issue 23 development artifact is `futureshops-3.0.0-beta.11.jar`. It keeps the beta 10 ATM and
+The current beta artifact is `futureshops-3.0.0-beta.1.jar`. It includes the historical beta 11 ATM and
 catalog recovery work and repairs startup compatibility for legacy exact item inventory intents.
 Persisted slot proofs are validated from their original serialized evidence, while live item
 comparisons use complete semantic NBT including Forge capabilities. New plans derive their hashes
 and evidence from one owned snapshot per slot. The repair does not clear maintenance state or
 discard escrow evidence. A world that recorded maintenance during beta 10 can use the verified
-maintenance resume command after beta 11 loads and aligns the journal. This remains a development
+maintenance resume command after `3.0.0-beta.1` loads and aligns the journal. This remains a beta
 artifact until the reporter's backed up dedicated server passes startup, purchase, restart, and
-recovery testing.
+recovery testing. The 3.0.0 beta is prepared for that live validation and is not a stable release.
 
 Worlds previously opened with the incorrectly labeled `3.1.0-beta.1` build can report a Forge
 version difference when first opened with `3.0.0-beta.3`. This corrects the public artifact label

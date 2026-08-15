@@ -4,7 +4,7 @@
 
 FutureShops is a Forge 1.20.1 mod that owns a server authoritative economy, shop catalogs, player shop blocks, physical currency, an escrow protected Auction House, and a Bazaar order book.
 
-The 3.0.0 implementation is in beta on the active phase branch. Its advanced trade offer work extends the durable 3.0 market foundation with one normalized offer contract for Server Shops and Player Shops. The [FutureShops advanced trade offers plan](FutureShops3-1TradeOffersPlan.MD) remains the feature acceptance source of truth, but its filename does not define the public artifact version. Current code and tests establish implemented behavior. Release approval still requires the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, and recovery acceptance run. Focused operator documentation is available in:
+The `3.0.0-beta.1` implementation is prepared as a beta for live validation. Its advanced trade offer work extends the durable 3.0 market foundation with one normalized offer contract for Server Shops and Player Shops. The [FutureShops advanced trade offers plan](FutureShops3-1TradeOffersPlan.MD) remains the feature acceptance source of truth, but its filename does not define the public artifact version. Current code and tests establish implemented behavior. Stable release approval still requires the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, and recovery acceptance run. Focused operator documentation is available in:
 
 * [Auction House and Bazaar guide](docs/markets-guide.md)
 * [Configuration examples](docs/config-3.0-examples.md)
@@ -19,7 +19,7 @@ The 3.0.0 implementation is in beta on the active phase branch. Its advanced tra
 
 | Component | Pinned value |
 | --- | --- |
-| FutureShops | 3.0.0 beta 6 |
+| FutureShops | 3.0.0 beta 1 |
 | Java | 17 |
 | Gradle Wrapper | 8.14.4 |
 | Minecraft | 1.20.1 |
@@ -302,7 +302,7 @@ Also run:
 
 For readiness changes, verify both the recovery window and the ready transition. A screen opened during recovery must refresh without reconnecting. Navigation requests must remain server authorized. Currency and profile reads may use the safe display balance, while mutations remain blocked until ready.
 
-After packaging, inspect the manifest, expanded `META-INF/mods.toml`, mixin configuration and refmap, assets, data, dependency metadata, and the complete Git diff. Version `3.0.0-beta.7` must expand into the mod metadata, and `logoFile = "futureshops.png"` must resolve to the 400 by 400 project logo at the jar root. Run `verifyPackagedDependencyBoundary` and confirm the JAR contains no launcher supplied Netty, Apache Commons, Guava, Log4j, or Plexus classes and no Forge Jar in Jar metadata. Calculate release checksums only after the final Forge reobfuscation and packaging pass. Bug fix builds stay on the `3.0.0` release line and increment only the final beta number until the owner explicitly approves another release line. Build output, run directories, logs, crash reports, local configs, caches, IDE files, and `AGENTS.md` must not be committed.
+After packaging, inspect the manifest, expanded `META-INF/mods.toml`, mixin configuration and refmap, assets, data, dependency metadata, and the complete Git diff. Version `3.0.0-beta.1` must expand into the mod metadata, and `logoFile = "futureshops.png"` must resolve to the 400 by 400 project logo at the jar root. Run `verifyPackagedDependencyBoundary` and confirm the JAR contains no launcher supplied Netty, Apache Commons, Guava, Log4j, or Plexus classes and no Forge Jar in Jar metadata. Calculate release checksums only after the final Forge reobfuscation and packaging pass. Beta builds use the owner selected `3.0.0-beta.1` public baseline and increment only the final beta number until the owner explicitly approves another release line. Build output, run directories, logs, crash reports, local configs, caches, IDE files, and `AGENTS.md` must not be committed.
 
 ## Troubleshooting
 
