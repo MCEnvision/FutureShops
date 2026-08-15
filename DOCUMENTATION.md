@@ -4,7 +4,7 @@
 
 FutureShops is a Forge 1.20.1 mod that owns a server authoritative economy, shop catalogs, player shop blocks, physical currency, an escrow protected Auction House, and a Bazaar order book.
 
-The `3.0.0-beta.1` implementation is prepared as a beta for live validation. Its advanced trade offer work extends the durable 3.0 market foundation with one normalized offer contract for Server Shops and Player Shops. The [FutureShops advanced trade offers plan](FutureShops3-1TradeOffersPlan.MD) remains the feature acceptance source of truth, but its filename does not define the public artifact version. Current code and tests establish implemented behavior. Stable release approval still requires the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, and recovery acceptance run. Focused operator documentation is available in:
+The `3.0.0-beta.1` implementation is published on CurseForge and Modrinth as a beta for live validation. Its advanced trade offer work extends the durable 3.0 market foundation with one normalized offer contract for Server Shops and Player Shops. The [FutureShops advanced trade offers plan](FutureShops3-1TradeOffersPlan.MD) remains the feature acceptance source of truth, but its filename does not define the public artifact version. Current code and tests establish implemented behavior. Stable release approval still requires the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, and recovery acceptance run. Focused operator documentation is available in:
 
 * [Auction House and Bazaar guide](docs/markets-guide.md)
 * [Configuration examples](docs/config-3.0-examples.md)
