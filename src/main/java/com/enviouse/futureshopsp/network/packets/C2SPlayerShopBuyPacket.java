@@ -46,7 +46,7 @@ public record C2SPlayerShopBuyPacket(BlockPos shopPos, int listingIndex, int qua
     }
 
     public static C2SPlayerShopBuyPacket decode(FriendlyByteBuf buffer) {
-        return new C2SPlayerShopBuyPacket(buffer.readBlockPos(), buffer.readVarInt(), buffer.readVarInt(), buffer.readUtf());
+        return new C2SPlayerShopBuyPacket(buffer.readBlockPos(), buffer.readVarInt(), buffer.readVarInt(), buffer.readUtf(32));
     }
 
     public static void handle(C2SPlayerShopBuyPacket packet, IPayloadContext context) {
@@ -58,4 +58,3 @@ public record C2SPlayerShopBuyPacket(BlockPos shopPos, int listingIndex, int qua
         });
     }
 }
-

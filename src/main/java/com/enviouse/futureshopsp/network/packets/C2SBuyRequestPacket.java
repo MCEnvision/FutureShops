@@ -33,12 +33,12 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
      */
     public record LineItem(String listingId, int quantity) {
         public static void encode(FriendlyByteBuf buffer, LineItem lineItem) {
-            buffer.writeUtf(lineItem.listingId);
+            buffer.writeUtf(lineItem.listingId, 128);
             buffer.writeVarInt(lineItem.quantity);
         }
 
         public static LineItem decode(FriendlyByteBuf buffer) {
-            return new LineItem(buffer.readUtf(), buffer.readVarInt());
+            return new LineItem(buffer.readUtf(128), buffer.readVarInt());
         }
     }
 
@@ -51,7 +51,7 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
     }
 
     public static void encode(C2SBuyRequestPacket packet, FriendlyByteBuf buffer) {
-        buffer.writeUtf(packet.shopId);
+        buffer.writeUtf(packet.shopId, 128);
         buffer.writeBoolean(packet.cartCheckout);
         buffer.writeCollection(packet.lineItems, LineItem::encode);
     }
@@ -61,7 +61,7 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
     private static final int MAX_LINES = 256;
 
     public static C2SBuyRequestPacket decode(FriendlyByteBuf buffer) {
-        String shopId = buffer.readUtf();
+        String shopId = buffer.readUtf(128);
         boolean cartCheckout = buffer.readBoolean();
         int count = buffer.readVarInt();
         if (count < 0 || count > MAX_LINES) {
@@ -84,4 +84,3 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
         });
     }
 }
-

@@ -22,11 +22,11 @@ public record C2SInventorySyncPacket(String shopId) implements CustomPacketPaylo
     }
 
     public static void encode(C2SInventorySyncPacket packet, FriendlyByteBuf buffer) {
-        buffer.writeUtf(packet.shopId);
+        buffer.writeUtf(packet.shopId, 128);
     }
 
     public static C2SInventorySyncPacket decode(FriendlyByteBuf buffer) {
-        return new C2SInventorySyncPacket(buffer.readUtf());
+        return new C2SInventorySyncPacket(buffer.readUtf(128));
     }
 
     public static void handle(C2SInventorySyncPacket packet, IPayloadContext context) {
@@ -38,4 +38,3 @@ public record C2SInventorySyncPacket(String shopId) implements CustomPacketPaylo
         });
     }
 }
-

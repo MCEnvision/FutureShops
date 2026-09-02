@@ -21,11 +21,11 @@ public record C2SOpenShopPacket(String shopId) implements CustomPacketPayload {
     }
 
     public static void encode(C2SOpenShopPacket packet, FriendlyByteBuf buffer) {
-        buffer.writeUtf(packet.shopId);
+        buffer.writeUtf(packet.shopId, 128);
     }
 
     public static C2SOpenShopPacket decode(FriendlyByteBuf buffer) {
-        return new C2SOpenShopPacket(buffer.readUtf());
+        return new C2SOpenShopPacket(buffer.readUtf(128));
     }
 
     public static void handle(C2SOpenShopPacket packet, IPayloadContext context) {
@@ -39,4 +39,3 @@ public record C2SOpenShopPacket(String shopId) implements CustomPacketPayload {
         });
     }
 }
-

@@ -35,7 +35,7 @@ public record C2SPlayerShopPromoPacket(
         buffer.writeBlockPos(packet.shopPos());
         buffer.writeVarInt(packet.listingIndex());
         buffer.writeBoolean(packet.clear());
-        buffer.writeUtf(packet.promoType());
+        buffer.writeUtf(packet.promoType(), 32);
         buffer.writeDouble(packet.promoValue());
         buffer.writeVarInt(packet.buyX());
         buffer.writeVarInt(packet.buyY());
@@ -49,7 +49,7 @@ public record C2SPlayerShopPromoPacket(
                 buffer.readBlockPos(),
                 buffer.readVarInt(),
                 buffer.readBoolean(),
-                buffer.readUtf(),
+                buffer.readUtf(32),
                 buffer.readDouble(),
                 buffer.readVarInt(),
                 buffer.readVarInt(),
@@ -78,4 +78,3 @@ public record C2SPlayerShopPromoPacket(
         });
     }
 }
-

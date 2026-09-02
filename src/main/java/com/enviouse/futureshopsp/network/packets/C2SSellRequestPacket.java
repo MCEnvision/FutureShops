@@ -26,13 +26,13 @@ public record C2SSellRequestPacket(String shopId, String listingId, int quantity
     }
 
     public static void encode(C2SSellRequestPacket packet, FriendlyByteBuf buffer) {
-        buffer.writeUtf(packet.shopId);
-        buffer.writeUtf(packet.listingId);
+        buffer.writeUtf(packet.shopId, 128);
+        buffer.writeUtf(packet.listingId, 128);
         buffer.writeVarInt(packet.quantity);
     }
 
     public static C2SSellRequestPacket decode(FriendlyByteBuf buffer) {
-        return new C2SSellRequestPacket(buffer.readUtf(), buffer.readUtf(), buffer.readVarInt());
+        return new C2SSellRequestPacket(buffer.readUtf(128), buffer.readUtf(128), buffer.readVarInt());
     }
 
     public static void handle(C2SSellRequestPacket packet, IPayloadContext context) {
@@ -44,4 +44,3 @@ public record C2SSellRequestPacket(String shopId, String listingId, int quantity
         });
     }
 }
-

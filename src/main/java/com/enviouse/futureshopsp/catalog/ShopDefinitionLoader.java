@@ -8,8 +8,17 @@ import net.neoforged.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,6 +38,8 @@ public final class ShopDefinitionLoader {
     /** Filename of the bundled admin shop config. */
     public static final String ADMIN_SHOP_FILENAME = "admin.json";
     private static final String LEGACY_DEFAULT_FILENAME = "default.json";
+    private static final int MAX_SHOP_DEFINITION_FILES = 256;
+    private static final long MAX_SHOP_DEFINITION_BYTES = 8L * 1024L * 1024L;
 
     private ShopDefinitionLoader() {
     }
@@ -49,19 +60,24 @@ public final class ShopDefinitionLoader {
      * Never returns null; falls back to the hardcoded default if loading fails entirely.
      */
     public static List<ShopDefinition> loadAll() {
-        Path shopsDir = FMLPaths.CONFIGDIR.get().resolve("futureshops").resolve("shops");
+        return loadAll(FMLPaths.CONFIGDIR.get());
+    }
 
-        try {
-            Files.createDirectories(shopsDir);
-        } catch (IOException e) {
-            LOGGER.error("[FutureShops] Could not create shops config directory '{}': {}", shopsDir, e.getMessage());
+    static List<ShopDefinition> loadAll(Path configDirectory) {
+        Path configDir = configDirectory.toAbsolutePath().normalize();
+        Path root = configDir.resolve("futureshops");
+        Path shopsDir = root.resolve("shops");
+        if (!prepareDirectory(root) || !prepareDirectory(shopsDir)) {
+            LOGGER.error("[FutureShops] Refusing unsafe shops config directory '{}'.", shopsDir);
             return List.of(buildDefaultShop());
         }
 
         // Migrate legacy default.json → admin.json (only if admin.json doesn't already exist).
         Path adminFile  = shopsDir.resolve(ADMIN_SHOP_FILENAME);
         Path legacyFile = shopsDir.resolve(LEGACY_DEFAULT_FILENAME);
-        if (!Files.exists(adminFile) && Files.exists(legacyFile)) {
+        if (!Files.exists(adminFile, LinkOption.NOFOLLOW_LINKS)
+                && Files.exists(legacyFile, LinkOption.NOFOLLOW_LINKS)
+                && safeRegularFile(legacyFile)) {
             try {
                 Files.move(legacyFile, adminFile);
                 LOGGER.info("[FutureShops] Migrated '{}' → '{}'.", LEGACY_DEFAULT_FILENAME, ADMIN_SHOP_FILENAME);
@@ -72,15 +88,32 @@ public final class ShopDefinitionLoader {
         }
 
         // Regenerate admin.json on every load if it's missing (operator deleted/moved it).
-        if (!Files.exists(adminFile)) {
+        if (!Files.exists(adminFile, LinkOption.NOFOLLOW_LINKS)) {
             writeFile(adminFile, DEFAULT_SHOP_JSON);
+        }
+        if (!safeRegularFile(adminFile)) {
+            LOGGER.error("[FutureShops] Refusing unsafe admin shop file '{}'.", adminFile);
+            return List.of(buildDefaultShop());
         }
 
         // Collect .json files
         List<Path> jsonFiles = new ArrayList<>();
-        try (var stream = Files.list(shopsDir)) {
-            stream.filter(p -> p.getFileName().toString().endsWith(".json"))
-                  .forEach(jsonFiles::add);
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(shopsDir)) {
+            for (Path file : stream) {
+                if (!file.getFileName().toString().endsWith(".json")) {
+                    continue;
+                }
+                if (jsonFiles.size() >= MAX_SHOP_DEFINITION_FILES) {
+                    LOGGER.error("[FutureShops] More than {} shop definition files were found.",
+                            MAX_SHOP_DEFINITION_FILES);
+                    return List.of(buildDefaultShop());
+                }
+                if (!safeRegularFile(file) || Files.size(file) > MAX_SHOP_DEFINITION_BYTES) {
+                    LOGGER.error("[FutureShops] Refusing unsafe or oversized shop definition '{}'.", file);
+                    continue;
+                }
+                jsonFiles.add(file);
+            }
         } catch (IOException e) {
             LOGGER.error("[FutureShops] Failed to list files in '{}': {}", shopsDir, e.getMessage());
         }
@@ -88,7 +121,7 @@ public final class ShopDefinitionLoader {
         List<ShopDefinition> result = new ArrayList<>();
         for (Path file : jsonFiles) {
             try {
-                String content = Files.readString(file);
+                String content = readBounded(file, MAX_SHOP_DEFINITION_BYTES);
                 ShopDefinition def = parseJson(content, file.getFileName().toString());
                 if (def != null) {
                     result.add(def);
@@ -251,6 +284,62 @@ public final class ShopDefinitionLoader {
         }
     }
 
+    private static boolean prepareDirectory(Path path) {
+        try {
+            if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+                return safeDirectory(path);
+            }
+            Files.createDirectories(path);
+            return safeDirectory(path);
+        } catch (IOException exception) {
+            return false;
+        }
+    }
+
+    private static boolean safeDirectory(Path path) {
+        return Files.exists(path, LinkOption.NOFOLLOW_LINKS)
+                && !Files.isSymbolicLink(path)
+                && Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS);
+    }
+
+    private static boolean safeRegularFile(Path path) {
+        return Files.exists(path, LinkOption.NOFOLLOW_LINKS)
+                && !Files.isSymbolicLink(path)
+                && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS);
+    }
+
+    private static String readBounded(Path path, long maximumBytes) throws IOException {
+        if (!safeRegularFile(path)) {
+            throw new IOException("unsafe shop definition path");
+        }
+        long size = Files.size(path);
+        if (size > maximumBytes) {
+            throw new IOException("shop definition is oversized");
+        }
+        try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+            ByteBuffer bytes = ByteBuffer.allocate((int) size);
+            while (bytes.hasRemaining()) {
+                int read = channel.read(bytes);
+                if (read < 0) {
+                    break;
+                }
+                if (read == 0) {
+                    Thread.yield();
+                }
+            }
+            bytes.flip();
+            try {
+                CharBuffer chars = StandardCharsets.UTF_8.newDecoder()
+                        .onMalformedInput(CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(CodingErrorAction.REPORT)
+                        .decode(bytes);
+                return chars.toString();
+            } catch (CharacterCodingException exception) {
+                throw new IOException("shop definition encoding is invalid", exception);
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Hardcoded default catalog — also written as the initial default.json
     // -------------------------------------------------------------------------
@@ -344,5 +433,3 @@ public final class ShopDefinitionLoader {
             }
             """;
 }
-
-

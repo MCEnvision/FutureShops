@@ -23,14 +23,14 @@ public record C2SPlayerShopConfigPacket(BlockPos shopPos, String shopName, boole
 
     public static void encode(C2SPlayerShopConfigPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.shopPos());
-        buffer.writeUtf(packet.shopName());
+        buffer.writeUtf(packet.shopName(), 128);
         buffer.writeBoolean(packet.singleItemMode());
         buffer.writeBoolean(packet.barterStorageSame());
         buffer.writeVarInt(packet.selectedListingIndex());
     }
 
     public static C2SPlayerShopConfigPacket decode(FriendlyByteBuf buffer) {
-        return new C2SPlayerShopConfigPacket(buffer.readBlockPos(), buffer.readUtf(), buffer.readBoolean(), buffer.readBoolean(), buffer.readVarInt());
+        return new C2SPlayerShopConfigPacket(buffer.readBlockPos(), buffer.readUtf(128), buffer.readBoolean(), buffer.readBoolean(), buffer.readVarInt());
     }
 
     public static void handle(C2SPlayerShopConfigPacket packet, IPayloadContext context) {

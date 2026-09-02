@@ -31,25 +31,25 @@ public record C2SVerifyAdminCartPacket(String shopId, List<AdminCartLine> lines)
     public record AdminCartLine(String listingId, int quantity, long expectedPriceMinor) {
 
         public static void encode(FriendlyByteBuf buffer, AdminCartLine line) {
-            buffer.writeUtf(line.listingId);
+            buffer.writeUtf(line.listingId, 256);
             buffer.writeVarInt(line.quantity);
             buffer.writeLong(line.expectedPriceMinor);
         }
 
         public static AdminCartLine decode(FriendlyByteBuf buffer) {
-            return new AdminCartLine(buffer.readUtf(), buffer.readVarInt(), buffer.readLong());
+            return new AdminCartLine(buffer.readUtf(256), buffer.readVarInt(), buffer.readLong());
         }
     }
 
     public static void encode(C2SVerifyAdminCartPacket packet, FriendlyByteBuf buffer) {
-        buffer.writeUtf(packet.shopId);
+        buffer.writeUtf(packet.shopId, 128);
         buffer.writeCollection(packet.lines, AdminCartLine::encode);
     }
 
     private static final int MAX_LINES = 256;
 
     public static C2SVerifyAdminCartPacket decode(FriendlyByteBuf buffer) {
-        String shopId = buffer.readUtf();
+        String shopId = buffer.readUtf(128);
         int count = buffer.readVarInt();
         if (count < 0 || count > MAX_LINES) {
             throw new io.netty.handler.codec.DecoderException(
@@ -71,4 +71,3 @@ public record C2SVerifyAdminCartPacket(String shopId, List<AdminCartLine> lines)
         });
     }
 }
-

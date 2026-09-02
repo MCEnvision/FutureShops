@@ -38,11 +38,11 @@ public class C2SSetDepartmentPacket implements CustomPacketPayload {
     public static void encode(C2SSetDepartmentPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.shopPos);
         buffer.writeVarInt(packet.listingIndex);
-        buffer.writeUtf(packet.department);
+        buffer.writeUtf(packet.department, 128);
     }
 
     public static C2SSetDepartmentPacket decode(FriendlyByteBuf buffer) {
-        return new C2SSetDepartmentPacket(buffer.readBlockPos(), buffer.readVarInt(), buffer.readUtf());
+        return new C2SSetDepartmentPacket(buffer.readBlockPos(), buffer.readVarInt(), buffer.readUtf(128));
     }
 
     public static void handle(C2SSetDepartmentPacket packet, IPayloadContext context) {
@@ -54,4 +54,3 @@ public class C2SSetDepartmentPacket implements CustomPacketPayload {
         });
     }
 }
-

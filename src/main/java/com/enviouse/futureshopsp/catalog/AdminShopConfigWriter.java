@@ -11,7 +11,15 @@ import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -27,6 +35,7 @@ public final class AdminShopConfigWriter {
 
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson PRETTY = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+    private static final long MAX_CONFIG_BYTES = 8L * 1024L * 1024L;
 
     private AdminShopConfigWriter() {
     }
@@ -433,7 +442,11 @@ public final class AdminShopConfigWriter {
 
     private static JsonObject readOrInit(Path path) {
         try {
-            if (!Files.exists(path)) {
+            if (!safeParentDirectory(path)) {
+                LOGGER.error("[FutureShops] Refusing unsafe admin.json parent at '{}'", path);
+                return null;
+            }
+            if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
                 JsonObject root = new JsonObject();
                 root.addProperty("shopId", "default");
                 root.addProperty("displayName", "Server Shop");
@@ -443,7 +456,11 @@ public final class AdminShopConfigWriter {
                 root.add("barterRecipes", new JsonArray());
                 return root;
             }
-            String content = Files.readString(path);
+            if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+                LOGGER.error("[FutureShops] Refusing unsafe admin.json path at '{}'", path);
+                return null;
+            }
+            String content = readBounded(path);
             JsonElement parsed = JsonParser.parseString(content);
             if (!parsed.isJsonObject()) {
                 LOGGER.error("[FutureShops] admin.json root is not an object");
@@ -458,12 +475,50 @@ public final class AdminShopConfigWriter {
 
     private static boolean writeJson(Path path, JsonObject root) {
         try {
-            Files.createDirectories(path.getParent());
-            Files.writeString(path, PRETTY.toJson(root));
+            if (!safeParentDirectory(path) || Files.isSymbolicLink(path)) {
+                LOGGER.error("[FutureShops] Refusing unsafe admin.json write at '{}'", path);
+                return false;
+            }
+            Files.writeString(path, PRETTY.toJson(root), StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
             return true;
         } catch (IOException e) {
             LOGGER.error("[FutureShops] Failed to write admin.json at '{}': {}", path, e.getMessage());
             return false;
+        }
+    }
+
+    private static boolean safeParentDirectory(Path path) {
+        Path parent = path.toAbsolutePath().normalize().getParent();
+        if (parent == null) return false;
+        for (Path current = parent; current != null; current = current.getParent()) {
+            if (!Files.exists(current, LinkOption.NOFOLLOW_LINKS)
+                    || Files.isSymbolicLink(current)
+                    || !Files.isDirectory(current, LinkOption.NOFOLLOW_LINKS)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static String readBounded(Path path) throws IOException {
+        long size = Files.size(path);
+        if (size > MAX_CONFIG_BYTES) {
+            throw new IOException("admin.json exceeds " + MAX_CONFIG_BYTES + " bytes");
+        }
+        try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+            ByteBuffer bytes = ByteBuffer.allocate((int) size);
+            while (bytes.hasRemaining()) {
+                if (channel.read(bytes) < 0) break;
+            }
+            bytes.flip();
+            CharBuffer chars = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(bytes);
+            return chars.toString();
+        } catch (CharacterCodingException e) {
+            throw new IOException("admin.json is not valid utf8", e);
         }
     }
 }

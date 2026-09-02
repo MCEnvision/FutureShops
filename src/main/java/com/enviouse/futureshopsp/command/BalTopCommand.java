@@ -4,6 +4,7 @@ import com.enviouse.futureshopsp.server.economy.BalanceEntry;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
 import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import com.enviouse.futureshopsp.server.shop.MarketplaceAnalyticsService;
+import com.enviouse.futureshopsp.server.util.PageBounds;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.commands.CommandSourceStack;
@@ -25,9 +26,9 @@ public final class BalTopCommand {
             .executes(context -> runUi(context.getSource(), 1))
             .then(Commands.literal("ui")
                 .executes(context -> runUi(context.getSource(), 1))
-                .then(Commands.argument("page", IntegerArgumentType.integer(1))
+                .then(Commands.argument("page", IntegerArgumentType.integer(1, PageBounds.MAX_PAGE_INDEX))
                     .executes(context -> runUi(context.getSource(), IntegerArgumentType.getInteger(context, "page")))))
-            .then(Commands.argument("page", IntegerArgumentType.integer(1))
+            .then(Commands.argument("page", IntegerArgumentType.integer(1, PageBounds.MAX_PAGE_INDEX))
                 .executes(context -> run(context.getSource(), IntegerArgumentType.getInteger(context, "page")))));
     }
 
@@ -47,14 +48,15 @@ public final class BalTopCommand {
         }
 
         EconomyProvider provider = BalanceManager.getProvider();
-        List<BalanceEntry> entries = BalanceManager.getTopBalances(page, PAGE_SIZE);
+        int safePage = PageBounds.normalizePage(page);
+        List<BalanceEntry> entries = BalanceManager.getTopBalances(safePage, PAGE_SIZE);
         if (entries.isEmpty()) {
-            player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable("command.futureshops.baltop.empty", page)));
+            player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable("command.futureshops.baltop.empty", safePage)));
             return 1;
         }
 
-        player.sendSystemMessage(EconomyCommandUtil.info(Component.translatable("command.futureshops.baltop.header", page)));
-        int rank = ((page - 1) * PAGE_SIZE) + 1;
+        player.sendSystemMessage(EconomyCommandUtil.info(Component.translatable("command.futureshops.baltop.header", safePage)));
+        long rank = ((long) (safePage - 1) * PAGE_SIZE) + 1L;
         for (BalanceEntry entry : entries) {
             String name = resolvePlayerName(player, entry.playerUUID());
             String balanceText = EconomyCommandUtil.formatMinorUnits(entry.balanceMinorUnits(), provider.getDecimalPlaces());
@@ -73,4 +75,3 @@ public final class BalTopCommand {
         return playerUUID.toString().substring(0, 8);
     }
 }
-

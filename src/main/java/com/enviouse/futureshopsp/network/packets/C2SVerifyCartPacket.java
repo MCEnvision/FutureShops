@@ -37,16 +37,16 @@ public record C2SVerifyCartPacket(List<CartLine> lines) implements CustomPacketP
             buffer.writeBlockPos(line.shopPos);
             buffer.writeVarInt(line.listingIndex);
             buffer.writeVarInt(line.quantity);
-            buffer.writeUtf(line.expectedItemId);
+            buffer.writeUtf(line.expectedItemId, 256);
             buffer.writeLong(line.expectedPriceMinor);
             buffer.writeBoolean(line.expectedNbtAware);
-            buffer.writeUtf(line.expectedTradeMode);
+            buffer.writeUtf(line.expectedTradeMode, 32);
         }
 
         public static CartLine decode(FriendlyByteBuf buffer) {
             return new CartLine(
                     buffer.readBlockPos(), buffer.readVarInt(), buffer.readVarInt(),
-                    buffer.readUtf(), buffer.readLong(), buffer.readBoolean(), buffer.readUtf());
+                    buffer.readUtf(256), buffer.readLong(), buffer.readBoolean(), buffer.readUtf(32));
         }
     }
 
@@ -78,4 +78,3 @@ public record C2SVerifyCartPacket(List<CartLine> lines) implements CustomPacketP
         });
     }
 }
-

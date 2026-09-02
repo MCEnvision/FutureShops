@@ -32,14 +32,14 @@ public record C2SPlayerShopBuybackConfigPacket(BlockPos shopPos, int listingInde
     public static void encode(C2SPlayerShopBuybackConfigPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.shopPos());
         buffer.writeVarInt(packet.listingIndex());
-        buffer.writeUtf(packet.direction());
+        buffer.writeUtf(packet.direction(), 16);
         buffer.writeLong(packet.buybackPriceMinor());
         buffer.writeVarInt(packet.buybackCap());
     }
 
     public static C2SPlayerShopBuybackConfigPacket decode(FriendlyByteBuf buffer) {
         return new C2SPlayerShopBuybackConfigPacket(buffer.readBlockPos(), buffer.readVarInt(),
-                buffer.readUtf(), buffer.readLong(), buffer.readVarInt());
+                buffer.readUtf(16), buffer.readLong(), buffer.readVarInt());
     }
 
     public static void handle(C2SPlayerShopBuybackConfigPacket packet, IPayloadContext context) {

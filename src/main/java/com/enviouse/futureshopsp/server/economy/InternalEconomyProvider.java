@@ -3,6 +3,7 @@ package com.enviouse.futureshopsp.server.economy;
 import com.enviouse.futureshopsp.Config;
 import com.enviouse.futureshopsp.event.BalanceChangeEvent;
 import com.enviouse.futureshopsp.server.shop.ShopResultCode;
+import com.enviouse.futureshopsp.server.util.PageBounds;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -104,11 +105,17 @@ public class InternalEconomyProvider implements EconomyProvider {
 
     @Override
     public List<BalanceEntry> getTopBalances(int page, int pageSize) {
-        int safePage = Math.max(page, 1);
-        int safePageSize = Math.max(pageSize, 1);
-        int skip = (safePage - 1) * safePageSize;
+        if (!PageBounds.isValid(page, pageSize)) {
+            return List.of();
+        }
+        int safePage = page;
+        int safePageSize = pageSize;
+        long skip = PageBounds.offset(safePage, safePageSize);
 
         Map<UUID, Long> balances = getData().snapshotBalances();
+        if (skip >= balances.size()) {
+            return List.of();
+        }
         return balances.entrySet().stream()
             .sorted(Map.Entry.<UUID, Long>comparingByValue(Comparator.reverseOrder()))
             .skip(skip)
