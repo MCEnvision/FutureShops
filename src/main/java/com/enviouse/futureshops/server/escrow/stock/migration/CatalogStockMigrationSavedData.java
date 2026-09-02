@@ -31,6 +31,7 @@ public final class CatalogStockMigrationSavedData extends SavedData {
     private CatalogStockMigrationFailure failure =
             CatalogStockMigrationFailure.NONE;
     private String failureDetail = "";
+    private boolean materializedRetryBlocked;
     private long completionSequence = -1L;
 
     public static CatalogStockMigrationSavedData get(MinecraftServer server) {
@@ -79,6 +80,11 @@ public final class CatalogStockMigrationSavedData extends SavedData {
         data.nextEntryIndex = tag.getInt("nextEntryIndex");
         data.failure = parseFailure(tag.getString("failure"));
         data.failureDetail = tag.getString("failureDetail");
+        if (tag.contains("materializedRetryBlocked")) {
+            requireType(tag, "materializedRetryBlocked", Tag.TAG_BYTE);
+            data.materializedRetryBlocked = tag.getBoolean(
+                    "materializedRetryBlocked");
+        }
         data.completionSequence = tag.getLong("completionSequence");
         if (tag.contains("lastCompletedShop")) {
             data.lastCompletedKey = new StockKey(
@@ -127,6 +133,7 @@ public final class CatalogStockMigrationSavedData extends SavedData {
         }
         tag.putString("failure", failure.name());
         tag.putString("failureDetail", failureDetail);
+        tag.putBoolean("materializedRetryBlocked", materializedRetryBlocked);
         tag.putLong("completionSequence", completionSequence);
         return tag;
     }
@@ -226,6 +233,49 @@ public final class CatalogStockMigrationSavedData extends SavedData {
         this.failure = failure;
         failureDetail = detail;
         stage = CatalogStockMigrationStage.FAILED;
+        setDirty();
+    }
+
+    public synchronized boolean canRetryMaterializedState() {
+        return stage == CatalogStockMigrationStage.FAILED
+                && failure
+                == CatalogStockMigrationFailure.STOCK_STORE_NOT_EMPTY
+                && !materializedRetryBlocked
+                && snapshotEntries.isEmpty()
+                && snapshotFingerprint.isEmpty()
+                && nextEntryIndex == 0
+                && lastCompletedKey == null
+                && lastCompletedRequest == null
+                && completionSequence == -1L;
+    }
+
+    public synchronized void retryMaterializedState() {
+        if (!canRetryMaterializedState()) {
+            throw new IllegalStateException(
+                    "Catalog stock migration failure cannot be retried");
+        }
+        failure = CatalogStockMigrationFailure.NONE;
+        failureDetail = "";
+        materializedRetryBlocked = false;
+        stage = CatalogStockMigrationStage.UNINITIALIZED;
+        setDirty();
+    }
+
+    public synchronized void recordMaterializedStateFailure(
+            String detail
+    ) {
+        if (!canRetryMaterializedState()) {
+            throw new IllegalStateException(
+                    "Catalog stock migration failure cannot be updated");
+        }
+        detail = Objects.requireNonNull(detail, "detail").trim();
+        if (detail.isEmpty()
+                || detail.length() > MAXIMUM_DETAIL_LENGTH) {
+            throw new IllegalArgumentException(
+                    "Catalog stock migration failure detail is invalid");
+        }
+        failureDetail = detail;
+        materializedRetryBlocked = true;
         setDirty();
     }
 

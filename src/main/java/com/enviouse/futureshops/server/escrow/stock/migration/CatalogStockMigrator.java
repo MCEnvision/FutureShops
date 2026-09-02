@@ -29,9 +29,12 @@ public final class CatalogStockMigrator {
         }
         int batchSize = Math.min(
                 requestedBatchSize, MAXIMUM_BATCH_SIZE);
-        if (migration.stage() == CatalogStockMigrationStage.FAILED
-                || migration.stage()
+        if (migration.stage()
                 == CatalogStockMigrationStage.COMPLETE) {
+            return migration.result(0, migration.failureDetail());
+        }
+        if (migration.stage() == CatalogStockMigrationStage.FAILED
+                && !migration.canRetryMaterializedState()) {
             return migration.result(0, migration.failureDetail());
         }
         if (!gateway.ready()) {
@@ -39,12 +42,30 @@ public final class CatalogStockMigrator {
                     "Escrow stock is not ready");
         }
 
+        boolean verifiedMaterializedState = false;
+        if (migration.canRetryMaterializedState()) {
+            CatalogStockVerification verification = gateway.verify(source);
+            if (!verification.valid()) {
+                String detail = materializedFailureDetail(verification);
+                migration.recordMaterializedStateFailure(detail);
+                durabilityBarrier.flush();
+                return migration.result(0, detail);
+            }
+            migration.retryMaterializedState();
+            durabilityBarrier.flush();
+            verifiedMaterializedState = true;
+        }
+
         if (migration.stage()
                 == CatalogStockMigrationStage.UNINITIALIZED) {
-            if (!gateway.pristine()) {
-                return fail(migration, durabilityBarrier,
-                        CatalogStockMigrationFailure.STOCK_STORE_NOT_EMPTY,
-                        "Escrow stock already contains materialized state", 0);
+            if (!gateway.pristine() && !verifiedMaterializedState) {
+                CatalogStockVerification verification = gateway.verify(source);
+                if (!verification.valid()) {
+                    return fail(migration, durabilityBarrier,
+                            CatalogStockMigrationFailure
+                                    .STOCK_STORE_NOT_EMPTY,
+                            materializedFailureDetail(verification), 0);
+                }
             }
             migration.initializeSnapshot(source);
             durabilityBarrier.flush();
@@ -139,6 +160,14 @@ public final class CatalogStockMigrator {
             durabilityBarrier.flush();
         }
         return migration.result(processed, "");
+    }
+
+    private static String materializedFailureDetail(
+            CatalogStockVerification verification
+    ) {
+        Objects.requireNonNull(verification, "verification");
+        return "Escrow stock already contains incompatible materialized state. "
+                + verification.detail();
     }
 
     private static CatalogStockMigrationResult fail(

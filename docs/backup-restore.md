@@ -130,8 +130,11 @@ On first 3.0 startup against an existing world, FutureShops:
 7. Verifies totals and conservation, then writes a migration checksum and completion sequence.
 
 The legacy stores are retained until the new checkpoint verifies. Because the import IDs are
-deterministic, an interrupted migration resumes safely on the next start — it cannot double-import
-a wallet.
+deterministic, an interrupted migration resumes safely on the next start. A valid materialized
+catalog stock store from an earlier attempt is verified and adopted without reseeding or changing
+its revision. If the first attempt froze the legacy catalog before discovering an incomplete
+destination, the retry recaptures that frozen view. An incompatible materialized store remains
+failed closed with a bounded diagnostic and must be restored from a matching backup.
 
 ## The 3.1 offer migration
 

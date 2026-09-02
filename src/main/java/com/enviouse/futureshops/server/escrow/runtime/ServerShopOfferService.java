@@ -43,10 +43,12 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.concurrent.TimeUnit;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -54,6 +56,18 @@ import java.util.UUID;
 public final class ServerShopOfferService {
     private static final org.slf4j.Logger LOGGER =
             com.mojang.logging.LogUtils.getLogger();
+    private static final long STOCK_DIAGNOSTIC_INTERVAL_NANOS =
+            TimeUnit.SECONDS.toNanos(30L);
+    private static final int MAXIMUM_STOCK_DIAGNOSTIC_KEYS = 512;
+    private static final Map<String, Long> STOCK_DIAGNOSTIC_LOGS =
+            new LinkedHashMap<>(MAXIMUM_STOCK_DIAGNOSTIC_KEYS, 0.75F, true) {
+                @Override
+                protected boolean removeEldestEntry(
+                        Map.Entry<String, Long> eldest
+                ) {
+                    return size() > MAXIMUM_STOCK_DIAGNOSTIC_KEYS;
+                }
+            };
 
     private ServerShopOfferService() {
     }
@@ -932,13 +946,34 @@ public final class ServerShopOfferService {
         CatalogStockState stock = runtime.stockListing(
                 new StockKey(request.shopId(),
                         request.listingId())).orElse(null);
-        if (stock == null || stock.status() != CatalogStockStatus.ACTIVE) {
+        if (stock == null) {
+            if (shouldLogStockDiagnostic("missing", request)) {
+                LOGGER.warn(
+                        "Server shop offer request {} has no stock listing for shop {} listing {}.",
+                        request.requestId(), request.shopId(),
+                        request.listingId());
+            }
+            return Quote.failure(Status.UNAVAILABLE);
+        }
+        if (stock.status() != CatalogStockStatus.ACTIVE) {
+            if (shouldLogStockDiagnostic("status", request)) {
+                LOGGER.warn(
+                        "Server shop offer request {} found stock listing {} in status {}.",
+                        request.requestId(), request.listingId(), stock.status());
+            }
             return Quote.failure(Status.UNAVAILABLE);
         }
         if (request.action() == OfferAction.ACQUIRE_FROM_SHOP
                 && !stock.unlimited()
                 && stock.availableQuantity()
                 < stockQuantity(request, option)) {
+            if (shouldLogStockDiagnostic("exhausted", request)) {
+                LOGGER.debug(
+                        "Server shop offer request {} is out of stock for shop {} listing {}. Available {}, requested {}.",
+                        request.requestId(), request.shopId(),
+                        request.listingId(), stock.availableQuantity(),
+                        stockQuantity(request, option));
+            }
             return Quote.failure(Status.OUT_OF_STOCK);
         }
         if (request.action() == OfferAction.SELL_TO_SHOP
@@ -950,6 +985,24 @@ public final class ServerShopOfferService {
         }
         return new Quote(listing, option, stock, quotedAt,
                 moneyTotal, null);
+    }
+
+    private static boolean shouldLogStockDiagnostic(
+            String diagnostic,
+            Request request
+    ) {
+        String key = diagnostic + "\u0000" + request.shopId()
+                + "\u0000" + request.listingId();
+        long now = System.nanoTime();
+        synchronized (STOCK_DIAGNOSTIC_LOGS) {
+            Long previous = STOCK_DIAGNOSTIC_LOGS.get(key);
+            if (previous != null
+                    && now - previous < STOCK_DIAGNOSTIC_INTERVAL_NANOS) {
+                return false;
+            }
+            STOCK_DIAGNOSTIC_LOGS.put(key, now);
+            return true;
+        }
     }
 
     private static void recordHistory(

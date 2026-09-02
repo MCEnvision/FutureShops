@@ -354,6 +354,33 @@ public final class ShopCatalog {
         }
     }
 
+    /**
+     * recaptures the immutable legacy stock view after a failed cutover.
+     *
+     * the first migration attempt freezes this catalog before validating the
+     * durable destination. a retry must read the frozen in memory counts
+     * without reopening legacy mutations or silently reseeding them.
+     */
+    public static CatalogStockSeedSnapshot captureFrozenStockForCutover() {
+        java.util.concurrent.locks.Lock lock =
+                STOCK_AUTHORITY_LOCK.writeLock();
+        lock.lock();
+        try {
+            if (STOCK_AUTHORITY_MODE
+                    != CatalogStockAuthorityMode.CUTOVER_FROZEN) {
+                throw new IllegalStateException(
+                        "Catalog stock is not frozen for capture");
+            }
+            CatalogStockSeedSnapshot snapshot =
+                    CatalogStockSeedCapture.capture(
+                            all(), ShopCatalog::getFrozenStockLocked);
+            freezeStockForCutoverLocked(snapshot.fingerprint());
+            return snapshot;
+        } finally {
+            lock.unlock();
+        }
+    }
+
     private static void freezeStockForCutoverLocked(String checksum) {
         String safeChecksum = requireStockChecksum(checksum);
         if (STOCK_AUTHORITY_MODE == CatalogStockAuthorityMode.CUTOVER_FROZEN) {
@@ -576,6 +603,23 @@ public final class ShopCatalog {
                                 resolveShopId(shopId), item.resolutionKey());
                     }
                     return STOCKS.getOrDefault(resolveShopId(shopId), new ConcurrentHashMap<>())
+                            .getOrDefault(item.resolutionKey(), item.stock());
+                })
+                .orElse(-1);
+    }
+
+    private static int getFrozenStockLocked(
+            String shopId,
+            String itemId
+    ) {
+        return getItem(shopId, itemId)
+                .map(item -> {
+                    if (item.isUnlimited()) {
+                        return -1;
+                    }
+                    return STOCKS.getOrDefault(
+                                    resolveShopId(shopId),
+                                    new ConcurrentHashMap<>())
                             .getOrDefault(item.resolutionKey(), item.stock());
                 })
                 .orElse(-1);

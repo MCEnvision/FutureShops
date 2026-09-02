@@ -36,6 +36,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.common.MinecraftForge;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -49,6 +51,8 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public final class ShopBuyService {
     private static final UUID ZERO_UUID = new UUID(0L, 0L);
+    private static final Logger LOGGER = LoggerFactory.getLogger(
+            ShopBuyService.class);
 
     private ShopBuyService() {
     }
@@ -348,12 +352,24 @@ public final class ShopBuyService {
             }
             CatalogStockState stock = runtime.stockListing(
                     new StockKey(shopId, listingId)).orElse(null);
-            if (stock == null || stock.status()
-                    != CatalogStockStatus.ACTIVE) {
+            if (stock == null) {
+                LOGGER.warn(
+                        "Server shop purchase request {} has no stock listing for shop {} listing {}.",
+                        requestId, shopId, listingId);
+                return QuoteResult.error(ShopResultCode.SERVER_ERROR);
+            }
+            if (stock.status() != CatalogStockStatus.ACTIVE) {
+                LOGGER.warn(
+                        "Server shop purchase request {} found stock listing {} in status {}.",
+                        requestId, listingId, stock.status());
                 return QuoteResult.error(ShopResultCode.SERVER_ERROR);
             }
             if (!stock.unlimited()
                     && stock.availableQuantity() < quantity) {
+                LOGGER.info(
+                        "Server shop purchase request {} is out of stock for shop {} listing {}. Available {}, requested {}.",
+                        requestId, shopId, listingId,
+                        stock.availableQuantity(), quantity);
                 return QuoteResult.error(ShopResultCode.OUT_OF_STOCK);
             }
             Item item = ShopTransactionUtil.resolveItem(itemId);
