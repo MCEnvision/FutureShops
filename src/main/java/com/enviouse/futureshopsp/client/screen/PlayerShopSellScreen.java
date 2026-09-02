@@ -7,16 +7,16 @@ import com.enviouse.futureshopsp.network.ShopPackets;
 import com.enviouse.futureshopsp.network.packets.C2SPlayerShopSellPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 /**
  * Visitor sell-to-shop confirmation screen.
  * Mirrors PlayerShopBarterScreen layout but simplified for a one-sided "Sell N units".
  */
-public class PlayerShopSellScreen extends Screen implements ShopScreenMarker {
+public class PlayerShopSellScreen extends AbstractShopScreen implements ShopScreenMarker {
     private final Screen parent;
     private int guiLeft;
     private int guiTop;

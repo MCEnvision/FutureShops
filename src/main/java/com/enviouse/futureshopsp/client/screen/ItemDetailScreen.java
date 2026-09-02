@@ -10,10 +10,10 @@ import com.enviouse.futureshopsp.network.packets.C2SBuyRequestPacket;
 import com.enviouse.futureshopsp.network.packets.C2SInventorySyncPacket;
 import com.enviouse.futureshopsp.network.packets.C2SSellRequestPacket;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 
@@ -22,7 +22,7 @@ import java.util.List;
 /**
  * Item detail view — redesigned with bottom-aligned controls and modern layout.
  */
-public class ItemDetailScreen extends Screen implements ShopScreenMarker {
+public class ItemDetailScreen extends AbstractShopScreen implements ShopScreenMarker {
     private static final int DEFAULT_GUI_W = 340;
     private static final int DEFAULT_GUI_H = 260;
     private static final int PREVIEW_W = 130;

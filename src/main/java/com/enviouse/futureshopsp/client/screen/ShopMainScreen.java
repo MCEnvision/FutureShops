@@ -16,7 +16,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 
@@ -25,7 +24,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
 
-public class ShopMainScreen extends Screen implements ShopScreenMarker {
+public class ShopMainScreen extends AbstractShopScreen implements ShopScreenMarker {
     private int guiLeft;
     private int guiTop;
     private int guiW;

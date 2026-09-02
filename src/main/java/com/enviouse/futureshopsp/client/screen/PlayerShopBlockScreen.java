@@ -11,10 +11,10 @@ import com.enviouse.futureshopsp.network.packets.C2SPlayerShopBuyPacket;
 import com.enviouse.futureshopsp.network.packets.C2SPlayerShopBuybackConfigPacket;
 import com.enviouse.futureshopsp.network.packets.C2SPlayerShopConfigPacket;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
@@ -22,7 +22,7 @@ import net.minecraft.world.item.ItemStack;
 import java.util.List;
 import java.util.Locale;
 
-public class PlayerShopBlockScreen extends Screen implements ShopScreenMarker {
+public class PlayerShopBlockScreen extends AbstractShopScreen implements ShopScreenMarker {
     private int guiLeft;
     private int guiTop;
     private int guiW;

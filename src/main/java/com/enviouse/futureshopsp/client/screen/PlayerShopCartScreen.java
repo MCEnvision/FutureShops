@@ -9,8 +9,8 @@ import com.enviouse.futureshopsp.network.packets.C2SPlayerShopBuyPacket;
 import com.enviouse.futureshopsp.network.packets.C2SVerifyCartPacket;
 import com.enviouse.futureshopsp.network.packets.S2CVerifyCartResponsePacket;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
@@ -19,7 +19,7 @@ import java.util.List;
  * Items 34+35: Cart screen for player shop purchases.
  * Shows all items added from various player shops, with quantity controls and checkout.
  */
-public class PlayerShopCartScreen extends Screen implements ShopScreenMarker {
+public class PlayerShopCartScreen extends AbstractShopScreen implements ShopScreenMarker {
     private final Screen parent;
     private int guiLeft, guiTop, guiW, guiH;
     private int scroll;

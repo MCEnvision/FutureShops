@@ -5,15 +5,15 @@ import com.enviouse.futureshopsp.client.ShopColors;
 import com.enviouse.futureshopsp.network.ShopPackets;
 import com.enviouse.futureshopsp.network.packets.C2SPlayerShopPromoPacket;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 
 import java.util.Locale;
 
-public class PromoEditorModalScreen extends Screen implements ShopScreenMarker {
+public class PromoEditorModalScreen extends AbstractShopScreen implements ShopScreenMarker {
     private final Screen parent;
     private int guiLeft;
     private int guiTop;

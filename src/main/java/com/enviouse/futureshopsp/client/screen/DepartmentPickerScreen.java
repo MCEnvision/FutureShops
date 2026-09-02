@@ -7,9 +7,9 @@ import com.enviouse.futureshopsp.network.ShopPackets;
 import com.enviouse.futureshopsp.network.packets.C2SFetchDepartmentsPacket;
 import com.enviouse.futureshopsp.network.packets.C2SSetDepartmentPacket;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
@@ -19,7 +19,7 @@ import java.util.List;
  * Shows a search box + scrollable list of existing departments.
  * Typing a new name and pressing "Create" registers it.
  */
-public class DepartmentPickerScreen extends Screen implements ShopScreenMarker {
+public class DepartmentPickerScreen extends AbstractShopScreen implements ShopScreenMarker {
     private final Screen parent;
     private int guiLeft;
     private int guiTop;

@@ -6,9 +6,9 @@ import com.enviouse.futureshopsp.data.SettlementHistoryRow;
 import com.enviouse.futureshopsp.network.ShopPackets;
 import com.enviouse.futureshopsp.network.packets.C2SFetchSettlementHistoryPacket;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.time.Instant;
@@ -17,7 +17,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class SettlementHistoryScreen extends Screen implements ShopScreenMarker {
+public class SettlementHistoryScreen extends AbstractShopScreen implements ShopScreenMarker {
     private static final int PAGE_SIZE = 8;
     private static final DateTimeFormatter TS_FORMAT =
             DateTimeFormatter.ofPattern("MM-dd HH:mm").withZone(ZoneId.systemDefault());
