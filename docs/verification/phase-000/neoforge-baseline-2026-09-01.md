@@ -11,8 +11,8 @@ Captured 2026-09-01 in clean worktree `/tmp/futureshops-neoforge-baseline.0nMvlX
 | `bash ./gradlew runData --no-daemon` | pass | build successful in 10s |
 | `bash ./gradlew runGameTestServer --no-daemon` | invalid proof | Gradle reports success, but the server log reports `no test functions were given` and a fatal game test server startup failure |
 | `bash ./gradlew build --no-daemon` | pass | build successful in 4s |
-| `bash ./gradlew runServer --no-daemon` | readiness pass after isolated setup | with disposable `eula.txt` and port 25567, log reached `Done (4.937s)! For help, type help`; bounded termination returned 124 |
-| `xvfb-run ... bash ./gradlew runClient --no-daemon` | readiness pass, bounded timeout | log loaded FutureShops 2.2.0, reached common setup, sound engine startup, and texture atlas creation without a fatal crash; bounded termination returned 124 |
+| `bash ./gradlew runServer --no-daemon` | pass | readiness sentinel reached `Done (0.898s)! For help, type help`; an RCON readiness-aware launcher issued `stop`, the log recorded normal server shutdown, and Gradle returned exit code 0 |
+| `xvfb-run ... bash ./gradlew runClient --no-daemon` | pass | readiness sentinel reached `FutureShops common setup complete`; the launcher dismissed the first-run accessibility screen, selected `Quit Game` from the title screen, the log recorded `Minecraft Stopping!`, and Gradle returned exit code 0 |
 
 The initial server attempt used the default port and encountered an address already in use from an unrelated process. The rerun used only the disposable baseline worktree and port 25567. No live server process was stopped.
 
