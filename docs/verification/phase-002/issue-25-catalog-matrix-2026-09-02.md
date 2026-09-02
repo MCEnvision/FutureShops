@@ -1,6 +1,6 @@
 # Issue 25 catalog migration matrix
 
-This packet records the local Forge 1.20.1 verification for issue 25 at the phase 002 working revision. The candidate version is `3.0.0-beta.2`. The source branch is based on `ce6354a166ab74b12a1eeae33fcfe38d513e05c6`, and the candidate artifact produced during verification has SHA256 `c492d4c676e09b945e6aa3cb41c19fd44fa5ba5f178a326c446c86466e62a018`.
+This packet records the local Forge 1.20.1 verification for issue 25 at the phase 002 working revision. The candidate version is `3.0.0-beta.2`. The source branch is based on `ce6354a166ab74b12a1eeae33fcfe38d513e05c6`, and the candidate artifact produced during verification has SHA256 `abc90f7e1b7ca76af9ea65cf666817bb6c0817adcf0963c6fa726d5918c910f0`.
 
 ## Evidence matrix
 
