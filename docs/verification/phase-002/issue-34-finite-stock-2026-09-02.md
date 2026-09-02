@@ -1,6 +1,6 @@
 # Issue 34 finite stock purchase matrix
 
-This packet records the local Forge 1.20.1 verification for issue 34 at the phase 002 working revision. The report says finite money purchases fail while unlimited purchases succeed and provides no logs. The candidate version is `3.0.0-beta.2`.
+This packet records the local Forge 1.20.1 verification for issue 34 at the phase 002 working revision. The report says finite money purchases fail while unlimited purchases succeed and provides no logs. The candidate version is `3.0.0-beta.2`, with candidate artifact SHA256 `fd4fa0e431e85f1789ca7c4efb48ef5837cf713e2fc22173e6d6aa4f10008f13`.
 
 ## Paired matrix
 
