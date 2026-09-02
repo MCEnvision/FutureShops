@@ -15,6 +15,8 @@ import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeState;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowGlobalVerificationSnapshot;
 import com.enviouse.futureshops.server.escrow.runtime.LiveAdministrativeBalanceBackend;
+import com.enviouse.futureshops.server.escrow.stock.migration.CatalogStockMigrationFailure;
+import com.enviouse.futureshops.server.escrow.stock.migration.CatalogStockRuntime;
 import com.enviouse.futureshops.server.market.auction.AuctionHouseBook;
 import com.enviouse.futureshops.server.market.auction.AuctionHouseSnapshot;
 import com.enviouse.futureshops.server.market.auction.AuctionListing;
@@ -122,6 +124,12 @@ public final class MarketAdminCommand {
     private static final String KEY_MODULE = KEY + "module.";
     private static final String KEY_MODULE_STATE = KEY + "module_state.";
     private static final String KEY_RUNTIME_STATE = KEY + "runtime_state.";
+    private static final String KEY_CATALOG_AUTHORITY =
+            KEY + "catalog_authority.";
+    private static final String KEY_CATALOG_MIGRATION_STAGE =
+            KEY + "catalog_migration_stage.";
+    private static final String KEY_CATALOG_MIGRATION_FAILURE =
+            KEY + "catalog_migration_failure.";
     private static final String KEY_REASON_PROBLEM = KEY + "control.reason.";
     private static final String KEY_PRODUCT_STATE = KEY + "bazaar.product_state.";
 
@@ -326,6 +334,39 @@ public final class MarketAdminCommand {
                         Component.translatable(KEY_RUNTIME_STATE
                                 + Logic.statusKeySuffix(runtimeState)))
                 .withStyle(ChatFormatting.GRAY), false);
+
+        try {
+            CatalogStockRuntime.Status catalogStatus =
+                    CatalogStockRuntime.status(server);
+            source.sendSuccess(() -> Component.translatable(
+                            KEY + "status.catalog_line",
+                            Component.translatable(KEY_CATALOG_AUTHORITY
+                                    + Logic.statusKeySuffix(
+                                    catalogStatus.authorityMode())),
+                            Component.translatable(KEY_CATALOG_MIGRATION_STAGE
+                                    + Logic.statusKeySuffix(
+                                    catalogStatus.migrationStage())),
+                            catalogStatus.processedEntries(),
+                            catalogStatus.totalEntries())
+                    .withStyle(ChatFormatting.GRAY), false);
+            if (catalogStatus.migrationFailure()
+                    != CatalogStockMigrationFailure.NONE) {
+                source.sendSuccess(() -> Component.translatable(
+                                KEY + "status.catalog_failure_line",
+                                Component.translatable(
+                                        KEY_CATALOG_MIGRATION_FAILURE
+                                                + Logic.statusKeySuffix(
+                                                catalogStatus
+                                                        .migrationFailure())),
+                                catalogStatus.failureDetail())
+                        .withStyle(ChatFormatting.RED), false);
+            }
+        } catch (RuntimeException exception) {
+            LOGGER.error("Catalog stock status read failed", exception);
+            source.sendSuccess(() -> Component.translatable(
+                            KEY + "status.catalog_unavailable")
+                    .withStyle(ChatFormatting.DARK_GRAY), false);
+        }
 
         if (runtime == null || runtimeState != EscrowRuntimeState.READY) {
             source.sendSuccess(() -> Component.translatable(

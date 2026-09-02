@@ -932,13 +932,28 @@ public final class ServerShopOfferService {
         CatalogStockState stock = runtime.stockListing(
                 new StockKey(request.shopId(),
                         request.listingId())).orElse(null);
-        if (stock == null || stock.status() != CatalogStockStatus.ACTIVE) {
+        if (stock == null) {
+            LOGGER.warn(
+                    "Server shop offer request {} has no stock listing for shop {} listing {}.",
+                    request.requestId(), request.shopId(),
+                    request.listingId());
+            return Quote.failure(Status.UNAVAILABLE);
+        }
+        if (stock.status() != CatalogStockStatus.ACTIVE) {
+            LOGGER.warn(
+                    "Server shop offer request {} found stock listing {} in status {}.",
+                    request.requestId(), request.listingId(), stock.status());
             return Quote.failure(Status.UNAVAILABLE);
         }
         if (request.action() == OfferAction.ACQUIRE_FROM_SHOP
                 && !stock.unlimited()
                 && stock.availableQuantity()
                 < stockQuantity(request, option)) {
+            LOGGER.info(
+                    "Server shop offer request {} is out of stock for shop {} listing {}. Available {}, requested {}.",
+                    request.requestId(), request.shopId(),
+                    request.listingId(), stock.availableQuantity(),
+                    stockQuantity(request, option));
             return Quote.failure(Status.OUT_OF_STOCK);
         }
         if (request.action() == OfferAction.SELL_TO_SHOP

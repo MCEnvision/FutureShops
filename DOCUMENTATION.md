@@ -160,6 +160,12 @@ For recovery:
 
 See [Backup and restore](docs/backup-restore.md) for the full procedure.
 
+Catalog stock migration verifies a materialized store before retrying an interrupted cutover. A
+verified store is adopted without reseeding, and a cutover that already froze the legacy catalog
+recaptures that frozen view. Incompatible materialized state remains failed closed. The local
+phase evidence for catalog migration, player state safety, and finite stock purchases is in
+[phase 002 verification](docs/verification/phase-002/).
+
 ## Economy and currency
 
 Authoritative money values are `long` minor units. The configured decimal count defines display formatting. Totals use checked arithmetic and never use floating point for storage or settlement.

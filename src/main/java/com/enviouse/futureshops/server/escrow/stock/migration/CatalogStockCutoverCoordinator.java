@@ -19,7 +19,8 @@ public final class CatalogStockCutoverCoordinator {
                 == CatalogStockAuthorityMode.DURABLE) {
             return CatalogStockCutoverReadiness.ACTIVE;
         }
-        if (migration.stage() == CatalogStockMigrationStage.FAILED) {
+        if (migration.stage() == CatalogStockMigrationStage.FAILED
+                && !migration.canRetryMaterializedState()) {
             return CatalogStockCutoverReadiness.FAILED;
         }
         if (!coverage.complete()) {
@@ -49,6 +50,12 @@ public final class CatalogStockCutoverCoordinator {
         CatalogStockSeedSnapshot source;
         if (migration.stage()
                 == CatalogStockMigrationStage.UNINITIALIZED) {
+            return ShopCatalog.captureAndFreezeStockForCutover();
+        } else if (migration.canRetryMaterializedState()) {
+            if (ShopCatalog.stockAuthorityMode()
+                    == CatalogStockAuthorityMode.CUTOVER_FROZEN) {
+                return ShopCatalog.captureFrozenStockForCutover();
+            }
             return ShopCatalog.captureAndFreezeStockForCutover();
         } else {
             source = migration.snapshot();

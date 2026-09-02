@@ -63,4 +63,5 @@ class CatalogStockCutoverCoordinatorTest {
         assertEquals(CatalogStockAuthorityMode.CUTOVER_FROZEN,
                 ShopCatalog.stockAuthorityMode());
     }
+
 }

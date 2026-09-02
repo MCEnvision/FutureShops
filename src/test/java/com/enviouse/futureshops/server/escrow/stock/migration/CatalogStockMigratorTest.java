@@ -120,6 +120,95 @@ class CatalogStockMigratorTest {
     }
 
     @Test
+    void verifiedMaterializedDestinationCanBeAdoptedAfterLegacyFailure() {
+        PersistentStockRepository repository =
+                new PersistentStockRepository();
+        CatalogStockSeedSnapshot source = snapshot();
+        CatalogStockSeedGateway gateway = new CatalogStockSeedGateway(
+                new RepositoryBackend(repository));
+        CatalogStockMigrator migrator = new CatalogStockMigrator(gateway);
+        CatalogStockMigrationSavedData initial =
+                new CatalogStockMigrationSavedData();
+        TestBarrier barrier = new TestBarrier(true);
+
+        assertEquals(CatalogStockMigrationStage.COMPLETE,
+                migrator.runBatch(source, initial, 10, NOW, barrier)
+                        .stage());
+        long revision = repository.snapshot().storeRevision();
+
+        CatalogStockMigrationSavedData failed =
+                new CatalogStockMigrationSavedData();
+        failed.fail(CatalogStockMigrationFailure.STOCK_STORE_NOT_EMPTY,
+                "legacy migration interrupted after stock store creation");
+        assertTrue(failed.canRetryMaterializedState());
+
+        CatalogStockMigrationResult recovered = migrator.runBatch(
+                source, failed, 10, NOW.plusSeconds(1), barrier);
+
+        assertEquals(CatalogStockMigrationStage.COMPLETE,
+                recovered.stage());
+        assertEquals(CatalogStockMigrationFailure.NONE,
+                recovered.failure());
+        assertEquals(revision, repository.snapshot().storeRevision());
+        assertTrue(repository.conservation().conserved());
+    }
+
+    @Test
+    void completeMaterializedDestinationCanBeAdoptedWithMissingMetadata() {
+        PersistentStockRepository repository =
+                new PersistentStockRepository();
+        CatalogStockSeedSnapshot source = snapshot();
+        CatalogStockSeedGateway gateway = new CatalogStockSeedGateway(
+                new RepositoryBackend(repository));
+        CatalogStockMigrator migrator = new CatalogStockMigrator(gateway);
+        TestBarrier barrier = new TestBarrier(true);
+
+        assertEquals(CatalogStockMigrationStage.COMPLETE,
+                migrator.runBatch(source,
+                        new CatalogStockMigrationSavedData(), 10, NOW,
+                        barrier).stage());
+        long revision = repository.snapshot().storeRevision();
+
+        CatalogStockMigrationResult adopted = migrator.runBatch(
+                source, new CatalogStockMigrationSavedData(), 10,
+                NOW.plusSeconds(1), barrier);
+
+        assertEquals(CatalogStockMigrationStage.COMPLETE,
+                adopted.stage());
+        assertEquals(revision, repository.snapshot().storeRevision());
+        assertTrue(gateway.verifyRestoredLineage(source).valid());
+    }
+
+    @Test
+    void incompatibleMaterializedDestinationRemainsFailedWithEvidence() {
+        PersistentStockRepository repository =
+                new PersistentStockRepository();
+        CatalogStockSeedSnapshot source = snapshot();
+        CatalogStockSeedGateway gateway = new CatalogStockSeedGateway(
+                new RepositoryBackend(repository));
+        CatalogStockMigrator migrator = new CatalogStockMigrator(gateway);
+        StockDefinition incompatible = new StockDefinition(
+                new StockKey("default", "different"),
+                StockPolicy.limited(2L), "d".repeat(64));
+        repository.seed(UUID.randomUUID(), incompatible, NOW);
+
+        CatalogStockMigrationSavedData failed =
+                new CatalogStockMigrationSavedData();
+        failed.fail(CatalogStockMigrationFailure.STOCK_STORE_NOT_EMPTY,
+                "legacy migration interrupted");
+
+        CatalogStockMigrationResult result = migrator.runBatch(
+                source, failed, 10, NOW, new TestBarrier(true));
+
+        assertEquals(CatalogStockMigrationStage.FAILED, result.stage());
+        assertEquals(CatalogStockMigrationFailure.STOCK_STORE_NOT_EMPTY,
+                result.failure());
+        assertTrue(result.detail().contains("incompatible materialized state"));
+        assertTrue(result.detail().contains("Catalog stock"));
+        assertTrue(failed.canRetryMaterializedState());
+    }
+
+    @Test
     void restoredLineageAllowsLaterReloadsAndReservationsAfterRestart() {
         PersistentStockRepository repository =
                 new PersistentStockRepository();
