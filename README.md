@@ -58,6 +58,8 @@ Development launch tasks include `runClient`, `runServer`, `runGameTestServer`, 
 
 The implementation and compatibility decisions are documented in [Porting notes](PORTING_NOTES.md). The original migration inventory and risk analysis are in [Port audit](FutureShopsAudit.md).
 
+The maintained documentation index is in [Documentation](docs/README.md).
+
 ## Known boundaries
 
 The Refined Storage 2 integration remains guarded until its supported API artifact is available for verification. Live owner skin fetching also remains deferred and uses the safe default skin fallback. Review the deferred section in the porting notes before enabling optional integrations or approving a production migration.
