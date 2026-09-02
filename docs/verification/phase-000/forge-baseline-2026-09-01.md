@@ -11,8 +11,8 @@ Captured 2026-09-01 in clean worktree `/tmp/futureshops-forge-baseline.4PlFvM` a
 | `bash ./gradlew runData --no-daemon` | pass | build successful in 30s |
 | `bash ./gradlew runGameTestServer --no-daemon` | pass | five tests completed and all five required tests passed |
 | `bash ./gradlew build --no-daemon` | pass | verification tasks ran and build successful in 16s |
-| `bash ./gradlew runServer --no-daemon` | preflight pass after isolated setup | with disposable `eula.txt` and port 25566, log reached `Done (6.332s)! For help, type help`; bounded termination returned 124 |
-| `xvfb-run ... bash ./gradlew runClient --no-daemon` | readiness pass, bounded timeout | log loaded FutureShops, reached sound engine startup and texture atlas creation without a fatal crash; bounded termination returned 124 |
+| `bash ./gradlew runServer --no-daemon` | pass | readiness sentinel reached `Done (6.332s)! For help, type help`; an RCON readiness-aware launcher issued `stop`, the log recorded `FutureShops server stopping`, players and worlds saved, RCON stopped, and Gradle returned exit code 0 |
+| `xvfb-run ... bash ./gradlew runClient --no-daemon` | pass | readiness sentinel reached `FutureShops client setup complete`; the launcher dismissed the first-run accessibility screen, selected `Quit Game` from the title screen, the log recorded `Minecraft Stopping!`, and Gradle returned exit code 0 |
 
 The first server preflight without an isolated EULA marker stopped at the normal EULA gate. The later run used only the disposable baseline worktree and port 25566. No legal or runtime files were changed in the planning worktree.
 
@@ -24,4 +24,4 @@ The isolated worktree has no tracked changes. `run-data/` is generated untracked
 
 ## Baseline classification
 
-Forge is green at the exact approved support ref. The readiness timeout is expected for a continuously running client or server after the readiness sentinel. No Forge repository defect was opened by this task.
+Forge is green at the exact approved support ref. The server and client launchers stop through their normal control paths after readiness and return success. No Forge repository defect was opened by this task.
