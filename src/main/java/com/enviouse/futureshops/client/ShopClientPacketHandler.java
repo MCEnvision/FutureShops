@@ -21,6 +21,7 @@ import com.enviouse.futureshops.client.screen.PlayerStorefrontScreen;
 import com.enviouse.futureshops.client.screen.BalTopOverviewScreen;
 import com.enviouse.futureshops.client.screen.AtmScreen;
 import com.enviouse.futureshops.client.screen.AdminItemPickerScreen;
+import com.enviouse.futureshops.client.screen.AdminBulkPreviewScreen;
 import com.enviouse.futureshops.client.screen.AdminOfferEditorScreen;
 import com.enviouse.futureshops.client.screen.BalanceOverviewScreen;
 import com.enviouse.futureshops.client.screen.BulkSellConfirmationScreen;
@@ -32,6 +33,7 @@ import com.enviouse.futureshops.client.screen.ShopUiUtil;
 import com.enviouse.futureshops.client.screen.TransactionHistoryScreen;
 import com.enviouse.futureshops.network.packets.S2CAdminEditAckPacket;
 import com.enviouse.futureshops.network.packets.S2CAdminOfferSaveResultPacket;
+import com.enviouse.futureshops.network.packets.S2CAdminBulkResultPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmWithdrawPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmCollectCashPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
@@ -1104,6 +1106,17 @@ public final class ShopClientPacketHandler {
                 picker.applySaveResult(packet);
             } else {
                 ADMIN_OFFER_SAVE_RESULTS.record(packet);
+            }
+        });
+    }
+
+    public static void handleAdminBulkResult(S2CAdminBulkResultPacket packet) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            if (mc.screen instanceof AdminBulkPreviewScreen preview) {
+                preview.applyCommitResult(packet);
+            } else if (mc.screen instanceof AdminItemPickerScreen picker) {
+                picker.applyBulkPreview(packet);
             }
         });
     }

@@ -4,6 +4,8 @@ import com.enviouse.futureshops.Futureshops;
 import com.enviouse.futureshops.network.packets.C2SAdminShopAddItemsPacket;
 import com.enviouse.futureshops.network.packets.C2SAdminShopEditPacket;
 import com.enviouse.futureshops.network.packets.C2SAdminOfferSavePacket;
+import com.enviouse.futureshops.network.packets.C2SAdminBulkPreviewPacket;
+import com.enviouse.futureshops.network.packets.C2SAdminBulkCommitPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmWithdrawPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmCollectCashPacket;
 import com.enviouse.futureshops.network.packets.C2SAtmDepositPacket;
@@ -56,6 +58,7 @@ import com.enviouse.futureshops.network.packets.C2SBazaarRegisterProductPacket;
 import com.enviouse.futureshops.network.packets.C2SVerifyCartPacket;
 import com.enviouse.futureshops.network.packets.S2CAdminEditAckPacket;
 import com.enviouse.futureshops.network.packets.S2CAdminOfferSaveResultPacket;
+import com.enviouse.futureshops.network.packets.S2CAdminBulkResultPacket;
 import com.enviouse.futureshops.network.packets.S2CMarketActionResponsePacket;
 import com.enviouse.futureshops.network.packets.S2CAtmDataPacket;
 import com.enviouse.futureshops.network.packets.S2CAtmResultPacket;
@@ -133,7 +136,8 @@ public final class ShopPackets {
     // protocol 52 synchronizes atm deposit recovery.
     // protocol 53 adds normalized server shop offers.
     // protocol 57 adds the recovering market module capability.
-    public static final String PROTOCOL_VERSION = "57";
+    // protocol 58 adds the server authoritative admin bulk catalog preview and commit.
+    public static final String PROTOCOL_VERSION = "58";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))
@@ -709,6 +713,27 @@ public final class ShopPackets {
             .decoder(C2SBulkSellCancelPacket::decode)
             .encoder(C2SBulkSellCancelPacket::encode)
             .consumerMainThread(C2SBulkSellCancelPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SAdminBulkPreviewPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SAdminBulkPreviewPacket::decode)
+            .encoder(C2SAdminBulkPreviewPacket::encode)
+            .consumerMainThread(C2SAdminBulkPreviewPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(C2SAdminBulkCommitPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_SERVER)
+            .decoder(C2SAdminBulkCommitPacket::decode)
+            .encoder(C2SAdminBulkCommitPacket::encode)
+            .consumerMainThread(C2SAdminBulkCommitPacket::handle)
+            .add();
+
+        CHANNEL.messageBuilder(S2CAdminBulkResultPacket.class,
+                        nextId(), NetworkDirection.PLAY_TO_CLIENT)
+            .decoder(S2CAdminBulkResultPacket::decode)
+            .encoder(S2CAdminBulkResultPacket::encode)
+            .consumerMainThread(S2CAdminBulkResultPacket::handle)
             .add();
     }
 

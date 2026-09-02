@@ -10,8 +10,10 @@ import com.enviouse.futureshops.command.EconomyCommandUtil;
 import com.enviouse.futureshops.data.CatalogCategory;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.C2SAdminOfferSavePacket;
+import com.enviouse.futureshops.network.packets.C2SAdminBulkPreviewPacket;
 import com.enviouse.futureshops.network.packets.C2SAdminShopAddItemsPacket;
 import com.enviouse.futureshops.network.packets.S2CAdminOfferSaveResultPacket;
+import com.enviouse.futureshops.network.packets.S2CAdminBulkResultPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -24,9 +26,11 @@ import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
@@ -75,6 +79,7 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
     private final int initialIngredientCount;
     /** Insertion-ordered so the server receives ids in the order the admin picked them. */
     private final LinkedHashSet<String> selectedIds = new LinkedHashSet<>();
+    private final Map<String, String> exactNbtById = new LinkedHashMap<>();
 
     // Registry snapshot — built once per screen instance (the registry is frozen after load,
     // and localized names cannot change while the screen is open). Filtered ONLY when the
@@ -100,8 +105,8 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
 
     private EditBox searchBox;
     private EditBox buyBox;
-    private EditBox sellBox;
     private EditBox stockBox;
+    private EditBox nbtBox;
 
     /** Per-frame flat-button hit regions, populated in {@link #render}, consulted in mouseClicked. */
     private final java.util.List<ShopUiUtil.ClickZone> clickZones = new java.util.ArrayList<>();
@@ -120,6 +125,7 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
     private int tooltipMouseX;
     private int tooltipMouseY;
     private UUID pendingRequestId;
+    private UUID pendingBulkRequestId;
     private Component resultMessage;
     private boolean resultSuccess;
 
@@ -202,7 +208,8 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
         guiTop = (this.height - guiH) / 2;
 
         int footerHeight = quickAdd()
-                ? (guiW < 720 ? 82 : 56) : 44;
+                ? (guiW < 720 ? 82 : 56)
+                : (!barterMode && !ingredientMode() ? 64 : 44);
         footerY = guiTop + guiH - footerHeight;
         gridX = guiLeft + 8;
         gridY = guiTop + 40;
@@ -225,8 +232,6 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
         String buyPrev = buyBox != null ? buyBox.getValue()
                 : (ingredientMode() ? Integer.toString(initialIngredientCount)
                     : (barterMode ? "1" : ShopUiUtil.formatMinorUnits(DEFAULT_BUY_MINOR)));
-        String sellPrev = sellBox != null ? sellBox.getValue()
-                : ShopUiUtil.formatMinorUnits(0L);
         String stockPrev = stockBox != null ? stockBox.getValue() : "∞";
 
         searchBox = new EditBox(this.font, guiLeft + 12, guiTop + 22, guiW - 24, 14,
@@ -264,7 +269,7 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
                         ? "gui.futureshops.admin_edit.picker.base_price_label"
                         : barterMode
                         ? "gui.futureshops.admin_edit.picker.output_count_label"
-                        : "gui.futureshops.admin_edit.picker.buy_label"));
+                        : "gui.futureshops.admin_edit.picker.base_price_label"));
         buyBox.setMaxLength((barterMode || ingredientMode()) ? 4 : 18);
         buyBox.setFilter(filter);
         buyBox.setValue(buyPrev);
@@ -274,22 +279,12 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
             addRenderableWidget(buyBox);
         }
 
-        sellBox = null;
-        if (!quickAdd() && !barterMode && !ingredientMode()) {
-            sellBox = new EditBox(this.font, innerX + 52, rowY, 46, 14,
-                    Component.translatable("gui.futureshops.admin_edit.picker.sell_label"));
-            sellBox.setMaxLength(10);
-            sellBox.setFilter(filter);
-            sellBox.setValue(sellPrev);
-            addRenderableWidget(sellBox);
-        }
-
         stockBox = null;
         if (!ingredientMode()) {
             int stockX = quickAdd()
                     ? innerX + (showBasePrice ? 80
                     : Math.min(260, Math.max(150, guiW / 3)))
-                    : innerX + (barterMode ? 52 : 104);
+                    : innerX + 52;
             stockBox = new EditBox(this.font, stockX, rowY,
                     quickAdd() ? 54 : 38, 14,
                     Component.translatable("gui.futureshops.admin_edit.picker.stock_label"));
@@ -297,6 +292,24 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
             stockBox.setFilter(AdminItemPickerScreen::isStockText);
             stockBox.setValue(stockPrev);
             addRenderableWidget(stockBox);
+        }
+
+        nbtBox = null;
+        if (!quickAdd() && !barterMode && !ingredientMode()) {
+            nbtBox = new EditBox(this.font, innerX, footerY + 42,
+                    Math.max(120, guiW - 190), 14,
+                    Component.translatable("gui.futureshops.admin_edit.picker.exact_nbt_label"));
+            nbtBox.setMaxLength(com.enviouse.futureshops.catalog.AdminBulkListingIdentity.MAX_NBT_BYTES);
+            nbtBox.setHint(Component.translatable("gui.futureshops.admin_edit.picker.exact_nbt_hint"));
+            nbtBox.setVisible(selectedIds.size() == 1);
+            nbtBox.active = selectedIds.size() == 1;
+            nbtBox.setResponder(value -> {
+                if (selectedIds.size() == 1) {
+                    exactNbtById.put(selectedIds.iterator().next(), value);
+                }
+            });
+            refreshNbtField();
+            addRenderableWidget(nbtBox);
         }
 
         // ∞ / Cancel / Add are flat Nocturne buttons drawn immediate-mode in render().
@@ -313,7 +326,7 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
         int rowY = fieldRowY();
 
         if (!ingredientMode()) {
-            int stockToggleX = innerX + (barterMode ? 94 : 146);
+            int stockToggleX = innerX + 94;
             boolean infHover = ShopUiUtil.button(graphics, this.font, clickZones, mouseX, mouseY,
                     stockToggleX, rowY, 14, 14, Component.literal("∞"),
                     ShopUiUtil.ButtonStyle.SECONDARY, true, () -> stockBox.setValue("∞"));
@@ -322,7 +335,7 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
             }
 
             // ═══ Target-category selector: < label > (label itself is drawn in renderFooter) ═══
-            int catLabelX = innerX + 182;
+            int catLabelX = innerX + 130;
             int addLeft = guiLeft + guiW - 8 - 8 - 56 - 4 - 60;
             int catAvail = addLeft - catLabelX - 6 - 14;
             String catText = Component.translatable("gui.futureshops.admin_edit.picker.category_label", categoryLabel).getString();
@@ -648,19 +661,23 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
                             ? "gui.futureshops.admin_edit.picker.output_count_label"
                             : "gui.futureshops.admin_edit.picker.buy_label"),
                 innerX, labelY, ShopColors.TEXT_FAINT, false);
-        if (!barterMode && !ingredientMode()) {
-            graphics.drawString(this.font, Component.translatable("gui.futureshops.admin_edit.picker.sell_label"),
-                    innerX + 52, labelY, ShopColors.TEXT_FAINT, false);
-        }
         if (!ingredientMode()) {
             graphics.drawString(this.font, Component.translatable("gui.futureshops.admin_edit.picker.stock_label"),
-                    innerX + (barterMode ? 52 : 104), labelY, ShopColors.TEXT_FAINT, false);
+                    innerX + 52, labelY, ShopColors.TEXT_FAINT, false);
+        }
+
+        if (nbtBox != null) {
+            Component nbtLabel = selectedIds.size() == 1
+                    ? Component.translatable("gui.futureshops.admin_edit.picker.exact_nbt_label")
+                    : Component.translatable("gui.futureshops.admin_edit.picker.exact_nbt_select_one");
+            graphics.drawString(this.font, nbtLabel, innerX, footerY + 34,
+                    ShopColors.TEXT_FAINT, false);
         }
 
         // Target category — sits between the < and > cycle buttons; clipped against the Add button.
         if (!ingredientMode()) {
             String categoryText = Component.translatable("gui.futureshops.admin_edit.picker.category_label", categoryLabel).getString();
-            int categoryX = innerX + 182;
+            int categoryX = innerX + 130;
             int addX = guiLeft + guiW - 8 - 8 - 56 - 4 - 60;
             int available = addX - categoryX - 6 - 14;
             if (available > 20) {
@@ -743,12 +760,30 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
                         }
                         selectedIds.add(id);
                     }
+                    refreshNbtField();
                     return true;
                 }
             }
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    private void refreshNbtField() {
+        if (nbtBox == null) {
+            return;
+        }
+        boolean enabled = selectedIds.size() == 1;
+        nbtBox.visible = enabled;
+        nbtBox.active = enabled;
+        if (enabled) {
+            String value = exactNbtById.getOrDefault(selectedIds.iterator().next(), "");
+            if (!value.equals(nbtBox.getValue())) {
+                nbtBox.setValue(value);
+            }
+        } else if (!nbtBox.getValue().isEmpty()) {
+            nbtBox.setValue("");
+        }
     }
 
     @Override
@@ -799,13 +834,34 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
             onClose();
             return;
         }
-        ShopPackets.CHANNEL.sendToServer(new C2SAdminShopAddItemsPacket(
-                new ArrayList<>(selectedIds),
-                categoryId,
-                parsePriceMinor(buyBox.getValue(), DEFAULT_BUY_MINOR),
-                parsePriceMinor(sellBox.getValue(), 0L),
-                parseStock(stockBox.getValue())));
-        onClose();
+        sendBulkPreview();
+    }
+
+    private void sendBulkPreview() {
+        if (pendingBulkRequestId != null) {
+            return;
+        }
+        UUID requestId = UUID.randomUUID();
+        List<com.enviouse.futureshops.catalog.AdminBulkListingPlanner.Selection> selections =
+                selectedIds.stream()
+                        .map(id -> new com.enviouse.futureshops.catalog.AdminBulkListingPlanner.Selection(
+                                id, exactNbtById.getOrDefault(id, ""), quickDisplayNameFor(id)))
+                        .toList();
+        pendingBulkRequestId = requestId;
+        resultMessage = Component.translatable("gui.futureshops.admin_edit.picker.previewing");
+        resultSuccess = true;
+        String stock = stockBox == null ? "" : stockBox.getValue();
+        ShopPackets.CHANNEL.sendToServer(new C2SAdminBulkPreviewPacket(
+                requestId, selections, categoryId,
+                buyBox == null ? "" : buyBox.getValue(), stock,
+                com.enviouse.futureshops.catalog.AdminBulkListingPlanner.registryFingerprint(
+                        allEntries.stream().map(PickerEntry::id).collect(java.util.stream.Collectors.toSet()))));
+    }
+
+    private String quickDisplayNameFor(String itemId) {
+        ResourceLocation identifier = ResourceLocation.tryParse(itemId);
+        Item item = identifier == null ? null : ForgeRegistries.ITEMS.getValue(identifier);
+        return item == null ? itemId : item.getDescription().getString();
     }
 
     private void sendQuickAdd() {
@@ -946,6 +1002,21 @@ public class AdminItemPickerScreen extends Screen implements ShopScreenMarker {
                 "gui.futureshops.offer_editor.result."
                         + result.status().name()
                         .toLowerCase(Locale.ROOT));
+    }
+
+    public void applyBulkPreview(S2CAdminBulkResultPacket packet) {
+        if (pendingBulkRequestId == null || !pendingBulkRequestId.equals(packet.requestId())) {
+            return;
+        }
+        pendingBulkRequestId = null;
+        if (packet.preview() && packet.status()
+                == com.enviouse.futureshops.catalog.AdminBulkListingService.Status.PREVIEW_READY
+                && this.minecraft != null) {
+            this.minecraft.setScreen(new AdminBulkPreviewScreen(this, packet));
+            return;
+        }
+        resultSuccess = false;
+        resultMessage = Component.literal(packet.message());
     }
 
     private record QuickAddDraft(

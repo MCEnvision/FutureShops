@@ -59,7 +59,7 @@ class CatalogStockProductionCoverageTest {
         assertTrue(api.contains("StockRefreshScheduler.trigger("));
         assertTrue(command.contains("CatalogStockRuntime.reload("));
         assertFalse(command.contains("ShopCatalog.reload("));
-        assertEquals(20, count(writer, "CatalogStockRuntime.reload("));
+        assertEquals(22, count(writer, "CatalogStockRuntime.reload("));
         assertFalse(writer.contains("ShopCatalog.reload(server)"));
     }
 

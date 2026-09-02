@@ -21,7 +21,7 @@ Supported runtime:
 | Forge | 47.4.20 |
 | Java | 17 |
 | GeckoLib | 4.8.3 or newer compatible 4.x release |
-| Network protocol | 57 |
+| Network protocol | 58 |
 
 ## Features
 
@@ -29,6 +29,7 @@ Supported runtime:
 * Player shop blocks with versioned offers, legacy listing migration, physical storage, free and paid acquisition, multiple barter components, alternative options, Sell to Shop input bundles, promotions, stock alerts, and owner settlement tools.
 * Server authoritative bulk inventory selling to the active Server Shop or nearby Player Shops, with exact quotes, item deselection, total payout confirmation, tagged and damaged item support for general offers, and a fast confirmed command path.
 * A contextual Server Shop quick add grid for Buy, Sell, Barter, and Bundles, with one Base Price field, direct Buy and Sell creation, and progressively disclosed Simple and Advanced editors. Every simple trade mode remains selectable for every item, and rejected drafts recover as soon as the administrator edits them.
+* A bounded bulk admin catalog workflow that reuses the searchable item grid, accepts one shared price and stock value, supports one optional exact NBT identity for a selected item, previews every create, skip, replace, and blocking action, and commits one atomic validated update.
 * New generated Server Shop catalogs include working free, Sell Only, and discounted bundle examples without replacing an existing `admin.json`.
 * Wallet balances, payments, leaderboards, deposits, withdrawals, ATM controls, and protected FutureShops currency.
 * Auction House listings, bids, buy now sales, watchlists, history, anti sniping rules, and exact item custody.
