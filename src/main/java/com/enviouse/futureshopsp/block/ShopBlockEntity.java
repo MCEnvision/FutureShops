@@ -819,7 +819,8 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         public void configure(String promoType, double promoValue, int buyX, int buyY, long startEpochSeconds, long endEpochSeconds, boolean flash) {
             this.promoType = promoType == null ? "" : promoType;
             // LGB#8: Cap percentage at 100%
-            double cappedValue = Math.max(0.0D, promoValue);
+            double cappedValue = Double.isFinite(promoValue)
+                    ? Math.max(0.0D, promoValue) : 0.0D;
             if ("PERCENTAGE".equals(this.promoType) || "FLASH".equals(this.promoType)) {
                 cappedValue = Math.min(100.0D, cappedValue);
             }
@@ -964,4 +965,3 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
 
     private final List<String> clientTopItemIds = new ArrayList<>();
 }
-

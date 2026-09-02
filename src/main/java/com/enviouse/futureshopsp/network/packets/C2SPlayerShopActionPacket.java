@@ -23,13 +23,13 @@ public record C2SPlayerShopActionPacket(BlockPos shopPos, String action, int lis
 
     public static void encode(C2SPlayerShopActionPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.shopPos());
-        buffer.writeUtf(packet.action());
+        buffer.writeUtf(packet.action(), 32);
         buffer.writeVarInt(packet.listingIndex());
         buffer.writeVarInt(packet.amount());
     }
 
     public static C2SPlayerShopActionPacket decode(FriendlyByteBuf buffer) {
-        return new C2SPlayerShopActionPacket(buffer.readBlockPos(), buffer.readUtf(), buffer.readVarInt(), buffer.readVarInt());
+        return new C2SPlayerShopActionPacket(buffer.readBlockPos(), buffer.readUtf(32), buffer.readVarInt(), buffer.readVarInt());
     }
 
     public static void handle(C2SPlayerShopActionPacket packet, IPayloadContext context) {
@@ -41,4 +41,3 @@ public record C2SPlayerShopActionPacket(BlockPos shopPos, String action, int lis
         });
     }
 }
-

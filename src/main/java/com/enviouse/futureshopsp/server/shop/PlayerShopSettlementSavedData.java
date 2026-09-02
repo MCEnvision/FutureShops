@@ -1,5 +1,7 @@
 package com.enviouse.futureshopsp.server.shop;
 
+import com.enviouse.futureshopsp.server.util.PageBounds;
+
 import com.enviouse.futureshopsp.data.SettlementHistoryRow;
 import com.enviouse.futureshopsp.server.SavedDataMigrations;
 import net.minecraft.nbt.CompoundTag;
@@ -205,18 +207,19 @@ public final class PlayerShopSettlementSavedData extends SavedData {
                                                            SettlementHistoryRow.SettlementFilter filter,
                                                            long fromEpochSeconds,
                                                            long toEpochSeconds) {
-        int safePage = Math.max(1, page);
-        int safePageSize = Math.max(1, pageSize);
+        int safePage = PageBounds.normalizePage(page);
+        int safePageSize = PageBounds.normalizePageSize(pageSize);
         List<RevenueRow> filtered = rowsByOwner.getOrDefault(owner, List.of()).stream()
                 .filter(row -> row.shopPosLong() == shopPosLong)
                 .filter(row -> (filter == null ? SettlementHistoryRow.SettlementFilter.ALL : filter).matches(row.type()))
                 .filter(row -> isInRange(row.timestampEpochSeconds(), fromEpochSeconds, toEpochSeconds))
                 .toList();
-        int from = (safePage - 1) * safePageSize;
-        if (from >= filtered.size()) {
+        long fromLong = PageBounds.offset(safePage, safePageSize);
+        if (fromLong >= filtered.size()) {
             return List.of();
         }
-        int to = Math.min(filtered.size(), from + safePageSize);
+        int from = (int) fromLong;
+        int to = (int) Math.min((long) filtered.size(), fromLong + safePageSize);
         return filtered.subList(from, to).stream()
                 .map(row -> new SettlementHistoryRow(row.timestampEpochSeconds(), row.amountMinor(), row.type(), row.itemId(), row.quantity()))
                 .toList();
@@ -280,5 +283,4 @@ public final class PlayerShopSettlementSavedData extends SavedData {
     public record Snapshot(long pendingMinor, long lifetimeMinor, List<String> rows) {
     }
 }
-
 

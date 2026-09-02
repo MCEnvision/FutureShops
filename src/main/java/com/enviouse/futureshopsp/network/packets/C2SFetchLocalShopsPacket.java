@@ -26,11 +26,11 @@ public record C2SFetchLocalShopsPacket(String ownerFilter) implements CustomPack
 
 
     public static void encode(C2SFetchLocalShopsPacket packet, FriendlyByteBuf buffer) {
-        buffer.writeUtf(packet.ownerFilter);
+        buffer.writeUtf(packet.ownerFilter, 128);
     }
 
     public static C2SFetchLocalShopsPacket decode(FriendlyByteBuf buffer) {
-        return new C2SFetchLocalShopsPacket(buffer.readUtf());
+        return new C2SFetchLocalShopsPacket(buffer.readUtf(128));
     }
 
     public static void handle(C2SFetchLocalShopsPacket packet, IPayloadContext context) {
@@ -42,4 +42,3 @@ public record C2SFetchLocalShopsPacket(String ownerFilter) implements CustomPack
         });
     }
 }
-

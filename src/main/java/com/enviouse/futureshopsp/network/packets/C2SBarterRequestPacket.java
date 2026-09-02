@@ -22,13 +22,13 @@ public record C2SBarterRequestPacket(String shopId, String recipeId, int multipl
     }
 
     public static void encode(C2SBarterRequestPacket packet, FriendlyByteBuf buffer) {
-        buffer.writeUtf(packet.shopId);
-        buffer.writeUtf(packet.recipeId);
+        buffer.writeUtf(packet.shopId, 128);
+        buffer.writeUtf(packet.recipeId, 128);
         buffer.writeVarInt(packet.multiplier);
     }
 
     public static C2SBarterRequestPacket decode(FriendlyByteBuf buffer) {
-        return new C2SBarterRequestPacket(buffer.readUtf(), buffer.readUtf(), buffer.readVarInt());
+        return new C2SBarterRequestPacket(buffer.readUtf(128), buffer.readUtf(128), buffer.readVarInt());
     }
 
     public static void handle(C2SBarterRequestPacket packet, IPayloadContext context) {
@@ -40,4 +40,3 @@ public record C2SBarterRequestPacket(String shopId, String recipeId, int multipl
         });
     }
 }
-

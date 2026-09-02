@@ -2,6 +2,7 @@ package com.enviouse.futureshopsp.network.packets;
 
 import com.enviouse.futureshopsp.data.SettlementHistoryRow;
 import com.enviouse.futureshopsp.server.shop.PlayerShopBlockService;
+import com.enviouse.futureshopsp.server.util.PageBounds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -32,7 +33,7 @@ public record C2SFetchSettlementHistoryPacket(
         buffer.writeBlockPos(packet.shopPos());
         buffer.writeVarInt(packet.page());
         buffer.writeVarInt(packet.pageSize());
-        buffer.writeUtf(packet.filter().name());
+        buffer.writeUtf(packet.filter().name(), 32);
         buffer.writeLong(packet.fromEpochSeconds());
         buffer.writeLong(packet.toEpochSeconds());
     }
@@ -42,7 +43,7 @@ public record C2SFetchSettlementHistoryPacket(
                 buffer.readBlockPos(),
                 buffer.readVarInt(),
                 buffer.readVarInt(),
-                SettlementHistoryRow.SettlementFilter.fromWire(buffer.readUtf()),
+                SettlementHistoryRow.SettlementFilter.fromWire(buffer.readUtf(32)),
                 buffer.readLong(),
                 buffer.readLong());
     }
@@ -50,7 +51,7 @@ public record C2SFetchSettlementHistoryPacket(
     public static void handle(C2SFetchSettlementHistoryPacket packet, IPayloadContext context) {
         context.enqueueWork(() -> {
             ServerPlayer player = (ServerPlayer) context.player();
-            if (player != null) {
+            if (player != null && PageBounds.isValid(packet.page(), packet.pageSize())) {
                 PlayerShopBlockService.sendSettlementHistoryPage(
                         player,
                         packet.shopPos(),
@@ -63,4 +64,3 @@ public record C2SFetchSettlementHistoryPacket(
         });
     }
 }
-

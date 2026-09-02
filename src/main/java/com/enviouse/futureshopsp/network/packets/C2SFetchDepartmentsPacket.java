@@ -32,11 +32,11 @@ public class C2SFetchDepartmentsPacket implements CustomPacketPayload {
     }
 
     public static void encode(C2SFetchDepartmentsPacket packet, FriendlyByteBuf buffer) {
-        buffer.writeUtf(packet.searchPrefix);
+        buffer.writeUtf(packet.searchPrefix, 128);
     }
 
     public static C2SFetchDepartmentsPacket decode(FriendlyByteBuf buffer) {
-        return new C2SFetchDepartmentsPacket(buffer.readUtf());
+        return new C2SFetchDepartmentsPacket(buffer.readUtf(128));
     }
 
     public static void handle(C2SFetchDepartmentsPacket packet, IPayloadContext context) {
@@ -49,4 +49,3 @@ public class C2SFetchDepartmentsPacket implements CustomPacketPayload {
         });
     }
 }
-

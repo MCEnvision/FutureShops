@@ -2,6 +2,7 @@ package com.enviouse.futureshopsp.network.packets;
 
 import com.enviouse.futureshopsp.data.TransactionHistoryEntry;
 import com.enviouse.futureshopsp.server.transaction.TransactionHistoryService;
+import com.enviouse.futureshopsp.server.util.PageBounds;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -30,30 +31,30 @@ public record C2SFetchHistoryPacket(
     }
 
     public static void encode(C2SFetchHistoryPacket packet, FriendlyByteBuf buffer) {
-        buffer.writeUtf(packet.shopId);
+                buffer.writeUtf(packet.shopId, 128);
         buffer.writeVarInt(packet.page);
         buffer.writeVarInt(packet.pageSize);
-        buffer.writeUtf(packet.filter.name());
-        buffer.writeUtf(packet.searchText);
-        buffer.writeUtf(packet.sortOrder.name());
-        buffer.writeUtf(packet.timeWindow.name());
+        buffer.writeUtf(packet.filter.name(), 32);
+        buffer.writeUtf(packet.searchText, 256);
+        buffer.writeUtf(packet.sortOrder.name(), 32);
+        buffer.writeUtf(packet.timeWindow.name(), 32);
     }
 
     public static C2SFetchHistoryPacket decode(FriendlyByteBuf buffer) {
         return new C2SFetchHistoryPacket(
-                buffer.readUtf(),
+                buffer.readUtf(128),
                 buffer.readVarInt(),
                 buffer.readVarInt(),
-                TransactionHistoryEntry.HistoryFilter.fromWire(buffer.readUtf()),
-                buffer.readUtf(),
-                TransactionHistoryEntry.SortOrder.fromWire(buffer.readUtf()),
-                TransactionHistoryEntry.TimeWindow.fromWire(buffer.readUtf()));
+                TransactionHistoryEntry.HistoryFilter.fromWire(buffer.readUtf(32)),
+                buffer.readUtf(256),
+                TransactionHistoryEntry.SortOrder.fromWire(buffer.readUtf(32)),
+                TransactionHistoryEntry.TimeWindow.fromWire(buffer.readUtf(32)));
     }
 
     public static void handle(C2SFetchHistoryPacket packet, IPayloadContext context) {
         context.enqueueWork(() -> {
             ServerPlayer player = (ServerPlayer) context.player();
-            if (player != null) {
+            if (player != null && PageBounds.isValid(packet.page(), packet.pageSize())) {
                 TransactionHistoryService.sendHistoryPage(
                         player,
                         packet.shopId(),
@@ -67,4 +68,3 @@ public record C2SFetchHistoryPacket(
         });
     }
 }
-
