@@ -14,12 +14,12 @@ Project: FutureShops
 Requested artifact: authoritative_plan
 Repository root: /mnt/hermes/projects/FutureShops
 Starting branch: envy/polish_plan
-Starting commit: f8cbbb77c86b35fad4fa59491cda58a7a8abb438
+Starting commit: d978a1f79d5c50efee5d91ea8cace232ac542116
 Authoritative remote:
 origin
 https://github.com/MCEnvision/FutureShops.git
 Remote ref: origin/envy/polish_plan
-Remote commit: f8cbbb77c86b35fad4fa59491cda58a7a8abb438
+Remote commit: d978a1f79d5c50efee5d91ea8cace232ac542116
 Secondary support ref: origin/1.21.1
 Secondary support commit at intake: 247d8f6842bfa1f586e5b18a9aab67cabd3db89f
 ```

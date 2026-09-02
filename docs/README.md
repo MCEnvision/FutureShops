@@ -23,4 +23,11 @@
 * [Community suggestions](community_suggestions.md)
 * [Community regression coverage](community-bug-regression-test-gaps.md)
 
+## Verification
+
+* [Phase 000 provenance capture](verification/phase-000/provenance-2026-09-01.md)
+* [Phase 000 plan validation](verification/phase-000/plan-validation-2026-09-01.md)
+* [GitHub baseline evidence](verification/phase-000/github-baseline-2026-09-01.md)
+* [Issue snapshot evidence](verification/phase-000/issue-snapshots-2026-09-01.md)
+
 The root [README](../README.md) is the installation and contributor entry point. [Technical documentation](../DOCUMENTATION.md) is the maintainer architecture and operations reference. The active repository polish and defect closure contract is the [authoritative plan](../plan.md). The [3.0 implementation plan](../FutureShops3-0Plan.MD) and [advanced trade offers plan](../FutureShops3-1TradeOffersPlan.MD) are retained as historical records.

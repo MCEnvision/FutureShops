@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "planId": "PLAN-MASTER",
-  "planSetSha256": "173f1e4ed90adf4a89ff2d04411924297e1ec9016263e7909042d44e1a21027a",
+  "planSetSha256": "81495e714fae1e0119f20720bdf77986457c56c9efa249065b1e1ba6e9518c3b",
   "planningSubject": {
     "name": "FutureShops defect closure and beta candidate polish for Forge 1.20.1 and NeoForge 1.21.1",
     "requestedArtifact": "authoritative_plan",
