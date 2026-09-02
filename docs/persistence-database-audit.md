@@ -145,7 +145,11 @@ mode.
 Issue 32 successor fixtures use synthetic player data, a modded item with nested
 NBT and capability data, unrelated top level and nested NBT sentinels, exact
 delivery slot proofs, receipts, login, logout, restart, reconnect, and repeated
-recovery. Production worlds and unique player state are never test inputs.
+recovery. Production worlds and unique player state are never test inputs. Player
+inventory hashing now validates item NBT iteratively before copying or saving a
+stack. Nesting beyond 512 levels fails closed with a bounded validation error,
+including when a foreign capability serializer would otherwise overflow the
+stack, and the delivery planner leaves the source inventory untouched.
 
 ## Phase 005 verification record
 
