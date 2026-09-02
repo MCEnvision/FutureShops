@@ -23,4 +23,4 @@
 * [Community suggestions](community_suggestions.md)
 * [Community regression coverage](community-bug-regression-test-gaps.md)
 
-The root [README](../README.md) is the installation and contributor entry point. [Technical documentation](../DOCUMENTATION.md) is the maintainer architecture and operations reference. The active implementation plan is [FutureShops 3.1 advanced trade offers](../FutureShops3-1TradeOffersPlan.MD).
+The root [README](../README.md) is the installation and contributor entry point. [Technical documentation](../DOCUMENTATION.md) is the maintainer architecture and operations reference. The active repository polish and defect closure contract is the [authoritative plan](../plan.md). The [3.0 implementation plan](../FutureShops3-0Plan.MD) and [advanced trade offers plan](../FutureShops3-1TradeOffersPlan.MD) are retained as historical records.

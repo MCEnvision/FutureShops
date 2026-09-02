@@ -1,0 +1,990 @@
+{
+  "schemaVersion": 2,
+  "planId": "PLAN-MASTER",
+  "planSetSha256": "1ea4e3c2ab600512d73ef579efb499f2d35c66902a6781dca7627a738c1c6cef",
+  "planningSubject": {
+    "name": "FutureShops defect closure and release candidate polish for the Forge 1.20.1 and NeoForge 1.21.1 support lines",
+    "requestedArtifact": "authoritative_plan",
+    "planProfile": "software_product",
+    "sources": [
+      {
+        "id": "SRC-001",
+        "role": "owner_request",
+        "subject": "The current request to replace the temporary planning state with an authoritative plan for fixing every active GitHub defect and polishing FutureShops to completion, including the owner's locked endpoint, scope, feature, evidence, version, audit, and publication decisions",
+        "source": "Current EnVy request and the resolved Plan Creator intake answers in this task",
+        "use": "Defines mandatory scope, completion authority, rolling defect intake, issue 33 behavior, external evidence gates, target versions, audit depth, and release exclusions"
+      },
+      {
+        "id": "SRC-002",
+        "role": "existing_plan",
+        "subject": "Legacy FutureShops 3.0 implementation, escrow, market, recovery, configuration, testing, and release contract",
+        "source": "/mnt/hermes/projects/FutureShops/FutureShops3-0Plan.MD",
+        "use": "Preserves established economic, recovery, compatibility, and verification invariants while migrating unfinished polish work into the new authoritative plan"
+      },
+      {
+        "id": "SRC-003",
+        "role": "existing_plan",
+        "subject": "Legacy FutureShops 3.1 trade offer, bulk editor, UI, catalog, and configuration contract",
+        "source": "/mnt/hermes/projects/FutureShops/FutureShops3-1TradeOffersPlan.MD",
+        "use": "Provides implemented trade offer and editor architecture constraints and acceptance history without reopening completed scope"
+      },
+      {
+        "id": "SRC-004",
+        "role": "requirements",
+        "subject": "Open issue 22, NeoForge 1.21.1 GUI blur defect and existing candidate fix evidence",
+        "source": "https://github.com/MCEnvision/FutureShops/issues/22",
+        "use": "Defines the 1.21.1 defect contract, reporter acceptance gate, and the candidate change that must be independently verified before integration"
+      },
+      {
+        "id": "SRC-005",
+        "role": "requirements",
+        "subject": "Open issue 25, Forge 1.20.1 server shop offers remain unavailable after the first migration fix",
+        "source": "https://github.com/MCEnvision/FutureShops/issues/25",
+        "use": "Defines the unresolved catalog availability behavior, affected world evidence, and mandatory reporter retest"
+      },
+      {
+        "id": "SRC-006",
+        "role": "requirements",
+        "subject": "Open issue 32, Forge 1.20.1 player data became unusable twice and was deleted to recover",
+        "source": "https://github.com/MCEnvision/FutureShops/issues/32",
+        "use": "Defines the high severity non destructive player data investigation and exact failure proof requirement"
+      },
+      {
+        "id": "SRC-007",
+        "role": "requirements",
+        "subject": "Open issue 33, bulk admin shop listing creation with shared price and stock and exact NBT support",
+        "source": "https://github.com/MCEnvision/FutureShops/issues/33",
+        "use": "Defines the KISS bulk listing workflow locked by the owner"
+      },
+      {
+        "id": "SRC-008",
+        "role": "requirements",
+        "subject": "Open issue 34, Forge 1.20.1 finite stock money purchases fail while infinite stock succeeds",
+        "source": "https://github.com/MCEnvision/FutureShops/issues/34",
+        "use": "Defines the multiplayer finite stock transaction regression and diagnostic gap"
+      },
+      {
+        "id": "SRC-009",
+        "role": "repository_evidence",
+        "subject": "Repository identity, branch topology, build metadata, current versions, and supported runtime lines",
+        "source": "/mnt/hermes/projects/FutureShops/.git, gradle.properties, settings.gradle, build.gradle, src/main/resources/META-INF/mods.toml, origin/1.20.1, and origin/1.21.1 inspected on 2026-09-01",
+        "use": "Grounds project identity, target branches, exact toolchains, release versions, and branch isolation"
+      },
+      {
+        "id": "SRC-010",
+        "role": "status",
+        "subject": "Current user and operator documentation for implemented behavior, commands, configuration, recovery, and known limits",
+        "source": "/mnt/hermes/projects/FutureShops/README.md, DOCUMENTATION.md, and docs/",
+        "use": "Separates current documented behavior from target corrections and defines documentation surfaces that must be reconciled"
+      },
+      {
+        "id": "SRC-011",
+        "role": "audit_evidence",
+        "subject": "Current implementation, tests, CI results, runtime tasks, and issue branch evidence",
+        "source": "/mnt/hermes/projects/FutureShops/src, GitHub Actions for MCEnvision/FutureShops, branch envy/issue_22_neoforge at bfba91f7b0c51b03d07117c4f1851c38a98f6186, and the 1.20.1 default branch at c6709e12ca7084ee068b2497a577b8d47c12f6fd",
+        "use": "Provides observed and verified baseline evidence that must be rerun at exact candidate revisions rather than accepted as future proof"
+      },
+      {
+        "id": "SRC-012",
+        "role": "status",
+        "subject": "Open Dependabot pull request 28 for JUnit and Gradle patch updates",
+        "source": "https://github.com/MCEnvision/FutureShops/pull/28",
+        "use": "Keeps unrelated dependency maintenance visible for branch health without silently expanding product defect scope or changing pinned platform boundaries"
+      },
+      {
+        "id": "SRC-013",
+        "role": "requirements",
+        "subject": "Repository execution, branch, verification, GitHub, recovery, security, and documentation rules",
+        "source": "/mnt/hermes/projects/FutureShops/AGENTS.md supplied as repository instructions",
+        "use": "Defines mandatory execution discipline, support branch separation, evidence quality, data safety, and release authorization boundaries"
+      }
+    ]
+  },
+  "profileContract": [
+    {
+      "area": "component architecture",
+      "status": "covered",
+      "source": "SRC-002, SRC-003, SRC-009, SRC-011",
+      "plan_section": "Architecture and component ownership",
+      "rationale": "The plan will assign client UI, networking, shop catalog, economy, escrow, persistence, commands, configuration, and release ownership across both support lines."
+    },
+    {
+      "area": "determinism",
+      "status": "covered",
+      "source": "SRC-001, SRC-002, SRC-006, SRC-007, SRC-011",
+      "plan_section": "Determinism, idempotency, and reproducibility",
+      "rationale": "Stable request identities, integer value movement, exact NBT identity, atomic writes, reproducible fixtures, exact revision tests, deterministic audits, and repeatable candidate hashes are mandatory."
+    },
+    {
+      "area": "failure taxonomy",
+      "status": "covered",
+      "source": "SRC-001, SRC-004, SRC-005, SRC-006, SRC-008, SRC-013",
+      "plan_section": "Failure taxonomy and blocker routing",
+      "rationale": "The plan will distinguish validation, readiness, authorization, inventory, custody, persistence, recovery, network, configuration, dependency, external evidence, and publication failures with fail closed behavior and actionable evidence."
+    },
+    {
+      "area": "generalization",
+      "status": "covered",
+      "source": "DEC-002, DEC-003, SRC-007",
+      "plan_section": "Scope generalization and bounded extension rules",
+      "rationale": "The rolling defect policy applies a common deduplicated issue, repair, and verification workflow, while issue 33 remains a deliberately bounded reusable catalog operation rather than an unbounded query language."
+    },
+    {
+      "area": "inputs and outputs",
+      "status": "covered",
+      "source": "SRC-001, SRC-004, SRC-005, SRC-006, SRC-007, SRC-008",
+      "plan_section": "Inputs, outputs, and user workflows",
+      "rationale": "The plan will define GitHub issue evidence, catalog selections, inventory and transaction inputs, UI and command outputs, reporter evidence, and exact candidate artifacts."
+    },
+    {
+      "area": "release lifecycle",
+      "status": "covered",
+      "source": "DEC-001, DEC-005, SRC-009, SRC-013",
+      "plan_section": "Candidate integration and release readiness",
+      "rationale": "The endpoint is verified merged support branches and exact beta candidate artifacts, while platform publication, stable release, and announcements remain excluded until separately authorized."
+    },
+    {
+      "area": "security",
+      "status": "covered",
+      "source": "DEC-006, SRC-002, SRC-013",
+      "plan_section": "Security and privacy contract",
+      "rationale": "The plan requires a complete audit and repair pass for leaks, backdoors, packet and command trust, secrets, paths, deserialization, permissions, duplication, privacy, and dependency packaging."
+    },
+    {
+      "area": "state and persistence",
+      "status": "covered",
+      "source": "SRC-001, SRC-002, SRC-005, SRC-006, SRC-008",
+      "plan_section": "State, persistence, migration, and recovery",
+      "rationale": "A codebase wide persistence audit is mandatory and includes every journal, checkpoint, ledger, custody store, claim store, SavedData object, inventory proof, NBT record, JSON and TOML file, migration, atomic write, backup, reload, concurrency, integrity, recovery, and corruption path."
+    },
+    {
+      "area": "test system",
+      "status": "covered",
+      "source": "SRC-001, SRC-011, SRC-013, EXT-001, EXT-002, EXT-003, EXT-004",
+      "plan_section": "Test system and evidence matrix",
+      "rationale": "The plan will require focused regressions, full tests, data validation, GameTests, builds, server and client smoke tests, controlled multiplayer, restart, reconnect, fault injection, reporter acceptance, and exact revision evidence."
+    },
+    {
+      "area": "versioning",
+      "status": "covered",
+      "source": "DEC-005, SRC-009",
+      "plan_section": "Compatibility, versioning, and branch topology",
+      "rationale": "The owner locked Forge 1.20.1 to 3.0.0-beta.2 and NeoForge 1.21.1 to 2.2.1, with fixes integrated only into their correct support branches."
+    }
+  ],
+  "mandatoryRequirements": [
+    {
+      "id": "CORE-REQ-001",
+      "summary": "Migrate the two legacy plans into one authoritative, traceable plan set without rewriting the legacy files or reopening already completed features.",
+      "source": "SRC-001, SRC-002, SRC-003",
+      "owner": "Plan governance",
+      "contributors": "Documentation and verification",
+      "dependencies": [],
+      "lifecycleStage": "readiness",
+      "productionVerification": "none",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-000"
+    },
+    {
+      "id": "CORE-REQ-002",
+      "summary": "Establish an exact issue and branch baseline that records current revisions, open issues and comments, candidate fixes, tests, CI, affected versions, configurations, reproduction status, and evidence gaps before any repair.",
+      "source": "SRC-004, SRC-005, SRC-006, SRC-007, SRC-008, SRC-009, SRC-011, SRC-012",
+      "owner": "Repository verification",
+      "contributors": "Issue triage, build system, runtime harness",
+      "dependencies": [
+        "CORE-REQ-001",
+        "EXT-005"
+      ],
+      "lifecycleStage": "readiness",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-000"
+    },
+    {
+      "id": "CORE-REQ-003",
+      "summary": "Resolve issue 22 on the NeoForge 1.21.1 line by independently verifying the existing blur fix, preventing unintended GUI background blur, integrating only into 1.21.1 as version 2.2.1, and obtaining the required reporter acceptance evidence before closure.",
+      "source": "SRC-001, SRC-004, SRC-009, EXT-001",
+      "owner": "NeoForge client presentation",
+      "contributors": "NeoForge build, runtime verification, issue triage",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-016",
+        "EXT-001"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-001"
+    },
+    {
+      "id": "CORE-REQ-004",
+      "summary": "Resolve issue 25 on Forge 1.20.1 by reproducing the post update unavailable offer state, locating the deeper cause beyond the first catalog migration change, preserving valid data, proving normal shop availability after restart and reload, and obtaining the required reporter retest before closure.",
+      "source": "SRC-001, SRC-005, SRC-009, EXT-002",
+      "owner": "Shop catalog service",
+      "contributors": "Configuration, migration, server networking, UI snapshots, issue triage",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-016",
+        "EXT-002"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "migration",
+      "canonicalPhase": "CORE-PHASE-002"
+    },
+    {
+      "id": "CORE-REQ-005",
+      "summary": "Resolve issue 32 on Forge 1.20.1 through preserved non destructive evidence, an exact deterministic reproduction or proof of the invalid player state, a root cause repair, compatible recovery, and regression coverage that never requires deleting player data.",
+      "source": "SRC-001, SRC-006, SRC-013, EXT-003",
+      "owner": "Persistence recovery subsystem",
+      "contributors": "Transactions, inventory proof, networking, player lifecycle, issue triage",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-016",
+        "EXT-003"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "migration",
+      "canonicalPhase": "CORE-PHASE-002"
+    },
+    {
+      "id": "CORE-REQ-006",
+      "summary": "Resolve issue 34 on Forge 1.20.1 by reproducing finite stock money purchases in controlled multiplayer, repairing the authoritative stock reservation and transaction path without duplication or value loss, and adding actionable bounded failure diagnostics.",
+      "source": "SRC-008, SRC-002, EXT-004",
+      "owner": "Forge shop transaction service",
+      "contributors": "Stock reservation, economy provider, escrow, networking, persistence, diagnostics",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-016",
+        "EXT-004"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-002"
+    },
+    {
+      "id": "CORE-REQ-007",
+      "summary": "Implement issue 33 as a KISS bulk admin shop workflow using the existing searchable bounded registry grid, optional one exact canonical NBT identity, a full generated listing preview, one shared price and stock, and one atomic catalog write.",
+      "source": "SRC-001, SRC-007, DEC-003",
+      "owner": "Admin shop editor",
+      "contributors": "Networking, registry snapshot, validation, persistence, client presentation",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-016"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-003"
+    },
+    {
+      "id": "CORE-REQ-008",
+      "summary": "Make bulk listing conflicts safe and explicit by skipping and reporting existing listings by default and permitting only an explicit per item replace that preserves unrelated listing fields.",
+      "source": "SRC-001, SRC-007, DEC-003",
+      "owner": "Forge shop catalog service",
+      "contributors": "Admin editor, persistence, validation",
+      "dependencies": [
+        "CORE-REQ-007"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "migration",
+      "canonicalPhase": "CORE-PHASE-003"
+    },
+    {
+      "id": "CORE-REQ-009",
+      "summary": "Apply a rolling defect contract in which every newly verified repository owned defect is searched for duplicates, recorded as a GitHub issue before repair, linked to its evidence and fix, regression tested, and included in the final closure audit.",
+      "source": "SRC-001, DEC-002, EXT-005",
+      "owner": "Repository issue workflow",
+      "contributors": "Every implementation and audit owner",
+      "dependencies": [
+        "CORE-REQ-002",
+        "EXT-005"
+      ],
+      "lifecycleStage": "continuous",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-000"
+    },
+    {
+      "id": "CORE-REQ-010",
+      "summary": "Complete a codebase wide security and privacy audit and repair every verified leak, exploitable backdoor, unsafe packet or command trust boundary, secret exposure, arbitrary path access, unsafe deserialization, permission bypass, duplication path, privacy violation, and dependency packaging risk.",
+      "source": "SRC-001, DEC-006, SRC-013",
+      "owner": "Security review",
+      "contributors": "Networking, commands, persistence, transactions, build and packaging",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-009"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-004"
+    },
+    {
+      "id": "CORE-REQ-011",
+      "summary": "Audit every admin command and subcommand for registration, syntax, permission level, identity and target validation, confirmation gates, state mutation authority, idempotency, feedback, audit logging, recovery behavior, and dedicated server execution, then repair every verified defect.",
+      "source": "SRC-001, DEC-006, SRC-002, SRC-010",
+      "owner": "Command subsystem",
+      "contributors": "Authoritative services, permissions, localization, documentation, security review",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-009",
+        "CORE-REQ-010"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-004"
+    },
+    {
+      "id": "CORE-REQ-012",
+      "summary": "Audit every persistence and database path, including escrow journals, checkpoints, ledgers, custody, claims, SavedData, inventory proofs, NBT, JSON, TOML, migrations, atomic writes, backups, reloads, concurrency, integrity, recovery, and corruption behavior, and repair every verified defect without destructive recovery.",
+      "source": "SRC-001, DEC-006, SRC-002, SRC-005, SRC-006, SRC-013",
+      "owner": "Persistence subsystem",
+      "contributors": "Escrow, markets, shops, economy, configuration, player lifecycle, security review",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-014"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "migration",
+      "canonicalPhase": "CORE-PHASE-005"
+    },
+    {
+      "id": "CORE-REQ-013",
+      "summary": "Audit and repair backend integration and failure handling across client and server networking, module readiness, server shops, player shops, economy providers, escrow, Auction House, Bazaar, ATM, claims, configuration reload, restart, reconnect, and multiplayer.",
+      "source": "SRC-001, DEC-006, SRC-002, SRC-003, SRC-011",
+      "owner": "Server integration architecture",
+      "contributors": "Client presentation, networking, all authoritative services, persistence, runtime verification",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "CORE-REQ-012",
+        "CORE-REQ-014",
+        "EXT-004"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-006"
+    },
+    {
+      "id": "CORE-REQ-014",
+      "summary": "Preserve server authority, signed integer minor units, checked arithmetic, stable request UUID idempotency, custody conservation, accessible durable claims, backward compatible persistence, fail closed readiness, and zero silent item or currency loss across every repair.",
+      "source": "SRC-002, SRC-013",
+      "owner": "Transaction architecture",
+      "contributors": "Every state-mutating component",
+      "dependencies": [
+        "CORE-REQ-002"
+      ],
+      "lifecycleStage": "continuous",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-005"
+    },
+    {
+      "id": "CORE-REQ-015",
+      "summary": "Provide a deterministic verification system with focused regressions, complete unit tests, data validation, GameTests where applicable, full builds, JAR inspection, dedicated server and client smoke tests, controlled multiplayer, restart, reconnect, reload, rollback, corruption, and fault injection workflows at exact revisions.",
+      "source": "SRC-001, SRC-011, SRC-013, EXT-004",
+      "owner": "Verification system",
+      "contributors": "All component owners, runtime harness, reporters",
+      "dependencies": [
+        "CORE-REQ-003",
+        "CORE-REQ-004",
+        "CORE-REQ-005",
+        "CORE-REQ-006",
+        "CORE-REQ-007",
+        "CORE-REQ-008",
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "CORE-REQ-012",
+        "CORE-REQ-013",
+        "CORE-REQ-014",
+        "EXT-003",
+        "EXT-004"
+      ],
+      "lifecycleStage": "post_change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-007"
+    },
+    {
+      "id": "CORE-REQ-016",
+      "summary": "Keep Forge 1.20.1 and NeoForge 1.21.1 changes isolated to their correct branches, preserve their supported toolchains and schemas, and prove migration and backward compatibility for every changed persistent or configured format.",
+      "source": "SRC-001, SRC-002, SRC-003, SRC-009, DEC-005",
+      "owner": "Build governance",
+      "contributors": "Component owners, persistence, release verification",
+      "dependencies": [
+        "CORE-REQ-002"
+      ],
+      "lifecycleStage": "continuous",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "migration",
+      "canonicalPhase": "CORE-PHASE-000"
+    },
+    {
+      "id": "CORE-REQ-017",
+      "summary": "Update the README, technical documentation, focused guides, configuration references, command reference, recovery runbooks, migration guidance, issue records, pull requests, and project tracking to match only verified behavior.",
+      "source": "SRC-010, SRC-013",
+      "owner": "Project documentation",
+      "contributors": "Every component owner, GitHub workflow",
+      "dependencies": [
+        "CORE-REQ-003",
+        "CORE-REQ-004",
+        "CORE-REQ-005",
+        "CORE-REQ-006",
+        "CORE-REQ-007",
+        "CORE-REQ-008",
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "CORE-REQ-012",
+        "CORE-REQ-013",
+        "CORE-REQ-014",
+        "CORE-REQ-015",
+        "CORE-REQ-016",
+        "EXT-005"
+      ],
+      "lifecycleStage": "post_change",
+      "productionVerification": "none",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-007"
+    },
+    {
+      "id": "CORE-REQ-018",
+      "summary": "Build and inspect exact Forge 3.0.0-beta.2 and NeoForge 2.2.1 candidate JARs with matching metadata, dependency contents, source revision manifests, SHA-256 and SHA-512 checksums, and reproducible verification records without publishing them.",
+      "source": "SRC-001, SRC-009, DEC-001, DEC-005",
+      "owner": "Release engineering",
+      "contributors": "Build system, verification, documentation",
+      "dependencies": [
+        "CORE-REQ-015",
+        "CORE-REQ-016",
+        "CORE-REQ-017"
+      ],
+      "lifecycleStage": "post_change",
+      "productionVerification": "none",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-007"
+    },
+    {
+      "id": "CORE-REQ-019",
+      "summary": "Repeat the complete issue, security, privacy, command, persistence, integration, runtime, documentation, dependency, and release readiness audit at the exact candidate revisions until no known repository owned defect remains.",
+      "source": "SRC-001, DEC-001, DEC-002, DEC-006",
+      "owner": "Final integration audit",
+      "contributors": "Every audit and component owner",
+      "dependencies": [
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "CORE-REQ-012",
+        "CORE-REQ-013",
+        "CORE-REQ-014",
+        "CORE-REQ-015",
+        "CORE-REQ-016",
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "EXT-004",
+        "EXT-005"
+      ],
+      "lifecycleStage": "post_change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-007"
+    },
+    {
+      "id": "CORE-REQ-020",
+      "summary": "Close each scoped issue and mark its tracking complete only after its merged fix, required exact evidence, green branch checks, and any mandatory reporter acceptance pass, while leaving externally blocked issues open with the precise missing evidence recorded.",
+      "source": "SRC-001, DEC-001, DEC-004, EXT-001, EXT-002, EXT-003, EXT-005",
+      "owner": "Repository closure governance",
+      "contributors": "Issue triage, component owners, reporters, verification",
+      "dependencies": [
+        "CORE-REQ-003",
+        "CORE-REQ-004",
+        "CORE-REQ-005",
+        "CORE-REQ-006",
+        "CORE-REQ-007",
+        "CORE-REQ-008",
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "CORE-REQ-012",
+        "CORE-REQ-013",
+        "CORE-REQ-014",
+        "CORE-REQ-015",
+        "CORE-REQ-016",
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "EXT-001",
+        "EXT-002",
+        "EXT-003",
+        "EXT-005"
+      ],
+      "lifecycleStage": "retention",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-007"
+    }
+  ],
+  "optionalFutureScope": [
+    {
+      "id": "FUT-001",
+      "summary": "Publish the prepared artifacts to CurseForge, Modrinth, or GitHub Releases and post an announcement after a separate explicit authorization.",
+      "source": "SRC-001, DEC-001",
+      "disposition": "excluded"
+    },
+    {
+      "id": "FUT-002",
+      "summary": "Promote either support line from beta or maintenance candidate status to a stable public release.",
+      "source": "SRC-001, DEC-001",
+      "disposition": "excluded"
+    },
+    {
+      "id": "FUT-003",
+      "summary": "Add material unrelated enhancements or new subsystems that are not required by an active defect, issue 33, or a verified audit defect.",
+      "source": "SRC-001, DEC-002",
+      "disposition": "excluded"
+    },
+    {
+      "id": "FUT-004",
+      "summary": "Extend bulk selection to fuzzy item matching, arbitrary NBT paths, broad tag expression languages, or unconditional replacement policies.",
+      "source": "SRC-001, DEC-003",
+      "disposition": "excluded"
+    },
+    {
+      "id": "FUT-005",
+      "summary": "Support distributed live market state across multiple servers or direct external storage listings without deterministic transaction receipts.",
+      "source": "SRC-002, SRC-013",
+      "disposition": "excluded"
+    }
+  ],
+  "nonGoals": [
+    {
+      "id": "NG-001",
+      "summary": "Do not implement product code, modify tracked repository files, or perform release operations during the Plan Creator pass.",
+      "source": "SRC-001"
+    },
+    {
+      "id": "NG-002",
+      "summary": "Do not publish to CurseForge, Modrinth, GitHub Releases, announce a release, or declare stable status under this plan endpoint.",
+      "source": "DEC-001"
+    },
+    {
+      "id": "NG-003",
+      "summary": "Do not delete player data, journals, checkpoints, ledgers, custody, claims, or worlds as a repair or verification strategy.",
+      "source": "SRC-006, SRC-013"
+    },
+    {
+      "id": "NG-004",
+      "summary": "Do not weaken server authority, maintenance mode, readiness checks, escrow conservation, request idempotency, claims access, permissions, or dedicated server safety to make a UI path appear available.",
+      "source": "SRC-002, SRC-013"
+    },
+    {
+      "id": "NG-005",
+      "summary": "Do not merge Forge fixes into the NeoForge support line or NeoForge fixes into the Forge support line without an independently required compatible implementation.",
+      "source": "SRC-009, DEC-005"
+    },
+    {
+      "id": "NG-006",
+      "summary": "Do not add fuzzy matching, arbitrary NBT query paths, unconditional bulk replacement, or a second competing item selector for issue 33.",
+      "source": "DEC-003"
+    },
+    {
+      "id": "NG-007",
+      "summary": "Do not close an issue because a patch compiles, a mocked test passes, or an external suggestion exists when the required real behavior evidence is absent.",
+      "source": "DEC-001, DEC-004, SRC-013"
+    },
+    {
+      "id": "NG-008",
+      "summary": "Do not silently update Minecraft, Forge, NeoForge, Java, mappings, Gradle, or other pinned platform boundaries as part of defect repair.",
+      "source": "SRC-009, SRC-012, SRC-013"
+    }
+  ],
+  "ownerDecisions": [
+    {
+      "id": "DEC-001",
+      "question": "What exact endpoint constitutes completion for this polish plan?",
+      "selectedChoice": "All scoped and audit discovered repository owned defects are fixed, merged on the correct support branch, fully verified, accepted where reporter evidence is mandatory, and closed. Both exact beta candidate artifacts are prepared and proven. Public platform releases, stable publication, and announcements remain excluded until later explicit authorization.",
+      "rationale": "Completion means a trustworthy candidate state, not only locally compiling patches.",
+      "affectedRequirements": [
+        "CORE-REQ-003",
+        "CORE-REQ-004",
+        "CORE-REQ-005",
+        "CORE-REQ-006",
+        "CORE-REQ-007",
+        "CORE-REQ-008",
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "CORE-REQ-012",
+        "CORE-REQ-013",
+        "CORE-REQ-014",
+        "CORE-REQ-015",
+        "CORE-REQ-016",
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-020"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-002",
+      "question": "Does the plan cover only issues open at intake or defects found during execution?",
+      "selectedChoice": "Scope rolls forward for verified defects. Every discovered defect is deduplicated and filed on GitHub before repair, then fixed and verified. A repeated final audit at exact candidate revisions must find no remaining known repository owned defect. Material unrelated enhancements require a later explicit Plan Creator revision.",
+      "rationale": "The owner selected convergence on a clean known-defect set instead of freezing scope to the intake snapshot.",
+      "affectedRequirements": [
+        "CORE-REQ-002",
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "CORE-REQ-012",
+        "CORE-REQ-013",
+        "CORE-REQ-019",
+        "CORE-REQ-020"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-003",
+      "question": "What is the bounded behavior for the issue 33 bulk listing workflow?",
+      "selectedChoice": "Reuse the searchable grid for bounded registry selection, allow optional one exact canonical NBT identity, show a full generated listing preview, apply one shared price and stock through one atomic catalog write, skip and report existing listings by default, and require explicit per item replacement that preserves unrelated fields. Exclude fuzzy matching, arbitrary NBT paths, and unconditional replacement.",
+      "rationale": "This gives administrators fast bulk entry without creating an ambiguous query or destructive replacement system.",
+      "affectedRequirements": [
+        "CORE-REQ-007",
+        "CORE-REQ-008"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-004",
+      "question": "How should missing issue evidence and reporter acceptance affect execution and closure?",
+      "selectedChoice": "Preserve and request exact non destructive evidence. If evidence is unavailable, use the authenticated EnVisione GitHub account to tag the issue author with a precise request. Reporter acceptance is mandatory for issues 22 and 25. Issue 32 requires a deterministic reproduction or proof of the exact invalid state. Other internal work may continue, but the affected issue and final plan endpoint remain blocked.",
+      "rationale": "External latency must not weaken evidence or halt unrelated audits and repairs.",
+      "affectedRequirements": [
+        "CORE-REQ-003",
+        "CORE-REQ-004",
+        "CORE-REQ-005",
+        "CORE-REQ-015",
+        "CORE-REQ-020"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-005",
+      "question": "What target versions and support branches own the completed work?",
+      "selectedChoice": "All Forge 1.20.1 fixes, issue 33, and Forge audit repairs ship together as exactly 3.0.0-beta.2 on the 1.20.1 branch. NeoForge issue 22 ships as exactly 2.2.1 on the 1.21.1 branch. No per bug version increment and no cross branch merge.",
+      "rationale": "The two supported runtimes have independent compatibility and release histories.",
+      "affectedRequirements": [
+        "CORE-REQ-003",
+        "CORE-REQ-004",
+        "CORE-REQ-005",
+        "CORE-REQ-006",
+        "CORE-REQ-007",
+        "CORE-REQ-008",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "CORE-REQ-012",
+        "CORE-REQ-013",
+        "CORE-REQ-014",
+        "CORE-REQ-015",
+        "CORE-REQ-016",
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "CORE-REQ-019"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-006",
+      "question": "Which whole codebase audits are mandatory before completion?",
+      "selectedChoice": "Complete and repair security and privacy, every admin command and permission path, every persistence and database path, and backend integration and failure handling across all named marketplace, economy, escrow, ATM, claim, lifecycle, networking, restart, reconnect, and multiplayer workflows. Every discovered defect is filed before repair and each audit reruns clean at the exact candidate revisions.",
+      "rationale": "Known reports cross trust, persistence, transaction, and lifecycle boundaries and require systematic closure.",
+      "affectedRequirements": [
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "CORE-REQ-012",
+        "CORE-REQ-013",
+        "CORE-REQ-014",
+        "CORE-REQ-015",
+        "CORE-REQ-019",
+        "CORE-REQ-020"
+      ],
+      "supersedes": []
+    }
+  ],
+  "externalPrerequisites": [
+    {
+      "id": "EXT-001",
+      "name": "Issue 22 reporter acceptance on the affected NeoForge 1.21.1 Windows client environment",
+      "affected_requirements": [
+        "CORE-REQ-003",
+        "CORE-REQ-020"
+      ],
+      "mandatory_for_endpoint": true,
+      "kind": "other",
+      "availability": "unknown",
+      "authorization": "not_required",
+      "blocked_plan_approved": true,
+      "required_evidence": [
+        "The reporter tests a JAR built from the exact merged 1.21.1 candidate revision in the originally affected client environment.",
+        "The reporter confirms with a screenshot or concise result that the affected FutureShops screens no longer apply unintended background blur and that navigation remains usable.",
+        "The issue records the tested version, candidate revision, loader version, Minecraft version, operating system, and result before closure."
+      ]
+    },
+    {
+      "id": "EXT-002",
+      "name": "Issue 25 affected world evidence and reporter acceptance on Forge 1.20.1",
+      "affected_requirements": [
+        "CORE-REQ-004",
+        "CORE-REQ-020"
+      ],
+      "mandatory_for_endpoint": true,
+      "kind": "other",
+      "availability": "unknown",
+      "authorization": "not_required",
+      "blocked_plan_approved": true,
+      "required_evidence": [
+        "A sanitized backup or exact inventory of the affected catalog files, relevant configuration, loader and mod versions, startup and first failure logs, and steps that reproduce unavailable offers after update.",
+        "The reporter retests a JAR built from the exact merged Forge candidate revision against a preserved copy of the affected world and confirms offers are available after startup, restart, and catalog reload without data deletion.",
+        "The issue records the candidate revision, tested environment, migrated file state, result, and any remaining warning before closure."
+      ]
+    },
+    {
+      "id": "EXT-003",
+      "name": "Exact issue 32 invalid player data evidence or deterministic reproduction",
+      "affected_requirements": [
+        "CORE-REQ-005",
+        "CORE-REQ-012",
+        "CORE-REQ-015",
+        "CORE-REQ-020"
+      ],
+      "mandatory_for_endpoint": true,
+      "kind": "other",
+      "availability": "unknown",
+      "authorization": "not_required",
+      "blocked_plan_approved": true,
+      "required_evidence": [
+        "Either a sanitized preserved copy of the affected player data with matching world and FutureShops persistence context, or a deterministic fixture that reproduces the same unusable player state twice without deleting data.",
+        "A before and after state report identifies the exact invalid field, ownership transition, persistence write, or recovery mismatch and proves unrelated player data remains unchanged.",
+        "The fixed candidate loads and recovers the preserved or reproduced state across restart, reconnect, and repeated transaction attempts without data deletion, duplication, or value loss."
+      ]
+    },
+    {
+      "id": "EXT-004",
+      "name": "Controlled isolated Forge 1.20.1 multiplayer verification environment",
+      "affected_requirements": [
+        "CORE-REQ-006",
+        "CORE-REQ-013",
+        "CORE-REQ-015",
+        "CORE-REQ-019"
+      ],
+      "mandatory_for_endpoint": true,
+      "kind": "other",
+      "availability": "unknown",
+      "authorization": "not_required",
+      "blocked_plan_approved": true,
+      "required_evidence": [
+        "An isolated dedicated Forge 1.20.1 server running the exact candidate revision with at least two independent clients and reproducible finite and infinite stock shop fixtures.",
+        "Captured server and client logs, balances, inventory states, stock states, request identities, claims, escrow and persistence state for purchase success, rejection, disconnect, retry, restart, and reconnect workflows.",
+        "A conservation report proves no duplicated or lost item or currency and no unexpected maintenance, recovery, or module readiness state."
+      ]
+    },
+    {
+      "id": "EXT-005",
+      "name": "Authenticated EnVisione GitHub access for issue, branch, pull request, check, and closure synchronization",
+      "affected_requirements": [
+        "CORE-REQ-002",
+        "CORE-REQ-009",
+        "CORE-REQ-017",
+        "CORE-REQ-019",
+        "CORE-REQ-020"
+      ],
+      "mandatory_for_endpoint": true,
+      "kind": "other",
+      "availability": "available",
+      "authorization": "authorized",
+      "blocked_plan_approved": false,
+      "required_evidence": [
+        "The authenticated GitHub identity is EnVisione and the remote resolves to MCEnvision/FutureShops.",
+        "Each discovered defect has a duplicate search record, issue link, implementation link, evidence link, and final closure state.",
+        "Each support branch and integration pull request reports the required green checks at the exact merged revision."
+      ]
+    }
+  ],
+  "phases": [
+    {
+      "id": "CORE-PHASE-000",
+      "owner": "Repository governance",
+      "dependencies": [],
+      "canonicalRequirements": [
+        "CORE-REQ-001",
+        "CORE-REQ-002",
+        "CORE-REQ-009",
+        "CORE-REQ-016"
+      ]
+    },
+    {
+      "id": "CORE-PHASE-001",
+      "owner": "NeoForge client integration",
+      "dependencies": [
+        "CORE-PHASE-000",
+        "CORE-REQ-002",
+        "CORE-REQ-016",
+        "DEC-004",
+        "DEC-005",
+        "EXT-001"
+      ],
+      "canonicalRequirements": [
+        "CORE-REQ-003"
+      ]
+    },
+    {
+      "id": "CORE-PHASE-002",
+      "owner": "Forge defect integration",
+      "dependencies": [
+        "CORE-PHASE-000",
+        "CORE-PHASE-001",
+        "CORE-REQ-002",
+        "CORE-REQ-016",
+        "DEC-002",
+        "DEC-004",
+        "DEC-005",
+        "EXT-002",
+        "EXT-003",
+        "EXT-004"
+      ],
+      "canonicalRequirements": [
+        "CORE-REQ-004",
+        "CORE-REQ-005",
+        "CORE-REQ-006"
+      ]
+    },
+    {
+      "id": "CORE-PHASE-003",
+      "owner": "Admin shop editor",
+      "dependencies": [
+        "CORE-PHASE-002",
+        "CORE-REQ-002",
+        "CORE-REQ-016",
+        "DEC-003"
+      ],
+      "canonicalRequirements": [
+        "CORE-REQ-007",
+        "CORE-REQ-008"
+      ]
+    },
+    {
+      "id": "CORE-PHASE-004",
+      "owner": "Security review",
+      "dependencies": [
+        "CORE-PHASE-003",
+        "CORE-REQ-009",
+        "CORE-REQ-016",
+        "DEC-002",
+        "DEC-006",
+        "EXT-005"
+      ],
+      "canonicalRequirements": [
+        "CORE-REQ-010",
+        "CORE-REQ-011"
+      ]
+    },
+    {
+      "id": "CORE-PHASE-005",
+      "owner": "Persistence subsystem",
+      "dependencies": [
+        "CORE-PHASE-004",
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "DEC-006",
+        "EXT-003",
+        "EXT-005"
+      ],
+      "canonicalRequirements": [
+        "CORE-REQ-012",
+        "CORE-REQ-014"
+      ]
+    },
+    {
+      "id": "CORE-PHASE-006",
+      "owner": "FutureShops server integration architecture",
+      "dependencies": [
+        "CORE-PHASE-005",
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "CORE-REQ-012",
+        "CORE-REQ-014",
+        "DEC-006",
+        "EXT-004",
+        "EXT-005"
+      ],
+      "canonicalRequirements": [
+        "CORE-REQ-013"
+      ]
+    },
+    {
+      "id": "CORE-PHASE-007",
+      "owner": "Release readiness",
+      "dependencies": [
+        "CORE-PHASE-006",
+        "CORE-REQ-001",
+        "CORE-REQ-002",
+        "CORE-REQ-003",
+        "CORE-REQ-004",
+        "CORE-REQ-005",
+        "CORE-REQ-006",
+        "CORE-REQ-007",
+        "CORE-REQ-008",
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "CORE-REQ-012",
+        "CORE-REQ-013",
+        "CORE-REQ-014",
+        "CORE-REQ-016",
+        "DEC-001",
+        "DEC-002",
+        "DEC-003",
+        "DEC-004",
+        "DEC-005",
+        "DEC-006",
+        "EXT-001",
+        "EXT-002",
+        "EXT-003",
+        "EXT-004",
+        "EXT-005"
+      ],
+      "canonicalRequirements": [
+        "CORE-REQ-015",
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-020"
+      ]
+    }
+  ],
+  "completionEndpoint": "Every scoped open issue, currently issues 22, 25, 32, 33, and 34, plus every repository owned defect verified during the rolling audit, is deduplicated, fixed, regression tested, merged into the correct 1.20.1 or 1.21.1 support branch, supported by mandatory reporter acceptance or exact deterministic reproduction evidence, and closed. Both exact candidate revisions pass the complete security, privacy, command, persistence, integration, runtime, documentation, and repeated clean audit gates, all required branches and checks are green, and the validated Forge 3.0.0-beta.2 and NeoForge 2.2.1 artifacts are prepared with integrity evidence. CurseForge, Modrinth, GitHub release publication, stable publication, and announcements are not part of this endpoint and require later explicit authorization.",
+  "goalCreator": {
+    "mandatoryBoundary": "CORE-REQ-001 through CORE-REQ-020 on the Forge 1.20.1 and NeoForge 1.21.1 support lines, including rolling verified defects and all mandatory audits.",
+    "optionalFutureDisposition": "excluded",
+    "lockedOwnerDecisions": "DEC-001 through DEC-006.",
+    "activePhase": "CORE-PHASE-000",
+    "nextExecutableAction": "Read phases/plan-phase-000.md through EOF, verify the exact starting repository and GitHub state without changing unrelated files, and execute its first unfinished evidence gate.",
+    "knownFailingChecks": "None are asserted by plan authoring. Baseline and exact-candidate checks must be run and recorded by execution.",
+    "knownExternalBlockers": "Issue 22 reporter acceptance on the affected NeoForge 1.21.1 Windows client environment, Issue 25 affected world evidence and reporter acceptance on Forge 1.20.1, Exact issue 32 invalid player data evidence or deterministic reproduction, and Controlled isolated Forge 1.20.1 multiplayer verification environment.",
+    "requiredEvidenceGates": "Valid plan set, exact baseline, issue-before-repair traceability, line-specific deterministic tests and builds, server and client smoke tests, multiplayer and recovery evidence, reporter acceptance, clean security, command, persistence, and integration audits, documentation reconciliation, exact artifact inspection, checksums, green GitHub state, and two unchanged-revision final audits."
+  }
+}

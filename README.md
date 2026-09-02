@@ -10,6 +10,8 @@ The repository default branch is `1.20.1`, which is the canonical Forge 1.20.1 i
 The separate `1.21.1` branch contains the NeoForge line. Forge 1.20.1 fixes and releases target
 `1.20.1`, not the historical `master` branch.
 
+The active repository polish and defect closure contract is the [authoritative plan](plan.md). The earlier [3.0 implementation plan](FutureShops3-0Plan.MD) and [advanced trade offers plan](FutureShops3-1TradeOffersPlan.MD) are retained as historical implementation records.
+
 Supported runtime:
 
 | Component | Version |
