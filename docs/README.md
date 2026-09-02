@@ -36,5 +36,9 @@
 * [NeoForge baseline](verification/phase-000/neoforge-baseline-2026-09-01.md)
 * [Deterministic harness contract](verification/phase-000/harness-contract-2026-09-01.md)
 * [Phase 000 completion packet](verification/phase-000/completion-2026-09-01.md)
+* [Phase 002 baseline and runtime evidence](verification/phase-002/baseline-2026-09-02.md)
+* [Issue 25 catalog migration matrix](verification/phase-002/issue-25-catalog-matrix-2026-09-02.md)
+* [Issue 32 player state corpus](verification/phase-002/issue-32-player-state-2026-09-02.md)
+* [Issue 34 finite stock matrix](verification/phase-002/issue-34-finite-stock-2026-09-02.md)
 
 The root [README](../README.md) is the installation and contributor entry point. [Technical documentation](../DOCUMENTATION.md) is the maintainer architecture and operations reference. The active repository polish and defect closure contract is the [authoritative plan](../plan.md). The [3.0 implementation plan](../FutureShops3-0Plan.MD) and [advanced trade offers plan](../FutureShops3-1TradeOffersPlan.MD) are retained as historical records.
