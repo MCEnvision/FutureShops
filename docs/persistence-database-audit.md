@@ -175,6 +175,13 @@ smoke command is only accepted when the server reaches `Done`, FutureShops
 initializes, and no crash report or startup exception is produced. A timeout
 after those observations is a bounded process stop, not a product failure.
 
+The integration pull request checks all passed. The quality Gradle, quality
+dependency review, quality secret scan, Java and Kotlin CodeQL, and Python
+CodeQL checks completed successfully. Documentation, Node, and dependency
+submission jobs were intentionally skipped because this repository has no
+matching inputs. The signed annotated tag `phase-005-persistence-recovery`
+points to the merged revision.
+
 ## Operator recovery boundary
 
 Recovery must use one complete matching world, escrow, playerdata, and config

@@ -106,6 +106,12 @@ packaged build. The packaged beta jar is
 `6c1d0f94b308a91e10bf754d5768cb1d48fbbb30eb169c5e7088471926a839ba` and
 contains `META-INF/mods.toml` and `futureshops.mixins.json`.
 
+The integration checks passed for quality Gradle, quality dependency review,
+quality secret scan, Java and Kotlin CodeQL, and Python CodeQL. Documentation,
+Node, and dependency submission jobs were intentionally skipped because this
+repository has no matching inputs. The signed annotated tag
+`phase-005-persistence-recovery` points to the merged revision.
+
 The merged revision reached `Done`, initialized FutureShops, loaded the default
 shop and 12 Bazaar products, and stopped cleanly through RCON. Two independent
 Forge clients completed the modded handshake, joined the same world, and
