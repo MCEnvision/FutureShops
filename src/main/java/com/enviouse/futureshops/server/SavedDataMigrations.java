@@ -2,6 +2,8 @@ package com.enviouse.futureshops.server;
 
 import com.mojang.logging.LogUtils;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import org.slf4j.Logger;
 
 /**
@@ -61,5 +63,23 @@ public final class SavedDataMigrations {
         }
         return false;
     }
-}
 
+    public static ListTag requireList(
+            CompoundTag tag,
+            String key,
+            int elementType,
+            int maximum,
+            String label
+    ) {
+        if (!tag.contains(key)) {
+            return new ListTag();
+        }
+        Tag raw = tag.get(key);
+        if (!(raw instanceof ListTag list)
+                || (!list.isEmpty() && list.getElementType() != elementType)
+                || list.size() > maximum) {
+            throw new IllegalArgumentException(label + " list is invalid");
+        }
+        return list;
+    }
+}

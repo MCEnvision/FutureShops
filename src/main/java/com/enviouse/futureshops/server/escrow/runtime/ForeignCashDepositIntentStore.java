@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.server.escrow.runtime;
 
 import com.enviouse.futureshops.mixin.PlayerListInvoker;
+import com.enviouse.futureshops.server.SavedDataMigrations;
 import com.enviouse.futureshops.server.escrow.inventory.PlayerDataDurabilityBarrier;
 import com.enviouse.futureshops.server.escrow.inventory.PlayerInventoryReceiptStore;
 import com.enviouse.futureshops.server.escrow.redemption.ProtectedCashInventoryState;
@@ -282,7 +283,11 @@ final class ForeignCashDepositIntentStore {
             }
             ProtectedCashInventoryState current =
                     ProtectedCashInventoryState.fromPlayerInventoryTag(
-                            root.getList("Inventory", Tag.TAG_COMPOUND));
+                            SavedDataMigrations.requireList(
+                                    root, "Inventory", Tag.TAG_COMPOUND,
+                                    PlayerInventoryReceiptStore
+                                            .MAX_SERIALIZED_INVENTORY_ENTRIES,
+                                    "Foreign cash player inventory"));
             if (!current.equals(evidence.inventoryState())) {
                 return Inspection.unknown(playerId, transactionId,
                         "Foreign cash inventory diverges from its evidence");

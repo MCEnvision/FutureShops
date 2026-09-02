@@ -19,6 +19,8 @@ import java.util.stream.Collectors;
 public class DepartmentSavedData extends SavedData {
     private static final String DATA_NAME = "futureshops_departments";
     private static final int CURRENT_VERSION = 1;
+    private static final int MAXIMUM_DEPARTMENTS = 512;
+    private static final int MAXIMUM_NAME_LENGTH = 48;
     private final Set<String> departments = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
 
     public DepartmentSavedData() {
@@ -35,7 +37,9 @@ public class DepartmentSavedData extends SavedData {
     public boolean addDepartment(String name) {
         if (name == null || name.isBlank()) return false;
         String trimmed = name.trim();
-        if (trimmed.length() > 48) trimmed = trimmed.substring(0, 48);
+        if (trimmed.length() > MAXIMUM_NAME_LENGTH
+                || (departments.size() >= MAXIMUM_DEPARTMENTS
+                && !departments.contains(trimmed))) return false;
         boolean added = departments.add(trimmed);
         if (added) setDirty();
         return added;
@@ -78,26 +82,37 @@ public class DepartmentSavedData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag) {
+        if (departments.size() > MAXIMUM_DEPARTMENTS) {
+            throw new IllegalStateException("Department list limit is exceeded");
+        }
         SavedDataMigrations.writeVersion(tag, CURRENT_VERSION);
         ListTag list = new ListTag();
         for (String dept : departments) {
+            if (dept == null || dept.isBlank() || dept.length() > MAXIMUM_NAME_LENGTH) {
+                throw new IllegalStateException("Department name is invalid");
+            }
             list.add(StringTag.valueOf(dept));
         }
         tag.put("Departments", list);
         return tag;
     }
 
-    private static DepartmentSavedData load(CompoundTag tag) {
+    static DepartmentSavedData load(CompoundTag tag) {
         DepartmentSavedData data = new DepartmentSavedData();
         int version = SavedDataMigrations.readVersion(tag);
         SavedDataMigrations.needsMigration(DATA_NAME, version, CURRENT_VERSION);
-        if (tag.contains("Departments", Tag.TAG_LIST)) {
-            ListTag list = tag.getList("Departments", Tag.TAG_STRING);
+        if (tag.contains("Departments")) {
+            ListTag list = SavedDataMigrations.requireList(
+                    tag, "Departments", Tag.TAG_STRING,
+                    MAXIMUM_DEPARTMENTS, "Department");
             for (Tag t : list) {
-                data.departments.add(t.getAsString());
+                String name = t.getAsString().trim();
+                if (name.isEmpty() || name.length() > MAXIMUM_NAME_LENGTH) {
+                    throw new IllegalArgumentException("Department name is invalid");
+                }
+                data.departments.add(name);
             }
         }
         return data;
     }
 }
-

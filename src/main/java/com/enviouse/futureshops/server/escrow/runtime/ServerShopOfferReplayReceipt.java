@@ -4,6 +4,7 @@ import com.enviouse.futureshops.catalog.offer.AcquireOfferOption;
 import com.enviouse.futureshops.catalog.offer.OfferAction;
 import com.enviouse.futureshops.catalog.offer.OfferLimitPolicy;
 import com.enviouse.futureshops.catalog.offer.SellOfferOption;
+import com.enviouse.futureshops.server.SavedDataMigrations;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -298,11 +299,9 @@ public record ServerShopOfferReplayReceipt(
     }
 
     static ServerShopOfferReplayReceipt load(CompoundTag tag) {
-        ListTag usage = tag.getList("Usage", Tag.TAG_COMPOUND);
-        if (usage.size() > MAXIMUM_USAGE_LINES) {
-            throw new IllegalArgumentException(
-                    "Server shop offer replay usage limit is exceeded");
-        }
+        ListTag usage = SavedDataMigrations.requireList(
+                tag, "Usage", Tag.TAG_COMPOUND,
+                MAXIMUM_USAGE_LINES, "Server shop offer replay usage");
         List<UsageEvidence> evidence =
                 new ArrayList<>(usage.size());
         for (int index = 0; index < usage.size(); index++) {

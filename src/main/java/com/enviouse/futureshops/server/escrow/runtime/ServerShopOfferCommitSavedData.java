@@ -261,11 +261,9 @@ public final class ServerShopOfferCommitSavedData extends SavedData {
                 DATA_ID, loadedVersion, CURRENT_VERSION);
         ServerShopOfferCommitSavedData data =
                 new ServerShopOfferCommitSavedData();
-        ListTag entries = tag.getList("Commits", Tag.TAG_COMPOUND);
-        if (entries.size() > MAXIMUM_COMMITS) {
-            throw new IllegalArgumentException(
-                    "Server shop offer commit limit is exceeded");
-        }
+        ListTag entries = SavedDataMigrations.requireList(
+                tag, "Commits", Tag.TAG_COMPOUND,
+                MAXIMUM_COMMITS, "Server shop offer commits");
         for (int index = 0;
              index < entries.size() && data.commits.size()
                      < MAXIMUM_COMMITS;
@@ -289,12 +287,9 @@ public final class ServerShopOfferCommitSavedData extends SavedData {
             }
         }
         if (loadedVersion >= 2) {
-            ListTag archived = tag.getList(
-                    "Archives", Tag.TAG_COMPOUND);
-            if (archived.size() > MAXIMUM_ARCHIVES) {
-                throw new IllegalArgumentException(
-                        "Server shop offer replay archive limit is exceeded");
-            }
+            ListTag archived = SavedDataMigrations.requireList(
+                    tag, "Archives", Tag.TAG_COMPOUND,
+                    MAXIMUM_ARCHIVES, "Server shop offer replay archives");
             for (int index = 0;
                  index < archived.size(); index++) {
                 try {

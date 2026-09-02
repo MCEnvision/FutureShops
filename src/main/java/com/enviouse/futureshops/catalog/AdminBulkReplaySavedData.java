@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.catalog;
 
+import com.enviouse.futureshops.server.SavedDataMigrations;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -22,15 +23,19 @@ public final class AdminBulkReplaySavedData extends SavedData {
 
     public static AdminBulkReplaySavedData load(CompoundTag tag) {
         AdminBulkReplaySavedData data = new AdminBulkReplaySavedData();
-        ListTag entries = tag.getList("entries", Tag.TAG_COMPOUND);
-        for (int index = 0; index < entries.size() && data.outcomes.size() < MAX_ENTRIES; index++) {
+        ListTag entries = SavedDataMigrations.requireList(
+                tag, "entries", Tag.TAG_COMPOUND, MAX_ENTRIES,
+                "Administrator bulk replay entries");
+        for (int index = 0; index < entries.size(); index++) {
             CompoundTag entry = entries.getCompound(index);
+            ListTag rowTags = SavedDataMigrations.requireList(
+                    entry, "rows", Tag.TAG_COMPOUND,
+                    AdminBulkListingPlanner.MAX_SELECTIONS,
+                    "Administrator bulk replay rows");
             try {
                 UUID requestId = UUID.fromString(entry.getString("requestId"));
-                ListTag rowTags = entry.getList("rows", Tag.TAG_COMPOUND);
                 java.util.ArrayList<AdminBulkListingPlanner.Row> rows = new java.util.ArrayList<>();
-                for (int rowIndex = 0; rowIndex < rowTags.size()
-                        && rows.size() < AdminBulkListingPlanner.MAX_SELECTIONS; rowIndex++) {
+                for (int rowIndex = 0; rowIndex < rowTags.size(); rowIndex++) {
                     CompoundTag row = rowTags.getCompound(rowIndex);
                     rows.add(new AdminBulkListingPlanner.Row(
                             row.getInt("ordinal"), row.getString("itemId"), row.getString("nbt"),
@@ -48,8 +53,10 @@ public final class AdminBulkReplaySavedData extends SavedData {
                 if (!preview.fingerprint().isBlank()) {
                     data.outcomes.put(requestId, preview);
                 }
-            } catch (RuntimeException ignored) {
-                // Ignore one malformed historical outcome and retain all valid outcomes.
+            } catch (RuntimeException exception) {
+                throw new IllegalArgumentException(
+                        "Administrator bulk replay entry " + index
+                                + " is invalid", exception);
             }
         }
         return data;

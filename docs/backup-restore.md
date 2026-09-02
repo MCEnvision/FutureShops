@@ -115,6 +115,19 @@ the matching player data can leave deliveries in manual review.
 restored world remains internally consistent even against a newer config, but keeping config and
 world from the same point in time avoids surprises.
 
+## Persistence bounds and audit
+
+Every world `SavedData` decoder rejects oversized collections, invalid nested NBT types,
+duplicate identities, invalid signed values, and oversized identifiers or snapshots before
+copying them into live state. The same limits apply when state is saved. This includes the
+physical mint registry, departments, franchises, transaction history, player shop settlements,
+saved shop configurations, shop limits, stock refresh timestamps, dynamic pricing state, admin
+categories, and shop block listings and bundle outputs. A rejected store fails closed and keeps
+the last valid cohort or maintenance state; it is never repaired by deleting one file.
+
+The complete inventory, schema and migration matrix, state lineage, conservation boundary, and
+local issue 32 successor corpus are maintained in [Persistence and database audit](persistence-database-audit.md).
+
 ## The 3.0 migration
 
 On first 3.0 startup against an existing world, FutureShops:

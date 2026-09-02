@@ -10,6 +10,7 @@ The `3.0.0-beta.1` implementation is published on CurseForge and Modrinth as a b
 * [Configuration examples](docs/config-3.0-examples.md)
 * [Bazaar product definitions](docs/bazaar-products.md)
 * [Backup and restore](docs/backup-restore.md)
+* [Persistence and database audit](docs/persistence-database-audit.md)
 * [Compatibility matrix](docs/compatibility-matrix.md)
 * [Physical currency and ATM](docs/physical-currency-atm.md)
 * [Advanced trade offer configuration](docs/config-3.1-offers.md)
@@ -161,6 +162,8 @@ For recovery:
 6. Verify balances, claims, listings, and orders before reopening trading.
 
 See [Backup and restore](docs/backup-restore.md) for the full procedure.
+
+The phase 005 persistence and database audit is in [Persistence and database audit](docs/persistence-database-audit.md). It records the complete SavedData inventory, file backed state, schema bounds, migration boundary, conservation lineage, and the local corruption and recovery evidence contract.
 
 Catalog stock migration verifies a materialized store before retrying an interrupted cutover. A
 verified store is adopted without reseeding, and a cutover that already froze the legacy catalog

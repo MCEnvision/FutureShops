@@ -64,11 +64,9 @@ public final class ServerShopIntentSavedData
             throw new IllegalStateException(
                     "Server shop intent entries are missing");
         }
-        ListTag entries = tag.getList(ENTRIES_KEY, Tag.TAG_COMPOUND);
-        if (entries.size() > MAXIMUM_ENTRIES) {
-            throw new IllegalStateException(
-                    "Server shop intent entry capacity is exceeded");
-        }
+        ListTag entries = SavedDataMigrations.requireList(
+                tag, ENTRIES_KEY, Tag.TAG_COMPOUND,
+                MAXIMUM_ENTRIES, "Server shop intent entries");
         try {
             for (Tag raw : entries) {
                 CompoundTag entry = (CompoundTag) raw;

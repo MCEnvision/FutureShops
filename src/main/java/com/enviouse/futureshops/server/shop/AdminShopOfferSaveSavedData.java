@@ -74,11 +74,9 @@ public final class AdminShopOfferSaveSavedData extends SavedData {
                 CURRENT_VERSION);
         AdminShopOfferSaveSavedData data =
                 new AdminShopOfferSaveSavedData();
-        ListTag values = tag.getList("Receipts", Tag.TAG_COMPOUND);
-        if (values.size() > MAXIMUM_RECEIPTS) {
-            throw new IllegalArgumentException(
-                    "Admin offer save receipt limit is exceeded");
-        }
+        ListTag values = SavedDataMigrations.requireList(
+                tag, "Receipts", Tag.TAG_COMPOUND,
+                MAXIMUM_RECEIPTS, "Admin offer save receipts");
         for (int index = 0; index < values.size(); index++) {
             try {
                 Receipt receipt = Receipt.load(
@@ -175,12 +173,9 @@ public final class AdminShopOfferSaveSavedData extends SavedData {
                             .decodeListingBytes(
                                     tag.getByteArray("Snapshot")))
                             : Optional.empty();
-            ListTag issueTags =
-                    tag.getList("Issues", Tag.TAG_COMPOUND);
-            if (issueTags.size() > MAXIMUM_ISSUES) {
-                throw new IllegalArgumentException(
-                        "Admin offer save issue count is invalid");
-            }
+            ListTag issueTags = SavedDataMigrations.requireList(
+                    tag, "Issues", Tag.TAG_COMPOUND,
+                    MAXIMUM_ISSUES, "Admin offer save issues");
             List<OfferValidationIssue> issues =
                     new ArrayList<>(issueTags.size());
             for (int index = 0; index < issueTags.size(); index++) {

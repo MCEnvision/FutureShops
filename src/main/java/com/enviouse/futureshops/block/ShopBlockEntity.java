@@ -3,6 +3,7 @@ package com.enviouse.futureshops.block;
 import com.enviouse.futureshops.catalog.offer.ServerShopOfferListing;
 import com.enviouse.futureshops.catalog.offer.ServerShopOfferValidator;
 import com.enviouse.futureshops.init.ModBlockEntities;
+import com.enviouse.futureshops.server.SavedDataMigrations;
 import com.enviouse.futureshops.server.shop.PlayerShopRegistrySavedData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -42,7 +43,10 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     private final AnimatableInstanceCache geoCache = GeckoLibUtil.createInstanceCache(this);
     /** Default listing cap when maxListings is not overridden (-1 = unlimited). */
     public static final int DEFAULT_MAX_LISTINGS = -1;
+    public static final int MAX_PERSISTED_LISTINGS = 4_096;
     public static final int MAX_BUNDLE_OUTPUTS = 36;
+    public static final int MAX_ITEM_ID_LENGTH = 256;
+    public static final int MAX_LISTING_NBT_CHARACTERS = 262_144;
     /**
      * Hard cap on the number of storage containers a single shop may link for its
      * sale-item stock. Stock is summed across all links and a buy pulls across them
@@ -61,6 +65,17 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
      * Item 11: A single entry in a bundle listing — represents one output item and its quantity.
      */
     public record BundleEntry(String itemId, int count, @Nullable CompoundTag nbtTag) {
+        public BundleEntry {
+            if (itemId == null || itemId.isBlank()
+                    || itemId.length() > MAX_ITEM_ID_LENGTH) {
+                throw new IllegalArgumentException("Bundle item identifier is invalid");
+            }
+            if (count <= 0) {
+                throw new IllegalArgumentException("Bundle item count is invalid");
+            }
+            validateListingNbt(nbtTag);
+        }
+
         public CompoundTag save() {
             CompoundTag tag = new CompoundTag();
             tag.putString("ItemId", itemId);
@@ -73,8 +88,12 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
 
         public static BundleEntry load(CompoundTag tag) {
             String id = tag.getString("ItemId");
-            int count = Math.max(1, tag.getInt("Count"));
-            CompoundTag nbt = tag.contains("NbtTag", Tag.TAG_COMPOUND) ? tag.getCompound("NbtTag") : null;
+            int count = tag.getInt("Count");
+            if (tag.contains("NbtTag") && !tag.contains("NbtTag", Tag.TAG_COMPOUND)) {
+                throw new IllegalArgumentException("Bundle item nbt type is invalid");
+            }
+            CompoundTag nbt = tag.contains("NbtTag", Tag.TAG_COMPOUND)
+                    ? tag.getCompound("NbtTag") : null;
             return new BundleEntry(id, count, nbt);
         }
     }
@@ -355,7 +374,9 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     /** Per-block listing cap. -1 = unlimited. */
     public int getMaxListings() { return maxListings; }
     public void setMaxListings(int maxListings) {
-        this.maxListings = maxListings;
+        this.maxListings = maxListings < 0
+                ? DEFAULT_MAX_LISTINGS
+                : Math.min(maxListings, MAX_PERSISTED_LISTINGS);
         setChanged();
     }
     /** Effective cap: returns Integer.MAX_VALUE when unlimited (-1). */
@@ -590,6 +611,9 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
      * at the destination) or the owner UUID (which must stay whoever placed the block).
      */
     public CompoundTag exportConfigSnapshot() {
+        if (listings.size() > MAX_PERSISTED_LISTINGS) {
+            throw new IllegalStateException("Shop listing count is invalid");
+        }
         CompoundTag tag = new CompoundTag();
         tag.putString("ShopName", shopName);
         tag.putString("Description", description);
@@ -627,18 +651,26 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         }
         if (tag.contains("FloatingIconMode")) floatingIconMode = FloatingIconMode.byName(tag.getString("FloatingIconMode"));
         if (tag.contains("FloatingIconItem")) floatingIconItem = tag.getString("FloatingIconItem");
+        if (tag.contains("Listings") && !tag.contains("Listings", Tag.TAG_LIST)) {
+            throw new IllegalArgumentException("Shop listings have the wrong type");
+        }
         if (tag.contains("Listings", Tag.TAG_LIST)) {
-            listings.clear();
-            ListTag listingTags = tag.getList("Listings", Tag.TAG_COMPOUND);
+            ListTag listingTags = SavedDataMigrations.requireList(
+                    tag, "Listings", Tag.TAG_COMPOUND,
+                    MAX_PERSISTED_LISTINGS, "Shop listings");
+            List<Listing> loadedListings = new ArrayList<>(listingTags.size());
+            boolean loadedMigration = false;
             String namespace = listingMigrationNamespace();
             for (int index = 0; index < listingTags.size(); index++) {
                 Listing listing = Listing.load(
                         listingTags.getCompound(index),
                         namespace, index);
-                offerPersistenceMigrationPending |=
-                        listing.migratedOfferPersistence();
-                listings.add(listing);
+                loadedMigration |= listing.migratedOfferPersistence();
+                loadedListings.add(listing);
             }
+            listings.clear();
+            listings.addAll(loadedListings);
+            offerPersistenceMigrationPending = loadedMigration;
             if (visibleListingIndex >= listings.size()) {
                 visibleListingIndex = listings.isEmpty() ? -1 : 0;
             }
@@ -650,6 +682,9 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     @Override
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
+        if (listings.size() > MAX_PERSISTED_LISTINGS) {
+            throw new IllegalStateException("Shop listing count is invalid");
+        }
         if (ownerUuid != null) {
             tag.putUUID("OwnerUUID", ownerUuid);
         }
@@ -708,7 +743,11 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         singleItemMode = tag.getBoolean("SingleItemMode");
         visibleListingIndex = tag.contains("VisibleListingIndex") ? tag.getInt("VisibleListingIndex") : -1;
         barterStorageSame = tag.contains("BarterStorageSame") ? tag.getBoolean("BarterStorageSame") : true;
-        maxListings = tag.contains("MaxListings") ? tag.getInt("MaxListings") : DEFAULT_MAX_LISTINGS;
+        int persistedMaxListings = tag.contains("MaxListings")
+                ? tag.getInt("MaxListings") : DEFAULT_MAX_LISTINGS;
+        maxListings = persistedMaxListings < 0
+                ? DEFAULT_MAX_LISTINGS
+                : Math.min(persistedMaxListings, MAX_PERSISTED_LISTINGS);
         displayYOffset = clamp(tag.contains("DisplayYOffset") ? tag.getFloat("DisplayYOffset") : 0.0F,
                 DISPLAY_Y_OFFSET_MIN, DISPLAY_Y_OFFSET_MAX);
         displayScale = clamp(tag.contains("DisplayScale") ? tag.getFloat("DisplayScale") : 1.0F,
@@ -718,18 +757,22 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         adminShopMode = placedByCreative && tag.getBoolean("AdminShopMode");
         floatingIconMode = FloatingIconMode.byName(tag.getString("FloatingIconMode"));
         floatingIconItem = tag.getString("FloatingIconItem");
-        listings.clear();
-        offerPersistenceMigrationPending = false;
+        List<Listing> loadedListings = new ArrayList<>();
+        boolean loadedMigration = false;
+        if (tag.contains("Listings") && !tag.contains("Listings", Tag.TAG_LIST)) {
+            throw new IllegalStateException("Shop listings have the wrong type");
+        }
         if (tag.contains("Listings", Tag.TAG_LIST)) {
-            ListTag listingTags = tag.getList("Listings", Tag.TAG_COMPOUND);
+            ListTag listingTags = SavedDataMigrations.requireList(
+                    tag, "Listings", Tag.TAG_COMPOUND,
+                    MAX_PERSISTED_LISTINGS, "Shop listings");
             String namespace = listingMigrationNamespace();
             for (int index = 0; index < listingTags.size(); index++) {
                 Listing listing = Listing.load(
                         listingTags.getCompound(index),
                         namespace, index);
-                offerPersistenceMigrationPending |=
-                        listing.migratedOfferPersistence();
-                listings.add(listing);
+                loadedMigration |= listing.migratedOfferPersistence();
+                loadedListings.add(listing);
             }
         } else {
             String listedItemId = tag.getString("ListedItemId");
@@ -747,10 +790,13 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
                 listing.listingId = Listing.migratedListingId(
                         listingMigrationNamespace(), 0);
                 listing.migrateLegacyOffer();
-                offerPersistenceMigrationPending = true;
-                listings.add(listing);
+                loadedMigration = true;
+                loadedListings.add(listing);
             }
         }
+        listings.clear();
+        listings.addAll(loadedListings);
+        offerPersistenceMigrationPending = loadedMigration;
         linkedStoragePositions.clear();
         if (tag.contains("LinkedStorages", Tag.TAG_LONG_ARRAY)) {
             for (long packed : tag.getLongArray("LinkedStorages")) {
@@ -774,6 +820,13 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         String owner = ownerUuid == null
                 ? ZERO_UUID.toString() : ownerUuid.toString();
         return owner + "." + worldPosition.asLong() + "." + shopId;
+    }
+
+    private static void validateListingNbt(@Nullable CompoundTag nbtTag) {
+        if (nbtTag != null
+                && nbtTag.toString().length() > MAX_LISTING_NBT_CHARACTERS) {
+            throw new IllegalArgumentException("Shop listing nbt exceeds its limit");
+        }
     }
 
     static void writeRegistryIdentity(CompoundTag tag, UUID shopId, long revision) {
@@ -929,6 +982,7 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         }
         public CompoundTag barterNbtTag() { return barterNbtTag; }
         public void setBarterNbtTag(CompoundTag barterNbtTag) {
+            validateListingNbt(barterNbtTag);
             this.barterNbtTag = barterNbtTag;
             refreshLegacyOffer();
         }
@@ -995,6 +1049,7 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         }
         public CompoundTag nbtTag() { return nbtTag; }
         public void setNbtTag(CompoundTag nbtTag) {
+            validateListingNbt(nbtTag);
             this.nbtTag = nbtTag;
             refreshLegacyOffer();
         }
@@ -1005,7 +1060,9 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         }
 
         public void addBundleOutput(String itemId, int count, @Nullable CompoundTag nbtTag) {
-            if (bundleOutputs.size() >= MAX_BUNDLE_OUTPUTS) return;
+            if (bundleOutputs.size() >= MAX_BUNDLE_OUTPUTS
+                    || itemId == null || itemId.isBlank()
+                    || itemId.length() > MAX_ITEM_ID_LENGTH) return;
             bundleOutputs.add(new BundleEntry(itemId, Math.max(1, count), nbtTag));
             refreshLegacyOffer();
         }
@@ -1065,6 +1122,14 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         public long calculateBuybackTotal(int qty) { return effectiveBuybackUnitPriceMinor() * Math.max(0, qty); }
 
         CompoundTag save() {
+            if (listingId == null || listingId.isBlank()
+                    || listingId.length() > MAX_ITEM_ID_LENGTH
+                    || itemId == null || itemId.isBlank()
+                    || itemId.length() > MAX_ITEM_ID_LENGTH) {
+                throw new IllegalStateException("Shop listing identity is invalid");
+            }
+            validateListingNbt(nbtTag);
+            validateListingNbt(barterNbtTag);
             CompoundTag tag = new CompoundTag();
             tag.putString("ListingId", listingId);
             tag.putInt(OFFER_SCHEMA_KEY, offerSchemaVersion);
@@ -1126,6 +1191,10 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
             Listing listing = new Listing();
             listing.legacyOfferProjection = false;
             listing.itemId = tag.getString("ItemId");
+            if (listing.itemId.isBlank()
+                    || listing.itemId.length() > MAX_ITEM_ID_LENGTH) {
+                throw new IllegalStateException("Shop listing item identifier is invalid");
+            }
             boolean schemaPresent = tag.contains(OFFER_SCHEMA_KEY);
             boolean payloadPresent = tag.contains(OFFER_PAYLOAD_KEY);
             boolean malformedSchema = schemaPresent
@@ -1166,12 +1235,18 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
             listing.nbtAware = tag.getBoolean("NbtAware");
             if (tag.contains("NbtTag", Tag.TAG_COMPOUND)) {
                 listing.nbtTag = tag.getCompound("NbtTag");
+                validateListingNbt(listing.nbtTag);
+            } else if (tag.contains("NbtTag")) {
+                throw new IllegalStateException("Shop listing nbt type is invalid");
             }
             listing.barterNbtAware =
                     tag.getBoolean("BarterNbtAware");
             if (tag.contains("BarterNbtTag", Tag.TAG_COMPOUND)) {
                 listing.barterNbtTag =
                         tag.getCompound("BarterNbtTag");
+                validateListingNbt(listing.barterNbtTag);
+            } else if (tag.contains("BarterNbtTag")) {
+                throw new IllegalStateException("Shop barter nbt type is invalid");
             }
             listing.hidden = tag.getBoolean("Hidden");
             listing.showcase = tag.getBoolean("Showcase");
@@ -1199,7 +1274,9 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
                         tag.getInt("BuybackBought"));
             }
             if (tag.contains("BundleOutputs", Tag.TAG_LIST)) {
-                ListTag bundleTag = tag.getList("BundleOutputs", Tag.TAG_COMPOUND);
+                ListTag bundleTag = SavedDataMigrations.requireList(
+                        tag, "BundleOutputs", Tag.TAG_COMPOUND,
+                        MAX_BUNDLE_OUTPUTS, "Shop bundle outputs");
                 for (Tag bt : bundleTag) {
                     listing.bundleOutputs.add(BundleEntry.load((CompoundTag) bt));
                 }
@@ -1445,11 +1522,18 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
     public void handleUpdateTag(CompoundTag tag) {
         clientTopStacks.clear();
         if (tag.contains("TopItems", Tag.TAG_LIST)) {
-            ListTag items = tag.getList("TopItems", Tag.TAG_COMPOUND);
+            final ListTag items;
+            try {
+                items = SavedDataMigrations.requireList(
+                        tag, "TopItems", Tag.TAG_COMPOUND,
+                        MAX_PERSISTED_LISTINGS, "Shop top items");
+            } catch (RuntimeException exception) {
+                return;
+            }
             for (Tag t : items) {
                 if (t instanceof CompoundTag ct) {
                     String id = ct.getString("Id");
-                    if (id.isBlank()) continue;
+                    if (id.isBlank() || id.length() > MAX_ITEM_ID_LENGTH) continue;
                     net.minecraft.resources.ResourceLocation rl = net.minecraft.resources.ResourceLocation.tryParse(id);
                     net.minecraft.world.item.Item item = rl == null
                             ? null
@@ -1459,7 +1543,11 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
                     // the renderer never does registry lookups or tag copies.
                     net.minecraft.world.item.ItemStack stack = new net.minecraft.world.item.ItemStack(item);
                     if (ct.contains("Tag", Tag.TAG_COMPOUND)) {
-                        stack.setTag(ct.getCompound("Tag").copy());
+                        CompoundTag displayTag = ct.getCompound("Tag");
+                        if (displayTag.sizeInBytes() > MAX_LISTING_NBT_CHARACTERS) continue;
+                        stack.setTag(displayTag.copy());
+                    } else if (ct.contains("Tag")) {
+                        continue;
                     }
                     clientTopStacks.add(stack);
                 }

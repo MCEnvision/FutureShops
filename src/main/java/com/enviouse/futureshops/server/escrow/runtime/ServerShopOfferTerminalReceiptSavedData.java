@@ -130,11 +130,9 @@ public final class ServerShopOfferTerminalReceiptSavedData
                 DATA_ID, loadedVersion, CURRENT_VERSION);
         ServerShopOfferTerminalReceiptSavedData data =
                 new ServerShopOfferTerminalReceiptSavedData();
-        ListTag values = tag.getList("Receipts", Tag.TAG_COMPOUND);
-        if (values.size() > MAXIMUM_RECEIPTS) {
-            throw new IllegalArgumentException(
-                    "Server shop terminal receipt limit is exceeded");
-        }
+        ListTag values = SavedDataMigrations.requireList(
+                tag, "Receipts", Tag.TAG_COMPOUND,
+                MAXIMUM_RECEIPTS, "Server shop terminal receipts");
         for (int index = 0;
              index < values.size();
              index++) {

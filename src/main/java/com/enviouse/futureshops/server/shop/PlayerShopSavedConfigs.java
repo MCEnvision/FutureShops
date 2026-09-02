@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.server.shop;
 
+import com.enviouse.futureshops.server.SavedDataMigrations;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -23,13 +24,21 @@ public final class PlayerShopSavedConfigs extends SavedData {
     /** Cap per player so a hostile/careless client can't grow the save file unbounded. */
     public static final int MAX_PER_PLAYER = 16;
     public static final int MAX_NAME_LENGTH = 24;
+    private static final int MAXIMUM_PLAYERS = 100_000;
+    private static final int MAXIMUM_SNAPSHOT_NBT_CHARACTERS = 262_144;
 
     /** playerUUID → (name → snapshot), insertion-ordered so the client list is stable. */
     private final Map<UUID, LinkedHashMap<String, CompoundTag>> byPlayer = new LinkedHashMap<>();
 
     public static PlayerShopSavedConfigs load(CompoundTag tag) {
         PlayerShopSavedConfigs data = new PlayerShopSavedConfigs();
+        if (tag.contains("Players") && !tag.contains("Players", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            throw new IllegalArgumentException("Saved shop configuration players are invalid");
+        }
         CompoundTag players = tag.getCompound("Players");
+        if (players.getAllKeys().size() > MAXIMUM_PLAYERS) {
+            throw new IllegalArgumentException("Saved shop configuration player limit is exceeded");
+        }
         for (String uuidKey : players.getAllKeys()) {
             UUID uuid;
             try {
@@ -40,13 +49,24 @@ public final class PlayerShopSavedConfigs extends SavedData {
             CompoundTag named = players.getCompound(uuidKey);
             LinkedHashMap<String, CompoundTag> map = new LinkedHashMap<>();
             // "Order" preserves insertion order across save/load (compound key order is unspecified).
-            var order = named.getList("Order", net.minecraft.nbt.Tag.TAG_STRING);
+            var order = SavedDataMigrations.requireList(
+                    named, "Order", net.minecraft.nbt.Tag.TAG_STRING,
+                    MAX_PER_PLAYER, "Saved shop configuration order");
             CompoundTag entries = named.getCompound("Entries");
+            if (named.contains("Entries") && !named.contains("Entries", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                    || entries.getAllKeys().size() > MAX_PER_PLAYER) {
+                throw new IllegalArgumentException("Saved shop configuration entries are invalid");
+            }
+            java.util.HashSet<String> names = new java.util.HashSet<>();
             for (int i = 0; i < order.size(); i++) {
                 String name = order.getString(i);
-                if (entries.contains(name, net.minecraft.nbt.Tag.TAG_COMPOUND)) {
-                    map.put(name, entries.getCompound(name).copy());
+                if (name.isBlank() || name.length() > MAX_NAME_LENGTH || !names.add(name)
+                        || !entries.contains(name, net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+                    throw new IllegalArgumentException("Saved shop configuration name is invalid");
                 }
+                CompoundTag snapshot = entries.getCompound(name).copy();
+                validateSnapshot(snapshot);
+                map.put(name, snapshot);
             }
             if (!map.isEmpty()) data.byPlayer.put(uuid, map);
         }
@@ -55,12 +75,22 @@ public final class PlayerShopSavedConfigs extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag) {
+        if (byPlayer.size() > MAXIMUM_PLAYERS) {
+            throw new IllegalStateException("Saved shop configuration player limit is exceeded");
+        }
         CompoundTag players = new CompoundTag();
         byPlayer.forEach((uuid, map) -> {
+            if (map.size() > MAX_PER_PLAYER) {
+                throw new IllegalStateException("Saved shop configuration limit is exceeded");
+            }
             CompoundTag named = new CompoundTag();
             var order = new net.minecraft.nbt.ListTag();
             CompoundTag entries = new CompoundTag();
             map.forEach((name, snap) -> {
+                if (name == null || name.isBlank() || name.length() > MAX_NAME_LENGTH) {
+                    throw new IllegalStateException("Saved shop configuration name is invalid");
+                }
+                validateSnapshot(snap);
                 order.add(net.minecraft.nbt.StringTag.valueOf(name));
                 entries.put(name, snap.copy());
             });
@@ -99,6 +129,11 @@ public final class PlayerShopSavedConfigs extends SavedData {
      */
     public boolean save(UUID player, String name, CompoundTag snapshot) {
         if (player == null || snapshot == null) return false;
+        try {
+            validateSnapshot(snapshot);
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
         String safe = normalizeName(name);
         if (safe.isEmpty()) return false;
         LinkedHashMap<String, CompoundTag> map = byPlayer.computeIfAbsent(player, ignored -> new LinkedHashMap<>());
@@ -106,6 +141,12 @@ public final class PlayerShopSavedConfigs extends SavedData {
         map.put(safe, snapshot.copy());
         setDirty();
         return true;
+    }
+
+    private static void validateSnapshot(CompoundTag snapshot) {
+        if (snapshot == null || snapshot.toString().length() > MAXIMUM_SNAPSHOT_NBT_CHARACTERS) {
+            throw new IllegalArgumentException("Saved shop configuration snapshot is too large");
+        }
     }
 
     /** Returns an independent copy of the named snapshot, or null if absent. */

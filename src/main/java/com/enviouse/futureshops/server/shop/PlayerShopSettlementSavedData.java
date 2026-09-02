@@ -13,14 +13,21 @@ import net.minecraft.world.level.saveddata.SavedData;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public final class PlayerShopSettlementSavedData extends SavedData {
     private static final String DATA_NAME = "futureshops_player_shop_settlements";
     private static final int CURRENT_VERSION = 2; // v2: added per-row "nbt" key (SNBT string, "" = none)
+    private static final int MAXIMUM_SETTLEMENTS = 131_072;
+    private static final int MAXIMUM_OWNERS = 32_768;
     private static final int MAX_ROWS_PER_OWNER = 40;
+    private static final int MAXIMUM_TYPE_LENGTH = 32;
+    private static final int MAXIMUM_ITEM_ID_LENGTH = 256;
+    private static final int MAXIMUM_NBT_LENGTH = 262_144;
 
     private final Map<Long, ShopSettlement> settlementsByShopPos = new HashMap<>();
     private final Map<UUID, List<RevenueRow>> rowsByOwner = new HashMap<>();
@@ -30,7 +37,9 @@ public final class PlayerShopSettlementSavedData extends SavedData {
         int version = SavedDataMigrations.readVersion(tag);
         SavedDataMigrations.needsMigration(DATA_NAME, version, CURRENT_VERSION);
 
+        requireList(tag, "settlements", Tag.TAG_COMPOUND, MAXIMUM_SETTLEMENTS);
         ListTag settlementList = tag.getList("settlements", Tag.TAG_COMPOUND);
+        Set<Long> loadedSettlements = new HashSet<>();
         for (Tag value : settlementList) {
             CompoundTag row = (CompoundTag) value;
             long shopPos = row.getLong("shopPos");
@@ -40,29 +49,39 @@ public final class PlayerShopSettlementSavedData extends SavedData {
             UUID owner = row.getUUID("owner");
             long pending = row.getLong("pending");
             long lifetime = row.getLong("lifetime");
+            if (pending < 0L || lifetime < 0L || !loadedSettlements.add(shopPos)) {
+                throw new IllegalArgumentException("Player shop settlement is invalid");
+            }
             data.settlementsByShopPos.put(shopPos, new ShopSettlement(owner, pending, lifetime));
         }
 
+        requireList(tag, "ownerRows", Tag.TAG_COMPOUND, MAXIMUM_OWNERS);
         ListTag ownerRows = tag.getList("ownerRows", Tag.TAG_COMPOUND);
+        Set<UUID> loadedOwners = new HashSet<>();
         for (Tag ownerTag : ownerRows) {
             CompoundTag ownerCompound = (CompoundTag) ownerTag;
             if (!ownerCompound.hasUUID("owner")) {
                 continue;
             }
             UUID owner = ownerCompound.getUUID("owner");
+            if (!loadedOwners.add(owner)) {
+                throw new IllegalArgumentException("Player shop settlement owner is duplicated");
+            }
+            requireList(ownerCompound, "rows", Tag.TAG_COMPOUND, MAX_ROWS_PER_OWNER);
             ListTag rowsTag = ownerCompound.getList("rows", Tag.TAG_COMPOUND);
             List<RevenueRow> rows = new ArrayList<>();
             for (Tag rowTag : rowsTag) {
                 CompoundTag row = (CompoundTag) rowTag;
-                rows.add(new RevenueRow(
+                RevenueRow revenueRow = new RevenueRow(
                         row.getLong("ts"),
                         row.getLong("shopPos"),
                         row.getLong("amount"),
                         row.getString("type"),
                         row.getString("itemId"),
                         row.getInt("quantity"),
-                        row.getString("nbt") // optional; "" when absent (pre-nbt rows)
-                ));
+                        row.getString("nbt")); // optional; "" when absent (pre-nbt rows)
+                validateRow(revenueRow);
+                rows.add(revenueRow);
             }
             data.rowsByOwner.put(owner, rows);
         }
@@ -72,9 +91,17 @@ public final class PlayerShopSettlementSavedData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag) {
+        if (settlementsByShopPos.size() > MAXIMUM_SETTLEMENTS
+                || rowsByOwner.size() > MAXIMUM_OWNERS) {
+            throw new IllegalStateException("Player shop settlement owner limit is exceeded");
+        }
         SavedDataMigrations.writeVersion(tag, CURRENT_VERSION);
         ListTag settlementList = new ListTag();
         for (Map.Entry<Long, ShopSettlement> entry : settlementsByShopPos.entrySet()) {
+            if (entry.getValue().pendingMinor() < 0L
+                    || entry.getValue().lifetimeMinor() < 0L) {
+                throw new IllegalStateException("Player shop settlement is invalid");
+            }
             CompoundTag row = new CompoundTag();
             row.putLong("shopPos", entry.getKey());
             row.putUUID("owner", entry.getValue().owner());
@@ -86,10 +113,14 @@ public final class PlayerShopSettlementSavedData extends SavedData {
 
         ListTag ownerRows = new ListTag();
         for (Map.Entry<UUID, List<RevenueRow>> entry : rowsByOwner.entrySet()) {
+            if (entry.getValue().size() > MAX_ROWS_PER_OWNER) {
+                throw new IllegalStateException("Player shop settlement row limit is exceeded");
+            }
             CompoundTag ownerTag = new CompoundTag();
             ownerTag.putUUID("owner", entry.getKey());
             ListTag rowsTag = new ListTag();
             for (RevenueRow row : entry.getValue()) {
+                validateRow(row);
                 CompoundTag rowTag = new CompoundTag();
                 rowTag.putLong("ts", row.timestampEpochSeconds());
                 rowTag.putLong("shopPos", row.shopPosLong());
@@ -106,6 +137,20 @@ public final class PlayerShopSettlementSavedData extends SavedData {
         tag.put("ownerRows", ownerRows);
 
         return tag;
+    }
+
+    private static void requireList(CompoundTag tag, String key, int elementType, int maximum) {
+        SavedDataMigrations.requireList(
+                tag, key, elementType, maximum, "Player shop settlement");
+    }
+
+    private static void validateRow(RevenueRow row) {
+        if (row == null || row.amountMinor() < 0L || row.quantity() < 0
+                || row.type() == null || row.type().length() > MAXIMUM_TYPE_LENGTH
+                || row.itemId() == null || row.itemId().length() > MAXIMUM_ITEM_ID_LENGTH
+                || row.nbtJson() != null && row.nbtJson().length() > MAXIMUM_NBT_LENGTH) {
+            throw new IllegalArgumentException("Player shop settlement row is invalid");
+        }
     }
 
     public static PlayerShopSettlementSavedData get(MinecraftServer server) {

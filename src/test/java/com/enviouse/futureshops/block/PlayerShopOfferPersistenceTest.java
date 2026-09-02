@@ -253,6 +253,27 @@ class PlayerShopOfferPersistenceTest {
     }
 
     @Test
+    void malformedBundleEntriesAndOversizedIdentifiersFailClosed() {
+        CompoundTag malformedBundle = legacyListing();
+        ListTag bundles = new ListTag();
+        CompoundTag invalid = new CompoundTag();
+        invalid.putString("ItemId", "");
+        invalid.putInt("Count", 1);
+        bundles.add(invalid);
+        malformedBundle.put("BundleOutputs", bundles);
+        assertThrows(IllegalArgumentException.class,
+                () -> ShopBlockEntity.Listing.load(
+                        malformedBundle, SHOP_IDENTITY, 0));
+
+        CompoundTag oversizedId = legacyListing();
+        oversizedId.putString("ItemId", "x".repeat(
+                ShopBlockEntity.MAX_ITEM_ID_LENGTH + 1));
+        assertThrows(IllegalStateException.class,
+                () -> ShopBlockEntity.Listing.load(
+                        oversizedId, SHOP_IDENTITY, 0));
+    }
+
+    @Test
     void malformedSchemaAndMissingPayloadFailClosed() {
         byte[] payload = {4, 3, 2, 1};
         CompoundTag malformedSchema = legacyListing();

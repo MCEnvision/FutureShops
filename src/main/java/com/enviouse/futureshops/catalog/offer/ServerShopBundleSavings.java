@@ -10,6 +10,8 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 public final class ServerShopBundleSavings {
+    public static final int MAXIMUM_COMPARISON_REVISIONS = 36;
+
     private ServerShopBundleSavings() {
     }
 
@@ -163,7 +165,8 @@ public final class ServerShopBundleSavings {
                     || individualTotalMinorUnits
                     - bundleTotalMinorUnits != savingsMinorUnits
                     || comparisonRevisions.isEmpty()
-                    || comparisonRevisions.size() > 36
+                    || comparisonRevisions.size()
+                    > MAXIMUM_COMPARISON_REVISIONS
                     || comparisonRevisions.stream().anyMatch(revision ->
                     revision.componentId() == null
                             || revision.componentId().isBlank()
