@@ -317,11 +317,9 @@ public final class ServerShopOfferCartPreparedSavedData
                 DATA_ID, loadedVersion, CURRENT_VERSION);
         ServerShopOfferCartPreparedSavedData data =
                 new ServerShopOfferCartPreparedSavedData();
-        ListTag values = tag.getList("Entries", Tag.TAG_COMPOUND);
-        if (values.size() > MAXIMUM_ENTRIES) {
-            throw new IllegalArgumentException(
-                    "Server shop offer cart prepared entry limit is exceeded");
-        }
+        ListTag values = SavedDataMigrations.requireList(
+                tag, "Entries", Tag.TAG_COMPOUND,
+                MAXIMUM_ENTRIES, "Server shop offer cart prepared entries");
         for (int index = 0;
              index < values.size()
                      && data.entries.size() < MAXIMUM_ENTRIES;
@@ -344,12 +342,10 @@ public final class ServerShopOfferCartPreparedSavedData
             }
         }
         if (loadedVersion >= 2) {
-            ListTag archived = tag.getList(
-                    "Archives", Tag.TAG_COMPOUND);
-            if (archived.size() > MAXIMUM_ARCHIVES) {
-                throw new IllegalArgumentException(
-                        "Server shop offer cart replay archive limit is exceeded");
-            }
+            ListTag archived = SavedDataMigrations.requireList(
+                    tag, "Archives", Tag.TAG_COMPOUND,
+                    MAXIMUM_ARCHIVES,
+                    "Server shop offer cart replay archives");
             for (int index = 0;
                  index < archived.size(); index++) {
                 try {
@@ -557,8 +553,10 @@ public final class ServerShopOfferCartPreparedSavedData
                             ? Optional.of(PaymentSource.valueOf(
                             tag.getString("PaymentSource")))
                             : Optional.empty();
-            ListTag lineTags =
-                    tag.getList("Lines", Tag.TAG_COMPOUND);
+            ListTag lineTags = SavedDataMigrations.requireList(
+                    tag, "Lines", Tag.TAG_COMPOUND,
+                    ServerShopOfferCartCommit.MAXIMUM_LINES,
+                    "Server shop offer cart prepared lines");
             List<QuotedLine> lines =
                     new ArrayList<>(lineTags.size());
             for (int index = 0; index < lineTags.size(); index++) {
@@ -653,8 +651,10 @@ public final class ServerShopOfferCartPreparedSavedData
             if (tag.contains("SavingsSnapshot", Tag.TAG_COMPOUND)) {
                 CompoundTag savingsTag =
                         tag.getCompound("SavingsSnapshot");
-                ListTag revisionTags = savingsTag.getList(
-                        "Revisions", Tag.TAG_COMPOUND);
+                ListTag revisionTags = SavedDataMigrations.requireList(
+                        savingsTag, "Revisions", Tag.TAG_COMPOUND,
+                        ServerShopBundleSavings.MAXIMUM_COMPARISON_REVISIONS,
+                        "Server shop bundle savings revisions");
                 List<ServerShopBundleSavings.ComparisonRevision>
                         revisions = new ArrayList<>(revisionTags.size());
                 for (int index = 0;

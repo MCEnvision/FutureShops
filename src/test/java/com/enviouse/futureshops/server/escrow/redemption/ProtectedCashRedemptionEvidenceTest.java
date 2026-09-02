@@ -5,6 +5,7 @@ import com.enviouse.futureshops.money.InternalBillInventoryPlanner;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.StringTag;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -72,6 +73,11 @@ class ProtectedCashRedemptionEvidenceTest {
         assertThrows(IllegalArgumentException.class, () ->
                 ProtectedCashInventoryState.fromPlayerInventoryTag(
                         duplicate));
+        ListTag malformed = new ListTag();
+        malformed.add(StringTag.valueOf("invalid"));
+        assertThrows(IllegalArgumentException.class, () ->
+                ProtectedCashInventoryState.fromPlayerInventoryTag(
+                        malformed));
         assertThrows(IllegalArgumentException.class, () ->
                 ProtectedCashInventoryState.decode(Arrays.copyOf(
                         scenario.before().encode(),

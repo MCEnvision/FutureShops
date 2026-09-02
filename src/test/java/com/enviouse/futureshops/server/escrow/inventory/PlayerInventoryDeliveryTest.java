@@ -11,6 +11,7 @@ import com.enviouse.futureshops.server.escrow.custody.CustodyTransferEvidence;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.StringTag;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -83,6 +84,14 @@ class PlayerInventoryDeliveryTest {
                 PlayerInventoryHashes.hashSlot(second));
         assertArrayEquals(PlayerInventoryHashes.hashSlot(first),
                 PlayerInventoryHashes.hashSlot(first.copy()));
+    }
+
+    @Test
+    void malformedInventoryListElementTypeFailsClosed() {
+        ListTag malformed = new ListTag();
+        malformed.add(StringTag.valueOf("invalid"));
+        assertThrows(IllegalArgumentException.class,
+                () -> PlayerInventoryHashes.readMainInventory(malformed));
     }
 
     @Test

@@ -57,12 +57,9 @@ public final class MarketProfileSavedData extends SavedData {
                     "Market profile schema is unsupported");
         }
         requireType(tag, "players", Tag.TAG_LIST);
-        ListTag players = tag.getList("players", Tag.TAG_COMPOUND);
-        requireCompoundList(tag.get("players"), "players");
-        if (players.size() > MAX_PROFILES) {
-            throw new IllegalStateException(
-                    "Market profile player limit is exceeded");
-        }
+        ListTag players = SavedDataMigrations.requireList(
+                tag, "players", Tag.TAG_COMPOUND, MAX_PROFILES,
+                "Market profile players");
         MarketProfileSavedData data = new MarketProfileSavedData();
         for (int index = 0; index < players.size(); index++) {
             CompoundTag encoded = players.getCompound(index);
@@ -87,6 +84,10 @@ public final class MarketProfileSavedData extends SavedData {
 
     @Override
     public synchronized CompoundTag save(CompoundTag tag) {
+        if (profiles.size() > MAX_PROFILES) {
+            throw new IllegalStateException(
+                    "Market profile player limit is exceeded");
+        }
         SavedDataMigrations.writeVersion(tag, CURRENT_VERSION);
         ListTag players = new ListTag();
         profiles.entrySet().stream()
@@ -488,18 +489,36 @@ public final class MarketProfileSavedData extends SavedData {
             int version,
             UUID playerId
     ) {
+        ListTag watchedAuctions = SavedDataMigrations.requireList(
+                tag, "watchedAuctions", Tag.TAG_COMPOUND,
+                MAX_WATCHED_AUCTIONS, "Market watched auctions");
+        ListTag favoriteProducts = SavedDataMigrations.requireList(
+                tag, "favoriteProducts", Tag.TAG_COMPOUND,
+                MAX_FAVORITE_PRODUCTS, "Market favorite products");
+        ListTag recentProducts = SavedDataMigrations.requireList(
+                tag, "recentProducts", Tag.TAG_COMPOUND,
+                MAX_RECENT_PRODUCTS, "Market recent products");
+        ListTag priceAlerts = SavedDataMigrations.requireList(
+                tag, "priceAlerts", Tag.TAG_COMPOUND,
+                MAX_PRICE_ALERTS, "Market price alerts");
+        ListTag notifications = SavedDataMigrations.requireList(
+                tag, "notifications", Tag.TAG_COMPOUND,
+                MAX_NOTIFICATIONS, "Market notifications");
         for (String key : List.of("watchedAuctions", "favoriteProducts",
                 "recentProducts", "priceAlerts", "notifications")) {
             requireType(tag, key, Tag.TAG_LIST);
-            requireCompoundList(tag.get(key), key);
         }
+        ListTag mutationReceipts = new ListTag();
+        ListTag mutationTombstones = new ListTag();
         if (version >= 2) {
             requireType(tag, "mutationReceipts", Tag.TAG_LIST);
-            requireCompoundList(tag.get("mutationReceipts"),
-                    "mutationReceipts");
+            mutationReceipts = SavedDataMigrations.requireList(
+                    tag, "mutationReceipts", Tag.TAG_COMPOUND,
+                    MAX_MUTATION_RECEIPTS, "Market mutation receipts");
             requireType(tag, "mutationTombstones", Tag.TAG_LIST);
-            requireCompoundList(tag.get("mutationTombstones"),
-                    "mutationTombstones");
+            mutationTombstones = SavedDataMigrations.requireList(
+                    tag, "mutationTombstones", Tag.TAG_COMPOUND,
+                    MAX_MUTATION_TOMBSTONES, "Market mutation tombstones");
             if (version == 2) {
                 requireType(tag, "mutationReplayFilter",
                         Tag.TAG_LONG_ARRAY);
@@ -527,14 +546,8 @@ public final class MarketProfileSavedData extends SavedData {
                         "Market profile replay epoch is invalid");
             }
         }
-        ListTag auctions = tag.getList(
-                "watchedAuctions", Tag.TAG_COMPOUND);
-        if (auctions.size() > MAX_WATCHED_AUCTIONS) {
-            throw new IllegalStateException(
-                    "Market watched auction limit is exceeded");
-        }
-        for (int index = 0; index < auctions.size(); index++) {
-            CompoundTag value = auctions.getCompound(index);
+        for (int index = 0; index < watchedAuctions.size(); index++) {
+            CompoundTag value = watchedAuctions.getCompound(index);
             if (!value.hasUUID("id")
                     || !profile.watchedAuctions.add(requireUuid(
                     value.getUUID("id"), "listingId"))) {
@@ -542,27 +555,16 @@ public final class MarketProfileSavedData extends SavedData {
                         "Market watched auction is invalid");
             }
         }
-        readProducts(tag.getList("favoriteProducts", Tag.TAG_COMPOUND),
-                profile.favoriteProducts, MAX_FAVORITE_PRODUCTS);
-        readProducts(tag.getList("recentProducts", Tag.TAG_COMPOUND),
-                profile.recentProducts, MAX_RECENT_PRODUCTS);
-        ListTag alerts = tag.getList("priceAlerts", Tag.TAG_COMPOUND);
-        if (alerts.size() > MAX_PRICE_ALERTS) {
-            throw new IllegalStateException(
-                    "Market price alert limit is exceeded");
-        }
-        for (int index = 0; index < alerts.size(); index++) {
-            PriceAlert alert = readAlert(alerts.getCompound(index));
+        readProducts(favoriteProducts, profile.favoriteProducts,
+                MAX_FAVORITE_PRODUCTS);
+        readProducts(recentProducts, profile.recentProducts,
+                MAX_RECENT_PRODUCTS);
+        for (int index = 0; index < priceAlerts.size(); index++) {
+            PriceAlert alert = readAlert(priceAlerts.getCompound(index));
             if (profile.priceAlerts.put(alert.alertId(), alert) != null) {
                 throw new IllegalStateException(
                         "Market price alert is duplicated");
             }
-        }
-        ListTag notifications = tag.getList(
-                "notifications", Tag.TAG_COMPOUND);
-        if (notifications.size() > MAX_NOTIFICATIONS) {
-            throw new IllegalStateException(
-                    "Market notification limit is exceeded");
         }
         Set<UUID> notificationIds = new LinkedHashSet<>();
         for (int index = 0; index < notifications.size(); index++) {
@@ -575,15 +577,9 @@ public final class MarketProfileSavedData extends SavedData {
             profile.notifications.add(notification);
         }
         if (version >= 2) {
-            ListTag receipts = tag.getList(
-                    "mutationReceipts", Tag.TAG_COMPOUND);
-            if (receipts.size() > MAX_MUTATION_RECEIPTS) {
-                throw new IllegalStateException(
-                        "Market profile receipt limit is exceeded");
-            }
-            for (int index = 0; index < receipts.size(); index++) {
+            for (int index = 0; index < mutationReceipts.size(); index++) {
                 MarketProfileMutationReceipt receipt =
-                        readMutationReceipt(receipts.getCompound(index),
+                        readMutationReceipt(mutationReceipts.getCompound(index),
                                 version);
                 if (!receipt.ownerId().equals(playerId)) {
                     throw new IllegalStateException(
@@ -595,14 +591,8 @@ public final class MarketProfileSavedData extends SavedData {
                             "Market profile receipt is duplicated");
                 }
             }
-            ListTag tombstones = tag.getList(
-                    "mutationTombstones", Tag.TAG_COMPOUND);
-            if (tombstones.size() > MAX_MUTATION_TOMBSTONES) {
-                throw new IllegalStateException(
-                        "Market profile tombstone limit is exceeded");
-            }
-            for (int index = 0; index < tombstones.size(); index++) {
-                CompoundTag encoded = tombstones.getCompound(index);
+            for (int index = 0; index < mutationTombstones.size(); index++) {
+                CompoundTag encoded = mutationTombstones.getCompound(index);
                 if (!encoded.hasUUID("request")) {
                     throw new IllegalStateException(
                             "Market profile tombstone identity is missing");

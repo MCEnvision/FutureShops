@@ -93,6 +93,11 @@ final class PlayerInventoryHashes {
 
     static List<ItemStack> readMainInventory(ListTag inventory) {
         Objects.requireNonNull(inventory, "inventory");
+        if (!inventory.isEmpty()
+                && inventory.getElementType() != Tag.TAG_COMPOUND) {
+            throw new IllegalArgumentException(
+                    "Player inventory list has an invalid element type");
+        }
         List<ItemStack> slots = new ArrayList<>(MAIN_SLOT_COUNT);
         for (int index = 0; index < MAIN_SLOT_COUNT; index++) {
             slots.add(ItemStack.EMPTY);

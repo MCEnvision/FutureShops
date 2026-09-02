@@ -23,7 +23,14 @@ import java.util.UUID;
 public final class TransactionHistorySavedData extends SavedData {
     public static final String DATA_NAME = "futureshops_tx_history";
     private static final int CURRENT_VERSION = 3;
+    private static final int MAX_PLAYERS = 100_000;
     private static final int MAX_ENTRIES_PER_PLAYER = 200;
+    private static final int MAX_IDEMPOTENCY_OWNERS = 100_000;
+    private static final int MAX_MARKERS_PER_PLAYER = 1_024;
+    private static final int MAX_TYPE_LENGTH = 64;
+    private static final int MAX_ITEM_ID_LENGTH = 256;
+    private static final int MAX_NOTE_LENGTH = 512;
+    private static final int MAX_NBT_LENGTH = 262_144;
 
     private final Map<UUID, List<TransactionHistoryEntry>> entriesByPlayer = new HashMap<>();
     private final Map<UUID, Set<String>> idempotencyMarkersByPlayer =
@@ -33,46 +40,62 @@ public final class TransactionHistorySavedData extends SavedData {
         TransactionHistorySavedData data = new TransactionHistorySavedData();
         int version = SavedDataMigrations.readVersion(tag);
         SavedDataMigrations.needsMigration(DATA_NAME, version, CURRENT_VERSION);
+        requireList(tag, "players", Tag.TAG_COMPOUND, MAX_PLAYERS);
         ListTag players = tag.getList("players", Tag.TAG_COMPOUND);
+        Set<UUID> loadedPlayers = new HashSet<>();
         for (Tag playerTag : players) {
             CompoundTag playerCompound = (CompoundTag) playerTag;
             if (!playerCompound.hasUUID("uuid")) {
                 continue;
             }
             UUID uuid = playerCompound.getUUID("uuid");
+            if (!loadedPlayers.add(uuid)) {
+                throw new IllegalArgumentException("Transaction history player is duplicated");
+            }
+            requireList(playerCompound, "entries", Tag.TAG_COMPOUND, MAX_ENTRIES_PER_PLAYER);
             ListTag entriesTag = playerCompound.getList("entries", Tag.TAG_COMPOUND);
             List<TransactionHistoryEntry> entries = new ArrayList<>();
             for (Tag entryTag : entriesTag) {
                 CompoundTag tx = (CompoundTag) entryTag;
-                entries.add(new TransactionHistoryEntry(
+                TransactionHistoryEntry entry = new TransactionHistoryEntry(
                         tx.getLong("ts"),
                         tx.getString("type"),
                         tx.getString("item"),
                         tx.getInt("qty"),
                         tx.getLong("total"),
                         tx.getString("note"),
-                        tx.getString("nbt"))); // optional; "" when absent (pre-nbt entries)
+                        tx.getString("nbt")); // optional; "" when absent (pre-nbt entries)
+                validateEntry(entry);
+                entries.add(entry);
             }
             data.entriesByPlayer.put(uuid, entries);
         }
+        requireList(tag, "idempotency_markers", Tag.TAG_COMPOUND, MAX_IDEMPOTENCY_OWNERS);
         ListTag markerOwners = tag.getList(
                 "idempotency_markers", Tag.TAG_COMPOUND);
+        Set<UUID> loadedMarkerOwners = new HashSet<>();
         for (Tag ownerTag : markerOwners) {
             CompoundTag owner = (CompoundTag) ownerTag;
             if (!owner.hasUUID("uuid")) {
                 continue;
             }
+            UUID ownerId = owner.getUUID("uuid");
+            if (!loadedMarkerOwners.add(ownerId)) {
+                throw new IllegalArgumentException("Transaction history marker owner is duplicated");
+            }
+            requireList(owner, "markers", Tag.TAG_STRING, MAX_MARKERS_PER_PLAYER);
             Set<String> markers = new HashSet<>();
             for (Tag markerTag : owner.getList(
                     "markers", Tag.TAG_STRING)) {
                 String marker = markerTag.getAsString();
-                if (!marker.isBlank()) {
-                    markers.add(marker);
+                if (marker.isBlank() || marker.length() > MAX_NBT_LENGTH) {
+                    throw new IllegalArgumentException("Transaction history marker is invalid");
                 }
+                markers.add(marker);
             }
             if (!markers.isEmpty()) {
                 data.idempotencyMarkersByPlayer.put(
-                        owner.getUUID("uuid"), markers);
+                        ownerId, markers);
             }
         }
         return data;
@@ -80,13 +103,21 @@ public final class TransactionHistorySavedData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag) {
+        if (entriesByPlayer.size() > MAX_PLAYERS
+                || idempotencyMarkersByPlayer.size() > MAX_IDEMPOTENCY_OWNERS) {
+            throw new IllegalStateException("Transaction history owner limit is exceeded");
+        }
         SavedDataMigrations.writeVersion(tag, CURRENT_VERSION);
         ListTag players = new ListTag();
         for (Map.Entry<UUID, List<TransactionHistoryEntry>> entry : entriesByPlayer.entrySet()) {
             CompoundTag playerTag = new CompoundTag();
             playerTag.putUUID("uuid", entry.getKey());
             ListTag entries = new ListTag();
+            if (entry.getValue().size() > MAX_ENTRIES_PER_PLAYER) {
+                throw new IllegalStateException("Transaction history entry limit is exceeded");
+            }
             for (TransactionHistoryEntry tx : entry.getValue()) {
+                validateEntry(tx);
                 CompoundTag txTag = new CompoundTag();
                 txTag.putLong("ts", tx.timestampEpochSeconds());
                 txTag.putString("type", tx.type());
@@ -107,7 +138,15 @@ public final class TransactionHistorySavedData extends SavedData {
             CompoundTag owner = new CompoundTag();
             owner.putUUID("uuid", entry.getKey());
             ListTag markers = new ListTag();
+            if (entry.getValue().size() > MAX_MARKERS_PER_PLAYER) {
+                throw new IllegalStateException("Transaction history marker limit is exceeded");
+            }
             entry.getValue().stream().sorted()
+                    .peek(marker -> {
+                        if (marker.isBlank() || marker.length() > MAX_NBT_LENGTH) {
+                            throw new IllegalStateException("Transaction history marker is invalid");
+                        }
+                    })
                     .map(StringTag::valueOf)
                     .forEach(markers::add);
             owner.put("markers", markers);
@@ -115,6 +154,23 @@ public final class TransactionHistorySavedData extends SavedData {
         }
         tag.put("idempotency_markers", markerOwners);
         return tag;
+    }
+
+    private static void requireList(CompoundTag tag, String key, int elementType, int maximum) {
+        SavedDataMigrations.requireList(
+                tag, key, elementType, maximum, "Transaction history");
+    }
+
+    private static void validateEntry(TransactionHistoryEntry entry) {
+        if (entry == null || entry.type() == null || entry.itemId() == null
+                || entry.note() == null
+                || entry.type().length() > MAX_TYPE_LENGTH
+                || entry.itemId().length() > MAX_ITEM_ID_LENGTH
+                || entry.note().length() > MAX_NOTE_LENGTH
+                || entry.nbtJson() != null && entry.nbtJson().length() > MAX_NBT_LENGTH
+                || entry.quantity() < 0) {
+            throw new IllegalArgumentException("Transaction history entry is invalid");
+        }
     }
 
     public static TransactionHistorySavedData get(MinecraftServer server) {
@@ -152,6 +208,10 @@ public final class TransactionHistorySavedData extends SavedData {
         Set<String> markers = idempotencyMarkersByPlayer
                 .computeIfAbsent(owner, ignored -> new HashSet<>());
         if (!markers.add(marker)) {
+            return false;
+        }
+        if (markers.size() > MAX_MARKERS_PER_PLAYER) {
+            markers.remove(marker);
             return false;
         }
         List<TransactionHistoryEntry> entries = entriesByPlayer

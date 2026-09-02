@@ -24,6 +24,11 @@ import java.util.stream.Collectors;
 public class AdminCategorySavedData extends SavedData {
     private static final String DATA_NAME = "futureshops_admin_categories";
     private static final int CURRENT_VERSION = 2;
+    static final int MAXIMUM_CATEGORIES = 512;
+    static final int MAXIMUM_ASSIGNMENTS = 131_072;
+    static final int MAXIMUM_HIDDEN_BASE_CATEGORIES = 512;
+    static final int MAXIMUM_NAME_LENGTH = 48;
+    static final int MAXIMUM_ITEM_ID_LENGTH = 256;
     private final Set<String> categories = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
     /** Maps itemId → categoryName (e.g., "minecraft:diamond_sword" → "Weapons") */
     private final Map<String, String> itemAssignments = new HashMap<>();
@@ -48,7 +53,10 @@ public class AdminCategorySavedData extends SavedData {
     public boolean addCategory(String name) {
         if (name == null || name.isBlank()) return false;
         String trimmed = name.trim();
-        if (trimmed.length() > 48) trimmed = trimmed.substring(0, 48);
+        if (trimmed.length() > MAXIMUM_NAME_LENGTH
+                || categories.size() >= MAXIMUM_CATEGORIES) {
+            return false;
+        }
         boolean added = categories.add(trimmed);
         if (added) {
             setDirty();
@@ -65,7 +73,7 @@ public class AdminCategorySavedData extends SavedData {
     public boolean renameCategory(String oldName, String newName) {
         if (oldName == null || oldName.isBlank() || newName == null || newName.isBlank()) return false;
         String trimmedNew = newName.trim();
-        if (trimmedNew.length() > 48) trimmedNew = trimmedNew.substring(0, 48);
+        if (trimmedNew.length() > MAXIMUM_NAME_LENGTH) return false;
         if (!categories.remove(oldName.trim())) return false;
         categories.add(trimmedNew);
         for (Map.Entry<String, String> entry : itemAssignments.entrySet()) {
@@ -128,9 +136,14 @@ public class AdminCategorySavedData extends SavedData {
      */
     public boolean assignItem(String itemId, String categoryName) {
         if (itemId == null || itemId.isBlank() || categoryName == null || categoryName.isBlank()) return false;
+        if (itemId.trim().length() > MAXIMUM_ITEM_ID_LENGTH) return false;
         String trimmedCat = categoryName.trim();
         // Category must exist
         if (!categories.contains(trimmedCat)) return false;
+        if (!itemAssignments.containsKey(itemId.trim())
+                && itemAssignments.size() >= MAXIMUM_ASSIGNMENTS) {
+            return false;
+        }
         String prev = itemAssignments.put(itemId.trim(), trimmedCat);
         if (!trimmedCat.equals(prev)) {
             setDirty();
@@ -182,6 +195,10 @@ public class AdminCategorySavedData extends SavedData {
     /** Hides a JSON-defined category by its normalized id (lowercase, spaces→underscores). */
     public boolean hideBaseCategory(String idOrName) {
         if (idOrName == null || idOrName.isBlank()) return false;
+        if (idOrName.trim().length() > MAXIMUM_NAME_LENGTH
+                || hiddenBaseCategoryIds.size() >= MAXIMUM_HIDDEN_BASE_CATEGORIES) {
+            return false;
+        }
         boolean added = hiddenBaseCategoryIds.add(normalizeId(idOrName));
         if (added) setDirty();
         return added;
@@ -211,6 +228,7 @@ public class AdminCategorySavedData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag) {
+        requireBounds();
         SavedDataMigrations.writeVersion(tag, CURRENT_VERSION);
         ListTag list = new ListTag();
         for (String cat : categories) {
@@ -234,29 +252,79 @@ public class AdminCategorySavedData extends SavedData {
         return tag;
     }
 
-    private static AdminCategorySavedData load(CompoundTag tag) {
+    static AdminCategorySavedData load(CompoundTag tag) {
         AdminCategorySavedData data = new AdminCategorySavedData();
         int version = SavedDataMigrations.readVersion(tag);
+        if (version < 0 || version > CURRENT_VERSION) {
+            throw new IllegalStateException("Admin category schema is unsupported");
+        }
         SavedDataMigrations.needsMigration(DATA_NAME, version, CURRENT_VERSION);
-        // v0→v1: no structural changes, just adds the version tag on next save
+        if (tag.contains("Categories") && !tag.contains("Categories", Tag.TAG_LIST)) {
+            throw new IllegalStateException("Admin category list has the wrong type");
+        }
         if (tag.contains("Categories", Tag.TAG_LIST)) {
-            ListTag list = tag.getList("Categories", Tag.TAG_STRING);
+            ListTag list = SavedDataMigrations.requireList(
+                    tag, "Categories", Tag.TAG_STRING, MAXIMUM_CATEGORIES,
+                    "Admin categories");
             for (Tag t : list) {
-                data.categories.add(t.getAsString());
+                String category = t.getAsString();
+                if (category.isBlank() || category.length() > MAXIMUM_NAME_LENGTH
+                        || !data.categories.add(category)) {
+                    throw new IllegalStateException("Admin category entry is invalid");
+                }
             }
+        }
+        if (tag.contains("ItemAssignments") && !tag.contains("ItemAssignments", Tag.TAG_COMPOUND)) {
+            throw new IllegalStateException("Admin category assignments have the wrong type");
         }
         if (tag.contains("ItemAssignments", Tag.TAG_COMPOUND)) {
             CompoundTag assignTag = tag.getCompound("ItemAssignments");
+            if (assignTag.getAllKeys().size() > MAXIMUM_ASSIGNMENTS) {
+                throw new IllegalStateException("Admin category assignments exceed the limit");
+            }
             for (String key : assignTag.getAllKeys()) {
-                data.itemAssignments.put(key, assignTag.getString(key));
+                if (key.isBlank() || key.length() > MAXIMUM_ITEM_ID_LENGTH
+                        || !assignTag.contains(key, Tag.TAG_STRING)) {
+                    throw new IllegalStateException("Admin category assignment is invalid");
+                }
+                String category = assignTag.getString(key);
+                if (!data.categories.contains(category)
+                        || category.length() > MAXIMUM_NAME_LENGTH
+                        || data.itemAssignments.put(key, category) != null) {
+                    throw new IllegalStateException("Admin category assignment is invalid");
+                }
             }
         }
+        if (tag.contains("HiddenBaseCategories")
+                && !tag.contains("HiddenBaseCategories", Tag.TAG_LIST)) {
+            throw new IllegalStateException("Admin hidden category list has the wrong type");
+        }
         if (tag.contains("HiddenBaseCategories", Tag.TAG_LIST)) {
-            ListTag hidden = tag.getList("HiddenBaseCategories", Tag.TAG_STRING);
+            ListTag hidden = SavedDataMigrations.requireList(
+                    tag, "HiddenBaseCategories", Tag.TAG_STRING,
+                    MAXIMUM_HIDDEN_BASE_CATEGORIES, "Admin hidden categories");
             for (Tag t : hidden) {
-                data.hiddenBaseCategoryIds.add(t.getAsString());
+                String id = t.getAsString();
+                if (id.isBlank() || id.length() > MAXIMUM_NAME_LENGTH
+                        || !data.hiddenBaseCategoryIds.add(id)) {
+                    throw new IllegalStateException("Admin hidden category entry is invalid");
+                }
             }
         }
         return data;
+    }
+
+    private void requireBounds() {
+        if (categories.size() > MAXIMUM_CATEGORIES
+                || itemAssignments.size() > MAXIMUM_ASSIGNMENTS
+                || hiddenBaseCategoryIds.size() > MAXIMUM_HIDDEN_BASE_CATEGORIES) {
+            throw new IllegalStateException("Admin category state exceeds its limits");
+        }
+        if (categories.stream().anyMatch(value -> value.length() > MAXIMUM_NAME_LENGTH)
+                || hiddenBaseCategoryIds.stream().anyMatch(value -> value.length() > MAXIMUM_NAME_LENGTH)
+                || itemAssignments.keySet().stream()
+                .anyMatch(value -> value.length() > MAXIMUM_ITEM_ID_LENGTH)) {
+            throw new IllegalStateException("Admin category state contains oversized values");
+        }
     }
 }

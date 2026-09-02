@@ -641,11 +641,9 @@ public final class ServerShopOfferUsageSavedData extends SavedData {
                     tag.getLong("ReplayDiscoveryOffset"),
                     "replay discovery offset");
         }
-        ListTag rows = tag.getList("Usages", Tag.TAG_COMPOUND);
-        if (rows.size() > MAX_SCOPES) {
-            throw new IllegalArgumentException(
-                    "Server shop offer usage scope limit is exceeded");
-        }
+        ListTag rows = SavedDataMigrations.requireList(
+                tag, "Usages", Tag.TAG_COMPOUND,
+                MAX_SCOPES, "Server shop offer usage scopes");
         for (int index = 0; index < rows.size(); index++) {
             try {
                 CompoundTag row = rows.getCompound(index);
@@ -668,12 +666,10 @@ public final class ServerShopOfferUsageSavedData extends SavedData {
                 usage.lastCommittedAt =
                         requireNonnegative(row.getLong("LastCommitted"),
                                 "last committed time");
-                ListTag requests = row.getList(
-                        "Requests", Tag.TAG_COMPOUND);
-                if (requests.size() > MAX_REQUESTS_PER_SCOPE) {
-                    throw new IllegalArgumentException(
-                            "Server shop offer usage request limit is exceeded");
-                }
+                ListTag requests = SavedDataMigrations.requireList(
+                        row, "Requests", Tag.TAG_COMPOUND,
+                        MAX_REQUESTS_PER_SCOPE,
+                        "Server shop offer usage requests");
                 for (int requestIndex = 0;
                      requestIndex < requests.size(); requestIndex++) {
                     UUID requestId = requests.getCompound(requestIndex)

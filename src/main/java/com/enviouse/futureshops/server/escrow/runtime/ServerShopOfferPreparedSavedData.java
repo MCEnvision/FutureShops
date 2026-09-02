@@ -309,11 +309,9 @@ public final class ServerShopOfferPreparedSavedData extends SavedData {
                 DATA_ID, loadedVersion, CURRENT_VERSION);
         ServerShopOfferPreparedSavedData data =
                 new ServerShopOfferPreparedSavedData();
-        ListTag values = tag.getList("Entries", Tag.TAG_COMPOUND);
-        if (values.size() > MAXIMUM_ENTRIES) {
-            throw new IllegalArgumentException(
-                    "Prepared server offer entry limit is exceeded");
-        }
+        ListTag values = SavedDataMigrations.requireList(
+                tag, "Entries", Tag.TAG_COMPOUND,
+                MAXIMUM_ENTRIES, "Prepared server offer entries");
         for (int index = 0;
              index < values.size()
                      && data.entries.size() < MAXIMUM_ENTRIES;
@@ -336,12 +334,9 @@ public final class ServerShopOfferPreparedSavedData extends SavedData {
             }
         }
         if (loadedVersion >= 2) {
-            ListTag archived = tag.getList(
-                    "Archives", Tag.TAG_COMPOUND);
-            if (archived.size() > MAXIMUM_ARCHIVES) {
-                throw new IllegalArgumentException(
-                        "Prepared server offer replay archive limit is exceeded");
-            }
+            ListTag archived = SavedDataMigrations.requireList(
+                    tag, "Archives", Tag.TAG_COMPOUND,
+                    MAXIMUM_ARCHIVES, "Prepared server offer replay archives");
             for (int index = 0;
                  index < archived.size(); index++) {
                 try {

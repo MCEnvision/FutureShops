@@ -53,6 +53,11 @@ public final class ProtectedCashInventoryState {
             ListTag inventory
     ) {
         Objects.requireNonNull(inventory, "inventory");
+        if (!inventory.isEmpty()
+                && inventory.getElementType() != Tag.TAG_COMPOUND) {
+            throw new IllegalArgumentException(
+                    "Protected cash inventory list has an invalid element type");
+        }
         List<ItemStack> main = empty(MAIN_SLOT_COUNT);
         List<ItemStack> offhand = empty(OFFHAND_SLOT_COUNT);
         boolean[] seenMain = new boolean[MAIN_SLOT_COUNT];

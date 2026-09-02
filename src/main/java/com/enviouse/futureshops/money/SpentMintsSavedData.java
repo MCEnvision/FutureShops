@@ -34,6 +34,9 @@ public final class SpentMintsSavedData extends SavedData {
 
     public static final String DATA_NAME = "futureshops_coin_mints";
     private static final int CURRENT_VERSION = 2;
+    private static final int MAXIMUM_MINTS = 100_000;
+    private static final int MAXIMUM_MINT_ID_LENGTH = 128;
+    private static final int MAXIMUM_SERVER_ID_LENGTH = 128;
 
     private final Map<String, MoneyMintRecord> registry = new HashMap<>();
 
@@ -45,16 +48,23 @@ public final class SpentMintsSavedData extends SavedData {
         SpentMintsSavedData data = new SpentMintsSavedData();
         int version = SavedDataMigrations.readVersion(tag);
         boolean migrating = SavedDataMigrations.needsMigration(DATA_NAME, version, CURRENT_VERSION);
-        ListTag entries = tag.getList("mints", Tag.TAG_COMPOUND);
+        ListTag entries = SavedDataMigrations.requireList(
+                tag, "mints", Tag.TAG_COMPOUND, MAXIMUM_MINTS,
+                "Mint registry");
         for (Tag entryTag : entries) {
             CompoundTag entry = (CompoundTag) entryTag;
             String mintId = entry.getString("id");
-            if (mintId.isEmpty()) continue;
+            if (mintId.isEmpty() || mintId.length() > MAXIMUM_MINT_ID_LENGTH) {
+                throw new IllegalArgumentException("Mint registry id is invalid");
+            }
             UUID playerUUID = entry.hasUUID("player") ? entry.getUUID("player") : new UUID(0L, 0L);
             long denomination = entry.getLong("denomination");
             long mintedAt = entry.getLong("minted_at");
             long consumedAt = entry.getLong("consumed_at");
             String serverId = entry.getString("server");
+            if (serverId.length() > MAXIMUM_SERVER_ID_LENGTH) {
+                throw new IllegalArgumentException("Mint registry server id is invalid");
+            }
 
             int authorizedCount;
             int remainingCount;
@@ -69,9 +79,16 @@ public final class SpentMintsSavedData extends SavedData {
                 remainingCount = consumedAt > 0L ? 0 : legacyCount;
             }
 
-            data.registry.put(mintId,
+            if (denomination < 0L || authorizedCount < 0 || remainingCount < 0
+                    || remainingCount > authorizedCount) {
+                throw new IllegalArgumentException("Mint registry counts are invalid");
+            }
+
+            if (data.registry.put(mintId,
                     new MoneyMintRecord(mintId, playerUUID, denomination, authorizedCount,
-                            remainingCount, mintedAt, consumedAt, serverId));
+                            remainingCount, mintedAt, consumedAt, serverId)) != null) {
+                throw new IllegalArgumentException("Mint registry id is duplicated");
+            }
         }
         if (migrating) {
             data.setDirty();
@@ -81,9 +98,19 @@ public final class SpentMintsSavedData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag) {
+        if (registry.size() > MAXIMUM_MINTS) {
+            throw new IllegalStateException("Mint registry entry limit is exceeded");
+        }
         SavedDataMigrations.writeVersion(tag, CURRENT_VERSION);
         ListTag entries = new ListTag();
         for (MoneyMintRecord record : registry.values()) {
+            if (record.mintId().isBlank() || record.mintId().length() > MAXIMUM_MINT_ID_LENGTH
+                    || record.serverId().length() > MAXIMUM_SERVER_ID_LENGTH
+                    || record.denomination() < 0L || record.authorizedCount() < 0
+                    || record.remainingCount() < 0
+                    || record.remainingCount() > record.authorizedCount()) {
+                throw new IllegalStateException("Mint registry record is invalid");
+            }
             CompoundTag entry = new CompoundTag();
             entry.putString("id", record.mintId());
             entry.putUUID("player", record.playerUUID());
@@ -189,4 +216,3 @@ public final class SpentMintsSavedData extends SavedData {
         return record != null ? record.remainingCount() : 0;
     }
 }
-

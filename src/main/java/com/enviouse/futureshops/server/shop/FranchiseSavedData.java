@@ -25,6 +25,9 @@ import java.util.UUID;
 public class FranchiseSavedData extends SavedData {
     private static final String DATA_ID = "futureshops_franchises";
     private static final int CURRENT_VERSION = 1;
+    private static final int MAXIMUM_FRANCHISES = 10_000;
+    private static final int MAXIMUM_MEMBERS_PER_FRANCHISE = 20;
+    private static final int MAXIMUM_NAME_LENGTH = 48;
 
     /** Maps franchise UUID → franchise data. */
     private final Map<UUID, Franchise> franchises = new HashMap<>();
@@ -39,6 +42,11 @@ public class FranchiseSavedData extends SavedData {
     // ═══ Franchise management ═══
 
     public CreateResult createFranchise(UUID leader, String name) {
+        if (leader == null || name == null || name.isBlank()
+                || name.trim().length() > MAXIMUM_NAME_LENGTH
+                || franchises.size() >= MAXIMUM_FRANCHISES) {
+            return new CreateResult(false, "INVALID");
+        }
         if (playerToFranchise.containsKey(leader)) {
             return new CreateResult(false, "ALREADY_IN_FRANCHISE");
         }
@@ -173,9 +181,17 @@ public class FranchiseSavedData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag) {
+        if (franchises.size() > MAXIMUM_FRANCHISES) {
+            throw new IllegalStateException("Franchise limit is exceeded");
+        }
         SavedDataMigrations.writeVersion(tag, CURRENT_VERSION);
         ListTag franchiseList = new ListTag();
         for (Franchise franchise : franchises.values()) {
+            if (franchise.name == null || franchise.name.isBlank()
+                    || franchise.name.length() > MAXIMUM_NAME_LENGTH
+                    || franchise.members.size() > MAXIMUM_MEMBERS_PER_FRANCHISE) {
+                throw new IllegalStateException("Franchise record is invalid");
+            }
             CompoundTag fTag = new CompoundTag();
             fTag.putUUID("Id", franchise.id);
             fTag.putString("Name", franchise.name);
@@ -198,20 +214,42 @@ public class FranchiseSavedData extends SavedData {
         FranchiseSavedData data = new FranchiseSavedData();
         int version = SavedDataMigrations.readVersion(tag);
         SavedDataMigrations.needsMigration(DATA_ID, version, CURRENT_VERSION);
-        ListTag franchiseList = tag.getList("Franchises", Tag.TAG_COMPOUND);
+        ListTag franchiseList = SavedDataMigrations.requireList(
+                tag, "Franchises", Tag.TAG_COMPOUND, MAXIMUM_FRANCHISES,
+                "Franchise");
+        Set<UUID> membersByFranchise = new HashSet<>();
         for (Tag fTag : franchiseList) {
             CompoundTag fCompound = (CompoundTag) fTag;
+            if (!fCompound.hasUUID("Id") || !fCompound.hasUUID("Leader")) {
+                throw new IllegalArgumentException("Franchise identity is missing");
+            }
             UUID id = fCompound.getUUID("Id");
             String name = fCompound.getString("Name");
             UUID leader = fCompound.getUUID("Leader");
+            if (name.isBlank() || name.length() > MAXIMUM_NAME_LENGTH
+                    || data.franchises.containsKey(id)) {
+                throw new IllegalArgumentException("Franchise identity is invalid");
+            }
             long createdAt = fCompound.getLong("CreatedAt");
             Franchise franchise = new Franchise(id, name, leader);
             franchise.createdAt = createdAt;
-            ListTag memberList = fCompound.getList("Members", Tag.TAG_COMPOUND);
+            ListTag memberList = SavedDataMigrations.requireList(
+                    fCompound, "Members", Tag.TAG_COMPOUND,
+                    MAXIMUM_MEMBERS_PER_FRANCHISE, "Franchise member");
             for (Tag mTag : memberList) {
-                UUID member = ((CompoundTag) mTag).getUUID("UUID");
+                CompoundTag memberTag = (CompoundTag) mTag;
+                if (!memberTag.hasUUID("UUID")) {
+                    throw new IllegalArgumentException("Franchise member identity is missing");
+                }
+                UUID member = memberTag.getUUID("UUID");
+                if (!membersByFranchise.add(member)) {
+                    throw new IllegalArgumentException("Franchise member is duplicated");
+                }
                 franchise.members.add(member);
                 data.playerToFranchise.put(member, id);
+            }
+            if (!franchise.members.contains(leader)) {
+                throw new IllegalArgumentException("Franchise leader is not a member");
             }
             data.franchises.put(id, franchise);
         }
@@ -250,4 +288,3 @@ public class FranchiseSavedData extends SavedData {
     public record FranchiseLeaderEntry(UUID franchiseId, String name, UUID leader, int memberCount) {
     }
 }
-

@@ -59,11 +59,9 @@ public final class PlayerShopEscrowSavedData
             throw new IllegalStateException(
                     "Player shop escrow entries are missing");
         }
-        ListTag values = tag.getList(ENTRIES_KEY, Tag.TAG_COMPOUND);
-        if (values.size() > MAXIMUM_ENTRIES) {
-            throw new IllegalStateException(
-                    "Player shop escrow entry capacity is exceeded");
-        }
+        ListTag values = SavedDataMigrations.requireList(
+                tag, ENTRIES_KEY, Tag.TAG_COMPOUND,
+                MAXIMUM_ENTRIES, "Player shop escrow entries");
         try {
             for (Tag raw : values) {
                 CompoundTag value = (CompoundTag) raw;

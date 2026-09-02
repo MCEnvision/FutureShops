@@ -4,6 +4,7 @@ import com.enviouse.futureshops.server.escrow.claim.ClaimKind;
 import com.enviouse.futureshops.server.escrow.claim.ClaimStatus;
 import com.enviouse.futureshops.server.escrow.claim.EscrowClaim;
 import com.enviouse.futureshops.server.escrow.custody.CustodyAdapterInspectionStatus;
+import com.enviouse.futureshops.server.SavedDataMigrations;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtAccounter;
@@ -28,6 +29,7 @@ import java.util.zip.GZIPInputStream;
 public final class PlayerInventoryReceiptStore {
     static final String RECEIPTS_KEY =
             "futureshops_cash_claim_delivery_receipts";
+    public static final int MAX_SERIALIZED_INVENTORY_ENTRIES = 256;
     private static final int MAX_RECEIPTS = 1024;
     private static final long MAX_COMPRESSED_PLAYER_BYTES = 16_777_216L;
     private static final long MAX_DECODED_PLAYER_BYTES = 67_108_864L;
@@ -173,7 +175,10 @@ public final class PlayerInventoryReceiptStore {
         List<net.minecraft.world.item.ItemStack> inventory;
         try {
             inventory = PlayerInventoryHashes.readMainInventory(
-                    root.getList("Inventory", Tag.TAG_COMPOUND));
+                    SavedDataMigrations.requireList(
+                            root, "Inventory", Tag.TAG_COMPOUND,
+                            MAX_SERIALIZED_INVENTORY_ENTRIES,
+                            "Player inventory"));
         } catch (RuntimeException exception) {
             return unknown("Player inventory data is invalid");
         }
