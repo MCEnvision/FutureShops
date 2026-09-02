@@ -4,7 +4,7 @@ FutureShops is a Minecraft Forge economy and marketplace mod for server shops, p
 
 ## Status
 
-The `3.0.0-beta.1` build is published as a beta for live validation on [CurseForge](https://www.curseforge.com/minecraft/mc-mods/future-shops/files/8651722) and [Modrinth](https://modrinth.com/mod/future-shops/version/mordTCRQ). It is not a stable release. Use matching FutureShops builds on the client and server, preserve a complete backup before upgrading, and report multiplayer, reconnect, restart, migration, or recovery failures with the relevant logs and recovery handles.
+The `3.0.0-beta.1` build is the published beta baseline for live validation on [CurseForge](https://www.curseforge.com/minecraft/mc-mods/future-shops/files/8651722) and [Modrinth](https://modrinth.com/mod/future-shops/version/mordTCRQ). It is not a stable release. The `3.0.0-beta.2` Forge candidate is prepared locally and remains unpublished. Use matching FutureShops builds on the client and server, preserve a complete backup before upgrading, and report multiplayer, reconnect, restart, migration, or recovery failures with the relevant logs and recovery handles.
 
 The repository default branch is `1.20.1`, which is the canonical Forge 1.20.1 integration line.
 The separate `1.21.1` branch contains the NeoForge line. Forge 1.20.1 fixes and releases target
@@ -16,7 +16,7 @@ Supported runtime:
 
 | Component | Version |
 | --- | --- |
-| FutureShops | 3.0.0 beta 1 |
+| FutureShops | 3.0.0 beta 2 candidate |
 | Minecraft | 1.20.1 |
 | Forge | 47.4.20 |
 | Java | 17 |
@@ -52,16 +52,16 @@ The Bazaar and Auction House are disabled on a new installation. Enable either m
 
 For 3.0 beta upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
 
-The current beta artifact is `futureshops-3.0.0-beta.1.jar`. It includes the historical beta 11 ATM and
-catalog recovery work and repairs startup compatibility for legacy exact item inventory intents.
+The prepared local candidate artifact is `futureshops-3.0.0-beta.2.jar`. It includes the historical beta 11 ATM and
+catalog recovery work and repairs startup compatibility for legacy exact item inventory intents. This candidate is
+not published and must not be treated as a download or stable release.
 Persisted slot proofs are validated from their original serialized evidence, while live item
 comparisons use complete semantic NBT including Forge capabilities. New plans derive their hashes
 and evidence from one owned snapshot per slot. The repair does not clear maintenance state or
 discard escrow evidence. A world that recorded maintenance during beta 10 can use the verified
-maintenance resume command after `3.0.0-beta.1` loads and aligns the journal. This remains a beta
-artifact until the reporter's backed up dedicated server passes startup, purchase, restart, and
-recovery testing. The published 3.0.0 beta is intended for that live validation and is not a stable
-release.
+maintenance resume command after the candidate loads and aligns the journal. This remains a beta
+candidate until the complete release workflow is separately authorized. The published 3.0.0 beta
+baseline remains available on the project pages for live validation and is not a stable release.
 
 Worlds previously opened with the incorrectly labeled `3.1.0-beta.1` build can report a Forge
 version difference when first opened with `3.0.0-beta.3`. This corrects the public artifact label
