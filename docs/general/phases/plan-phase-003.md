@@ -21,10 +21,10 @@ This phase owns `CORE-REQ-019` through `CORE-REQ-022`. The master owns product s
 | VERIFIED | External inputs | `EXT-001` through `EXT-006` identify exact reviewed artifacts and reproducible Pixelmon and hybrid environments. | Phase 000 and Phase 002 evidence packets | Any byte, version, license, configuration, or manifest change invalidates dependent proof. |
 | VERIFIED | Integrated behavior | Requirements `CORE-REQ-001` through `CORE-REQ-018` have phase-owned evidence and no known mandatory defect. | Prior completion packets and requirement trace | A changed implementation, schema, config, dependency, or user-visible behavior invalidates affected evidence. |
 | PROPOSED | Final candidate | The integrated source can produce one reproducible FutureShops `2.3.0` jar. | Clean checked-in wrapper build | Unknown until the final build and artifact inspection pass. |
-| VERIFIED | Tracking issue | Plan authoring created the required open GitHub continuation issue after plan validation. Phase 003 must verify and update that issue, not create an initial issue. | Existing issue URL and number in authoring evidence | Repository, issue identity, state, milestone, labels, or body change requires readback. |
+| VERIFIED | Tracking issue | Plan authoring created and read back GitHub issue 66 immediately after plan validation. Phase 003 must preserve that identity, then search for, verify, and update the same issue only after artifact validation; it must not create an initial or duplicate issue. | Issue 66 URL, number, and readback in authoring evidence | Repository, issue identity, state, milestone, labels, or body change requires post-artifact readback. |
 | UNKNOWN | Terminal evidence | `EVD-VER-001`, `EVD-VER-002`, and `EVD-ART-001` are not final until tied to one source commit and one candidate hash. | Phase 003 evidence store | Any candidate or source change invalidates final status. |
 
-Phase entry stops if Phase 002 is not integrated, exact external environments cannot be reproduced, the existing issue cannot be identified, or a prior mandatory requirement lacks evidence. No later task may convert an entry failure into a documentation caveat.
+Phase entry stops if Phase 002 is not integrated, exact external environments cannot be reproduced, the authoring evidence does not identify issue 66, or a prior mandatory requirement lacks evidence. No later task may convert an entry failure into a documentation caveat.
 
 ## Scope Boundaries
 
@@ -33,7 +33,7 @@ Phase entry stops if Phase 002 is not integrated, exact external environments ca
 - `CORE-REQ-019`: execute the complete deterministic, runtime, recovery, security, dependency, packaging, and diff validation matrix.
 - `CORE-REQ-020`: reconcile `README.md`, `DOCUMENTATION.md`, `docs/README.md`, and applicable focused guides with the exact validated behavior.
 - `CORE-REQ-021`: build, inspect, hash, reinstall, and retain one unpublished `2.3.0` release candidate.
-- `CORE-REQ-022`: verify `EXT-007`, search for duplicates, read back and update the already open continuation issue, and preserve its required scope, milestone, and labels.
+- `CORE-REQ-022`: only after artifact validation, verify `EXT-007`, search for duplicates, read back and update the already open issue 66, preserve its required scope, milestone, and labels, and keep it open.
 - Audit every `CORE-REQ-001` through `CORE-REQ-022` acceptance criterion and every plan-wide Definition of Done item.
 
 ### Explicit Exclusions
@@ -59,7 +59,7 @@ Phase entry stops if Phase 002 is not integrated, exact external environments ca
 
 - Phase 002 is merged and its resulting default branch commit is the source baseline.
 - Prior phase evidence identifies exact external artifacts, environment manifests, and phase artifact hashes.
-- The open continuation issue, repository, milestone, and exact labels are discoverable through authenticated read access.
+- The authoring evidence records issue 66, its repository, URL, creation readback, milestone, and exact labels; Phase 003 does not query GitHub before artifact validation.
 - The immutable goal file and protected plan set are unchanged except through authorized plan authoring.
 
 **Implementation scope**
@@ -72,7 +72,7 @@ Phase entry stops if Phase 002 is not integrated, exact external environments ca
 **Execution order**
 
 1. `P003-TASK-001` executes CORE-PHASE-003 by freezing the source revision, rereading all registered requirements, importing prior evidence, and recording invalidation boundaries.
-2. `P003-TASK-002` verifies `EXT-007`, the existing issue identity, authenticated repository access, duplicate search, milestone, and labels without mutating or closing the issue.
+2. `P003-TASK-002` preserves `DEC-015` and `EXT-007` by recording issue 66 from the authoring `EVD-GH-001` evidence and freezing its identity for later comparison without querying or mutating GitHub.
 3. `P003-TASK-003` runs focused and complete deterministic checks for `CORE-REQ-001` through `CORE-REQ-018`.
 4. `P003-TASK-004` executes CORE-REQ-019 through standard NeoForge server, client, multiplayer, reconnect, lifecycle, and optional-isolation workflows.
 5. `P003-TASK-005` executes CORE-REQ-019 through internal, fixture, Pixelmon, and `vault` failure, crash, idempotency, recovery, and surface matrices.
@@ -81,7 +81,7 @@ Phase entry stops if Phase 002 is not integrated, exact external environments ca
 8. `P003-TASK-008` executes CORE-REQ-021 by building the final candidate from the verified commit and recording SHA 256, SHA 512, metadata, contents, and reproducibility evidence.
 9. `P003-TASK-009` executes CORE-REQ-021 by installing the exact hashed candidate in every required environment and repeating artifact-dependent acceptance workflows.
 10. `P003-TASK-010` executes CORE-REQ-019 by completing the requirement trace and every plan-wide Definition of Done check.
-11. `P003-TASK-011` executes CORE-REQ-022 by searching again for duplicates, updating and reading back the existing continuation issue, and recording `EVD-GH-001` without closing it.
+11. `P003-TASK-011` executes CORE-REQ-022 after artifact validation by searching for duplicates, verifying, updating, and reading back the same open issue 66, and recording `EVD-GH-001` without creating another issue or closing issue 66.
 12. `P003-TASK-012` executes CORE-PHASE-003 by assembling the terminal completion packet and presenting the unpublished endpoint for owner acceptance.
 
 **Required evidence**
@@ -103,7 +103,7 @@ Phase entry stops if Phase 002 is not integrated, exact external environments ca
 | Integrated source | `CORE-PHASE-002` | Approved default branch contains sequential phase results | Git and GitHub readback, source revision record | Stop and return to the missing integration gate. |
 | Requirement evidence | Phases 000 through 002 | Complete, sanitized, and tied to exact inputs | Trace every acceptance criterion | Return failure to owning requirement and invalidate dependents. |
 | External stacks | `EXT-001` through `EXT-006` | Exact reviewed bytes and reproducible manifests | Hash before every install and run | Discard mismatched runs and restore exact stack. |
-| GitHub issue capability | `EXT-007` | Correct repository, authenticated owner access, existing milestone, exact labels, and identifiable open issue | Duplicate search and remote readback | Block completion; do not create a substitute or omit metadata. |
+| GitHub issue 66 evidence and capability | `EXT-007` | At entry, authoring `EVD-GH-001` identifies issue 66 and its creation readback. Only after tasks 009 and 010 pass is authenticated owner access required for the live search, verification, update, and readback. | Freeze authoring evidence locally before product checks; perform no live GitHub operation until the post-artifact gate | Complete all independent validation first. If post-artifact access fails, block completion without creating a substitute or omitting metadata. |
 | Publication boundary | `DEC-016` | No release, tag, upload, announcement, or public artifact | Remote state and local artifact audit | Stop and report any unauthorized publication state. |
 
 ## Outputs and Downstream Contracts
@@ -120,7 +120,7 @@ Phase entry stops if Phase 002 is not integrated, exact external environments ca
 | Task ID | Requirement IDs | Work | Inputs and dependencies | Outputs | Affected components or interfaces | Verification |
 |---|---|---|---|---|---|---|
 | `P003-TASK-001` | `CORE-REQ-019` | Freeze revision and construct the full acceptance and invalidation trace. | Integrated Phase 002, all prior packets | Validation baseline | Plan set, evidence store, Git state | Every criterion has an owner and planned proof. |
-| `P003-TASK-002` | `CORE-REQ-022` | Verify `EXT-007` and existing issue identity without mutation. | Authoring issue evidence, authenticated GitHub | Capability and duplicate report | GitHub issue, milestone, labels | Remote readback matches exact repository and metadata. |
+| `P003-TASK-002` | `DEC-015`, `EXT-007` | Import and freeze issue 66 identity and creation readback from authoring evidence for later `CORE-REQ-022` proof without querying or mutating GitHub. | Authoring `EVD-GH-001` evidence | Frozen issue 66 identity for post-artifact comparison | Authoring evidence | Recorded URL and number match issue 66; no Phase 003 GitHub search or readback occurs. |
 | `P003-TASK-003` | `CORE-REQ-019` | Run focused tests, all tests, applicable data validation and GameTests, then build. | Frozen source and commands | `EVD-VER-001` draft | Build, tests, generated resources | Every required command passes in order. |
 | `P003-TASK-004` | `CORE-REQ-019` | Run clean server, client, multiplayer, reconnect, restart, and isolation workflows. | Phase artifact and standard NeoForge manifest | Standard runtime evidence | Common, client, network, lifecycle | Same bytes pass all standard workflows. |
 | `P003-TASK-005` | `CORE-REQ-019` | Execute provider, surface, crash, retry, compensation, claim, and recovery matrices. | Exact external manifests and stable request fixtures | `EVD-VER-002` | Coordinator, persistence, adapters, external bridge | No duplicate effect, guessed outcome, fallback, loss, or unsafe mutation. |
@@ -129,7 +129,7 @@ Phase entry stops if Phase 002 is not integrated, exact external environments ca
 | `P003-TASK-008` | `CORE-REQ-021` | Clean build the candidate and record identity, metadata, hashes, and contents. | Final verified source and docs | `EVD-ART-001` candidate | Release candidate jar | Reproducible bytes and correct `2.3.0` metadata. |
 | `P003-TASK-009` | `CORE-REQ-019`, `CORE-REQ-021` | Reinstall exact candidate in standard, Pixelmon, and hybrid environments. | Candidate hashes and exact manifests | Final artifact runtime proof | All supported environments | Installed hashes match and terminal workflows pass. |
 | `P003-TASK-010` | `CORE-REQ-019` through `CORE-REQ-021` | Audit all requirements and Definition of Done items. | Final evidence and candidate | Signed-off trace matrix | Whole product contract | No missing, stale, contradictory, or lower-fidelity proof. |
-| `P003-TASK-011` | `CORE-REQ-022` | Search duplicates, update existing issue, verify state, scope, milestone, labels, and links. | Passed tasks 009 and 010, `EXT-007` | `EVD-GH-001` | Existing GitHub issue | URL and readback prove correct open issue; no duplicate created. |
+| `P003-TASK-011` | `CORE-REQ-022` | After artifact validation, search duplicates, verify and update the same issue 66, then read back its state, scope, milestone, labels, and links. | Passed tasks 009 and 010, frozen issue 66 identity, `EXT-007` | `EVD-GH-001` | Existing GitHub issue 66 | URL and readback prove issue 66 remains the correct open issue; no new or duplicate issue is created. |
 | `P003-TASK-012` | `CORE-REQ-019` through `CORE-REQ-022` | Assemble completion packet and owner acceptance handoff. | All prior tasks | Terminal packet | Evidence, candidate, issue link | Packet independently reproduces every terminal claim. |
 
 Tasks are sequential where evidence depends on candidate identity. Independent deterministic checks may run in parallel only against the same frozen revision. A failure returns to its owning requirement, invalidates every dependent task result, and resumes from the earliest affected gate.
@@ -149,7 +149,7 @@ Candidate identity is content based. Every runtime manifest records source commi
 | External stack drifts | Installed hash differs from manifest | Do not run or accept evidence. | Restore exact reviewed bytes or reopen prerequisite review. | Hash check followed by complete affected matrix. |
 | Ambiguous or duplicate value effect | Receipt, balance delta, or journal conflict | Enter `RECOVERY_REQUIRED`; stop monetary writes. | Preserve data, recover by stable identity, repair owning requirement. | Full crash and idempotency matrix for provider and surfaces. |
 | Documentation conflicts with runtime | Rehearsal or artifact cross-check differs | Treat documentation gate as failed. | Correct docs or behavior through the proper owner, then rerun. | Link, example, command, and runbook checks. |
-| Existing issue is missing or inaccessible | Search or readback fails | Block completion; do not create a replacement in this phase. | Restore access or owner-authorized authoring evidence. | Duplicate search and exact remote readback. |
+| Issue 66 is missing or inaccessible at the post-artifact gate | Task 011 search or readback fails after tasks 009 and 010 pass | Block completion; do not create a replacement in this phase. | Restore access to issue 66 or resolve the external repository state through owner-authorized action. | Repeat the post-artifact duplicate search and exact issue 66 remote readback. |
 | Issue metadata drifts | Milestone, labels, scope, state, or links differ | Update only after candidate validation, then read back. | Restore exact metadata; keep issue open. | `EVD-GH-001` readback. |
 | Publication is detected | Tag, release, upload, or public artifact exists | Stop and report contract violation. | Owner directs safe remediation; never publish further. | Remote and artifact publication audit. |
 
@@ -160,7 +160,7 @@ Candidate identity is content based. Every runtime manifest records source commi
 | `CORE-REQ-019` | Focused tests, all tests, build, scans | Full provider and surface matrices | Server, client, multiplayer, Pixelmon, hybrid | Crash, retry, reconnect, failure, compensation, restore | `EVD-VER-001`, `EVD-VER-002` |
 | `CORE-REQ-020` | Link, identifier, version, config, and API checks | Documentation against final behavior | Operator install, selection, failure, backup, and recovery rehearsal | Invalid config, missing provider, ambiguous request, restore | Documentation diff and rehearsal record |
 | `CORE-REQ-021` | Metadata, contents, dependency, secret, and hash checks | Exact bytes across all manifests | Candidate installed in every required environment | Hash mismatch, forbidden contents, clean rebuild | `EVD-ART-001` |
-| `CORE-REQ-022` | Duplicate and metadata checks | Existing issue linked to validated endpoint | Authenticated GitHub readback | Missing capability, wrong state, metadata drift | `EVD-GH-001` |
+| `CORE-REQ-022` | Authoring evidence integrity, then post-artifact duplicate and metadata checks | Issue 66 linked to the validated endpoint and updated only after artifact validation | Post-artifact authenticated GitHub readback of issue 66 | Missing capability, wrong state, metadata drift, replacement or duplicate creation, premature closure | `EVD-GH-001` |
 | `P003-TASK-010` | Requirement trace audit | Cross-phase evidence reconciliation | Repeat any disputed terminal workflow | Invalidate stale or mismatched proof | Plan-wide completion checklist |
 
 Fixtures use disposable worlds, players, products, shops, claims, bills, requests, and provider data. Reruns begin with focused tests, then all tests, applicable data and GameTests, build, standard runtime, multiplayer and reconnect, crash and recovery, exact external environments, packaging and security inspection, candidate reinstall, documentation rehearsal, and issue readback. Lower-fidelity proof never replaces an exact environment or recovery workflow.
@@ -197,7 +197,7 @@ The packet outside the protected plan set contains:
 7. Documentation diff, link and example checks, compatibility cross-check, and disposable operator runbook rehearsal.
 8. Dependency, license, classpath, bytecode, archive, secret, generated output, debug output, and complete Git diff reports.
 9. Failure and evidence invalidation ledger showing every repair and required rerun.
-10. `EVD-GH-001` with duplicate search, existing issue URL and number, post-update readback, exact milestone and labels, correct open state, and no publication promise or private data.
+10. `EVD-GH-001` with issue 66 authoring creation and readback, proof of no early Phase 003 GitHub access, post-artifact duplicate search, issue 66 update and readback, exact milestone and labels, correct open state, and no replacement, duplicate, publication promise, or private data.
 11. Proof that `docs/plan/goal.md` is byte for byte unchanged and no protected plan file became an execution diary.
 12. Remote audit proving no release, tag, mod platform upload, announcement, or public candidate occurred.
 
@@ -207,4 +207,4 @@ Any failed command, stale evidence, hash mismatch, unverified exact stack, missi
 
 This is the final phase. After tasks 001 through 012 pass, perform the plan-wide completion audit against the master from top to bottom, verify the owner-selected endpoint is exactly one fully validated and unpublished FutureShops `2.3.0` artifact plus the verified open continuation issue, and present the completion packet for owner acceptance.
 
-Do not create another phase, publish the artifact, create an initial issue, or close the existing issue as part of this transition. Issue closure occurs only after future owner acceptance of the completed `2.3.0` outcome. Until that acceptance and every terminal gate pass, report the plan as incomplete.
+Do not create another phase, publish the artifact, create an initial or replacement issue, or close issue 66 as part of this transition. Issue 66 closure occurs only after future owner acceptance of the completed `2.3.0` outcome. Until that acceptance and every terminal gate pass, report the plan as incomplete.

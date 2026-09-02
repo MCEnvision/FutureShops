@@ -13,12 +13,12 @@ Project: FutureShops 2.3.0 external economy providers
 Requested artifact: authoritative_plan
 Repository root: /mnt/hermes/projects/FutureShops
 Starting branch: envy/plan-2.3.0-external-economy
-Starting commit: 5fb749b2e6dbc791c8c3984216877ab90b904ee9
+Starting commit: 1ccb0d9aa28bcafe59ffd902db48357a6898113d
 Authoritative remote:
 origin
 https://github.com/MCEnvision/FutureShops.git
-Remote ref: origin/1.21.1
-Remote commit: 5fb749b2e6dbc791c8c3984216877ab90b904ee9
+Remote ref: origin/envy/plan-2.3.0-external-economy
+Remote commit: 1ccb0d9aa28bcafe59ffd902db48357a6898113d
 ```
 
 This existing repository evolves the observed FutureShops 2.2.1 implementation into an unpublished, validated 2.3.0 candidate for Minecraft 1.21.1 and NeoForge 21.1.248. Client and server use one FutureShops jar. The four-phase topology is CORE-PHASE-000 through CORE-PHASE-003. The immutable goal remains outside plan authoring scope.
@@ -49,7 +49,7 @@ FutureShops 2.3.0 must expose one public, versioned NeoForge economy provider co
 | Repository baseline | OBSERVED | Version metadata identifies FutureShops 2.2.1, Minecraft 1.21.1, and NeoForge 21.1.233 before the planned compatibility update. | Repository revision 5fb749b2e6dbc791c8c3984216877ab90b904ee9 and build metadata inspection. |
 | Economy boundary | OBSERVED | EconomyProvider, InternalEconomyProvider, and BalanceManager form the current economy boundary whose callers and persistence must be traced. | Source inspection at the pinned starting commit. |
 | External artifacts | UNKNOWN | Exact Pixelmon, bridge, hybrid stack, license, security, and disposable environment evidence remains unresolved. | EXT-001 through EXT-006 require recorded hashes, manifests, reviews, and runtime proof. |
-| Tracking capability | VERIFIED | Repository issue capability is authorized for the two-stage continuation issue lifecycle. | EXT-007 and DEC-015 require duplicate search, creation response, URL, and readback. |
+| Tracking capability | VERIFIED | Repository issue capability was authorized for the two-stage continuation issue lifecycle, and plan authoring created and read back issue 66. | EXT-007, DEC-015, and EVD-GH-001 preserve the duplicate search, creation response, issue 66 URL, and readback. |
 | Protected goal | OBSERVED | Any existing goal is immutable and supplies no authority to change product scope. | Protected goal path inspection. |
 
 Unknown external evidence is a blocker, not permission to substitute artifacts, guess APIs, weaken transaction guarantees, or claim compatibility.
@@ -84,8 +84,8 @@ All locked future scope is excluded from implementation and remains non-blocking
 
 | Future ID | Deferred subject | Boundary |
 | --- | --- | --- |
-| FUT-001 | Maintain the existing 3.0.0 beta on Forge 1.20.1 | Track in the continuation issue created by plan authoring. Do not import that implementation into 2.3.0. |
-| FUT-002 | Port 3.0.0 functionality to Minecraft 1.21.1 | Track in the same open issue as a future effort. Product execution verifies and updates tracking but does not implement the port. |
+| FUT-001 | Maintain the existing 3.0.0 beta on Forge 1.20.1 | Track in issue 66 created by plan authoring. Do not import that implementation into 2.3.0. |
+| FUT-002 | Port 3.0.0 functionality to Minecraft 1.21.1 | Track in the same open issue 66 as a future effort. Product execution verifies and updates tracking but does not implement the port. |
 | FUT-003 | ATM user interface and commands | Future release only. The 2.3.0 mutation policy must prevent a future ATM path from bypassing provider rules. |
 | FUT-004 | Additional external economy adapters | No adapter beyond internal, Pixelmon 9.4.0, and separately validated vault interoperability is promised here. |
 
@@ -243,7 +243,7 @@ All locked future scope is excluded from implementation and remains non-blocking
 | EXT-004 | Separately installed Vault bridge artifact | CORE-REQ-002, CORE-REQ-018, CORE-REQ-019, CORE-REQ-021 | unknown | not_required | Acquire and review the exact bridge artifact, source, hashes, compatibility, license provenance, and security boundary. |
 | EXT-005 | Exact reviewed hybrid runtime, Vault, and economy plugin stack | CORE-REQ-018, CORE-REQ-019, CORE-REQ-021 | unknown | not_required | Select and review every exact artifact and record versions, sources, hashes, compatibility, licenses, and security conclusions. |
 | EXT-006 | Disposable exact Vault bridge integration environment | CORE-REQ-018, CORE-REQ-019, CORE-REQ-021 | unknown | not_required | Provision the isolated exact hybrid environment and record its reproducible manifest and sanitized logs. |
-| EXT-007 | GitHub repository tracking capabilities | CORE-REQ-022 | available | authorized | Search for duplicates, create and read back the initial issue after plan validation, then verify and update that same open issue in CORE-PHASE-003. |
+| EXT-007 | GitHub repository tracking capabilities | CORE-REQ-022 | available | authorized | Preserve the completed authoring search, creation, and readback for issue 66, then verify and update that same open issue in CORE-PHASE-003 only after artifact validation. |
 
 ### EXT-001 — Official Pixelmon 9.4.0 runtime and development artifacts
 
@@ -271,7 +271,7 @@ All locked future scope is excluded from implementation and remains non-blocking
 
 ### EXT-007 — GitHub repository tracking capabilities
 
-**Kind:** service. **Required evidence:** Authenticated EnVisione identity, repository identity, existing 3.0 beta maintenance milestone, required labels, duplicate search, creation result, issue URL, and readback. Plan authoring creates the initial issue immediately after validation; CORE-PHASE-003 revalidates and updates that same issue without closing it.
+**Kind:** service. **Required evidence:** Authenticated EnVisione identity, repository identity, existing 3.0 beta maintenance milestone, required labels, duplicate search, creation result, issue 66 URL, and readback. Plan authoring created and read back issue 66 immediately after validation; CORE-PHASE-003 preserves that evidence without early GitHub access, then revalidates and updates issue 66 only after artifact validation without creating a replacement or closing it.
 
 ## 11. Architecture Contract and Ownership Boundaries
 
@@ -797,9 +797,9 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 - `EVD-ART-001`, artifact hashes, contents listing, environment manifests, and validation summary.
 
-### CORE-REQ-022 — actual `3.0.0` continuation issue
+### CORE-REQ-022 — actual `3.0.0` continuation issue 66
 
-**Behavior:** Plan authoring immediately searches for duplicates and creates the actual open GitHub issue after the integrated plan set passes validation and before the authoring pass returns. The issue covers maintenance of the existing `3.0.0` Forge `1.20.1` beta and a future Minecraft `1.21.1` port, uses the existing `3.0` beta maintenance milestone and labels `enhancement`, `forge`, `neoforge`, and `ready`, and links reference context without making it `2.3.0` implementation scope. After `CORE-REQ-019` and `CORE-REQ-021` pass, `CORE-PHASE-003` searches again, verifies and updates that same issue, and keeps it open until future owner acceptance.
+**Behavior:** Plan authoring searched for duplicates, created, and read back open GitHub issue 66 immediately after the integrated plan set passed validation and before the authoring pass returned. Issue 66 covers maintenance of the existing `3.0.0` Forge `1.20.1` beta and a future Minecraft `1.21.1` port, uses the existing `3.0` beta maintenance milestone and labels `enhancement`, `forge`, `neoforge`, and `ready`, and links reference context without making it `2.3.0` implementation scope. Phases 000 through 002 preserve issue 66 unchanged and open. CORE-PHASE-003 records the authoring evidence without early GitHub access; only after `CORE-REQ-019` and `CORE-REQ-021` pass does it search again, verify, update, and read back the same issue 66, which remains open until future owner acceptance. It never creates a replacement or duplicate issue.
 **Owner:** `CORE-PHASE-003`
 **Contributors:** `CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`
 **Dependencies:** CORE-REQ-019, CORE-REQ-021, DEC-015, DEC-016, EXT-007
@@ -809,11 +809,11 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 **Acceptance criteria**
 
-- One actual issue URL and number exist from this plan authoring pass; the initial issue was created immediately after plan validation and before authoring returned; no duplicate was created; both maintenance and port subjects are explicit; the required existing milestone and every required label are attached; `CORE-PHASE-003` updates and reads back the same issue after artifact validation; the issue remains open until future owner acceptance.
+- Issue 66 URL and number exist from this plan authoring pass; issue 66 was created and read back immediately after plan validation and before authoring returned; no duplicate was created; both maintenance and port subjects are explicit; the required existing milestone and every required label are attached; phases 000 through 002 keep issue 66 unchanged and open; `CORE-PHASE-003` performs no early GitHub access and updates and reads back issue 66 only after artifact validation; issue 66 remains open until future owner acceptance.
 
 **Required evidence**
 
-- `EVD-GH-001` with authoring duplicate search, initial creation URL and readback, Phase 003 duplicate search, post-change update readback, exact open state, milestone, labels, and links.
+- `EVD-GH-001` with the authoring duplicate search, issue 66 creation URL and readback, preservation evidence for phases 000 through 002, and the post-artifact Phase 003 duplicate search, update, readback, exact open state, milestone, labels, and links.
 
 ## Requirement ownership freeze
 
@@ -853,7 +853,7 @@ Phases are sequential. A phase starts from the approved result of its predecesso
 | `CORE-PHASE-000` | [`phases/plan-phase-000.md`](phases/plan-phase-000.md) | Verified external prerequisites, pinned platform, frozen public API, and restart only selection contract | `CORE-REQ-001`, `CORE-REQ-002`, `CORE-REQ-003` | Master and complete registered plan set accepted, repository baseline reconfirmed | `EXT-001` through `EXT-006` are proven; the repository baseline and public API contract are frozen; platform and API acceptance pass; unresolved artifact, environment, or feasibility evidence blocks exit |
 | `CORE-PHASE-001` | [`phases/plan-phase-001.md`](phases/plan-phase-001.md) | Complete server authoritative provider routing, fail closed lifecycle, durable transactions, surface coverage, migration safety, presentation, and recovery | `CORE-REQ-004`, `CORE-REQ-005`, `CORE-REQ-006`, `CORE-REQ-007`, `CORE-REQ-008`, `CORE-REQ-009`, `CORE-REQ-010`, `CORE-REQ-011`, `CORE-REQ-012`, `CORE-REQ-013`, `CORE-REQ-014`, `CORE-REQ-015`, `CORE-REQ-016` | `CORE-PHASE-000` integrated and its public contract stable | Every owned requirement passes focused deterministic, persistence, failure, server, client, and multiplayer gates with internal and fixture external providers |
 | `CORE-PHASE-002` | [`phases/plan-phase-002.md`](phases/plan-phase-002.md) | Bundled optional Pixelmon `9.4.0` adapter and verified separate `vault` bridge interoperability | `CORE-REQ-017`, `CORE-REQ-018` | `CORE-PHASE-001` integrated; exact reviewed artifacts and disposable environments remain reproducible | Both exact external stacks pass the complete surface, lifecycle, idempotency, restart, recovery, isolation, and packaging matrices; standard NeoForge remains clean |
-| `CORE-PHASE-003` | [`phases/plan-phase-003.md`](phases/plan-phase-003.md) | Final production validation, accurate documentation, validated unpublished artifact, and verification and update of the existing open `3.0.0` continuation issue | `CORE-REQ-019`, `CORE-REQ-020`, `CORE-REQ-021`, `CORE-REQ-022` | `CORE-PHASE-002` integrated with complete external evidence and the authoring issue identified by `EVD-GH-001` | Plan wide definition of done passes, exact artifact remains unpublished, and the same issue is updated, verified by URL and readback, and remains open |
+| `CORE-PHASE-003` | [`phases/plan-phase-003.md`](phases/plan-phase-003.md) | Final production validation, accurate documentation, validated unpublished artifact, and post-artifact verification and update of open issue 66 | `CORE-REQ-019`, `CORE-REQ-020`, `CORE-REQ-021`, `CORE-REQ-022` | `CORE-PHASE-002` integrated with complete external evidence and issue 66 identified by the authoring `EVD-GH-001` record | Plan wide definition of done passes, exact artifact remains unpublished, and issue 66 is updated only after artifact validation, verified by URL and readback, and remains open |
 
 No future phase may start early. A failure in an earlier owned requirement returns work to that requirement's phase scope and invalidates affected downstream evidence.
 
@@ -874,7 +874,7 @@ No future phase may start early. A failure in an earlier owned requirement retur
 11. Run the exact Pixelmon environment and exact hybrid bridge environment.
 12. Inspect dependency graphs, runtime classpaths, the final jar, generated output, secrets, debug output, and the complete diff.
 13. Reinstall the exact hashed candidate in every production validation environment.
-14. Search again, update, and read back the existing authoring-created GitHub issue only after all prior product gates pass, and keep it open.
+14. Only after all prior product gates pass, search again, update, and read back authoring-created GitHub issue 66, and keep it open without creating a replacement or duplicate.
 
 ### Required test matrices
 
@@ -976,7 +976,7 @@ Release `2.3.0` ends at a validated artifact. No GitHub release, mod platform up
 | `RISK-007` | Optional classes link when Pixelmon or hybrid APIs are absent | Standard NeoForge startup crashes | Isolate source and class loading, use exact presence and version gates, test clean jar | Blocks `CORE-REQ-001` and integrations |
 | `RISK-008` | Client controls remain active from a stale readiness snapshot | Users submit unsafe or confusing operations | Server revalidation, typed rejections, synchronized presentation, reconnect tests | Blocks `CORE-REQ-005` and `CORE-REQ-012` |
 | `RISK-009` | Money item registration is removed to disable use | Existing saves or inventories corrupt | Retain registration and decoding, disable mutation behavior only | Blocks `CORE-REQ-011` |
-| `RISK-010` | GitHub milestone, labels, capability, or authoring issue evidence are missing | Required tracking cannot satisfy scope | Verify `EXT-007`, create and read back the issue immediately after plan validation, and revalidate the same issue in Phase 003 | Blocks this authoring pass and plan completion |
+| `RISK-010` | GitHub milestone, labels, capability, or issue 66 authoring evidence are missing | Required tracking cannot satisfy scope | Preserve the completed issue 66 creation and readback evidence, and revalidate and update issue 66 only after artifact validation in Phase 003 | Blocks plan completion; never create a replacement issue during product execution |
 | `RISK-011` | Reference `3.0` work is mistaken for current implementation scope | Uncontrolled scope and version conflict | Keep reference only role explicit and freeze ownership here | Requires plan revision before any imported work |
 | `RISK-012` | Validation artifact differs from the artifact installed in an external environment | Evidence does not prove the delivered bytes | Hash before installation and verify hashes in every environment | Blocks `CORE-REQ-021` |
 
@@ -1005,11 +1005,11 @@ Official Pixelmon 9.4.0 runtime and development artifacts, Disposable exact Pixe
 15. Focused tests, complete tests, applicable data and GameTests, build, server, client, multiplayer, restart, failure, recovery, dependency, security, jar, and diff gates pass.
 16. User, API, maintainer, migration, integration, security, verification, and recovery documentation matches the validated behavior and exact artifacts.
 17. `EVD-ART-001` identifies one reproducible, inspected, SHA 256 and SHA 512 hashed FutureShops `2.3.0` artifact that remains unpublished.
-18. `EVD-GH-001` identifies the one open GitHub issue created immediately after plan validation for `3.0.0` Forge `1.20.1` maintenance and a future `1.21.1` port, records its authoring readback, proves its Phase 003 post-change update and readback, assigns the existing `3.0` beta maintenance milestone and labels `enhancement`, `forge`, `neoforge`, and `ready`, and keeps it open until future owner acceptance.
+18. `EVD-GH-001` identifies open GitHub issue 66, created and read back immediately after plan validation for `3.0.0` Forge `1.20.1` maintenance and a future `1.21.1` port, proves it remained unchanged and open through phases 000 through 002, and proves its post-artifact Phase 003 search, update, and readback with the existing `3.0` beta maintenance milestone and labels `enhancement`, `forge`, `neoforge`, and `ready`. Issue 66 remains open until future owner acceptance, and product execution never creates a replacement or duplicate.
 19. `docs/plan/goal.md` is byte for byte unchanged.
 20. No publication, release tag, mod platform upload, private data disclosure, credential use outside approved authentication, or unrelated source change occurred.
 
-Passing internal tests without the exact Pixelmon and Vault environments is not completion. Deferring initial issue creation beyond the validated plan authoring pass is a contract violation. Product completion also requires Phase 003 to update and read back the same open issue after artifact validation.
+Passing internal tests without the exact Pixelmon and Vault environments is not completion. Issue 66 creation and authoring readback are completed planning evidence and may not be deferred, repeated, or replaced during product execution. Product completion also requires Phase 003 to update and read back issue 66 only after artifact validation.
 
 ## 19. Goal Creator Handoff
 
@@ -1024,7 +1024,7 @@ Next executable action: Execute P000-TASK-001 to reconfirm repository identity, 
 Known failing checks: none at validated plan handoff; execution checks have not yet run.
 Known external blockers: Official Pixelmon 9.4.0 runtime and development artifacts; Disposable exact Pixelmon 9.4.0 integration environment; Pixelmon economy API feasibility proof; Separately installed Vault bridge artifact; Exact reviewed hybrid runtime, Vault, and economy plugin stack; Disposable exact Vault bridge integration environment.
 Completion endpoint: One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven against internal, exact Pixelmon 9.4.0, and one exact reviewed Vault bridge stack, plus an actual read-back GitHub issue for 3.0.0 Forge maintenance and its future 1.21.1 port.
-Required evidence gates: Complete every requirement acceptance criterion and phase exit gate, resolve EXT-001 through EXT-006 with exact evidence, pass deterministic and runtime matrices, inspect and hash the unpublished jar, and preserve EVD-GH-001 creation and Phase 003 update readbacks for the same open issue.
+Required evidence gates: Complete every requirement acceptance criterion and phase exit gate, resolve EXT-001 through EXT-006 with exact evidence, pass deterministic and runtime matrices, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation.
 ```
 
 Execution advances one phase at a time. It does not stack future phase work, rewrite the master as status, alter the immutable goal, or declare success before the plan-wide Definition of Done and exact endpoint are satisfied.

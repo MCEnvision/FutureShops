@@ -20,7 +20,7 @@ This phase owns `CORE-REQ-001`, `CORE-REQ-002`, and `CORE-REQ-003`. The master o
 | OBSERVED | Product baseline | The master records FutureShops `2.2.1`, Minecraft `1.21.1`, and NeoForge `21.1.233` as the baseline that must be reconfirmed. | `EVD-REP-001`; repository version metadata, build scripts, settings, and mod metadata | Any edit to version, loader, mapping, Java, Gradle, dependency, or mod metadata invalidates the observation. |
 | OBSERVED | Economy boundary | The master identifies `EconomyProvider`, `InternalEconomyProvider`, and `BalanceManager`; their definitions, call sites, and persistence ownership remain to be traced from current source. | `EVD-REP-002`; CodeGraph call graph and focused source inspection during `P000-TASK-001` | Any source edit touching an economy type, caller, command, packet, shop, market, persistence, or money item invalidates the call graph. |
 | VERIFIED | Product contract | The frozen master assigns exactly `CORE-REQ-001`, `CORE-REQ-002`, and `CORE-REQ-003` to this phase and makes `EXT-001` through `EXT-006` phase exit gates. | [plan.md](../plan.md) at the accepted plan set revision | Any owner authorized master or plan index revision requires a complete reread and traceability check. |
-| VERIFIED | Continuation issue | Validated plan authoring created the required open `3.0.0` continuation issue and recorded its URL, number, milestone, labels, duplicate search, and readback in `EVD-GH-001`. | `DEC-015`, `EXT-007`, and authoring evidence | Any issue identity, state, scope, milestone, label, or link change requires readback; this phase does not modify or close it. |
+| VERIFIED | Continuation issue | Validated plan authoring created and read back open `3.0.0` continuation issue 66 and recorded its URL, number, milestone, labels, and duplicate search in `EVD-GH-001`. | `DEC-015`, `EXT-007`, and authoring evidence | This phase preserves issue 66 unchanged and open and performs no issue mutation, duplication, or closure. |
 | UNKNOWN | Pixelmon artifacts and terms | Exact official Pixelmon `9.4.0` runtime and development artifacts, hashes, terms, archive contents, and security conclusions are not yet proven. | `EXT-001`, `EVD-EXT-001`, `EVD-EXT-002` | Remains unknown until evidence is acquired from an authoritative source and independently hashed and reviewed. |
 | UNKNOWN | Pixelmon provider feasibility | The exact API shape, lifecycle, value representation, persistence, mutation identity, and outcome recovery guarantees are not yet proven. | `EXT-003`, `EVD-EXT-003` | Any change in the exact Pixelmon artifact or NeoForge pin invalidates the feasibility result. |
 | UNKNOWN | Pixelmon environment | No reproducible disposable environment using the exact required artifacts and exact FutureShops build is yet recorded. | `EXT-002`, `EVD-EXT-004` | Any artifact, configuration, launcher, Java runtime, FutureShops build, or environment manifest change invalidates runtime evidence. |
@@ -48,7 +48,7 @@ This phase owns `CORE-REQ-001`, `CORE-REQ-002`, and `CORE-REQ-003`. The master o
 - `CORE-REQ-004` through `CORE-REQ-016`: Complete provider routing, transaction coordination, market surface migration, player presentation, recovery implementation, and operational behavior belong to `CORE-PHASE-001`. Phase 000 freezes their required public contracts but does not start their implementation.
 - `CORE-REQ-017` and `CORE-REQ-018`: Production implementation and full compatibility validation of the Pixelmon adapter and separate Vault bridge belong to `CORE-PHASE-002`. Phase 000 proves feasibility and provides reproducible reviewed inputs only.
 - `CORE-REQ-019` through `CORE-REQ-021` and the Phase 003 portion of `CORE-REQ-022`: Plan wide production validation, terminal documentation reconciliation, final artifact creation, and verification and update of the already open GitHub continuation issue belong to `CORE-PHASE-003`.
-- Initial issue creation and `EXT-007` authoring evidence are completed immediately after plan validation, before this phase begins. This phase does not modify or close the issue; Phase 003 revalidates `EXT-007` and updates the same issue after product validation.
+- Initial issue 66 creation and `EXT-007` authoring evidence were completed immediately after plan validation, before this phase begins. This phase preserves issue 66 unchanged and open; Phase 003 revalidates `EXT-007` and updates issue 66 only after artifact validation.
 - `FUT-001` through `FUT-004`: `3.0.0` maintenance, the future `1.21.1` port of `3.0.0`, an ATM interface or command, and additional provider adapters remain future work.
 - `NG-001` through `NG-009`: Publication, balance migration, bundled Bukkit or Vault components, hot switching, shadow balance ledgers, extra Pixelmon versions, unrelated upgrades, telemetry, distributed authority, and weakened browsing, barter, custody, claims, or save compatibility remain prohibited.
 - No FutureShops source may contain the separate bridge implementation, Bukkit or Vault reflection, or compile time or runtime dependencies on Bukkit, Vault, a hybrid server, or its economy plugin.
@@ -62,13 +62,13 @@ This phase owns `CORE-REQ-001`, `CORE-REQ-002`, and `CORE-REQ-003`. The master o
 **Owner:** FutureShops repository
 **Dependencies:** DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-012, DEC-013, DEC-014, DEC-015, DEC-016, EXT-001, EXT-002, EXT-003, EXT-004, EXT-005, EXT-006, EXT-007
 **Canonical requirements:** CORE-REQ-001, CORE-REQ-002, CORE-REQ-003
-**Documentation and release impact:** Update the detected root user documentation, maintainer documentation, documentation index, API reference, configuration guide, integration evidence, and validation records for behavior implemented in this phase. Record exact external artifact and environment evidence without redistributing artifacts. Do not publish, tag, upload, announce, modify, duplicate, or close the authoring-created `3.0.0` continuation issue.
+**Documentation and release impact:** Update the detected root user documentation, maintainer documentation, documentation index, API reference, configuration guide, integration evidence, and validation records for behavior implemented in this phase. Record exact external artifact and environment evidence without redistributing artifacts. Do not modify, duplicate, or close authoring-created `3.0.0` continuation issue 66, and do not publish, tag, upload, or announce.
 **Next transition:** `CORE-PHASE-001`, only after this phase is integrated and every phase exit gate remains current.
 
 **Entry criteria**
 
 - The accepted master and complete registered plan set are readable through EOF and identify `CORE-PHASE-000` as active with no ownership, dependency, or phase sequence conflict.
-- `EVD-GH-001` identifies the open continuation issue created by validated plan authoring, and its required state, milestone, and labels are preserved without mutation in this phase.
+- `EVD-GH-001` identifies issue 66 and its authoring creation readback, milestone, and labels. Preserve that evidence and perform no Phase 000 issue mutation.
 - Repository identity, current branch, source revision, dirty state, wrapper, version metadata, dependency declarations, mod metadata, Java and Gradle pins, test source sets, and available verification tasks are captured without changing implementation.
 - `EVD-REP-001` and `EVD-REP-002` are reconfirmed against current repository evidence. A mismatch is classified before work proceeds; a material product contract mismatch requires an owner authorized plan revision.
 - External evidence begins in `UNKNOWN` or verified state without substituting unofficial artifacts, guessed APIs, or unrecorded environments.
@@ -125,7 +125,7 @@ Tasks `P000-TASK-002`, `P000-TASK-004`, and the artifact discovery part of `P000
 - The separate bridge and exact hybrid stack remain outside FutureShops source, dependency graphs, runtime classpath requirements for standard NeoForge, and jar contents.
 - Phase owned documentation, configuration examples, API reference, environment manifests, and evidence records match the implemented behavior and exact artifacts.
 - The complete phase diff contains no unrelated upgrade, external artifact, credential, private raw log, cache, test world, absolute private path, debug output, or change to the immutable goal.
-- The phase result is integrated according to repository policy. No release, publication, release tag, or mod platform upload has been created, and the existing `3.0.0` continuation issue remains open and unmodified.
+- The phase result is integrated according to repository policy. No release, publication, release tag, or mod platform upload has been created, and issue 66 remains open and unmodified.
 - No known mandatory phase owned defect remains.
 
 ## Inputs and Upstream Contracts
@@ -260,7 +260,7 @@ Verification reruns in master order after the final phase change: confirm task i
 - Document operator behavior for missing, malformed, incompatible, and late providers: the server stays online, the selected external provider does not fall back to internal, correction requires restart, and phase 001 will implement complete monetary surface enforcement.
 - Document the configuration and schema impact. State explicitly that provider selection does not migrate balances, reinterpret integer prices beyond selected minor units, redeem external bills, or reassign unresolved requests.
 - Keep all evidence free of credentials, private player data, proprietary raw logs, private absolute paths, and bundled external bytes.
-- Do not publish a release, create a GitHub release, upload to a mod platform, create a release tag, announce a public artifact, duplicate the authoring-created `3.0.0` continuation issue, modify it, or close it in this phase.
+- Do not publish a release, create a GitHub release, upload to a mod platform, create a release tag, announce a public artifact, duplicate authoring-created issue 66, modify it, or close it in this phase.
 
 ## Risks and Evidence Invalidation
 
@@ -295,7 +295,7 @@ The phase completion packet is stored outside the protected plan set and contain
 - Updated phase owned root, maintainer, index, API, configuration, integration, security, migration, and verification documentation, with links and examples checked against the phase candidate.
 - A blocker ledger showing no unresolved `EXT-001` through `EXT-006`, no unresolved phase owned defect, and no downgraded guarantee. Closed blockers retain their evidence and resolution.
 - A signed approval or review record for the frozen public API and the exact downstream contracts consumed by `CORE-PHASE-001` and `CORE-PHASE-002`, according to repository policy.
-- Confirmation that external bytes, credentials, private data, raw proprietary logs, caches, test worlds, unrelated changes, release publication, and release tags are absent, and that the authoring-created `3.0.0` issue remains the same open, unmodified issue recorded by `EVD-GH-001`.
+- Confirmation that external bytes, credentials, private data, raw proprietary logs, caches, test worlds, unrelated changes, release publication, and release tags are absent, and that no Phase 000 mutation targeted authoring-created open issue 66 recorded by `EVD-GH-001`.
 
 ## Next Transition
 

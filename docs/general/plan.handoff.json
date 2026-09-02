@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "planId": "PLAN-MASTER",
-  "planSetSha256": "850140946dea95ac3f04a0f7defacd9b4c5831dab9101f690c2d16c27ae22226",
+  "planSetSha256": "9fa6cbb672eadbd7b15a7f14cd4f9d4b8b2583ec769d68bebb4cad910d80aff7",
   "planningSubject": {
     "name": "FutureShops 2.3.0 external economy providers for Minecraft 1.21.1 NeoForge, with Pixelmon 9.4.0 support and a Vault bridge API",
     "requestedArtifact": "authoritative_plan",
@@ -538,7 +538,7 @@
     },
     {
       "id": "CORE-REQ-022",
-      "summary": "After artifact validation, create and read back the actual 3.0.0 Forge maintenance and future 1.21.1 port issue with the required milestone and labels.",
+      "summary": "Plan authoring already created and read back issue 66 immediately after plan validation, and CORE-PHASE-003 later searches, verifies, updates, and keeps that same issue open after artifact validation.",
       "source": "SRC-001",
       "owner": "`CORE-PHASE-003`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`",
@@ -1116,6 +1116,6 @@
     "nextExecutableAction": "Execute P000-TASK-001 to reconfirm repository identity, toolchain, product metadata, economy ownership, and the complete provider call graph before implementation.",
     "knownFailingChecks": "none at validated plan handoff; execution checks have not yet run.",
     "knownExternalBlockers": "Official Pixelmon 9.4.0 runtime and development artifacts; Disposable exact Pixelmon 9.4.0 integration environment; Pixelmon economy API feasibility proof; Separately installed Vault bridge artifact; Exact reviewed hybrid runtime, Vault, and economy plugin stack; Disposable exact Vault bridge integration environment.",
-    "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, resolve EXT-001 through EXT-006 with exact evidence, pass deterministic and runtime matrices, inspect and hash the unpublished jar, and preserve EVD-GH-001 creation and Phase 003 update readbacks for the same open issue."
+    "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, resolve EXT-001 through EXT-006 with exact evidence, pass deterministic and runtime matrices, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation."
   }
 }
