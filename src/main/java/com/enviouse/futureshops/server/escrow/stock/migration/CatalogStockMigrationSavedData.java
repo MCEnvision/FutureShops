@@ -31,6 +31,7 @@ public final class CatalogStockMigrationSavedData extends SavedData {
     private CatalogStockMigrationFailure failure =
             CatalogStockMigrationFailure.NONE;
     private String failureDetail = "";
+    private boolean materializedRetryBlocked;
     private long completionSequence = -1L;
 
     public static CatalogStockMigrationSavedData get(MinecraftServer server) {
@@ -79,6 +80,11 @@ public final class CatalogStockMigrationSavedData extends SavedData {
         data.nextEntryIndex = tag.getInt("nextEntryIndex");
         data.failure = parseFailure(tag.getString("failure"));
         data.failureDetail = tag.getString("failureDetail");
+        if (tag.contains("materializedRetryBlocked")) {
+            requireType(tag, "materializedRetryBlocked", Tag.TAG_BYTE);
+            data.materializedRetryBlocked = tag.getBoolean(
+                    "materializedRetryBlocked");
+        }
         data.completionSequence = tag.getLong("completionSequence");
         if (tag.contains("lastCompletedShop")) {
             data.lastCompletedKey = new StockKey(
@@ -127,6 +133,7 @@ public final class CatalogStockMigrationSavedData extends SavedData {
         }
         tag.putString("failure", failure.name());
         tag.putString("failureDetail", failureDetail);
+        tag.putBoolean("materializedRetryBlocked", materializedRetryBlocked);
         tag.putLong("completionSequence", completionSequence);
         return tag;
     }
@@ -233,6 +240,7 @@ public final class CatalogStockMigrationSavedData extends SavedData {
         return stage == CatalogStockMigrationStage.FAILED
                 && failure
                 == CatalogStockMigrationFailure.STOCK_STORE_NOT_EMPTY
+                && !materializedRetryBlocked
                 && snapshotEntries.isEmpty()
                 && snapshotFingerprint.isEmpty()
                 && nextEntryIndex == 0
@@ -248,6 +256,7 @@ public final class CatalogStockMigrationSavedData extends SavedData {
         }
         failure = CatalogStockMigrationFailure.NONE;
         failureDetail = "";
+        materializedRetryBlocked = false;
         stage = CatalogStockMigrationStage.UNINITIALIZED;
         setDirty();
     }
@@ -266,6 +275,7 @@ public final class CatalogStockMigrationSavedData extends SavedData {
                     "Catalog stock migration failure detail is invalid");
         }
         failureDetail = detail;
+        materializedRetryBlocked = true;
         setDirty();
     }
 

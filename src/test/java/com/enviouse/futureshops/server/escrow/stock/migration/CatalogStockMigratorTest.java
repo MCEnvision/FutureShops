@@ -205,7 +205,7 @@ class CatalogStockMigratorTest {
                 result.failure());
         assertTrue(result.detail().contains("incompatible materialized state"));
         assertTrue(result.detail().contains("Catalog stock"));
-        assertTrue(failed.canRetryMaterializedState());
+        assertFalse(failed.canRetryMaterializedState());
     }
 
     @Test
