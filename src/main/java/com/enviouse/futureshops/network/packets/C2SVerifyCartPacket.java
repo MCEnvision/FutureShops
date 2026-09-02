@@ -16,6 +16,9 @@ import java.util.function.Supplier;
  * price changed, out of stock, listing removed, etc.).
  */
 public record C2SVerifyCartPacket(List<CartLine> lines) {
+    private static final int MAX_ITEM_ID_LENGTH = 256;
+    private static final int MAX_TRADE_MODE_LENGTH = 32;
+    private static final int MAX_NBT_LENGTH = 65_536;
 
     public record CartLine(BlockPos shopPos, int listingIndex, int quantity,
                            String expectedItemId, long expectedPriceMinor,
@@ -26,20 +29,22 @@ public record C2SVerifyCartPacket(List<CartLine> lines) {
             buffer.writeBlockPos(line.shopPos);
             buffer.writeVarInt(line.listingIndex);
             buffer.writeVarInt(line.quantity);
-            buffer.writeUtf(line.expectedItemId);
+            buffer.writeUtf(line.expectedItemId, MAX_ITEM_ID_LENGTH);
             buffer.writeLong(line.expectedPriceMinor);
             buffer.writeBoolean(line.expectedNbtAware);
-            buffer.writeUtf(line.expectedTradeMode);
+            buffer.writeUtf(line.expectedTradeMode, MAX_TRADE_MODE_LENGTH);
             // Protocol 25: SNBT snapshot of the listing tag at add-to-cart time
             // (blank = no NBT). Appended last to keep prior field order intact.
-            buffer.writeUtf(line.expectedNbtJson == null ? "" : line.expectedNbtJson);
+            buffer.writeUtf(line.expectedNbtJson == null ? "" : line.expectedNbtJson,
+                    MAX_NBT_LENGTH);
         }
 
         public static CartLine decode(FriendlyByteBuf buffer) {
             return new CartLine(
                     buffer.readBlockPos(), buffer.readVarInt(), buffer.readVarInt(),
-                    buffer.readUtf(), buffer.readLong(), buffer.readBoolean(), buffer.readUtf(),
-                    buffer.readUtf());
+                    buffer.readUtf(MAX_ITEM_ID_LENGTH), buffer.readLong(),
+                    buffer.readBoolean(), buffer.readUtf(MAX_TRADE_MODE_LENGTH),
+                    buffer.readUtf(MAX_NBT_LENGTH));
         }
     }
 
@@ -72,4 +77,3 @@ public record C2SVerifyCartPacket(List<CartLine> lines) {
         ctx.get().setPacketHandled(true);
     }
 }
-

@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.server.transaction;
 
+import com.enviouse.futureshops.server.util.PageBounds;
 import com.enviouse.futureshops.data.TransactionHistoryEntry;
 import com.enviouse.futureshops.server.SavedDataMigrations;
 import net.minecraft.nbt.CompoundTag;
@@ -200,13 +201,14 @@ public final class TransactionHistorySavedData extends SavedData {
                         ? java.util.Comparator.comparingLong(TransactionHistoryEntry::timestampEpochSeconds).reversed()
                         : java.util.Comparator.comparingLong(TransactionHistoryEntry::timestampEpochSeconds))
                 .toList();
-        int safePage = Math.max(1, page);
-        int safePageSize = Math.max(1, pageSize);
-        int from = (safePage - 1) * safePageSize;
-        if (from >= filteredEntries.size()) {
+        int safePage = PageBounds.normalizePage(page);
+        int safePageSize = PageBounds.normalizePageSize(pageSize);
+        long fromLong = PageBounds.offset(safePage, safePageSize);
+        if (fromLong >= filteredEntries.size()) {
             return List.of();
         }
-        int to = Math.min(filteredEntries.size(), from + safePageSize);
+        int from = (int) fromLong;
+        int to = (int) Math.min((long) filteredEntries.size(), fromLong + safePageSize);
         return List.copyOf(filteredEntries.subList(from, to));
     }
 

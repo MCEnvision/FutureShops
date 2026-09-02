@@ -41,4 +41,15 @@ class TransactionHistorySavedDataTest {
                 .getCompound(0).getList("markers", Tag.TAG_STRING)
                 .getString(0));
     }
+
+    @Test
+    void hostilePageValuesCannotOverflowTheSliceOffset() {
+        UUID playerId = UUID.randomUUID();
+        TransactionHistorySavedData data = new TransactionHistorySavedData();
+        TransactionHistoryEntry entry = new TransactionHistoryEntry(
+                1234L, "BUY", "futureshops:shop", 1, 1L, "test", "");
+        assertTrue(data.appendIfAbsent(playerId, "page-test", entry));
+
+        assertTrue(data.getPage(playerId, Integer.MAX_VALUE, Integer.MAX_VALUE).isEmpty());
+    }
 }

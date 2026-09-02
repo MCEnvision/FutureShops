@@ -2,6 +2,7 @@ package com.enviouse.futureshops.network.packets;
 
 import com.enviouse.futureshops.data.TransactionHistoryEntry;
 import com.enviouse.futureshops.server.transaction.TransactionHistoryService;
+import com.enviouse.futureshops.server.util.PageBounds;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
@@ -17,6 +18,8 @@ public record C2SFetchHistoryPacket(
         String searchText,
         TransactionHistoryEntry.SortOrder sortOrder,
         TransactionHistoryEntry.TimeWindow timeWindow) {
+    private static final int MAX_SHOP_ID_LENGTH = 128;
+    private static final int MAX_SEARCH_LENGTH = 256;
     public static void encode(C2SFetchHistoryPacket packet, FriendlyByteBuf buffer) {
         buffer.writeUtf(packet.shopId);
         buffer.writeVarInt(packet.page);
@@ -29,20 +32,20 @@ public record C2SFetchHistoryPacket(
 
     public static C2SFetchHistoryPacket decode(FriendlyByteBuf buffer) {
         return new C2SFetchHistoryPacket(
-                buffer.readUtf(),
+                buffer.readUtf(MAX_SHOP_ID_LENGTH),
                 buffer.readVarInt(),
                 buffer.readVarInt(),
-                TransactionHistoryEntry.HistoryFilter.fromWire(buffer.readUtf()),
-                buffer.readUtf(),
-                TransactionHistoryEntry.SortOrder.fromWire(buffer.readUtf()),
-                TransactionHistoryEntry.TimeWindow.fromWire(buffer.readUtf()));
+                TransactionHistoryEntry.HistoryFilter.fromWire(buffer.readUtf(32)),
+                buffer.readUtf(MAX_SEARCH_LENGTH),
+                TransactionHistoryEntry.SortOrder.fromWire(buffer.readUtf(32)),
+                TransactionHistoryEntry.TimeWindow.fromWire(buffer.readUtf(32)));
     }
 
     public static void handle(C2SFetchHistoryPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
         NetworkEvent.Context context = contextSupplier.get();
         context.enqueueWork(() -> {
             ServerPlayer player = context.getSender();
-            if (player != null) {
+            if (player != null && PageBounds.isValid(packet.page(), packet.pageSize())) {
                 TransactionHistoryService.sendHistoryPage(
                         player,
                         packet.shopId(),
@@ -57,4 +60,3 @@ public record C2SFetchHistoryPacket(
         context.setPacketHandled(true);
     }
 }
-

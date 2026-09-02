@@ -14,6 +14,8 @@ import java.util.function.Supplier;
  * fall back to CYCLE server-side.
  */
 public record C2SPlayerShopIconPacket(BlockPos shopPos, String iconMode, String iconItem) {
+    private static final int MAX_ICON_MODE_LENGTH = 32;
+    private static final int MAX_ICON_ITEM_LENGTH = 256;
     public static void encode(C2SPlayerShopIconPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.shopPos());
         buffer.writeUtf(packet.iconMode());
@@ -21,7 +23,8 @@ public record C2SPlayerShopIconPacket(BlockPos shopPos, String iconMode, String 
     }
 
     public static C2SPlayerShopIconPacket decode(FriendlyByteBuf buffer) {
-        return new C2SPlayerShopIconPacket(buffer.readBlockPos(), buffer.readUtf(), buffer.readUtf());
+        return new C2SPlayerShopIconPacket(buffer.readBlockPos(),
+                buffer.readUtf(MAX_ICON_MODE_LENGTH), buffer.readUtf(MAX_ICON_ITEM_LENGTH));
     }
 
     public static void handle(C2SPlayerShopIconPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

@@ -36,12 +36,15 @@ public record C2SAdminShopEditPacket(
         long longA,
         long longB,
         long longC) {
+    private static final int MAX_ACTION_LENGTH = 32;
+    private static final int MAX_IDENTIFIER_LENGTH = 128;
+    private static final int MAX_TEXT_LENGTH = 256;
 
     public static void encode(C2SAdminShopEditPacket packet, FriendlyByteBuf buffer) {
-        buffer.writeUtf(packet.action);
-        buffer.writeUtf(packet.targetId);
-        buffer.writeUtf(packet.stringA);
-        buffer.writeUtf(packet.stringB);
+        buffer.writeUtf(packet.action, MAX_ACTION_LENGTH);
+        buffer.writeUtf(packet.targetId, MAX_IDENTIFIER_LENGTH);
+        buffer.writeUtf(packet.stringA, MAX_TEXT_LENGTH);
+        buffer.writeUtf(packet.stringB, MAX_TEXT_LENGTH);
         buffer.writeLong(packet.longA);
         buffer.writeLong(packet.longB);
         buffer.writeLong(packet.longC);
@@ -49,10 +52,10 @@ public record C2SAdminShopEditPacket(
 
     public static C2SAdminShopEditPacket decode(FriendlyByteBuf buffer) {
         return new C2SAdminShopEditPacket(
-                buffer.readUtf(),
-                buffer.readUtf(),
-                buffer.readUtf(),
-                buffer.readUtf(),
+                buffer.readUtf(MAX_ACTION_LENGTH),
+                buffer.readUtf(MAX_IDENTIFIER_LENGTH),
+                buffer.readUtf(MAX_TEXT_LENGTH),
+                buffer.readUtf(MAX_TEXT_LENGTH),
                 buffer.readLong(),
                 buffer.readLong(),
                 buffer.readLong());

@@ -13,6 +13,7 @@ import java.util.function.Supplier;
  * Client → Server: Set the department on a player shop listing.
  */
 public class C2SSetDepartmentPacket {
+    private static final int MAX_DEPARTMENT_LENGTH = 128;
     private final BlockPos shopPos;
     private final int listingIndex;
     private final String department;
@@ -30,7 +31,8 @@ public class C2SSetDepartmentPacket {
     }
 
     public static C2SSetDepartmentPacket decode(FriendlyByteBuf buffer) {
-        return new C2SSetDepartmentPacket(buffer.readBlockPos(), buffer.readVarInt(), buffer.readUtf());
+        return new C2SSetDepartmentPacket(buffer.readBlockPos(), buffer.readVarInt(),
+                buffer.readUtf(MAX_DEPARTMENT_LENGTH));
     }
 
     public static void handle(C2SSetDepartmentPacket packet, Supplier<NetworkEvent.Context> ctx) {
@@ -43,4 +45,3 @@ public class C2SSetDepartmentPacket {
         ctx.get().setPacketHandled(true);
     }
 }
-

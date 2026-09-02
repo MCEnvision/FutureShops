@@ -13,6 +13,7 @@ import java.util.function.Supplier;
  * Client → Server: Request department search results.
  */
 public class C2SFetchDepartmentsPacket {
+    private static final int MAX_SEARCH_LENGTH = 128;
     private final String searchPrefix;
 
     public C2SFetchDepartmentsPacket(String searchPrefix) {
@@ -24,7 +25,7 @@ public class C2SFetchDepartmentsPacket {
     }
 
     public static C2SFetchDepartmentsPacket decode(FriendlyByteBuf buffer) {
-        return new C2SFetchDepartmentsPacket(buffer.readUtf());
+        return new C2SFetchDepartmentsPacket(buffer.readUtf(MAX_SEARCH_LENGTH));
     }
 
     public static void handle(C2SFetchDepartmentsPacket packet, Supplier<NetworkEvent.Context> ctx) {
@@ -38,4 +39,3 @@ public class C2SFetchDepartmentsPacket {
         ctx.get().setPacketHandled(true);
     }
 }
-

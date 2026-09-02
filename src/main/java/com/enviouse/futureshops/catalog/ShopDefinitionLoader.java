@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.catalog;
 
+import com.enviouse.futureshops.Config;
 import com.enviouse.futureshops.catalog.offer.LegacyServerShopOfferCompiler;
 import com.enviouse.futureshops.catalog.offer.AcquireOfferOption;
 import com.enviouse.futureshops.catalog.offer.OfferBundleComparison;
@@ -28,12 +29,18 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -54,6 +61,13 @@ public final class ShopDefinitionLoader {
     /** Filename of the bundled admin shop config. */
     public static final String ADMIN_SHOP_FILENAME = "admin.json";
     private static final String LEGACY_DEFAULT_FILENAME = "default.json";
+    private static final int MAX_SHOP_DEFINITION_FILES = 256;
+    private static final long MAX_SHOP_DEFINITION_BYTES = 8L * 1024L * 1024L;
+    private static final int MAX_LEGACY_CATEGORIES = 256;
+    private static final int MAX_LEGACY_PROMOS = 1024;
+    private static final int MAX_LEGACY_BARTER_RECIPES = 1024;
+    private static final int MAX_LEGACY_BARTER_INGREDIENTS = 36;
+    private static final int MAX_LEGACY_NBT_TEXT_LENGTH = 65_536;
 
     private ShopDefinitionLoader() {
     }
@@ -74,9 +88,18 @@ public final class ShopDefinitionLoader {
     }
 
     static synchronized boolean prepareStorage(Path configDirectory) {
-        Path shopsDir = shopsDirectory(configDirectory);
+        Path root = Objects.requireNonNull(configDirectory, "configDirectory")
+                .toAbsolutePath().normalize();
+        Path futureshopsDir = root.resolve("futureshops");
+        Path shopsDir = futureshopsDir.resolve("shops");
         try {
-            Files.createDirectories(shopsDir);
+            if (!prepareDirectory(root, "Configuration root")
+                    || !prepareDirectory(futureshopsDir,
+                    "FutureShops configuration directory")
+                    || !prepareDirectory(shopsDir,
+                    "FutureShops shops directory")) {
+                return false;
+            }
         } catch (IOException exception) {
             LOGGER.error(
                     "[FutureShops] Could not create shops config directory '{}': {}",
@@ -134,24 +157,56 @@ public final class ShopDefinitionLoader {
      * Never returns null; falls back to the hardcoded default if loading fails entirely.
      */
     public static List<ShopDefinition> loadAll() {
-        Path shopsDir = shopsDirectory();
-        if (!prepareStorage()) {
+        return loadAll(FMLPaths.CONFIGDIR.get());
+    }
+
+    static List<ShopDefinition> loadAll(Path configDirectory) {
+        Path shopsDir = shopsDirectory(configDirectory).toAbsolutePath().normalize();
+        if (!prepareStorage(configDirectory) || !safeDirectory(shopsDir)) {
             return List.of(buildDefaultShop());
         }
 
-        // Collect .json files
         List<Path> jsonFiles = new ArrayList<>();
-        try (var stream = Files.list(shopsDir)) {
-            stream.filter(p -> p.getFileName().toString().endsWith(".json"))
-                  .forEach(jsonFiles::add);
+        try (var stream = Files.newDirectoryStream(shopsDir,
+                path -> path.getFileName().toString().endsWith(".json"))) {
+            for (Path path : stream) {
+                jsonFiles.add(path);
+                if (jsonFiles.size() > MAX_SHOP_DEFINITION_FILES) {
+                    break;
+                }
+            }
         } catch (IOException e) {
             LOGGER.error("[FutureShops] Failed to list files in '{}': {}", shopsDir, e.getMessage());
+            return List.of(buildDefaultShop());
+        }
+        if (jsonFiles.size() > MAX_SHOP_DEFINITION_FILES) {
+            LOGGER.error("[FutureShops] Refused more than {} shop definition files in '{}'",
+                    MAX_SHOP_DEFINITION_FILES, shopsDir);
+            return List.of(buildDefaultShop());
+        }
+        for (Path file : jsonFiles) {
+            if (!safeRegularFile(file)) {
+                LOGGER.error("[FutureShops] Refused unsafe shop definition path '{}'",
+                        file.getFileName());
+                return List.of(buildDefaultShop());
+            }
+            try {
+                if (Files.size(file) > MAX_SHOP_DEFINITION_BYTES) {
+                    LOGGER.error("[FutureShops] Refused oversized shop definition '{}'",
+                            file.getFileName());
+                    return List.of(buildDefaultShop());
+                }
+            } catch (IOException exception) {
+                LOGGER.error("[FutureShops] Failed to inspect shop definition '{}': {}",
+                        file.getFileName(), exception.getMessage());
+                return List.of(buildDefaultShop());
+            }
         }
 
         List<ShopDefinition> result = new ArrayList<>();
         for (Path file : jsonFiles) {
             try {
-                String content = Files.readString(file);
+                String content = readBounded(file);
                 ShopDefinition def = parseJson(content, file.getFileName().toString());
                 if (def != null) {
                     result.add(def);
@@ -191,20 +246,18 @@ public final class ShopDefinitionLoader {
             String displayName = getString(root, "displayName", shopId);
 
             List<CategoryDef> categories = new ArrayList<>();
-            if (root.has("categories")) {
-                for (JsonElement el : root.getAsJsonArray("categories")) {
+            for (JsonElement el : optionalArray(root, "categories",
+                    MAX_LEGACY_CATEGORIES)) {
                     JsonObject o = el.getAsJsonObject();
                     if (!o.has("id")) continue;
                     categories.add(new CategoryDef(
                             o.get("id").getAsString(),
                             getString(o, "displayName", o.get("id").getAsString()),
                             getInt(o, "sortOrder", 0)));
-                }
             }
 
             List<ItemDef> items = new ArrayList<>();
-            if (root.has("items")) {
-                for (JsonElement el : root.getAsJsonArray("items")) {
+            for (JsonElement el : optionalArray(root, "items", maximumListings())) {
                     JsonObject o = el.getAsJsonObject();
                     if (!o.has("itemId")) continue;
                     String itemId = o.get("itemId").getAsString();
@@ -236,12 +289,11 @@ public final class ShopDefinitionLoader {
                             getString(o, "nbt", ""),
                             // Listing availability window (unix seconds); 0 = never expires.
                             getLong(o, "expiresAtEpoch", 0L)));
-                }
             }
 
             List<PromoDef> promos = new ArrayList<>();
-            if (root.has("promos")) {
-                for (JsonElement el : root.getAsJsonArray("promos")) {
+            for (JsonElement el : optionalArray(root, "promos",
+                    MAX_LEGACY_PROMOS)) {
                     JsonObject o = el.getAsJsonObject();
                     if (!o.has("promoId")) continue;
                     promos.add(new PromoDef(
@@ -250,17 +302,17 @@ public final class ShopDefinitionLoader {
                             getString(o, "targetItemId", ""),
                             getDouble(o, "discountValue", 0.0),
                             getLong(o, "endTimeEpoch", 0L)));
-                }
             }
 
             List<BarterRecipeDef> barterRecipes = new ArrayList<>();
-            if (root.has("barterRecipes")) {
-                for (JsonElement el : root.getAsJsonArray("barterRecipes")) {
+            for (JsonElement el : optionalArray(root, "barterRecipes",
+                    MAX_LEGACY_BARTER_RECIPES)) {
                     JsonObject o = el.getAsJsonObject();
                     if (!o.has("recipeId") || !o.has("targetItemId") || !o.has("ingredients")) continue;
 
                     List<BarterIngredientDef> ingredients = new ArrayList<>();
-                    for (JsonElement ingredientEl : o.getAsJsonArray("ingredients")) {
+                    for (JsonElement ingredientEl : optionalArray(o, "ingredients",
+                            MAX_LEGACY_BARTER_INGREDIENTS)) {
                         JsonObject ingredient = ingredientEl.getAsJsonObject();
                         if (!ingredient.has("itemId")) continue;
                         ingredients.add(new BarterIngredientDef(
@@ -277,7 +329,6 @@ public final class ShopDefinitionLoader {
                             getInt(o, "outputCount", 1),
                             List.copyOf(ingredients)));
                 }
-            }
 
             List<ServerShopOfferListing> offers;
             if (schemaVersion == ServerShopOfferJsonParser.SCHEMA_VERSION) {
@@ -325,7 +376,12 @@ public final class ShopDefinitionLoader {
     // -------------------------------------------------------------------------
 
     private static String getString(JsonObject o, String key, String fallback) {
-        return o.has(key) && !o.get(key).isJsonNull() ? o.get(key).getAsString() : fallback;
+        String value = o.has(key) && !o.get(key).isJsonNull()
+                ? o.get(key).getAsString() : fallback;
+        if (value != null && value.length() > MAX_LEGACY_NBT_TEXT_LENGTH) {
+            throw new IllegalArgumentException("Text value is too long");
+        }
+        return value;
     }
 
     private static int getInt(JsonObject o, String key, int fallback) {
@@ -353,6 +409,9 @@ public final class ShopDefinitionLoader {
     }
 
     private static boolean validNbt(String nbt) {
+        if (nbt == null || nbt.length() > MAX_LEGACY_NBT_TEXT_LENGTH) {
+            return false;
+        }
         try {
             TagParser.parseTag(nbt);
             return true;
@@ -385,6 +444,91 @@ public final class ShopDefinitionLoader {
     private static Path shopsDirectory(Path configDirectory) {
         return Objects.requireNonNull(configDirectory, "configDirectory")
                 .resolve("futureshops").resolve("shops");
+    }
+
+    private static JsonArray optionalArray(JsonObject object, String key,
+                                           int maximum) {
+        if (!object.has(key)) {
+            return new JsonArray();
+        }
+        JsonElement value = object.get(key);
+        if (!value.isJsonArray()) {
+            throw new IllegalArgumentException("Expected array " + key);
+        }
+        JsonArray array = value.getAsJsonArray();
+        if (array.size() > maximum) {
+            throw new IllegalArgumentException("Too many " + key);
+        }
+        return array;
+    }
+
+    private static int maximumListings() {
+        return Math.min(ServerShopOfferJsonParser.MAX_LISTINGS,
+                Math.max(1, Config.adminShopMaximumListings));
+    }
+
+    private static boolean prepareDirectory(Path directory, String description)
+            throws IOException {
+        if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) {
+            Files.createDirectories(directory);
+        }
+        if (Files.isSymbolicLink(directory)
+                || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
+            LOGGER.error("[FutureShops] {} is not a safe directory '{}'.",
+                    description, directory);
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean safeRegularFile(Path path) {
+        return Files.exists(path, LinkOption.NOFOLLOW_LINKS)
+                && !Files.isSymbolicLink(path)
+                && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS);
+    }
+
+    private static boolean safeDirectory(Path path) {
+        return Files.exists(path, LinkOption.NOFOLLOW_LINKS)
+                && !Files.isSymbolicLink(path)
+                && Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS);
+    }
+
+    private static String readBounded(Path path) throws IOException {
+        try (FileChannel channel = FileChannel.open(path,
+                StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+            long size = channel.size();
+            if (size > MAX_SHOP_DEFINITION_BYTES) {
+                throw new IOException("Shop definition is too large");
+            }
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream(
+                    (int) Math.min(size, MAX_SHOP_DEFINITION_BYTES));
+            ByteBuffer buffer = ByteBuffer.allocate(8192);
+            int read;
+            while ((read = channel.read(buffer)) != -1) {
+                if (read == 0) {
+                    continue;
+                }
+                buffer.flip();
+                if (bytes.size() + buffer.remaining()
+                        > MAX_SHOP_DEFINITION_BYTES) {
+                    throw new IOException("Shop definition is too large");
+                }
+                while (buffer.hasRemaining()) {
+                    bytes.write(buffer.get());
+                }
+                buffer.clear();
+            }
+            try {
+                return StandardCharsets.UTF_8.newDecoder()
+                        .onMalformedInput(CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(CodingErrorAction.REPORT)
+                        .decode(ByteBuffer.wrap(bytes.toByteArray()))
+                        .toString();
+            } catch (CharacterCodingException exception) {
+                throw new IOException("Shop definition is not valid UTF8",
+                        exception);
+            }
+        }
     }
 
     // -------------------------------------------------------------------------

@@ -9,6 +9,7 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.function.Supplier;
 
 public record C2SPlayerShopActionPacket(BlockPos shopPos, String action, int listingIndex, int amount) {
+    private static final int MAX_ACTION_LENGTH = 32;
     public static void encode(C2SPlayerShopActionPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.shopPos());
         buffer.writeUtf(packet.action());
@@ -17,7 +18,8 @@ public record C2SPlayerShopActionPacket(BlockPos shopPos, String action, int lis
     }
 
     public static C2SPlayerShopActionPacket decode(FriendlyByteBuf buffer) {
-        return new C2SPlayerShopActionPacket(buffer.readBlockPos(), buffer.readUtf(), buffer.readVarInt(), buffer.readVarInt());
+        return new C2SPlayerShopActionPacket(buffer.readBlockPos(),
+                buffer.readUtf(MAX_ACTION_LENGTH), buffer.readVarInt(), buffer.readVarInt());
     }
 
     public static void handle(C2SPlayerShopActionPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
@@ -31,4 +33,3 @@ public record C2SPlayerShopActionPacket(BlockPos shopPos, String action, int lis
         context.setPacketHandled(true);
     }
 }
-

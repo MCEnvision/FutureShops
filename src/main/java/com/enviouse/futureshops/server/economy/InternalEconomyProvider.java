@@ -12,6 +12,7 @@ import com.enviouse.futureshops.server.escrow.runtime.EscrowWalletService;
 import com.enviouse.futureshops.server.escrow.runtime.WalletMutationResult;
 import com.enviouse.futureshops.server.escrow.runtime.WalletMutationStatus;
 import com.enviouse.futureshops.server.shop.ShopResultCode;
+import com.enviouse.futureshops.server.util.PageBounds;
 import com.mojang.logging.LogUtils;
 import net.minecraft.server.MinecraftServer;
 import net.minecraftforge.common.MinecraftForge;
@@ -267,10 +268,16 @@ public class InternalEconomyProvider implements EconomyProvider {
     @Override
     public List<BalanceEntry> getTopBalances(int page, int pageSize) {
         LegacyBalanceMigrationManager.requireComplete();
-        int safePage = Math.max(page, 1);
-        int safePageSize = Math.max(pageSize, 1);
-        long skip = (long) (safePage - 1) * safePageSize;
+        if (!PageBounds.isValid(page, pageSize)) {
+            return List.of();
+        }
+        int safePage = page;
+        int safePageSize = pageSize;
+        long skip = PageBounds.offset(safePage, safePageSize);
         Map<UUID, Long> balances = EscrowWalletService.live().snapshotBalances();
+        if (skip >= balances.size()) {
+            return List.of();
+        }
         return balances.entrySet().stream()
                 .sorted(Map.Entry.<UUID, Long>comparingByValue(
                                 Comparator.reverseOrder())

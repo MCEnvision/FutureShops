@@ -9,12 +9,13 @@ import java.util.function.Supplier;
 
 /** Client requests a fresh authoritative owned-item count sync for the active shop. */
 public record C2SInventorySyncPacket(String shopId) {
+    private static final int MAX_SHOP_ID_LENGTH = 128;
     public static void encode(C2SInventorySyncPacket packet, FriendlyByteBuf buffer) {
         buffer.writeUtf(packet.shopId);
     }
 
     public static C2SInventorySyncPacket decode(FriendlyByteBuf buffer) {
-        return new C2SInventorySyncPacket(buffer.readUtf());
+        return new C2SInventorySyncPacket(buffer.readUtf(MAX_SHOP_ID_LENGTH));
     }
 
     public static void handle(C2SInventorySyncPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
@@ -28,4 +29,3 @@ public record C2SInventorySyncPacket(String shopId) {
         context.setPacketHandled(true);
     }
 }
-

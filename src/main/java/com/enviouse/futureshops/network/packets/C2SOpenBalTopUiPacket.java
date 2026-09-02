@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.network.packets;
 
 import com.enviouse.futureshops.server.shop.MarketplaceAnalyticsService;
+import com.enviouse.futureshops.server.util.PageBounds;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
@@ -23,9 +24,11 @@ public record C2SOpenBalTopUiPacket(int page) {
             if (player == null) {
                 return;
             }
+            if (packet.page() < 1 || packet.page() > PageBounds.MAX_PAGE_INDEX) {
+                return;
+            }
             MarketplaceAnalyticsService.sendLeaderboard(player, packet.page());
         });
         context.setPacketHandled(true);
     }
 }
-

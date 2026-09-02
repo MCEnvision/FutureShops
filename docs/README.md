@@ -41,5 +41,11 @@
 * [Issue 25 catalog migration matrix](verification/phase-002/issue-25-catalog-matrix-2026-09-02.md)
 * [Issue 32 player state corpus](verification/phase-002/issue-32-player-state-2026-09-02.md)
 * [Issue 34 finite stock matrix](verification/phase-002/issue-34-finite-stock-2026-09-02.md)
+* [Phase 004 entry point inventory](verification/phase-004/entry-point-inventory-2026-09-02.md)
+* [Phase 004 command matrix](verification/phase-004/command-matrix-2026-09-02.md)
+* [Phase 004 packet matrix](verification/phase-004/packet-matrix-2026-09-02.md)
+* [Phase 004 path, parser, privacy, and dependency audit](verification/phase-004/path-parser-privacy-dependency-2026-09-02.md)
+* [Phase 004 threat model](verification/phase-004/threat-model-2026-09-02.md)
+* [Phase 004 finding register](verification/phase-004/finding-register-2026-09-02.md)
 
 The root [README](../README.md) is the installation and contributor entry point. [Technical documentation](../DOCUMENTATION.md) is the maintainer architecture and operations reference. The active repository polish and defect closure contract is the [authoritative plan](../plan.md). The [3.0 implementation plan](../FutureShops3-0Plan.MD) and [advanced trade offers plan](../FutureShops3-1TradeOffersPlan.MD) are retained as historical records.

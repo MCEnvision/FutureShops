@@ -16,6 +16,8 @@ import java.util.function.Supplier;
  */
 public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<LineItem> lineItems,
                                   String paymentSource, UUID requestId) {
+    private static final int MAX_IDENTIFIER_LENGTH = 128;
+    private static final int MAX_PAYMENT_SOURCE_LENGTH = 32;
     private static final UUID UNCORRELATED_REQUEST_ID = new UUID(0L, 0L);
 
     public C2SBuyRequestPacket {
@@ -40,7 +42,7 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
         }
 
         public static LineItem decode(FriendlyByteBuf buffer) {
-            return new LineItem(buffer.readUtf(), buffer.readVarInt());
+            return new LineItem(buffer.readUtf(MAX_IDENTIFIER_LENGTH), buffer.readVarInt());
         }
     }
 
@@ -74,7 +76,7 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
     private static final int MAX_LINES = 256;
 
     public static C2SBuyRequestPacket decode(FriendlyByteBuf buffer) {
-        String shopId = buffer.readUtf();
+        String shopId = buffer.readUtf(MAX_IDENTIFIER_LENGTH);
         boolean cartCheckout = buffer.readBoolean();
         int count = buffer.readVarInt();
         if (count < 0 || count > MAX_LINES) {
@@ -86,7 +88,8 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
             lines.add(LineItem.decode(buffer));
         }
         return new C2SBuyRequestPacket(
-                shopId, cartCheckout, lines, buffer.readUtf(), buffer.readUUID());
+                shopId, cartCheckout, lines,
+                buffer.readUtf(MAX_PAYMENT_SOURCE_LENGTH), buffer.readUUID());
     }
 
     public static void handle(C2SBuyRequestPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

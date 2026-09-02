@@ -9,6 +9,7 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.function.Supplier;
 
 public record C2SPlayerShopConfigPacket(BlockPos shopPos, String shopName, boolean singleItemMode, boolean barterStorageSame, int selectedListingIndex) {
+    private static final int MAX_SHOP_NAME_LENGTH = 128;
     public static void encode(C2SPlayerShopConfigPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.shopPos());
         buffer.writeUtf(packet.shopName());
@@ -18,7 +19,9 @@ public record C2SPlayerShopConfigPacket(BlockPos shopPos, String shopName, boole
     }
 
     public static C2SPlayerShopConfigPacket decode(FriendlyByteBuf buffer) {
-        return new C2SPlayerShopConfigPacket(buffer.readBlockPos(), buffer.readUtf(), buffer.readBoolean(), buffer.readBoolean(), buffer.readVarInt());
+        return new C2SPlayerShopConfigPacket(buffer.readBlockPos(),
+                buffer.readUtf(MAX_SHOP_NAME_LENGTH), buffer.readBoolean(),
+                buffer.readBoolean(), buffer.readVarInt());
     }
 
     public static void handle(C2SPlayerShopConfigPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

@@ -1,9 +1,13 @@
 package com.enviouse.futureshops.network.packets;
 
 import com.enviouse.futureshops.client.market.MarketModule;
+import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.server.market.MarketClaimCollectionService;
 import com.enviouse.futureshops.server.market.claim.MarketClaimCollectionCommand;
+import com.enviouse.futureshops.server.market.claim.MarketClaimCollectionCode;
+import com.enviouse.futureshops.server.market.claim.MarketClaimCollectionResult;
 import io.netty.handler.codec.DecoderException;
+import com.mojang.logging.LogUtils;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
@@ -11,10 +15,12 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
 
 public record C2SMarketClaimCollectionPacket(
         MarketClaimCollectionCommand command
 ) {
+    private static final Logger LOGGER = LogUtils.getLogger();
     public C2SMarketClaimCollectionPacket {
         command = Objects.requireNonNull(command, "command");
     }
@@ -66,7 +72,19 @@ public record C2SMarketClaimCollectionPacket(
             if (player != null) {
                 try {
                     MarketClaimCollectionService.collect(player, packet);
-                } catch (RuntimeException ignored) {
+                } catch (RuntimeException exception) {
+                    LOGGER.error("FutureShops claim collection failed for player {} and request {}",
+                            player.getUUID(), packet.command().requestId(), exception);
+                    try {
+                        ShopPackets.sendToPlayer(player,
+                                new S2CMarketClaimCollectionPacket(
+                                        MarketClaimCollectionResult.failure(
+                                                packet.command(),
+                                                MarketClaimCollectionCode.SERVER_ERROR)));
+                    } catch (RuntimeException responseException) {
+                        LOGGER.error("FutureShops claim collection error response failed for player {} and request {}",
+                                player.getUUID(), packet.command().requestId(), responseException);
+                    }
                 }
             }
         });
