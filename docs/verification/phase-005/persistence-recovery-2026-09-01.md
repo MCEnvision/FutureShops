@@ -18,11 +18,11 @@ files, JSON catalogs, and Forge TOML configuration.
 
 | Issue | Finding | Repair status |
 | --- | --- | --- |
-| [48](https://github.com/MCEnvision/FutureShops/issues/48) | Admin category collections and identifiers decoded without complete bounds | Filed before repair. Repair is on this phase branch. |
-| [49](https://github.com/MCEnvision/FutureShops/issues/49) | Shop block listings, bundle output, and listing NBT decode needed bounded validation | Filed before repair. Repair is on this phase branch. |
-| [50](https://github.com/MCEnvision/FutureShops/issues/50) | Remaining world stores accepted unbounded collections or nested snapshots | Filed before repair. Repair is on this phase branch. |
-| [51](https://github.com/MCEnvision/FutureShops/issues/51) | Bounded replay and market profile lists could hide wrong element types as empty lists | Filed before repair. Repair is on this phase branch. |
-| [52](https://github.com/MCEnvision/FutureShops/issues/52) | Player inventory evidence accepted malformed list element types during escrow verification | Filed before repair. Repair is on this phase branch. |
+| [48](https://github.com/MCEnvision/FutureShops/issues/48) | Admin category collections and identifiers decoded without complete bounds | Filed before repair. Repair merged in `c43dae7d8348c51a91368cd73dd7e3bc68c01e19`. |
+| [49](https://github.com/MCEnvision/FutureShops/issues/49) | Shop block listings, bundle output, and listing NBT decode needed bounded validation | Filed before repair. Repair merged in `c43dae7d8348c51a91368cd73dd7e3bc68c01e19`. |
+| [50](https://github.com/MCEnvision/FutureShops/issues/50) | Remaining world stores accepted unbounded collections or nested snapshots | Filed before repair. Repair merged in `c43dae7d8348c51a91368cd73dd7e3bc68c01e19`. |
+| [51](https://github.com/MCEnvision/FutureShops/issues/51) | Bounded replay and market profile lists could hide wrong element types as empty lists | Filed before repair. Repair merged in `c43dae7d8348c51a91368cd73dd7e3bc68c01e19`. |
+| [52](https://github.com/MCEnvision/FutureShops/issues/52) | Player inventory evidence accepted malformed list element types during escrow verification | Filed before repair. Repair merged in `c43dae7d8348c51a91368cd73dd7e3bc68c01e19`. |
 
 The repairs reject oversized or malformed state before live collection mutation,
 enforce the same limits at save time, preserve supported legacy fields, and keep
@@ -96,8 +96,28 @@ untouched cohort restored with the original manifest and balances digest
 `05559d42b575e94777a1ac578a7e4330fec1f6901a41656b4e3988ec3a61ef39`. The
 restored cohort then started a disposable dedicated server and stopped cleanly.
 
-The final phase packet will append the exact merged revision rerun, jar digest,
-pull request checks, and signed phase tag after the phase branch is integrated.
+## Merged revision verification
+
+Pull request `53` merged the audited branch into Forge `1.20.1` at
+`c43dae7d8348c51a91368cd73dd7e3bc68c01e19`. The exact merged revision passed
+the complete unit suite, data generation, all five required GameTests, and the
+packaged build. The packaged beta jar is
+`build/libs/futureshops-3.0.0-beta.2.jar` with SHA256
+`6c1d0f94b308a91e10bf754d5768cb1d48fbbb30eb169c5e7088471926a839ba` and
+contains `META-INF/mods.toml` and `futureshops.mixins.json`.
+
+The merged revision reached `Done`, initialized FutureShops, loaded the default
+shop and 12 Bazaar products, and stopped cleanly through RCON. Two independent
+Forge clients completed the modded handshake, joined the same world, and
+disconnected cleanly before the server stopped. A restored copy of the same
+backup cohort also reached `Done`, initialized FutureShops, and stopped cleanly.
+
+The merged backup rehearsal hashed 105 files. The cohort manifest digest was
+`4dbf8ef0e146b6d732638acfbaf73194adc6d6d40f90d8ba759254913ccb8902`. A copied
+damaged balances file produced digest
+`e8c8f1b60777e34dfccd7aa09d79dcff2e7bc79c861e7e0881609fdd7eb6bdd0`; the
+untouched restored cohort matched the original manifest and its balances digest
+was `05559d42b575e94777a1ac578a7e4330fec1f6901a41656b4e3988ec3a61ef39`.
 
 ## Recovery boundary
 
