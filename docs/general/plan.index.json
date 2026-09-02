@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "name": "FutureShops",
+    "repository": "https://github.com/MCEnvision/FutureShops.git"
+  },
+  "master": "plan.md",
+  "plans": [
+    {
+      "id": "PLAN-MASTER",
+      "path": "plan.md",
+      "kind": "master",
+      "classification": "mandatory",
+      "requirementPrefix": "CORE",
+      "owner": "FutureShops",
+      "dependsOn": []
+    },
+    {
+      "id": "PLAN-PHASE-000",
+      "path": "phases/plan-phase-000.md",
+      "kind": "phase",
+      "classification": "mandatory",
+      "requirementPrefix": "PHASE000",
+      "phaseId": "CORE-PHASE-000",
+      "owner": "FutureShops platform and public economy API",
+      "dependsOn": []
+    },
+    {
+      "id": "PLAN-PHASE-001",
+      "path": "phases/plan-phase-001.md",
+      "kind": "phase",
+      "classification": "mandatory",
+      "requirementPrefix": "PHASE001",
+      "phaseId": "CORE-PHASE-001",
+      "owner": "Server-authoritative economy orchestration and all FutureShops monetary surfaces",
+      "dependsOn": [
+        "PLAN-PHASE-000"
+      ]
+    },
+    {
+      "id": "PLAN-PHASE-002",
+      "path": "phases/plan-phase-002.md",
+      "kind": "phase",
+      "classification": "mandatory",
+      "requirementPrefix": "PHASE002",
+      "phaseId": "CORE-PHASE-002",
+      "owner": "Exact external provider integrations",
+      "dependsOn": [
+        "PLAN-PHASE-001"
+      ]
+    },
+    {
+      "id": "PLAN-PHASE-003",
+      "path": "phases/plan-phase-003.md",
+      "kind": "phase",
+      "classification": "mandatory",
+      "requirementPrefix": "PHASE003",
+      "phaseId": "CORE-PHASE-003",
+      "owner": "FutureShops production validation and delivery evidence",
+      "dependsOn": [
+        "PLAN-PHASE-002"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1121 @@
+{
+  "schemaVersion": 2,
+  "planId": "PLAN-MASTER",
+  "planSetSha256": "850140946dea95ac3f04a0f7defacd9b4c5831dab9101f690c2d16c27ae22226",
+  "planningSubject": {
+    "name": "FutureShops 2.3.0 external economy providers for Minecraft 1.21.1 NeoForge, with Pixelmon 9.4.0 support and a Vault bridge API",
+    "requestedArtifact": "authoritative_plan",
+    "planProfile": "software_product",
+    "sources": [
+      {
+        "id": "SRC-001",
+        "role": "owner_request",
+        "subject": "FutureShops 2.3.0 external economy provider behavior and 3.0.0 follow-up issue",
+        "source": "current owner request and approved defaults",
+        "use": "binding scope, decisions, exclusions, compatibility target, and completion endpoint"
+      },
+      {
+        "id": "SRC-002",
+        "role": "repository_evidence",
+        "subject": "FutureShops 2.2.1 NeoForge 1.21.1 implementation baseline",
+        "source": "/mnt/hermes/projects/FutureShops at 5fb749b2e6dbc791c8c3984216877ab90b904ee9",
+        "use": "current versions, economy architecture, surfaces, packaging, tests, and branch identity"
+      },
+      {
+        "id": "SRC-003",
+        "role": "reference",
+        "subject": "FutureShops 3.0.0 Forge 1.20.1 architecture and maintenance context",
+        "source": "origin/1.20.1 plan.md and FutureShops3-0Plan.MD",
+        "use": "reference wording and future issue scope only, never 2.3.0 implementation authority"
+      },
+      {
+        "id": "SRC-004",
+        "role": "reference",
+        "subject": "official Pixelmon 9.4.0 release compatibility",
+        "source": "https://pixelmonmod.com/downloads.php",
+        "use": "Pixelmon 9.4.0, Minecraft 1.21.1, and NeoForge 21.1.248 compatibility evidence"
+      },
+      {
+        "id": "SRC-005",
+        "role": "reference",
+        "subject": "NeoForge 1.21.1 lifecycle and inter-mod communication",
+        "source": "https://docs.neoforged.net/docs/1.21.1/concepts/events/",
+        "use": "provider registration and startup lifecycle evidence"
+      },
+      {
+        "id": "SRC-006",
+        "role": "reference",
+        "subject": "Vault API economy boundary",
+        "source": "https://github.com/MilkBowl/VaultAPI and https://milkbowl.github.io/VaultAPI/overview-summary.html",
+        "use": "separate bridge boundary and exact checked conversion evidence"
+      }
+    ]
+  },
+  "profileContract": [
+    {
+      "area": "component architecture",
+      "status": "covered",
+      "source": "SRC-002",
+      "plan_section": "Architecture contract",
+      "rationale": "The plan freezes orchestration, provider registry, internal provider, Pixelmon adapter, separate Vault bridge, and dependency direction."
+    },
+    {
+      "area": "determinism",
+      "status": "covered",
+      "source": "SRC-001",
+      "plan_section": "Transaction and determinism contract",
+      "rationale": "Stable request identities, checked arithmetic, frozen selection, idempotent outcomes, and exact artifact evidence define repeatability."
+    },
+    {
+      "area": "failure taxonomy",
+      "status": "covered",
+      "source": "SRC-001",
+      "plan_section": "Failure semantics",
+      "rationale": "The plan distinguishes missing, incompatible, failed, recovery-required, authorization, validation, and dependency failures."
+    },
+    {
+      "area": "generalization",
+      "status": "covered",
+      "source": "SRC-001",
+      "plan_section": "Compatibility matrix",
+      "rationale": "The plan distinguishes standard NeoForge, exact Pixelmon, exact reviewed hybrid stack, unsupported versions, and future adapters."
+    },
+    {
+      "area": "inputs and outputs",
+      "status": "covered",
+      "source": "SRC-001",
+      "plan_section": "Required behavior by surface",
+      "rationale": "The plan defines provider configuration, APIs, commands, gameplay inputs, typed outcomes, UI states, artifacts, and tracking output."
+    },
+    {
+      "area": "release lifecycle",
+      "status": "covered",
+      "source": "SRC-001",
+      "plan_section": "Documentation, operations, and release boundaries",
+      "rationale": "The endpoint is one fully validated unpublished 2.3.0 artifact plus the actual 3.0.0 issue, with publication excluded."
+    },
+    {
+      "area": "security",
+      "status": "covered",
+      "source": "SRC-001",
+      "plan_section": "Security, privacy, and determinism",
+      "rationale": "The plan covers untrusted inputs, permissions, class isolation, artifacts, secrets, logs, replay, and dependency risk."
+    },
+    {
+      "area": "state and persistence",
+      "status": "covered",
+      "source": "SRC-001",
+      "plan_section": "State ownership and persistence",
+      "rationale": "The plan separates provider balances from durable request, outcome, custody, claims, recovery, analytics, and internal state."
+    },
+    {
+      "area": "test system",
+      "status": "external_prerequisite",
+      "source": "EXT-001",
+      "plan_section": "Verification contract",
+      "rationale": "Deterministic tests are planned, while exact Pixelmon and Vault environments are known external blockers for highest-fidelity proof."
+    },
+    {
+      "area": "versioning",
+      "status": "covered",
+      "source": "SRC-004",
+      "plan_section": "Versioning and compatibility",
+      "rationale": "The plan pins product, Minecraft, NeoForge, Pixelmon, public API, configuration, and persistence compatibility."
+    }
+  ],
+  "mandatoryRequirements": [
+    {
+      "id": "CORE-REQ-001",
+      "summary": "Target FutureShops 2.3.0 and NeoForge 21.1.248 while preserving unrelated pinned boundaries and one client-server jar.",
+      "source": "SRC-001 and SRC-004",
+      "owner": "`CORE-PHASE-000`",
+      "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "DEC-001",
+        "DEC-002",
+        "EXT-001",
+        "EXT-003"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-000"
+    },
+    {
+      "id": "CORE-REQ-002",
+      "summary": "Ship a public versioned NeoForge economy provider API with deterministic registration, typed state, checked minor units, idempotent mutation, and recovery.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-000`",
+      "contributors": "`CORE-PHASE-001`, `CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "DEC-003",
+        "DEC-004",
+        "DEC-005",
+        "DEC-006",
+        "DEC-007",
+        "DEC-009",
+        "DEC-013",
+        "EXT-003"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-000"
+    },
+    {
+      "id": "CORE-REQ-003",
+      "summary": "Select internal by default and resolve a validated restart-only provider without hot switching or fallback.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-000`",
+      "contributors": "`CORE-PHASE-001`, `CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-002",
+        "DEC-004",
+        "DEC-005",
+        "DEC-006"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-000"
+    },
+    {
+      "id": "CORE-REQ-004",
+      "summary": "Keep the server online and fail all monetary mutations closed when an external provider is unavailable or unsafe.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-001`",
+      "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-003",
+        "DEC-006"
+      ],
+      "lifecycleStage": "continuous",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-001"
+    },
+    {
+      "id": "CORE-REQ-005",
+      "summary": "Keep every provider decision and money mutation authoritative on the logical server.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-001`",
+      "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-003",
+        "CORE-REQ-004",
+        "DEC-003"
+      ],
+      "lifecycleStage": "continuous",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-001"
+    },
+    {
+      "id": "CORE-REQ-006",
+      "summary": "Use provider-owned currency metadata and exact checked integer minor units across all values and conversions.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-001`",
+      "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-004",
+        "DEC-007"
+      ],
+      "lifecycleStage": "continuous",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-001"
+    },
+    {
+      "id": "CORE-REQ-007",
+      "summary": "Coordinate every money mutation through durable stable request and leg identities with idempotent outcomes, recovery, and compensation.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-001`",
+      "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-004",
+        "CORE-REQ-006",
+        "DEC-009",
+        "DEC-014",
+        "EXT-003"
+      ],
+      "lifecycleStage": "continuous",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-001"
+    },
+    {
+      "id": "CORE-REQ-008",
+      "summary": "Keep external balances provider-owned while persisting only transaction facts, custody, claims, recovery, and confirmed analytics.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-001`",
+      "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-004",
+        "CORE-REQ-007",
+        "DEC-008",
+        "DEC-014"
+      ],
+      "lifecycleStage": "continuous",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-001"
+    },
+    {
+      "id": "CORE-REQ-009",
+      "summary": "Route every balance and monetary surface through the provider and transaction boundaries without bypasses.",
+      "source": "SRC-001 and SRC-002",
+      "owner": "`CORE-PHASE-001`",
+      "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-004",
+        "CORE-REQ-005",
+        "CORE-REQ-006",
+        "CORE-REQ-007",
+        "CORE-REQ-008"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-001"
+    },
+    {
+      "id": "CORE-REQ-010",
+      "summary": "Preserve independent internal and external balances, avoid automatic migration, and bind unresolved requests to their originating provider.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-001`",
+      "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-003",
+        "CORE-REQ-007",
+        "CORE-REQ-008",
+        "DEC-008"
+      ],
+      "lifecycleStage": "continuous",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "migration",
+      "canonicalPhase": "CORE-PHASE-001"
+    },
+    {
+      "id": "CORE-REQ-011",
+      "summary": "Preserve bill registration and saves while disabling money item, deposit, withdrawal, redemption, and future ATM mutations under external providers.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-001`",
+      "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-003",
+        "CORE-REQ-004",
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "DEC-010",
+        "DEC-011"
+      ],
+      "lifecycleStage": "continuous",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "migration",
+      "canonicalPhase": "CORE-PHASE-001"
+    },
+    {
+      "id": "CORE-REQ-012",
+      "summary": "Present currency and provider state accurately while retaining browsing and pure barter during monetary unavailability.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-001`",
+      "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-003",
+        "CORE-REQ-004",
+        "CORE-REQ-006",
+        "CORE-REQ-009"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-001"
+    },
+    {
+      "id": "CORE-REQ-013",
+      "summary": "Provide bounded actionable provider, request, recovery, and failure diagnostics without sensitive data or log spam.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-001`",
+      "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-004",
+        "CORE-REQ-007"
+      ],
+      "lifecycleStage": "continuous",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-001"
+    },
+    {
+      "id": "CORE-REQ-014",
+      "summary": "Keep provider discovery and external I/O out of hot paths and forbid full balance scans or synchronization.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-001`",
+      "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-004",
+        "CORE-REQ-009",
+        "DEC-014"
+      ],
+      "lifecycleStage": "continuous",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-001"
+    },
+    {
+      "id": "CORE-REQ-015",
+      "summary": "Validate untrusted provider and gameplay inputs, contain failures, isolate optional classes, and review exact external artifacts.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-001`",
+      "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-004",
+        "CORE-REQ-005",
+        "CORE-REQ-007",
+        "EXT-001",
+        "EXT-004",
+        "EXT-005"
+      ],
+      "lifecycleStage": "continuous",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-001"
+    },
+    {
+      "id": "CORE-REQ-016",
+      "summary": "Provide non-destructive recovery and rollback for incomplete provider operations, claims, custody, bills, and independent balances.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-001`",
+      "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-004",
+        "CORE-REQ-007",
+        "CORE-REQ-008",
+        "CORE-REQ-010",
+        "CORE-REQ-013"
+      ],
+      "lifecycleStage": "continuous",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "migration",
+      "canonicalPhase": "CORE-PHASE-001"
+    },
+    {
+      "id": "CORE-REQ-017",
+      "summary": "Bundle an optional adapter for exactly Pixelmon 9.4.0 without bundling or requiring Pixelmon on ordinary startup.",
+      "source": "SRC-001 and SRC-004",
+      "owner": "`CORE-PHASE-002`",
+      "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-001",
+        "CORE-REQ-002",
+        "CORE-REQ-004",
+        "CORE-REQ-006",
+        "CORE-REQ-007",
+        "CORE-REQ-009",
+        "CORE-REQ-015",
+        "CORE-REQ-016",
+        "EXT-001",
+        "EXT-002",
+        "EXT-003"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-002"
+    },
+    {
+      "id": "CORE-REQ-018",
+      "summary": "Interoperate with one exact separately installed Vault bridge and hybrid stack without Bukkit, Vault, reflection, or bridge code inside FutureShops.",
+      "source": "SRC-001 and SRC-006",
+      "owner": "`CORE-PHASE-002`",
+      "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-003`",
+      "dependencies": [
+        "CORE-REQ-002",
+        "CORE-REQ-004",
+        "CORE-REQ-007",
+        "CORE-REQ-009",
+        "CORE-REQ-015",
+        "CORE-REQ-016",
+        "EXT-004",
+        "EXT-005",
+        "EXT-006"
+      ],
+      "lifecycleStage": "change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-002"
+    },
+    {
+      "id": "CORE-REQ-019",
+      "summary": "Execute complete deterministic, runtime, multiplayer, restart, failure, recovery, external integration, dependency, security, jar, and diff validation.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-003`",
+      "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`",
+      "dependencies": [
+        "CORE-REQ-001",
+        "CORE-REQ-002",
+        "CORE-REQ-003",
+        "CORE-REQ-004",
+        "CORE-REQ-005",
+        "CORE-REQ-006",
+        "CORE-REQ-007",
+        "CORE-REQ-008",
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "CORE-REQ-012",
+        "CORE-REQ-013",
+        "CORE-REQ-014",
+        "CORE-REQ-015",
+        "CORE-REQ-016",
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "EXT-001",
+        "EXT-002",
+        "EXT-003",
+        "EXT-004",
+        "EXT-005",
+        "EXT-006"
+      ],
+      "lifecycleStage": "post_change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-003"
+    },
+    {
+      "id": "CORE-REQ-020",
+      "summary": "Document user, API, integration, configuration, migration, recovery, security, verification, and support behavior proven by the final build.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-003`",
+      "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`",
+      "dependencies": [
+        "CORE-REQ-001",
+        "CORE-REQ-002",
+        "CORE-REQ-003",
+        "CORE-REQ-004",
+        "CORE-REQ-005",
+        "CORE-REQ-006",
+        "CORE-REQ-007",
+        "CORE-REQ-008",
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "CORE-REQ-012",
+        "CORE-REQ-013",
+        "CORE-REQ-014",
+        "CORE-REQ-015",
+        "CORE-REQ-016",
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "CORE-REQ-019"
+      ],
+      "lifecycleStage": "post_change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-003"
+    },
+    {
+      "id": "CORE-REQ-021",
+      "summary": "Produce one reproducible inspected SHA-256 and SHA-512 hashed unpublished 2.3.0 candidate artifact.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-003`",
+      "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`",
+      "dependencies": [
+        "CORE-REQ-019",
+        "CORE-REQ-020",
+        "DEC-016"
+      ],
+      "lifecycleStage": "post_change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "stable release",
+      "canonicalPhase": "CORE-PHASE-003"
+    },
+    {
+      "id": "CORE-REQ-022",
+      "summary": "After artifact validation, create and read back the actual 3.0.0 Forge maintenance and future 1.21.1 port issue with the required milestone and labels.",
+      "source": "SRC-001",
+      "owner": "`CORE-PHASE-003`",
+      "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`",
+      "dependencies": [
+        "CORE-REQ-019",
+        "CORE-REQ-021",
+        "DEC-015",
+        "DEC-016",
+        "EXT-007"
+      ],
+      "lifecycleStage": "post_change",
+      "productionVerification": "nondestructive",
+      "releaseImpact": "none",
+      "canonicalPhase": "CORE-PHASE-003"
+    }
+  ],
+  "optionalFutureScope": [
+    {
+      "id": "FUT-001",
+      "summary": "Maintain the existing 3.0.0 Forge 1.20.1 beta.",
+      "source": "SRC-001",
+      "disposition": "excluded"
+    },
+    {
+      "id": "FUT-002",
+      "summary": "Port 3.0.0 to Minecraft 1.21.1.",
+      "source": "SRC-001",
+      "disposition": "excluded"
+    },
+    {
+      "id": "FUT-003",
+      "summary": "Add an ATM interface and command.",
+      "source": "SRC-001",
+      "disposition": "excluded"
+    },
+    {
+      "id": "FUT-004",
+      "summary": "Add external adapters beyond internal, Pixelmon 9.4.0, and the separately validated Vault bridge.",
+      "source": "SRC-001",
+      "disposition": "excluded"
+    }
+  ],
+  "nonGoals": [
+    {
+      "id": "NG-001",
+      "summary": "Publish 2.3.0 to GitHub, CurseForge, Modrinth, or another distribution service.",
+      "source": "SRC-001"
+    },
+    {
+      "id": "NG-002",
+      "summary": "Automatically copy, convert, reconcile, or merge balances between providers.",
+      "source": "SRC-001"
+    },
+    {
+      "id": "NG-003",
+      "summary": "Ship Bukkit, Vault, an economy plugin, a hybrid server, bridge code, or their APIs inside FutureShops.",
+      "source": "SRC-001"
+    },
+    {
+      "id": "NG-004",
+      "summary": "Hot switch, late activate, fall back, or priority-select providers at runtime.",
+      "source": "SRC-001"
+    },
+    {
+      "id": "NG-005",
+      "summary": "Mirror an external provider balance ledger inside FutureShops.",
+      "source": "SRC-001"
+    },
+    {
+      "id": "NG-006",
+      "summary": "Support Pixelmon versions other than 9.4.0 in this release.",
+      "source": "SRC-001"
+    },
+    {
+      "id": "NG-007",
+      "summary": "Upgrade unrelated platform or dependency boundaries.",
+      "source": "SRC-001"
+    },
+    {
+      "id": "NG-008",
+      "summary": "Add telemetry, remote balance services, distributed market authority, or cross-server balance synchronization.",
+      "source": "SRC-001"
+    },
+    {
+      "id": "NG-009",
+      "summary": "Weaken browsing, barter, custody, claims, or save compatibility for provider integration.",
+      "source": "SRC-001"
+    }
+  ],
+  "ownerDecisions": [
+    {
+      "id": "DEC-001",
+      "question": "Which product and platform target applies?",
+      "selectedChoice": "FutureShops 2.3.0 on Minecraft 1.21.1 and NeoForge 21.1.248, with unrelated boundaries preserved.",
+      "rationale": "Pixelmon 9.4.0 compatibility requires the exact NeoForge update while unrelated pins remain stable.",
+      "affectedRequirements": [
+        "CORE-REQ-001",
+        "CORE-REQ-017",
+        "CORE-REQ-019",
+        "CORE-REQ-021"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-002",
+      "question": "How is the mod packaged?",
+      "selectedChoice": "The same FutureShops jar is installed on client and server, with optional integrations isolated.",
+      "rationale": "One artifact must remain safe on dedicated servers and clients without optional dependencies.",
+      "affectedRequirements": [
+        "CORE-REQ-001",
+        "CORE-REQ-015",
+        "CORE-REQ-017",
+        "CORE-REQ-021"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-003",
+      "question": "Who owns provider and transaction authority?",
+      "selectedChoice": "The logical server owns provider selection, readiness, authorization, transactions, custody, claims, and outcomes.",
+      "rationale": "Monetary state and permissions require one authoritative mutation boundary.",
+      "affectedRequirements": [
+        "CORE-REQ-002",
+        "CORE-REQ-005",
+        "CORE-REQ-009"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-004",
+      "question": "How are providers integrated?",
+      "selectedChoice": "A public NeoForge provider API, bundled internal and optional Pixelmon adapter, and a separate bridge registering vault.",
+      "rationale": "The core API supports exact integrations without embedding unrelated platforms.",
+      "affectedRequirements": [
+        "CORE-REQ-002",
+        "CORE-REQ-003",
+        "CORE-REQ-017",
+        "CORE-REQ-018"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-005",
+      "question": "How is provider selection applied?",
+      "selectedChoice": "Internal is default and selection is restart-only without hot activation or fallback.",
+      "rationale": "Frozen startup selection prevents inconsistent state ownership.",
+      "affectedRequirements": [
+        "CORE-REQ-002",
+        "CORE-REQ-003",
+        "CORE-REQ-010"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-006",
+      "question": "What happens when an external provider fails?",
+      "selectedChoice": "Server remains online, monetary mutations fail closed, browsing and pure barter remain available.",
+      "rationale": "Dependency failure must not corrupt monetary or unrelated marketplace state.",
+      "affectedRequirements": [
+        "CORE-REQ-002",
+        "CORE-REQ-003",
+        "CORE-REQ-004",
+        "CORE-REQ-012"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-007",
+      "question": "Who owns currency metadata and precision?",
+      "selectedChoice": "The selected provider owns them and every accepted conversion is exact checked integer minor units.",
+      "rationale": "Exact provider metadata and checked values prevent loss and overflow.",
+      "affectedRequirements": [
+        "CORE-REQ-002",
+        "CORE-REQ-006",
+        "CORE-REQ-007",
+        "CORE-REQ-017",
+        "CORE-REQ-018"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-008",
+      "question": "Are balances migrated automatically?",
+      "selectedChoice": "No. Internal and external balances remain independent and internal starting balance is internal-only.",
+      "rationale": "Provider selection does not authorize transferring or inventing value.",
+      "affectedRequirements": [
+        "CORE-REQ-008",
+        "CORE-REQ-010"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-009",
+      "question": "How are multi-leg and offline operations protected?",
+      "selectedChoice": "Durable request and leg identities, idempotent outcomes, recovery, compensation, and no mirrored balance ledger.",
+      "rationale": "Every retry and restart must converge without duplicate value movement.",
+      "affectedRequirements": [
+        "CORE-REQ-002",
+        "CORE-REQ-007",
+        "CORE-REQ-017",
+        "CORE-REQ-018"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-010",
+      "question": "What happens to physical money under external providers?",
+      "selectedChoice": "Keep registrations and saves, disable all value mutation, and allow redemption only after returning to internal.",
+      "rationale": "Existing inventories remain compatible without bypassing an external provider.",
+      "affectedRequirements": [
+        "CORE-REQ-011"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-011",
+      "question": "Is ATM functionality part of 2.3.0?",
+      "selectedChoice": "No ATM UI or command is added.",
+      "rationale": "ATM functionality is excluded from 2.3.0.",
+      "affectedRequirements": [
+        "CORE-REQ-011",
+        "CORE-REQ-012"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-012",
+      "question": "Which Pixelmon integration is shipped?",
+      "selectedChoice": "A bundled optional adapter for exactly Pixelmon 9.4.0, without bundling Pixelmon.",
+      "rationale": "Compatibility claims remain limited to reviewed exact artifacts.",
+      "affectedRequirements": [
+        "CORE-REQ-017"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-013",
+      "question": "How is Vault supported?",
+      "selectedChoice": "A separately installed reviewed bridge registers vault; FutureShops contains no Bukkit or Vault dependency or reflection.",
+      "rationale": "The bridge owns hybrid-platform dependencies and lifecycle adaptation.",
+      "affectedRequirements": [
+        "CORE-REQ-002",
+        "CORE-REQ-018"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-014",
+      "question": "What external economy data may FutureShops persist?",
+      "selectedChoice": "Only transaction facts, requests, outcomes, custody, claims, and confirmed analytics, never a mirrored external balance ledger.",
+      "rationale": "The external provider remains the sole balance authority.",
+      "affectedRequirements": [
+        "CORE-REQ-007",
+        "CORE-REQ-008",
+        "CORE-REQ-014"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-015",
+      "question": "Is the 3.0.0 issue created now?",
+      "selectedChoice": "Create and read back the actual issue after plan validation with the existing 3.0 beta maintenance milestone and enhancement, forge, neoforge, and ready labels.",
+      "rationale": "Initial tracking is authoring output; CORE-PHASE-003 later verifies and updates the same open issue after product validation.",
+      "affectedRequirements": [
+        "CORE-REQ-022"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-016",
+      "question": "Is publication authorized?",
+      "selectedChoice": "No publication, release tag, mod platform upload, or public artifact is authorized.",
+      "rationale": "The selected endpoint is a validated unpublished candidate and open tracking issue.",
+      "affectedRequirements": [
+        "CORE-REQ-021",
+        "CORE-REQ-022"
+      ],
+      "supersedes": []
+    }
+  ],
+  "externalPrerequisites": [
+    {
+      "id": "EXT-001",
+      "name": "Official Pixelmon 9.4.0 runtime and development artifacts",
+      "affected_requirements": [
+        "CORE-REQ-001",
+        "CORE-REQ-017",
+        "CORE-REQ-019",
+        "CORE-REQ-021"
+      ],
+      "mandatory_for_endpoint": true,
+      "kind": "artifact",
+      "availability": "unknown",
+      "authorization": "not_required",
+      "blocked_plan_approved": true,
+      "artifact_evidence": [
+        "exact_version",
+        "authoritative_source",
+        "sha256",
+        "sha512",
+        "compatibility",
+        "license_provenance",
+        "security_review"
+      ],
+      "required_evidence": [
+        "Exact official artifact filenames or coordinates, authoritative URLs, versions, byte sizes, SHA-256 and SHA-512, publisher identity, compatibility, license or terms, archive and dependency security review."
+      ]
+    },
+    {
+      "id": "EXT-002",
+      "name": "Disposable exact Pixelmon 9.4.0 integration environment",
+      "affected_requirements": [
+        "CORE-REQ-017",
+        "CORE-REQ-019",
+        "CORE-REQ-021"
+      ],
+      "mandatory_for_endpoint": true,
+      "kind": "environment",
+      "availability": "unknown",
+      "authorization": "not_required",
+      "blocked_plan_approved": true,
+      "required_evidence": [
+        "Reproducible environment manifest for Minecraft 1.21.1, NeoForge 21.1.248, Pixelmon 9.4.0, exact FutureShops artifact, sanitized logs, and isolation from production credentials and data."
+      ]
+    },
+    {
+      "id": "EXT-003",
+      "name": "Pixelmon economy API feasibility proof",
+      "affected_requirements": [
+        "CORE-REQ-002",
+        "CORE-REQ-007",
+        "CORE-REQ-017"
+      ],
+      "mandatory_for_endpoint": true,
+      "kind": "other",
+      "availability": "unknown",
+      "authorization": "not_required",
+      "blocked_plan_approved": true,
+      "required_evidence": [
+        "Verified API signatures, values, lifecycle, persistence, exact conversion, idempotent mutation or durable receipt design, outcome lookup, failure behavior, and duplicate prevention."
+      ]
+    },
+    {
+      "id": "EXT-004",
+      "name": "Separately installed Vault bridge artifact",
+      "affected_requirements": [
+        "CORE-REQ-002",
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-021"
+      ],
+      "mandatory_for_endpoint": true,
+      "kind": "artifact",
+      "availability": "unknown",
+      "authorization": "not_required",
+      "blocked_plan_approved": true,
+      "artifact_evidence": [
+        "exact_version",
+        "authoritative_source",
+        "sha256",
+        "sha512",
+        "compatibility",
+        "license_provenance",
+        "security_review"
+      ],
+      "required_evidence": [
+        "Exact bridge version, authoritative source, byte size, SHA-256 and SHA-512, API compatibility, license or provenance, source or binary security review, and registration contract."
+      ]
+    },
+    {
+      "id": "EXT-005",
+      "name": "Exact reviewed hybrid runtime, Vault, and economy plugin stack",
+      "affected_requirements": [
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-021"
+      ],
+      "mandatory_for_endpoint": true,
+      "kind": "group",
+      "availability": "unknown",
+      "authorization": "not_required",
+      "blocked_plan_approved": true,
+      "required_evidence": [
+        "Exact versions, authoritative sources, byte sizes, SHA-256 and SHA-512 for every artifact, compatibility, licenses or provenance, security review, and supported limitations."
+      ]
+    },
+    {
+      "id": "EXT-006",
+      "name": "Disposable exact Vault bridge integration environment",
+      "affected_requirements": [
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-021"
+      ],
+      "mandatory_for_endpoint": true,
+      "kind": "environment",
+      "availability": "unknown",
+      "authorization": "not_required",
+      "blocked_plan_approved": true,
+      "required_evidence": [
+        "Reproducible hybrid environment manifest, exact reviewed artifacts, exact FutureShops jar, sanitized logs, and isolation from production credentials and data."
+      ]
+    },
+    {
+      "id": "EXT-007",
+      "name": "GitHub repository tracking capabilities",
+      "affected_requirements": [
+        "CORE-REQ-022"
+      ],
+      "mandatory_for_endpoint": true,
+      "kind": "service",
+      "availability": "available",
+      "authorization": "authorized",
+      "blocked_plan_approved": false,
+      "required_evidence": [
+        "Authenticated EnVisione identity, MCEnvision/FutureShops repository, existing 3.0 beta maintenance milestone, required labels, duplicate search, issue creation result, and readback."
+      ]
+    }
+  ],
+  "phases": [
+    {
+      "id": "CORE-PHASE-000",
+      "owner": "FutureShops repository",
+      "dependencies": [
+        "DEC-001",
+        "DEC-002",
+        "DEC-003",
+        "DEC-004",
+        "DEC-005",
+        "DEC-006",
+        "DEC-007",
+        "DEC-008",
+        "DEC-009",
+        "DEC-012",
+        "DEC-013",
+        "DEC-014",
+        "DEC-015",
+        "DEC-016",
+        "EXT-001",
+        "EXT-002",
+        "EXT-003",
+        "EXT-004",
+        "EXT-005",
+        "EXT-006",
+        "EXT-007"
+      ],
+      "canonicalRequirements": [
+        "CORE-REQ-001",
+        "CORE-REQ-002",
+        "CORE-REQ-003"
+      ]
+    },
+    {
+      "id": "CORE-PHASE-001",
+      "owner": "FutureShops repository",
+      "dependencies": [
+        "CORE-PHASE-000",
+        "CORE-REQ-001",
+        "CORE-REQ-002",
+        "CORE-REQ-003",
+        "DEC-003",
+        "DEC-004",
+        "DEC-005",
+        "DEC-006",
+        "DEC-007",
+        "DEC-008",
+        "DEC-009",
+        "DEC-010",
+        "DEC-011",
+        "DEC-014",
+        "EXT-003"
+      ],
+      "canonicalRequirements": [
+        "CORE-REQ-004",
+        "CORE-REQ-005",
+        "CORE-REQ-006",
+        "CORE-REQ-007",
+        "CORE-REQ-008",
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "CORE-REQ-012",
+        "CORE-REQ-013",
+        "CORE-REQ-014",
+        "CORE-REQ-015",
+        "CORE-REQ-016"
+      ]
+    },
+    {
+      "id": "CORE-PHASE-002",
+      "owner": "Exact external provider integrations",
+      "dependencies": [
+        "CORE-PHASE-001",
+        "CORE-REQ-001",
+        "CORE-REQ-002",
+        "CORE-REQ-004",
+        "CORE-REQ-006",
+        "CORE-REQ-007",
+        "CORE-REQ-009",
+        "CORE-REQ-015",
+        "CORE-REQ-016",
+        "DEC-001",
+        "DEC-002",
+        "DEC-003",
+        "DEC-004",
+        "DEC-005",
+        "DEC-006",
+        "DEC-007",
+        "DEC-008",
+        "DEC-009",
+        "DEC-010",
+        "DEC-011",
+        "DEC-012",
+        "DEC-013",
+        "DEC-014",
+        "EXT-001",
+        "EXT-002",
+        "EXT-003",
+        "EXT-004",
+        "EXT-005",
+        "EXT-006"
+      ],
+      "canonicalRequirements": [
+        "CORE-REQ-017",
+        "CORE-REQ-018"
+      ]
+    },
+    {
+      "id": "CORE-PHASE-003",
+      "owner": "FutureShops repository",
+      "dependencies": [
+        "CORE-PHASE-002",
+        "CORE-REQ-001",
+        "CORE-REQ-002",
+        "CORE-REQ-003",
+        "CORE-REQ-004",
+        "CORE-REQ-005",
+        "CORE-REQ-006",
+        "CORE-REQ-007",
+        "CORE-REQ-008",
+        "CORE-REQ-009",
+        "CORE-REQ-010",
+        "CORE-REQ-011",
+        "CORE-REQ-012",
+        "CORE-REQ-013",
+        "CORE-REQ-014",
+        "CORE-REQ-015",
+        "CORE-REQ-016",
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "DEC-015",
+        "DEC-016",
+        "EXT-001",
+        "EXT-002",
+        "EXT-003",
+        "EXT-004",
+        "EXT-005",
+        "EXT-006",
+        "EXT-007"
+      ],
+      "canonicalRequirements": [
+        "CORE-REQ-019",
+        "CORE-REQ-020",
+        "CORE-REQ-021",
+        "CORE-REQ-022"
+      ]
+    }
+  ],
+  "completionEndpoint": "One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven against internal, exact Pixelmon 9.4.0, and one exact reviewed Vault bridge stack, plus an actual read-back GitHub issue for 3.0.0 Forge maintenance and its future 1.21.1 port.",
+  "goalCreator": {
+    "mandatoryBoundary": "CORE-REQ-001 through CORE-REQ-022 across CORE-PHASE-000 through CORE-PHASE-003, including exact external integration evidence, the unpublished artifact, and the two-stage open issue lifecycle.",
+    "optionalFutureDisposition": "excluded",
+    "lockedOwnerDecisions": "DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012, DEC-013, DEC-014, DEC-015, DEC-016",
+    "activePhase": "CORE-PHASE-000",
+    "nextExecutableAction": "Execute P000-TASK-001 to reconfirm repository identity, toolchain, product metadata, economy ownership, and the complete provider call graph before implementation.",
+    "knownFailingChecks": "none at validated plan handoff; execution checks have not yet run.",
+    "knownExternalBlockers": "Official Pixelmon 9.4.0 runtime and development artifacts; Disposable exact Pixelmon 9.4.0 integration environment; Pixelmon economy API feasibility proof; Separately installed Vault bridge artifact; Exact reviewed hybrid runtime, Vault, and economy plugin stack; Disposable exact Vault bridge integration environment.",
+    "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, resolve EXT-001 through EXT-006 with exact evidence, pass deterministic and runtime matrices, inspect and hash the unpublished jar, and preserve EVD-GH-001 creation and Phase 003 update readbacks for the same open issue."
+  }
+}
