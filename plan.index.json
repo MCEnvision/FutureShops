@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "name": "FutureShops",
+    "repository": "https://github.com/MCEnvision/FutureShops.git"
+  },
+  "master": "plan.md",
+  "plans": [
+    {
+      "id": "PLAN-MASTER",
+      "path": "plan.md",
+      "kind": "master",
+      "classification": "mandatory",
+      "requirementPrefix": "CORE",
+      "owner": "FutureShops",
+      "dependsOn": []
+    },
+    {
+      "id": "PLAN-PHASE-000",
+      "path": "phases/plan-phase-000.md",
+      "kind": "phase",
+      "classification": "mandatory",
+      "requirementPrefix": "PHASE000",
+      "phaseId": "CORE-PHASE-000",
+      "owner": "Repository governance",
+      "dependsOn": []
+    },
+    {
+      "id": "PLAN-PHASE-001",
+      "path": "phases/plan-phase-001.md",
+      "kind": "phase",
+      "classification": "mandatory",
+      "requirementPrefix": "PHASE001",
+      "phaseId": "CORE-PHASE-001",
+      "owner": "NeoForge client integration",
+      "dependsOn": [
+        "PLAN-PHASE-000"
+      ]
+    },
+    {
+      "id": "PLAN-PHASE-002",
+      "path": "phases/plan-phase-002.md",
+      "kind": "phase",
+      "classification": "mandatory",
+      "requirementPrefix": "PHASE002",
+      "phaseId": "CORE-PHASE-002",
+      "owner": "Forge defect integration",
+      "dependsOn": [
+        "PLAN-PHASE-000",
+        "PLAN-PHASE-001"
+      ]
+    },
+    {
+      "id": "PLAN-PHASE-003",
+      "path": "phases/plan-phase-003.md",
+      "kind": "phase",
+      "classification": "mandatory",
+      "requirementPrefix": "PHASE003",
+      "phaseId": "CORE-PHASE-003",
+      "owner": "Admin shop editor",
+      "dependsOn": [
+        "PLAN-PHASE-002"
+      ]
+    },
+    {
+      "id": "PLAN-PHASE-004",
+      "path": "phases/plan-phase-004.md",
+      "kind": "phase",
+      "classification": "mandatory",
+      "requirementPrefix": "PHASE004",
+      "phaseId": "CORE-PHASE-004",
+      "owner": "Security review",
+      "dependsOn": [
+        "PLAN-PHASE-003"
+      ]
+    },
+    {
+      "id": "PLAN-PHASE-005",
+      "path": "phases/plan-phase-005.md",
+      "kind": "phase",
+      "classification": "mandatory",
+      "requirementPrefix": "PHASE005",
+      "phaseId": "CORE-PHASE-005",
+      "owner": "Persistence subsystem",
+      "dependsOn": [
+        "PLAN-PHASE-004"
+      ]
+    },
+    {
+      "id": "PLAN-PHASE-006",
+      "path": "phases/plan-phase-006.md",
+      "kind": "phase",
+      "classification": "mandatory",
+      "requirementPrefix": "PHASE006",
+      "phaseId": "CORE-PHASE-006",
+      "owner": "Server integration architecture",
+      "dependsOn": [
+        "PLAN-PHASE-005"
+      ]
+    },
+    {
+      "id": "PLAN-PHASE-007",
+      "path": "phases/plan-phase-007.md",
+      "kind": "phase",
+      "classification": "mandatory",
+      "requirementPrefix": "PHASE007",
+      "phaseId": "CORE-PHASE-007",
+      "owner": "Release readiness",
+      "dependsOn": [
+        "PLAN-PHASE-006"
+      ]
+    }
+  ]
+}
