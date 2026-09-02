@@ -164,12 +164,23 @@ The issue 51 and issue 52 strict list regressions are included in
 element types for administrator replay, market profile state, player inventory
 delivery, and protected cash redemption while preserving valid round trips.
 
-The remaining phase evidence packet records the exact fixture hashes, corruption
+The merged phase evidence packet records the exact fixture hashes, corruption
 campaign, crash cuts, backup cohort, restore rehearsal, dedicated server, client,
-and two profile lifecycle results. A timed smoke command is only accepted when
-the server reaches `Done`, FutureShops initializes, and no crash report or startup
-exception is produced. A timeout after those observations is a bounded process
-stop, not a product failure.
+and two profile lifecycle results. The merged `1.20.1` revision is
+`c43dae7d8348c51a91368cd73dd7e3bc68c01e19`. It passed the complete unit suite,
+data generation, all five required GameTests, the packaged build, a restored
+cohort server smoke, and two client joins. Its beta jar digest is
+`6c1d0f94b308a91e10bf754d5768cb1d48fbbb30eb169c5e7088471926a839ba`. A timed
+smoke command is only accepted when the server reaches `Done`, FutureShops
+initializes, and no crash report or startup exception is produced. A timeout
+after those observations is a bounded process stop, not a product failure.
+
+The integration pull request checks all passed. The quality Gradle, quality
+dependency review, quality secret scan, Java and Kotlin CodeQL, and Python
+CodeQL checks completed successfully. Documentation, Node, and dependency
+submission jobs were intentionally skipped because this repository has no
+matching inputs. The signed annotated tag `phase-005-persistence-recovery`
+points to the merged revision.
 
 ## Operator recovery boundary
 
