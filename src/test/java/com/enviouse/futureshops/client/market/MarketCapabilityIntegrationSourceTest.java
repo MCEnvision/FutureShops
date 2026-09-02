@@ -74,6 +74,20 @@ class MarketCapabilityIntegrationSourceTest {
     }
 
     @Test
+    void optionalTabsUseAuthoritativePacketFlagsBeforeCapabilitiesArrive()
+            throws Exception {
+        String screen = read(
+                "src/main/java/com/enviouse/futureshops/client/screen/MarketModuleScreen.java");
+
+        int visibility = screen.indexOf("private boolean moduleVisible(");
+        assertTrue(visibility >= 0);
+        String method = screen.substring(visibility,
+                screen.indexOf("\n    private boolean showNavigation()", visibility));
+        assertTrue(method.contains(".orElseGet(() -> packetConfigured(target))"));
+        assertTrue(method.contains("packetConfigured(target)"));
+    }
+
+    @Test
     void serverShutdownClearsCapabilityRevisionState() throws Exception {
         String source = read(
                 "src/main/java/com/enviouse/futureshops/Futureshops.java");

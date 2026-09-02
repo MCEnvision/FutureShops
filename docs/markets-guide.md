@@ -37,6 +37,11 @@ shown by `/shop` when the server enables `modules.show_module_navigation`. A dis
 disappears from navigation unless you still have claims in it, in which case it appears as
 **Claims only**.
 
+Optional tabs use the module flags carried by the server open response until the first capability
+snapshot arrives. This prevents a disabled Bazaar or Auction House tab from flashing into view
+during the initial handshake or after a client capability cache reset. The server still validates
+every route, so a stale client cannot open a disabled module.
+
 Bazaar and Auction House use the same body structure as Server Shop. Market routes appear in the
 segmented control above the results, while the left Departments panel contains All and the
 available categories with market-wide counts. Long department lists scroll under the mouse.
