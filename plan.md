@@ -1,9 +1,9 @@
-# FutureShops Defect Closure and Release Candidate Polish Plan
+# FutureShops Defect Closure and Beta Candidate Polish Plan
 
 > **Plan ID:** PLAN-MASTER
-> **Plan status:** VALIDATED WITH KNOWN EXTERNAL BLOCKER
+> **Plan status:** VALIDATED
 > **Project state:** EXISTING
-> **Planning subject:** FutureShops defect closure and release candidate polish for the Forge 1.20.1 and NeoForge 1.21.1 support lines
+> **Planning subject:** FutureShops defect closure and beta candidate polish for Forge 1.20.1 and NeoForge 1.21.1
 > **Plan profile:** software_product
 > **Contract schema:** 2
 
@@ -14,12 +14,12 @@ Project: FutureShops
 Requested artifact: authoritative_plan
 Repository root: /mnt/hermes/projects/FutureShops
 Starting branch: envy/polish_plan
-Starting commit: c6709e12ca7084ee068b2497a577b8d47c12f6fd
+Starting commit: f8cbbb77c86b35fad4fa59491cda58a7a8abb438
 Authoritative remote:
 origin
 https://github.com/MCEnvision/FutureShops.git
-Remote ref: origin/1.20.1
-Remote commit: c6709e12ca7084ee068b2497a577b8d47c12f6fd
+Remote ref: origin/envy/polish_plan
+Remote commit: f8cbbb77c86b35fad4fa59491cda58a7a8abb438
 Secondary support ref: origin/1.21.1
 Secondary support commit at intake: 247d8f6842bfa1f586e5b18a9aab67cabd3db89f
 ```
@@ -30,19 +30,20 @@ The default support line is Forge 1.20.1. It uses Java 17, Minecraft 1.20.1, For
 
 | ID | Role | Subject | Source | Intended use |
 |---|---|---|---|---|
-| SRC-001 | owner_request | The current request to replace the temporary planning state with an authoritative plan for fixing every active GitHub defect and polishing FutureShops to completion, including the owner's locked endpoint, scope, feature, evidence, version, audit, and publication decisions | Current EnVy request and the resolved Plan Creator intake answers in this task | Defines mandatory scope, completion authority, rolling defect intake, issue 33 behavior, external evidence gates, target versions, audit depth, and release exclusions |
-| SRC-002 | existing_plan | Legacy FutureShops 3.0 implementation, escrow, market, recovery, configuration, testing, and release contract | /mnt/hermes/projects/FutureShops/FutureShops3-0Plan.MD | Preserves established economic, recovery, compatibility, and verification invariants while migrating unfinished polish work into the new authoritative plan |
-| SRC-003 | existing_plan | Legacy FutureShops 3.1 trade offer, bulk editor, UI, catalog, and configuration contract | /mnt/hermes/projects/FutureShops/FutureShops3-1TradeOffersPlan.MD | Provides implemented trade offer and editor architecture constraints and acceptance history without reopening completed scope |
-| SRC-004 | requirements | Open issue 22, NeoForge 1.21.1 GUI blur defect and existing candidate fix evidence | https://github.com/MCEnvision/FutureShops/issues/22 | Defines the 1.21.1 defect contract, reporter acceptance gate, and the candidate change that must be independently verified before integration |
-| SRC-005 | requirements | Open issue 25, Forge 1.20.1 server shop offers remain unavailable after the first migration fix | https://github.com/MCEnvision/FutureShops/issues/25 | Defines the unresolved catalog availability behavior, affected world evidence, and mandatory reporter retest |
-| SRC-006 | requirements | Open issue 32, Forge 1.20.1 player data became unusable twice and was deleted to recover | https://github.com/MCEnvision/FutureShops/issues/32 | Defines the high severity non destructive player data investigation and exact failure proof requirement |
-| SRC-007 | requirements | Open issue 33, bulk admin shop listing creation with shared price and stock and exact NBT support | https://github.com/MCEnvision/FutureShops/issues/33 | Defines the KISS bulk listing workflow locked by the owner |
-| SRC-008 | requirements | Open issue 34, Forge 1.20.1 finite stock money purchases fail while infinite stock succeeds | https://github.com/MCEnvision/FutureShops/issues/34 | Defines the multiplayer finite stock transaction regression and diagnostic gap |
-| SRC-009 | repository_evidence | Repository identity, branch topology, build metadata, current versions, and supported runtime lines | /mnt/hermes/projects/FutureShops/.git, gradle.properties, settings.gradle, build.gradle, src/main/resources/META-INF/mods.toml, origin/1.20.1, and origin/1.21.1 inspected on 2026-09-01 | Grounds project identity, target branches, exact toolchains, release versions, and branch isolation |
-| SRC-010 | status | Current user and operator documentation for implemented behavior, commands, configuration, recovery, and known limits | /mnt/hermes/projects/FutureShops/README.md, DOCUMENTATION.md, and docs/ | Separates current documented behavior from target corrections and defines documentation surfaces that must be reconciled |
-| SRC-011 | audit_evidence | Current implementation, tests, CI results, runtime tasks, and issue branch evidence | /mnt/hermes/projects/FutureShops/src, GitHub Actions for MCEnvision/FutureShops, branch envy/issue_22_neoforge at bfba91f7b0c51b03d07117c4f1851c38a98f6186, and the 1.20.1 default branch at c6709e12ca7084ee068b2497a577b8d47c12f6fd | Provides observed and verified baseline evidence that must be rerun at exact candidate revisions rather than accepted as future proof |
-| SRC-012 | status | Open Dependabot pull request 28 for JUnit and Gradle patch updates | https://github.com/MCEnvision/FutureShops/pull/28 | Keeps unrelated dependency maintenance visible for branch health without silently expanding product defect scope or changing pinned platform boundaries |
-| SRC-013 | requirements | Repository execution, branch, verification, GitHub, recovery, security, and documentation rules | /mnt/hermes/projects/FutureShops/AGENTS.md supplied as repository instructions | Defines mandatory execution discipline, support branch separation, evidence quality, data safety, and release authorization boundaries |
+| SRC-001 | owner_request | Owner corrections for issues 22, 25, and 32 and local verification capacity | Current EnVy request on 2026-09-01 | Removes false external blockers, accepts issue 22, classifies issue 25 as beta compatibility work, and mandates local corruption and multiplayer testing |
+| SRC-002 | existing_plan | Legacy FutureShops 3.0 contract | /mnt/hermes/projects/FutureShops/FutureShops3-0Plan.MD | Preserves economy, recovery, compatibility, and verification invariants |
+| SRC-003 | existing_plan | Legacy FutureShops 3.1 trade offer contract | /mnt/hermes/projects/FutureShops/FutureShops3-1TradeOffersPlan.MD | Preserves implemented editor and catalog constraints |
+| SRC-004 | requirements | Issue 22 comments and accepted NeoForge blur fix | https://github.com/MCEnvision/FutureShops/issues/22 and commit bfba91f7b0c51b03d07117c4f1851c38a98f6186 | Defines the confirmed root cause, fix, evidence, owner acceptance, 1.21.1 merge, and closure work |
+| SRC-005 | requirements | Issue 25 body and every current comment | https://github.com/MCEnvision/FutureShops/issues/25 | Defines the beta update compatibility investigation without a reporter acceptance blocker |
+| SRC-006 | requirements | Issue 32 body and every current comment | https://github.com/MCEnvision/FutureShops/issues/32 | Defines local destructive input generation, non destructive recovery, and fault isolation |
+| SRC-007 | requirements | Issue 33 body and every current comment | https://github.com/MCEnvision/FutureShops/issues/33 | Defines the bounded bulk admin shop workflow |
+| SRC-008 | requirements | Issue 34 body and every current comment | https://github.com/MCEnvision/FutureShops/issues/34 | Defines locally reproducible finite stock multiplayer behavior |
+| SRC-009 | repository_evidence | Repository identity, branch topology, toolchains, and current versions | /mnt/hermes/projects/FutureShops and origin branches inspected on 2026-09-01 | Grounds branch isolation, versions, and exact runtime matrices |
+| SRC-010 | status | Current user and operator documentation | README.md, DOCUMENTATION.md, and docs | Defines documentation surfaces |
+| SRC-011 | audit_evidence | Current implementation, tests, CI, runtime tasks, and issue branch evidence | src, GitHub Actions, origin/1.20.1 at c6709e12ca7084ee068b2497a577b8d47c12f6fd, origin/1.21.1 at 247d8f6842bfa1f586e5b18a9aab67cabd3db89f, and envy/issue_22_neoforge at bfba91f7b0c51b03d07117c4f1851c38a98f6186 | Provides exact revision evidence to rerun during execution |
+| SRC-012 | status | Open dependency pull request 28 | https://github.com/MCEnvision/FutureShops/pull/28 | Keeps dependency maintenance visible without expanding product scope |
+| SRC-013 | requirements | Repository execution and safety rules | /mnt/hermes/projects/FutureShops/AGENTS.md | Defines branch, verification, GitHub, recovery, security, and documentation rules |
+| SRC-014 | audit_evidence | Owner supplied local verification capacity | Current EnVy request stating 64 GB workstation and 96 GB node1 availability | Establishes controlled dedicated server and multiple client testing as internal executable work |
 
 The planning subject is the FutureShops product across its two current support lines. Issue descriptions are requirements and evidence sources. Repository state, logs, tests, pull requests, and legacy completion records describe current state. None of those artifacts independently replaces the owner-approved product contract in this plan.
 
@@ -93,15 +94,15 @@ The intended endpoint is two prepared, unpublished candidate artifacts: Forge `3
 | Secondary support line | OBSERVED | `1.21.1` exists separately at intake commit `247d8f6842bfa1f586e5b18a9aab67cabd3db89f` | SRC-009 |
 | Forge version | OBSERVED | The current Forge line identifies as `3.0.0-beta.1` | Build and mod metadata in SRC-009 |
 | NeoForge version | OBSERVED | The current NeoForge line identifies as `2.2.0` | Branch metadata in SRC-009 |
-| Issue 22 | OBSERVED | A candidate change exists at `bfba91f7b0c51b03d07117c4f1851c38a98f6186`, but it is not merged and reporter acceptance is absent | SRC-004 and SRC-011 |
-| Issue 25 | OBSERVED | The first migration repair is present, but the reporter still observed unavailable offers | SRC-005 |
-| Issue 32 | UNKNOWN | The exact invalid player state and root cause are not yet available | SRC-006 and EXT-003 |
+| Issue 22 | OBSERVED | The owner accepts the documented root cause and correction at `bfba91f7b0c51b03d07117c4f1851c38a98f6186`; fresh independent evidence, required pull request integration into `1.21.1`, merged-revision verification, and issue closure remain | SRC-001, SRC-004, and SRC-011 |
+| Issue 25 | OBSERVED | Every current issue comment is part of the evidence baseline. The first migration repair exists, and the remaining question is whether a supported current-state defect exists or the report crossed an unsupported intermediate beta transition | SRC-001 and SRC-005 |
+| Issue 32 | UNKNOWN | The exact root cause is not proven, but local deterministic corruption, fuzzing, crash-cut, modded-NBT sentinel, ownership-isolation, and non-destructive recovery work is mandatory and executable without reporter data | SRC-001, SRC-006, and SRC-014 |
 | Issue 33 | PROPOSED | The owner has fixed the scope and interaction contract; implementation evidence does not yet exist | SRC-007 and DEC-003 |
-| Issue 34 | OBSERVED | Finite-stock money purchases fail while infinite-stock purchases succeed; current logs lack decisive FutureShops diagnostics | SRC-008 |
+| Issue 34 | OBSERVED | Finite-stock money purchases reportedly fail while infinite-stock purchases succeed; the report and every comment define a locally executable dedicated-server and multiple-client reproduction matrix | SRC-008 and SRC-014 |
 | Legacy 3.0 and 3.1 work | OBSERVED | Both legacy plans describe implemented behavior and historical verification, but neither is a current authoritative defect-closure plan | SRC-002 and SRC-003 |
 | Verification baseline | OBSERVED | Unit, build, data, GameTest, server, and client tasks exist, but they have not all been rerun at future exact candidate revisions | SRC-011 and SRC-013 |
 | Dependency maintenance | OBSERVED | Dependabot pull request 28 is open and separate from the product defect contract unless it becomes necessary for branch health | SRC-012 |
-| External acceptance | UNKNOWN | Issue 22 and issue 25 reporter retests, exact issue 32 evidence, and the controlled Forge multiplayer environment are not available at intake | EXT-001, EXT-002, EXT-003, and EXT-004 |
+| Verification capacity | OBSERVED | The 64 GB workstation is authorized for isolated dedicated servers and multiple clients; the 96 GB node1 host is an authorized temporary-server fallback. Historical EXT-001 through EXT-004 are resolved or superseded traceability records, and EXT-005 is available | SRC-001, SRC-014, DEC-007, and EXT-001 through EXT-005 |
 
 No future phase may convert an `UNKNOWN`, `OBSERVED`, or `PROPOSED` statement into `VERIFIED` without naming the exact revision, environment, procedure, and decisive result.
 
@@ -109,20 +110,20 @@ No future phase may convert an `UNKNOWN`, `OBSERVED`, or `PROPOSED` statement in
 
 | Profile area | Status | Source | Contract location | Rationale |
 |---|---|---|---|---|
-| inputs and outputs | covered | SRC-001, SRC-004, SRC-005, SRC-006, SRC-007, SRC-008 | Inputs, outputs, and user workflows | The plan will define GitHub issue evidence, catalog selections, inventory and transaction inputs, UI and command outputs, reporter evidence, and exact candidate artifacts. |
-| component architecture | covered | SRC-002, SRC-003, SRC-009, SRC-011 | Architecture and component ownership | The plan will assign client UI, networking, shop catalog, economy, escrow, persistence, commands, configuration, and release ownership across both support lines. |
-| state and persistence | covered | SRC-001, SRC-002, SRC-005, SRC-006, SRC-008 | State, persistence, migration, and recovery | A codebase wide persistence audit is mandatory and includes every journal, checkpoint, ledger, custody store, claim store, SavedData object, inventory proof, NBT record, JSON and TOML file, migration, atomic write, backup, reload, concurrency, integrity, recovery, and corruption path. |
-| failure taxonomy | covered | SRC-001, SRC-004, SRC-005, SRC-006, SRC-008, SRC-013 | Failure taxonomy and blocker routing | The plan will distinguish validation, readiness, authorization, inventory, custody, persistence, recovery, network, configuration, dependency, external evidence, and publication failures with fail closed behavior and actionable evidence. |
-| versioning | covered | DEC-005, SRC-009 | Compatibility, versioning, and branch topology | The owner locked Forge 1.20.1 to 3.0.0-beta.2 and NeoForge 1.21.1 to 2.2.1, with fixes integrated only into their correct support branches. |
-| security | covered | DEC-006, SRC-002, SRC-013 | Security and privacy contract | The plan requires a complete audit and repair pass for leaks, backdoors, packet and command trust, secrets, paths, deserialization, permissions, duplication, privacy, and dependency packaging. |
-| test system | covered | SRC-001, SRC-011, SRC-013, EXT-001, EXT-002, EXT-003, EXT-004 | Test system and evidence matrix | The plan will require focused regressions, full tests, data validation, GameTests, builds, server and client smoke tests, controlled multiplayer, restart, reconnect, fault injection, reporter acceptance, and exact revision evidence. |
-| release lifecycle | covered | DEC-001, DEC-005, SRC-009, SRC-013 | Candidate integration and release readiness | The endpoint is verified merged support branches and exact beta candidate artifacts, while platform publication, stable release, and announcements remain excluded until separately authorized. |
-| generalization | covered | DEC-002, DEC-003, SRC-007 | Scope generalization and bounded extension rules | The rolling defect policy applies a common deduplicated issue, repair, and verification workflow, while issue 33 remains a deliberately bounded reusable catalog operation rather than an unbounded query language. |
-| determinism | covered | SRC-001, SRC-002, SRC-006, SRC-007, SRC-011 | Determinism, idempotency, and reproducibility | Stable request identities, integer value movement, exact NBT identity, atomic writes, reproducible fixtures, exact revision tests, deterministic audits, and repeatable candidate hashes are mandatory. |
+| inputs and outputs | covered | SRC-004, SRC-005, SRC-006, SRC-007, SRC-008 | Inputs, outputs, and workflows | The plan defines issue evidence, fixtures, UI inputs, authoritative mutations, and evidence outputs. |
+| component architecture | covered | SRC-002, SRC-003, SRC-009, SRC-011 | Architecture and component ownership | The plan assigns client, networking, catalog, transaction, persistence, command, and release ownership. |
+| state and persistence | covered | SRC-002, SRC-005, SRC-006, SRC-008 | State, persistence, migration, and recovery | All stores, files, migrations, corruption paths, and recovery boundaries are audited. |
+| failure taxonomy | covered | SRC-001, SRC-004, SRC-005, SRC-006, SRC-008 | Failure taxonomy and routing | The plan distinguishes validation, compatibility, readiness, corruption, transaction, network, and recovery failures. |
+| versioning | covered | DEC-005, SRC-009 | Compatibility, versioning, and branch topology | Forge 1.20.1 and NeoForge 1.21.1 remain isolated with locked versions. |
+| security | covered | DEC-006, SRC-002, SRC-013 | Security and privacy contract | The whole codebase security and privacy audit remains mandatory. |
+| test system | covered | SRC-001, SRC-011, SRC-013, SRC-014 | Test system and evidence matrix | Local fault injection, dedicated server, multiple clients, restart, reconnect, and exact revision evidence replace false external blockers. |
+| release lifecycle | covered | DEC-001, DEC-005, SRC-009 | Candidate integration and release readiness | The endpoint is merged verified beta candidates without publication. |
+| generalization | covered | DEC-002, DEC-003, SRC-007 | Scope generalization and bounded extension rules | Verified defects roll into scope while issue 33 remains bounded. |
+| determinism | covered | SRC-001, SRC-002, SRC-006, SRC-007, SRC-014 | Determinism, idempotency, and reproducibility | Exact revisions, request identities, fixtures, corruption seeds, recovery proofs, and candidate hashes are mandatory. |
 
-### Inputs, outputs, and user workflows
+### Inputs, outputs, and workflows
 
-Sections 3, 6, 10, 11, and 12 define the issue evidence, catalog selections, inventory and transaction data, commands, packets, user-visible responses, durable outcomes, reporter results, and candidate artifacts that enter or leave the product workflows.
+Sections 3, 6, 10, 11, and 12 define the issue comments, local fixtures, catalog selections, inventory and transaction data, commands, packets, user-visible responses, durable outcomes, compatibility dispositions, and candidate artifacts that enter or leave the product workflows.
 
 ### Architecture and component ownership
 
@@ -132,9 +133,9 @@ Section 11 defines canonical component ownership, dependency direction, authorit
 
 Sections 11, 12, and 15 define durable and transient state, schemas, concurrency, migrations, compatibility, corruption handling, backup, restore, and non-destructive recovery.
 
-### Failure taxonomy and blocker routing
+### Failure taxonomy and routing
 
-Sections 10, 11, and 17 classify internal and external failures, required terminal behavior, retry and recovery boundaries, operator evidence, and blocker propagation.
+Sections 10, 11, and 17 classify validation, compatibility, readiness, corruption, transaction, network, recovery, repository-access, and publication failures, with required terminal behavior and operator evidence.
 
 ### Compatibility, versioning, and branch topology
 
@@ -146,7 +147,7 @@ Sections 11, 12, 14, and 17 define untrusted inputs, permissions, privacy, secre
 
 ### Test system and evidence matrix
 
-Sections 12 and 14 define unit, integration, runtime, compatibility, migration, security, regression, multiplayer, reporter, recovery, and artifact evidence at exact revisions.
+Sections 12 and 14 define unit, integration, runtime, compatibility, migration, security, regression, local multiplayer, corruption, recovery, and artifact evidence at exact revisions.
 
 ### Candidate integration and release readiness
 
@@ -164,10 +165,10 @@ Sections 11, 12, 14, and 18 require stable request and item identities, checked 
 
 - CORE-REQ-001 — Migrate the two legacy plans into one authoritative, traceable plan set without rewriting legacy artifacts or reopening completed features.
 - CORE-REQ-002 — Establish an exact issue, branch, test, CI, configuration, reproduction, and evidence baseline before repair.
-- CORE-REQ-003 — Resolve NeoForge issue 22, integrate it only into `1.21.1` as `2.2.1`, and obtain reporter acceptance.
-- CORE-REQ-004 — Resolve Forge issue 25 beyond the first migration attempt and obtain reporter acceptance on preserved affected data.
-- CORE-REQ-005 — Resolve Forge issue 32 through exact, non-destructive invalid-state proof and recovery without player-data deletion.
-- CORE-REQ-006 — Resolve Forge issue 34 for finite-stock money purchases in controlled multiplayer without duplication or value loss.
+- CORE-REQ-003 — Verify the accepted issue 22 background-pass fix, merge commit `bfba91f7b0c51b03d07117c4f1851c38a98f6186` only into `1.21.1` through the required pull request workflow, verify the merged revision, and close issue 22.
+- CORE-REQ-004 — Resolve issue 25 through a local beta transition and current-state matrix, fixing any supported current repository defect or producing an evidence-backed owner-approved beta compatibility disposition and recovery documentation.
+- CORE-REQ-005 — Resolve issue 32 through local deterministic corruption, fuzzing, crash cuts, modded NBT sentinels, ownership isolation, and non-destructive recovery without player-data deletion.
+- CORE-REQ-006 — Resolve issue 34 on an isolated local dedicated Forge server with multiple clients, without duplication or value loss.
 - CORE-REQ-007 — Implement the bounded KISS bulk admin shop listing workflow from issue 33.
 - CORE-REQ-008 — Make bulk listing conflict handling explicit, atomic, and preservation-safe.
 - CORE-REQ-009 — File, link, repair, verify, and converge every newly verified repository-owned defect.
@@ -176,12 +177,12 @@ Sections 11, 12, 14, and 18 require stable request and item identities, checked 
 - CORE-REQ-012 — Audit every persistence and database path and repair every verified defect non-destructively.
 - CORE-REQ-013 — Audit backend integration and failure handling and repair every verified defect.
 - CORE-REQ-014 — Preserve all economic, escrow, claims, authority, compatibility, and no-loss invariants.
-- CORE-REQ-015 — Provide deterministic, exact-revision verification at unit, integration, runtime, multiplayer, recovery, and artifact layers.
+- CORE-REQ-015 — Provide deterministic, exact-revision focused, unit, data, GameTest, build, JAR, server, client, local multiplayer, restart, reconnect, reload, rollback, corruption, and fault-injection verification.
 - CORE-REQ-016 — Keep both support lines isolated, compatible, and correctly versioned.
 - CORE-REQ-017 — Reconcile all affected documentation, operations, GitHub, and project tracking with verified behavior.
 - CORE-REQ-018 — Prepare and inspect exact unpublished Forge `3.0.0-beta.2` and NeoForge `2.2.1` candidate artifacts with integrity evidence.
 - CORE-REQ-019 — Repeat all mandatory audits at exact candidate revisions until no known repository-owned defect remains.
-- CORE-REQ-020 — Close and complete tracking only after merged fixes, exact evidence, green checks, and mandatory reporter acceptance.
+- CORE-REQ-020 — Close and complete tracking only after the owner-accepted disposition, merged change where required, local deterministic evidence, green exact-revision checks, and mandatory issue-comment evidence pass, without a reporter-acceptance prerequisite.
 
 ## 7. Optional / Future Scope
 
@@ -209,7 +210,7 @@ The locked disposition is `excluded`.
 ### DEC-001 — Completion endpoint
 
 **Status:** RESOLVED
-**Selected choice:** All scoped and audit discovered repository owned defects are fixed, merged on the correct support branch, fully verified, accepted where reporter evidence is mandatory, and closed. Both exact beta candidate artifacts are prepared and proven. Public platform releases, stable publication, and announcements remain excluded until later explicit authorization.
+**Selected choice:** All scoped and audit discovered repository defects are fixed or receive an evidence backed owner approved compatibility disposition, merged and locally verified as applicable, closed, and exact beta candidates prepared. Publication remains excluded.
 **Rationale:** Completion means a trustworthy candidate state, not only locally compiling patches.
 **Affected requirements:** CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-006, CORE-REQ-007, CORE-REQ-008, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, CORE-REQ-019, CORE-REQ-020
 **Supersedes:** Legacy completion and publication endpoints in SRC-002 and SRC-003
@@ -217,7 +218,7 @@ The locked disposition is `excluded`.
 ### DEC-002 — Rolling defect scope
 
 **Status:** RESOLVED
-**Selected choice:** Scope rolls forward for verified defects. Every discovered defect is deduplicated and filed on GitHub before repair, then fixed and verified. A repeated final audit at exact candidate revisions must find no remaining known repository owned defect. Material unrelated enhancements require a later explicit Plan Creator revision.
+**Selected choice:** Yes. Deduplicate and file every verified defect before repair, then rerun final audits until clean.
 **Rationale:** The owner selected convergence on a clean known-defect set instead of freezing scope to the intake snapshot.
 **Affected requirements:** CORE-REQ-002, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-019, CORE-REQ-020
 **Supersedes:** None
@@ -225,23 +226,23 @@ The locked disposition is `excluded`.
 ### DEC-003 — Issue 33 KISS behavior
 
 **Status:** RESOLVED
-**Selected choice:** Reuse the searchable grid for bounded registry selection, allow optional one exact canonical NBT identity, show a full generated listing preview, apply one shared price and stock through one atomic catalog write, skip and report existing listings by default, and require explicit per item replacement that preserves unrelated fields. Exclude fuzzy matching, arbitrary NBT paths, and unconditional replacement.
+**Selected choice:** Reuse the searchable grid, allow optional exact canonical NBT, preview all generated listings, apply shared price and stock atomically, skip and report existing entries by default, and require explicit per item replacement.
 **Rationale:** This gives administrators fast bulk entry without creating an ambiguous query or destructive replacement system.
 **Affected requirements:** CORE-REQ-007, CORE-REQ-008
 **Supersedes:** Any broader interpretation of issue 33
 
-### DEC-004 — External evidence and closure
+### DEC-004 — Issue evidence and closure
 
 **Status:** RESOLVED
-**Selected choice:** Preserve and request exact non destructive evidence. If evidence is unavailable, use the authenticated EnVisione GitHub account to tag the issue author with a precise request. Reporter acceptance is mandatory for issues 22 and 25. Issue 32 requires a deterministic reproduction or proof of the exact invalid state. Other internal work may continue, but the affected issue and final plan endpoint remain blocked.
-**Rationale:** External latency must not weaken evidence or halt unrelated audits and repairs.
-**Affected requirements:** CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-015, CORE-REQ-020
-**Supersedes:** None
+**Selected choice:** Issue comments are mandatory evidence. Reporter acceptance is not an endpoint prerequisite. Issue 22 has explicit owner acceptance. Issue 25 is evaluated under beta compatibility policy with local transition fixtures. Issues 32 and 34 require local deterministic fault and multiplayer reproduction. Missing reporter artifacts may improve a fixture but cannot be labeled an external blocker.
+**Rationale:** Repository-controlled evidence and explicit owner decisions must drive closure without turning reporter latency into a false product blocker.
+**Affected requirements:** CORE-REQ-002, CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-006, CORE-REQ-015, CORE-REQ-020
+**Supersedes:** The reporter-acceptance and missing-artifact blocker policy previously recorded under DEC-004
 
 ### DEC-005 — Versions and support branches
 
 **Status:** RESOLVED
-**Selected choice:** All Forge 1.20.1 fixes, issue 33, and Forge audit repairs ship together as exactly 3.0.0-beta.2 on the 1.20.1 branch. NeoForge issue 22 ships as exactly 2.2.1 on the 1.21.1 branch. No per bug version increment and no cross branch merge.
+**Selected choice:** Forge work ships together as 3.0.0-beta.2 on 1.20.1. Issue 22 ships as 2.2.1 on 1.21.1. No cross branch merge.
 **Rationale:** The two supported runtimes have independent compatibility and release histories.
 **Affected requirements:** CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-006, CORE-REQ-007, CORE-REQ-008, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, CORE-REQ-019
 **Supersedes:** Any intermediate Forge beta numbering implied by historical messages
@@ -249,62 +250,70 @@ The locked disposition is `excluded`.
 ### DEC-006 — Mandatory audits
 
 **Status:** RESOLVED
-**Selected choice:** Complete and repair security and privacy, every admin command and permission path, every persistence and database path, and backend integration and failure handling across all named marketplace, economy, escrow, ATM, claim, lifecycle, networking, restart, reconnect, and multiplayer workflows. Every discovered defect is filed before repair and each audit reruns clean at the exact candidate revisions.
+**Selected choice:** Security and privacy, every admin command, all persistence and database paths, and full backend integration and failure handling must be audited, repaired, and rerun clean.
 **Rationale:** Known reports cross trust, persistence, transaction, and lifecycle boundaries and require systematic closure.
 **Affected requirements:** CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-019, CORE-REQ-020
 **Supersedes:** None
+
+### DEC-007 — Local runtime capacity
+
+**Status:** RESOLVED
+**Selected choice:** Use the 64 GB workstation for isolated dedicated servers and multiple clients by default. Use the 96 GB node1 host for a temporary isolated server when it improves capacity or repeatability. Controlled multiplayer is normal internal verification.
+**Rationale:** The available local capacity makes corruption, crash, restart, reconnect, and multiplayer verification executable without an external environment dependency.
+**Affected requirements:** CORE-REQ-005, CORE-REQ-006, CORE-REQ-012, CORE-REQ-013, CORE-REQ-015, CORE-REQ-019
+**Supersedes:** The unavailable controlled-multiplayer assumption previously recorded under EXT-004
 
 ## 10. External Prerequisites
 
 | ID | Prerequisite | Affected requirements | Availability | Authorization | Required external action |
 |---|---|---|---|---|---|
-| EXT-001 | Issue 22 reporter acceptance on the affected NeoForge 1.21.1 Windows client environment | CORE-REQ-003, CORE-REQ-020 | unknown | not required | Reporter tests the exact merged candidate and records the environment and result |
-| EXT-002 | Issue 25 affected world evidence and reporter acceptance on Forge 1.20.1 | CORE-REQ-004, CORE-REQ-020 | unknown | not required | Reporter supplies sanitized exact evidence and retests the merged candidate on a preserved world copy |
-| EXT-003 | Exact issue 32 invalid player data evidence or deterministic reproduction | CORE-REQ-005, CORE-REQ-012, CORE-REQ-015, CORE-REQ-020 | unknown | not required | Supply a preserved sanitized state or produce an exact deterministic fixture and prove safe recovery |
-| EXT-004 | Controlled isolated Forge 1.20.1 multiplayer verification environment | CORE-REQ-006, CORE-REQ-013, CORE-REQ-015, CORE-REQ-019 | unknown | not required | Run the exact candidate on a dedicated server with at least two independent clients and capture conservation evidence |
-| EXT-005 | Authenticated EnVisione GitHub access for issue, branch, pull request, check, and closure synchronization | CORE-REQ-002, CORE-REQ-009, CORE-REQ-017, CORE-REQ-019, CORE-REQ-020 | available | authorized | Maintain issue, branch, pull request, check, evidence, and closure state under the authoritative repository |
+| EXT-001 | Historical issue 22 acceptance gate, now resolved by explicit owner acceptance | CORE-REQ-003, CORE-REQ-020 | available | not required | Retain owner acceptance, existing evidence, and fresh merged-revision verification as historical traceability |
+| EXT-002 | Historical issue 25 reporter gate, superseded by owner beta compatibility disposition and local transition testing | CORE-REQ-004, CORE-REQ-020 | available | not required | Retain every issue comment, execute the local beta transition matrix, and record a defect fix or owner-approved compatibility disposition |
+| EXT-003 | Historical issue 32 evidence gate, superseded by mandatory local corruption and recovery generation | CORE-REQ-005, CORE-REQ-012, CORE-REQ-015, CORE-REQ-020 | available | authorized | Retain deterministic corruption seeds, ownership-level isolation, and non-destructive recovery proof |
+| EXT-004 | Historical multiplayer environment gate, resolved by owner supplied local hardware | CORE-REQ-006, CORE-REQ-013, CORE-REQ-015, CORE-REQ-019 | available | authorized | Use the isolated 64 GB workstation environment or the authorized 96 GB node1 fallback and retain conservation evidence |
+| EXT-005 | Authenticated EnVisione GitHub access | CORE-REQ-002, CORE-REQ-009, CORE-REQ-017, CORE-REQ-019, CORE-REQ-020 | available | authorized | Maintain issue, branch, pull request, check, evidence, and closure state under the authoritative repository |
 
-### EXT-001 — NeoForge issue 22 reporter acceptance
-
-**Kind:** other
-**Mandatory for endpoint:** yes
-**Blocked-plan approval:** yes
-
-Required evidence is a test of a JAR built from the exact merged `1.21.1` candidate revision in the originally affected Windows environment. The issue must record the version, revision, Minecraft and loader versions, operating system, and a screenshot or concise confirmation that unintended FutureShops screen blur is absent and navigation remains usable.
-
-### EXT-002 — Forge issue 25 affected-world evidence and acceptance
+### EXT-001 — Historical NeoForge issue 22 acceptance gate
 
 **Kind:** other
-**Mandatory for endpoint:** yes
-**Blocked-plan approval:** yes
+**Mandatory for endpoint:** no
+**Blocked-plan approval:** no
 
-Required input is a sanitized backup or exact inventory of the affected catalog, relevant configuration, versions, startup and failure logs, and reproduction steps. Acceptance requires the reporter to test a JAR from the exact merged Forge candidate on a preserved world copy and confirm that offers remain available after startup, restart, and catalog reload without deleting data.
+This historical gate is resolved by the owner's explicit acceptance of the root cause and correction at `bfba91f7b0c51b03d07117c4f1851c38a98f6186`. Retain that acceptance, the existing root-cause, test, client-smoke, and artifact-hash evidence, plus fresh independent verification at the exact merged `1.21.1` revision. Reporter acceptance is not an active dependency or endpoint gate.
 
-### EXT-003 — Issue 32 exact invalid-state proof
-
-**Kind:** other
-**Mandatory for endpoint:** yes
-**Blocked-plan approval:** yes
-
-Evidence may be a sanitized preserved copy of the affected player state with matching FutureShops persistence context or a deterministic fixture that reproduces the same unusable state. The evidence must identify the exact invalid field, ownership transition, persistence write, or recovery mismatch and prove that the repaired candidate survives restart, reconnect, and repeated transaction attempts without deleting or modifying unrelated player data.
-
-### EXT-004 — Controlled Forge multiplayer environment
+### EXT-002 — Historical Forge issue 25 reporter gate
 
 **Kind:** other
-**Mandatory for endpoint:** yes
-**Blocked-plan approval:** yes
+**Mandatory for endpoint:** no
+**Blocked-plan approval:** no
 
-The environment must use an isolated dedicated Forge 1.20.1 server, the exact candidate revision, at least two independent clients, and reproducible finite- and infinite-stock fixtures. Evidence must include server and client logs, balances, inventories, stock, request identities, claims, escrow and persisted state for success, rejection, disconnect, retry, restart, and reconnect. A conservation report must show zero duplicated or lost items or currency and no unexplained maintenance, recovery, or module state.
+This historical reporter gate is superseded by DEC-004. Every issue comment remains mandatory evidence. Execute a local beta transition and current-state matrix. Fix any supported current repository defect. If no supported current defect exists, produce an evidence-backed compatibility disposition, obtain owner approval, and document supported update and recovery behavior before closure. Reporter retest is not an active dependency or endpoint gate.
 
-### EXT-005 — EnVisione GitHub access
+### EXT-003 — Historical issue 32 external-evidence gate
+
+**Kind:** other
+**Mandatory for endpoint:** no
+**Blocked-plan approval:** no
+
+This historical gate is superseded by mandatory local evidence generation. Use deterministic corruption seeds, fuzzing, crash cuts, modded NBT sentinels, owned-field mutation, unrelated-field preservation, restart, reconnect, repeated recovery, and exact fixture hashes to isolate the FutureShops-owned boundary. Missing reporter data is not a blocker and cannot weaken non-destructive recovery proof.
+
+### EXT-004 — Historical controlled Forge multiplayer environment gate
+
+**Kind:** other
+**Mandatory for endpoint:** no
+**Blocked-plan approval:** no
+
+This historical environment gate is resolved by DEC-007. Use an isolated dedicated Forge 1.20.1 server and at least two independent clients on the 64 GB workstation by default. The 96 GB node1 host is an authorized temporary isolated-server fallback. Evidence must include exact revisions, fixtures, logs, balances, inventories, stock, request identities, claims, escrow, persistence, restart, reconnect, and a zero-delta conservation report.
+
+### EXT-005 — Authenticated EnVisione GitHub access
 
 **Kind:** other
 **Mandatory for endpoint:** yes
 **Blocked-plan approval:** no
 
-The authenticated identity must be EnVisione and the remote must remain `MCEnvision/FutureShops`. Every discovered defect must retain its duplicate search, issue, implementation, evidence, and closure links. Required branch and pull request checks must be green at each exact merged revision.
+Required evidence is that the authenticated identity is EnVisione, the remote is MCEnvision FutureShops, and issue and pull request state is synchronized at exact revisions. Every discovered defect must retain its duplicate search, issue, implementation, evidence, and closure links. Required branch and pull request checks must be green at each exact merged revision.
 
-Unknown prerequisites are approved blockers, not waivers. A phase may finish independent internal work and transition with a clearly recorded external-blocked status when the next phase does not consume the missing evidence. The affected requirement remains unsatisfied, the issue remains open, and CORE-PHASE-007 cannot close until the prerequisite evidence passes. Mocked evidence, a lower-fidelity substitute, or silence from a reporter cannot satisfy an external prerequisite.
+EXT-001 through EXT-004 remain only as historical traceability IDs and are not active dependencies, blockers, or endpoint gates. Their required evidence has moved into repository-controlled requirement and phase verification. EXT-005 is available and authorized; a later loss of that access blocks only the GitHub operations that consume it and must not be relabeled as an issue 22, 25, 32, or 34 evidence gap.
 
 ## 11. Architecture and Ownership Boundaries
 
@@ -400,7 +409,7 @@ The default conflict action is `skip`, reported per item. Replacement is opt-in 
 
 ### CORE-REQ-002 — Exact baseline and evidence inventory
 
-**Behavior:** Before repair, the repository has an exact, sanitized baseline for support branches, versions, open issues and comments, configurations, affected fixtures, candidate changes, tests, CI, dependency state, and evidence gaps.
+**Behavior:** Before repair, the repository has an exact, sanitized baseline for support branches, versions, every current issue comment, configurations, local fixtures, candidate changes, tests, CI, dependency state, reproduction status, and evidence gaps.
 **Owner:** Repository verification
 **Contributors:** Issue triage, build system, runtime harness
 **Dependencies:** CORE-REQ-001, EXT-005
@@ -412,78 +421,78 @@ The default conflict action is `skip`, reported per item. Replacement is opt-in 
 
 - Issues 22, 25, 32, 33, and 34 each have an up-to-date defect evidence packet.
 - Exact branch heads, toolchains, current versions, tests, CI, open reviews, dependency changes, and dirty local files are recorded without modifying unrelated work.
-- Missing external evidence is requested precisely and bound to EXT-001 through EXT-004.
+- Historical EXT-001 through EXT-004 are classified as resolved or superseded traceability, local verification capacity is recorded, and no reporter artifact is misclassified as an endpoint blocker.
 
 **Required evidence**
 
 - Read-only Git and GitHub preflight at the named starting revisions.
 - Baseline execution of applicable focused tests and build tasks on each support line, with failures retained as evidence.
-- Sanitized reproduction inventory attached or linked from the relevant issues.
+- Sanitized reproduction inventory and every current issue comment attached or linked from the relevant issue packets.
 
 ### CORE-REQ-003 — NeoForge issue 22 blur correction
 
-**Behavior:** FutureShops screens on NeoForge 1.21.1 do not introduce unintended background blur, retain intended rendering and navigation, and ship the independently verified repair only on `1.21.1` as `2.2.1`.
+**Behavior:** FutureShops screens on NeoForge 1.21.1 do not introduce unintended background blur and retain intended rendering and navigation. The owner-accepted root cause and correction at `bfba91f7b0c51b03d07117c4f1851c38a98f6186` are independently rerun, integrated only into `1.21.1` through the required pull request workflow as `2.2.1`, verified at the exact merged revision, and used to close issue 22.
 **Owner:** NeoForge client presentation
 **Contributors:** NeoForge build, runtime verification, issue triage
-**Dependencies:** CORE-REQ-002, CORE-REQ-016, EXT-001
+**Dependencies:** CORE-REQ-002, CORE-REQ-016
 **Lifecycle stage:** change
 **Production verification:** nondestructive
 **Release impact:** none
 
 **Acceptance criteria**
 
-- The candidate commit is reviewed against the affected screen lifecycle and retained only if it fixes the root cause without global rendering side effects.
+- The accepted candidate commit is independently reviewed and rerun against the affected screen lifecycle, retaining the correction only if it fixes the confirmed root cause without global rendering side effects.
 - Unit, build, and client smoke evidence passes at the exact merged `1.21.1` revision.
-- The reporter accepts the exact candidate in the affected environment before issue closure.
+- The correction merges only through the required pull request workflow into `1.21.1`, remote ancestry contains the merge, and issue 22 closes with the owner acceptance and exact merged-revision evidence recorded in its comments.
 
 **Required evidence**
 
 - A regression test or deterministic screen lifecycle inspection that fails before and passes after the change.
 - Java 21 NeoForge test, build, JAR inspection, and client smoke results.
-- EXT-001 reporter evidence linked to issue 22.
+- Issue 22 comments linking owner acceptance, commit `bfba91f7b0c51b03d07117c4f1851c38a98f6186`, the line-specific pull request, exact merge, green checks, and merged-revision verification.
 
-### CORE-REQ-004 — Forge issue 25 catalog availability correction
+### CORE-REQ-004 — Forge issue 25 beta compatibility and catalog disposition
 
-**Behavior:** Valid legacy and current server-shop catalogs become available after update, startup, restart, and reload; invalid entries are identified precisely without hiding valid offers or requiring destructive data deletion.
+**Behavior:** Every issue 25 comment is incorporated into a local beta transition and current-state matrix. Any supported current repository defect is repaired so valid catalogs remain available after startup, restart, and reload. If the failure exists only in an unsupported intermediate beta state, an evidence-backed compatibility disposition receives explicit owner approval and documents safe update and recovery behavior without destructive deletion.
 **Owner:** Shop catalog service
 **Contributors:** Configuration, migration, server networking, UI snapshots, issue triage
-**Dependencies:** CORE-REQ-002, CORE-REQ-016, EXT-002
+**Dependencies:** CORE-REQ-002, CORE-REQ-016
 **Lifecycle stage:** change
 **Production verification:** nondestructive
 **Release impact:** migration
 
 **Acceptance criteria**
 
-- A preserved affected or equivalent exact fixture reproduces the unavailable state beyond the already-applied first migration repair.
-- The root cause is repaired at its authoritative boundary, with last-known-good behavior and actionable invalid-entry diagnostics.
-- The reporter confirms availability on a preserved affected-world copy after startup, restart, and reload.
+- A deterministic matrix covers supported current state, documented direct upgrade routes, relevant intermediate betas, the first migration repair, malformed entries, removed registry items, startup, restart, and reload.
+- Any defect reachable from a supported current state is repaired at its authoritative boundary with last-known-good behavior and actionable invalid-entry diagnostics.
+- If no supported current defect is present, the evidence identifies the unsupported transition precisely, the owner explicitly approves the compatibility disposition, and recovery documentation gives a non-destructive route to a supported current state.
 
 **Required evidence**
 
-- Before-and-after catalog, migration, readiness, packet, and UI trace for the exact fixture.
+- Before-and-after catalog, migration, readiness, packet, and UI traces for every matrix row, plus all issue 25 comments.
 - Focused migration and reload regressions plus dedicated-server and client tests.
-- EXT-002 acceptance linked to issue 25.
+- The merged repair evidence or owner-approved beta compatibility disposition, recovery documentation, and final issue 25 closure comment.
 
 ### CORE-REQ-005 — Forge issue 32 player-data integrity and recovery
 
-**Behavior:** FutureShops cannot make player data unusable through its persistence, inventory proof, attachment, transaction, claim, or recovery paths, and an affected state can be loaded and repaired without deleting player data.
+**Behavior:** FutureShops cannot make player data unusable through its persistence, inventory proof, attachment, transaction, claim, or recovery paths. Local deterministic corruption, structured fuzzing, crash cuts, modded NBT sentinels, and ownership-isolation fixtures identify and repair any FutureShops-owned cause, and every generated affected state recovers without deleting player data.
 **Owner:** Persistence recovery subsystem
 **Contributors:** Transactions, inventory proof, networking, player lifecycle, issue triage
-**Dependencies:** CORE-REQ-002, CORE-REQ-016, EXT-003
+**Dependencies:** CORE-REQ-002, CORE-REQ-016
 **Lifecycle stage:** change
 **Production verification:** nondestructive
 **Release impact:** migration
 
 **Acceptance criteria**
 
-- Exact preserved evidence or a deterministic fixture reproduces the invalid state and identifies the FutureShops-owned cause.
+- Deterministic seed-identified fixtures exercise malformed, truncated, oversized, old, newer, unknown, duplicate, cross-mod, partial-write, and crash-cut player and FutureShops state and identify the first FutureShops-owned boundary that can make data unusable.
 - The fixed line reads and preserves compatible old state, repairs only FutureShops-owned data, and leaves unrelated player fields and modded inventory untouched.
 - Restart, reconnect, repeated transaction, and recovery cycles do not recreate the invalid state, duplicate value, or require deletion.
 
 **Required evidence**
 
-- EXT-003 before-and-after state proof with sanitized field-level diff.
-- Regression tests for serialization, player lifecycle, recovery, exact item proof, and repeated restart.
+- Seed, fixture hash, crash point, and before-and-after field-level proof with modded NBT sentinels showing owned fields changed only as intended and unrelated state remained semantically unchanged.
+- Regression, fuzz, and crash-cut tests for serialization, player lifecycle, recovery, exact item proof, ownership isolation, and repeated restart.
 - Dedicated-server and multiplayer reconnect evidence on the exact Forge candidate.
 
 ### CORE-REQ-006 — Forge issue 34 finite-stock money transaction correction
@@ -491,21 +500,21 @@ The default conflict action is `skip`, reported per item. Replacement is opt-in 
 **Behavior:** A valid finite-stock money purchase follows the same authoritative transaction guarantees as infinite stock while atomically decrementing stock, charging money once, delivering once, and producing a durable claim on delivery failure.
 **Owner:** Forge shop transaction service
 **Contributors:** Stock reservation, economy provider, escrow, networking, persistence, diagnostics
-**Dependencies:** CORE-REQ-002, CORE-REQ-016, EXT-004
+**Dependencies:** CORE-REQ-002, CORE-REQ-016
 **Lifecycle stage:** change
 **Production verification:** nondestructive
 **Release impact:** none
 
 **Acceptance criteria**
 
-- Controlled multiplayer reproduces the finite-stock failure and proves why infinite stock follows a different successful path.
+- An isolated dedicated Forge server and at least two independent clients reproduce the finite-stock failure and prove why infinite stock follows a different successful path.
 - Success, insufficient funds, stale stock, concurrent buyers, full inventory, provider failure, disconnect, retry, and restart preserve conservation and idempotency.
 - Failures produce one bounded actionable record with request, listing, stock, transaction, and recovery context without exposing secrets or private NBT.
 
 **Required evidence**
 
 - Focused transaction, stock, escrow, replay, and persistence regressions.
-- EXT-004 multiplayer trace and conservation report.
+- Local multiplayer trace and conservation report from the 64 GB workstation, or the authorized temporary 96 GB node1 server when used.
 - Restart and reconnect verification at the exact Forge candidate revision.
 
 ### CORE-REQ-007 — KISS bulk admin listing creation
@@ -651,7 +660,7 @@ The default conflict action is `skip`, reported per item. Replacement is opt-in 
 **Behavior:** Client and server networking, module readiness, shops, economy, escrow, Auction House, Bazaar, ATM, claims, configuration reload, restart, reconnect, and multiplayer compose correctly in success and failure states.
 **Owner:** Server integration architecture
 **Contributors:** Client presentation, networking, all authoritative services, persistence, runtime verification
-**Dependencies:** CORE-REQ-002, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-014, EXT-004
+**Dependencies:** CORE-REQ-002, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-014
 **Lifecycle stage:** change
 **Production verification:** nondestructive
 **Release impact:** none
@@ -666,7 +675,7 @@ The default conflict action is `skip`, reported per item. Replacement is opt-in 
 **Required evidence**
 
 - Cross-component call and state-transition matrix with stable request and recovery identities.
-- Focused integration tests, dedicated server and client smoke tests, and EXT-004 multiplayer workflows.
+- Focused integration tests, dedicated server and client smoke tests, and local multiple-client workflows under DEC-007.
 - Restart, reconnect, delayed readiness, module toggle, ATM, Auction House, Bazaar, claim, and provider fault evidence.
 
 ### CORE-REQ-014 — Economic and recovery invariants
@@ -697,7 +706,7 @@ The default conflict action is `skip`, reported per item. Replacement is opt-in 
 **Behavior:** Every changed support line and mandatory workflow is verified at the highest applicable fidelity at an exact revision with retained decisive results.
 **Owner:** Verification system
 **Contributors:** All component owners, runtime harness, reporters
-**Dependencies:** CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-006, CORE-REQ-007, CORE-REQ-008, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, EXT-003, EXT-004
+**Dependencies:** CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-006, CORE-REQ-007, CORE-REQ-008, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014
 **Lifecycle stage:** post_change
 **Production verification:** nondestructive
 **Release impact:** none
@@ -706,14 +715,14 @@ The default conflict action is `skip`, reported per item. Replacement is opt-in 
 
 - Focused regressions fail against the reproduced defect where feasible and pass at the candidate.
 - Complete unit tests, data generation or validation, applicable GameTests, builds, dedicated-server smoke tests, client smoke tests, multiplayer, restart, reconnect, reload, rollback, corruption, and fault injection pass.
-- Flaky, skipped, unavailable, or failed evidence remains visible and blocks only the requirements that depend on it.
+- Flaky, skipped, or failed evidence remains visible and blocks only the requirements that depend on it; workstation or node1 capacity is scheduled rather than treated as unavailable external evidence.
 - No live or production verification mutates unbacked player or world state.
 
 **Required evidence**
 
 - Forge Java 17 results for `bash ./gradlew test`, applicable `runData`, applicable `runGameTestServer`, `build`, `runServer`, and `runClient` at the exact Forge candidate revision.
 - NeoForge Java 21 results for its applicable test, build, data, server, and client tasks at the exact NeoForge candidate revision.
-- EXT-003 and EXT-004 evidence plus exact JAR inspection and complete diff review.
+- Deterministic issue 32 corruption and recovery evidence, local controlled multiplayer evidence, exact JAR inspection, and complete diff review.
 
 ### CORE-REQ-016 — Support-line compatibility and version isolation
 
@@ -788,7 +797,7 @@ The default conflict action is `skip`, reported per item. Replacement is opt-in 
 **Behavior:** The complete issue, security, privacy, command, persistence, integration, runtime, documentation, dependency, and candidate-readiness audit repeats at exact candidate revisions until no known repository-owned defect remains.
 **Owner:** Final integration audit
 **Contributors:** Every audit and component owner
-**Dependencies:** CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, EXT-004, EXT-005
+**Dependencies:** CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, EXT-005
 **Lifecycle stage:** post_change
 **Production verification:** nondestructive
 **Release impact:** none
@@ -808,24 +817,25 @@ The default conflict action is `skip`, reported per item. Replacement is opt-in 
 
 ### CORE-REQ-020 — Evidence-gated issue closure and retention
 
-**Behavior:** A scoped issue is closed and its tracking marked complete only after the correct merged fix, exact required evidence, green checks, and mandatory reporter acceptance; blocked issues remain open with the precise missing evidence recorded.
+**Behavior:** A scoped issue is closed and its tracking marked complete only after its issue comments are incorporated, the owner-accepted disposition is satisfied, the correct merged fix exists where required, local deterministic evidence passes, and exact-revision checks are green. Reporter acceptance is not a prerequisite.
 **Owner:** Repository closure governance
 **Contributors:** Issue triage, component owners, reporters, verification
-**Dependencies:** CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-006, CORE-REQ-007, CORE-REQ-008, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, CORE-REQ-019, EXT-001, EXT-002, EXT-003, EXT-005
+**Dependencies:** CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-006, CORE-REQ-007, CORE-REQ-008, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, CORE-REQ-019, EXT-005
 **Lifecycle stage:** retention
 **Production verification:** nondestructive
 **Release impact:** none
 
 **Acceptance criteria**
 
-- Issues 22 and 25 include reporter acceptance of the exact candidate revision.
-- Issue 32 includes exact invalid-state or deterministic reproduction proof and non-destructive recovery evidence.
+- Issue 22 includes explicit owner acceptance, correct `1.21.1` pull request integration, exact merged-revision verification, and closure evidence.
+- Issue 25 includes every current comment, the local transition and current-state matrix, and either a supported-state defect repair or an explicit owner-approved beta compatibility disposition with recovery documentation.
+- Issue 32 includes deterministic corruption, fuzz, crash-cut, modded-NBT sentinel, ownership-isolation, and non-destructive recovery evidence.
 - Issues 33 and 34 and every audit-discovered defect include merged change and exact regression evidence.
-- Project, milestone, pull request, issue, branch, and evidence state agree; external blockers are visible and never relabeled as success.
+- Project, milestone, pull request, issue, branch, and evidence state agree, and no missing reporter artifact is represented as an external blocker.
 
 **Required evidence**
 
-- Final issue comments link exact merged commits, tests, runtime evidence, versions, and reporter results.
+- Final issue comments link exact merged commits where required, tests, local runtime evidence, versions, owner dispositions, and closure reasoning.
 - GitHub confirms required checks and merges on each correct support branch.
 - Retained candidate verification packets and blocker records support later release authorization without rerunning ambiguous work.
 
@@ -835,35 +845,33 @@ The master owns this complete global sequence and requirement assignment. Each l
 
 | Phase ID | Objective | Owner | Dependencies | Canonical requirements | Entry summary | Exit summary | Next transition | Execution blueprint |
 |---|---|---|---|---|---|---|---|---|
-| CORE-PHASE-000 | Establish authoritative governance, exact baseline, evidence requests, rolling issue intake, branch isolation, and deterministic harness contracts | Repository governance and verification | None | CORE-REQ-001, CORE-REQ-002, CORE-REQ-009, CORE-REQ-016 | Validated intake, exact repository identity, unchanged legacy plans, and known blocker inventory exist | Plan set is valid, baseline and issue packets are current, missing evidence is requested, branch and version routes are proven, and deterministic harness work is ready | CORE-PHASE-001 | [Phase 000](phases/plan-phase-000.md) |
-| CORE-PHASE-001 | Verify, integrate, and externally validate the NeoForge issue 22 correction as `2.2.1` | NeoForge client and release line | CORE-PHASE-000, EXT-001 | CORE-REQ-003 | `1.21.1` baseline and candidate commit are identified and relevant evidence is preserved | Root cause and fix are independently proven and merged on `1.21.1`; reporter acceptance closes the requirement, or EXT-001 remains an explicit final blocker while independent work continues | CORE-PHASE-002 | [Phase 001](phases/plan-phase-001.md) |
-| CORE-PHASE-002 | Reproduce, repair, and verify Forge issues 25, 32, and 34 without destructive recovery or value loss | Forge shop, transaction, persistence, and recovery owners | CORE-PHASE-000, CORE-PHASE-001 internal integration gate, EXT-002, EXT-003, EXT-004 | CORE-REQ-004, CORE-REQ-005, CORE-REQ-006 | Forge baseline, preserved evidence requests, safe fixtures, and authoritative subsystem maps exist | Every reproducible root cause is repaired and merged with regression evidence; missing external acceptance or exact-state proof remains a visible final blocker and does not authorize closure | CORE-PHASE-003 | [Phase 002](phases/plan-phase-002.md) |
-| CORE-PHASE-003 | Deliver the bounded issue 33 bulk listing workflow with atomic conflict-safe catalog updates | Forge admin editor and catalog owners | CORE-PHASE-002 internal integration gate | CORE-REQ-007, CORE-REQ-008 | Existing grid, catalog model, validation, price, stock, and persistence contracts are verified | Selection, preview, shared values, skip, explicit replace, preservation, atomicity, and recovery pass at the merged Forge revision | CORE-PHASE-004 | [Phase 003](phases/plan-phase-003.md) |
-| CORE-PHASE-004 | Audit and close security, privacy, and every admin command and permission path | Security and command owners | CORE-PHASE-003 | CORE-REQ-010, CORE-REQ-011 | All entry points, command leaves, trust boundaries, dependencies, and packaging surfaces are inventoried | Every verified finding has an issue before repair, all repairs merge on the affected line, and exact-revision security and command matrices rerun clean | CORE-PHASE-005 | [Phase 004](phases/plan-phase-004.md) |
-| CORE-PHASE-005 | Audit and close every persistence, migration, integrity, recovery, and conservation path | Persistence, escrow, and recovery owners | CORE-PHASE-004, EXT-003 | CORE-REQ-012, CORE-REQ-014 | Security and command repairs are integrated and the complete persistence inventory can be frozen | Every repository-controlled persistence surface and economic invariant has deterministic evidence, every finding is repaired through an issue, and non-destructive recovery reruns clean; if EXT-003 remains unavailable, it stays a final blocker while the internal integration gate permits independent Phase 006 work | CORE-PHASE-006 | [Phase 005](phases/plan-phase-005.md) |
-| CORE-PHASE-006 | Audit and close cross-component backend integration and failure behavior | Server integration owner | CORE-PHASE-005, EXT-004 | CORE-REQ-013 | Authoritative services, command paths, persistence, and invariants are integrated and individually clean | All named subsystem combinations and failure states pass exact-revision integration, runtime, restart, reconnect, and multiplayer evidence, or EXT-004 remains a final blocker | CORE-PHASE-007 | [Phase 006](phases/plan-phase-006.md) |
-| CORE-PHASE-007 | Prove final candidates, reconcile documentation, repeat all audits, satisfy external acceptance, close issues, and prepare unpublished artifacts | Final integration and release-readiness owner | CORE-PHASE-006, EXT-001, EXT-002, EXT-003, EXT-004, EXT-005 | CORE-REQ-015, CORE-REQ-017, CORE-REQ-018, CORE-REQ-019, CORE-REQ-020 | All internal repairs are merged on correct support lines and every blocker and evidence invalidation is current | Every requirement and prerequisite passes, two unchanged-revision audits are clean, all scoped issues are correctly closed, branches are green, and exact unpublished candidate artifacts and integrity records satisfy the completion endpoint | Final plan-wide closure | [Phase 007](phases/plan-phase-007.md) |
-
-The `internal integration gate` wording permits owner-approved progress past an unavailable external evidence source only when all source-controlled work and deterministic internal evidence for that phase have passed and the next phase does not consume the missing evidence. It does not mark the blocked requirement or phase fully complete. The requirement, issue, and final endpoint stay blocked until the named EXT evidence passes.
+| CORE-PHASE-000 | Establish authoritative governance, exact baseline, complete issue-comment intake, rolling issue workflow, branch isolation, local runtime capacity, and deterministic harness contracts | Repository governance | None | CORE-REQ-001, CORE-REQ-002, CORE-REQ-009, CORE-REQ-016 | Validated intake, exact repository identity, unchanged legacy plans, resolved historical prerequisite state, and available EXT-005 exist | Plan set is valid, issue packets include every current comment, historical EXT-001 through EXT-004 are classified, branch and version routes are proven, and local deterministic harness work is ready | CORE-PHASE-001 | [Phase 000](phases/plan-phase-000.md) |
+| CORE-PHASE-001 | Independently verify and integrate the owner-accepted NeoForge issue 22 correction as `2.2.1`, then close issue 22 | NeoForge client integration | CORE-PHASE-000 | CORE-REQ-003 | `1.21.1` baseline, accepted root cause, candidate commit, issue comments, and existing evidence are identified | Fresh evidence passes, the change merges only into `1.21.1` through the required pull request workflow, the exact merged revision passes, and issue 22 closes | CORE-PHASE-002 | [Phase 001](phases/plan-phase-001.md) |
+| CORE-PHASE-002 | Resolve Forge issues 25, 32, and 34 through local beta-transition, corruption, recovery, and multiple-client evidence | Forge defect integration | CORE-PHASE-001 | CORE-REQ-004, CORE-REQ-005, CORE-REQ-006 | Forge baseline, every issue comment, deterministic fixture contracts, local hardware capacity, and authoritative subsystem maps exist | Issue 25 has a merged supported-state repair or owner-approved compatibility disposition, issue 32 has local ownership-isolated recovery proof, issue 34 has local multiplayer conservation proof, and every required repair is merged | CORE-PHASE-003 | [Phase 002](phases/plan-phase-002.md) |
+| CORE-PHASE-003 | Deliver the bounded issue 33 bulk listing workflow with atomic conflict-safe catalog updates | Admin shop editor | CORE-PHASE-002 | CORE-REQ-007, CORE-REQ-008 | Existing grid, catalog model, validation, price, stock, and persistence contracts are verified | Selection, preview, shared values, skip, explicit replace, preservation, atomicity, and recovery pass at the merged Forge revision | CORE-PHASE-004 | [Phase 003](phases/plan-phase-003.md) |
+| CORE-PHASE-004 | Audit and close security, privacy, and every admin command and permission path | Security review | CORE-PHASE-003 | CORE-REQ-010, CORE-REQ-011 | All entry points, command leaves, trust boundaries, dependencies, and packaging surfaces are inventoried | Every verified finding has an issue before repair, all repairs merge on the affected line, and exact-revision security and command matrices rerun clean | CORE-PHASE-005 | [Phase 004](phases/plan-phase-004.md) |
+| CORE-PHASE-005 | Audit and close every persistence, migration, integrity, recovery, and conservation path | Persistence subsystem | CORE-PHASE-004 | CORE-REQ-012, CORE-REQ-014 | Security and command repairs are integrated and the complete persistence inventory can be frozen | Every repository-controlled persistence surface and economic invariant has deterministic local evidence, every finding is repaired through an issue, and non-destructive recovery reruns clean | CORE-PHASE-006 | [Phase 005](phases/plan-phase-005.md) |
+| CORE-PHASE-006 | Audit and close cross-component backend integration and failure behavior | Server integration architecture | CORE-PHASE-005 | CORE-REQ-013 | Authoritative services, command paths, persistence, invariants, and local multiple-client capacity are integrated and individually clean | All named subsystem combinations and failure states pass exact-revision integration, runtime, restart, reconnect, and controlled multiplayer evidence | CORE-PHASE-007 | [Phase 006](phases/plan-phase-006.md) |
+| CORE-PHASE-007 | Prove final candidates, reconcile documentation, repeat all audits, close issues, and prepare unpublished artifacts | Release readiness | CORE-PHASE-006, EXT-005 | CORE-REQ-015, CORE-REQ-017, CORE-REQ-018, CORE-REQ-019, CORE-REQ-020 | All repairs and approved dispositions are integrated on correct support lines and every evidence invalidation is current | Every requirement passes, EXT-005 remains verified, two unchanged-revision audits are clean, all scoped issues are correctly closed, branches are green, and exact unpublished candidate artifacts and integrity records satisfy the completion endpoint | Final plan-wide closure | [Phase 007](phases/plan-phase-007.md) |
 
 ## 14. Verification Strategy
 
 | Requirement family | Unit and contract evidence | Integration evidence | Real behavior evidence | Security evidence | Artifact or runtime evidence |
 |---|---|---|---|---|---|
 | CORE-REQ-001, CORE-REQ-002, CORE-REQ-009, CORE-REQ-016 | Plan validation, branch and issue inventory assertions | GitHub and Git ancestry reconciliation | Evidence requests and duplicate-before-repair workflow | Sanitized evidence and confidential routing | Exact baseline revisions and unchanged legacy hashes |
-| CORE-REQ-003 | Screen lifecycle and rendering regression | NeoForge client integration | EXT-001 reporter test | Client-only boundary review | Java 21 test, build, client smoke, and JAR inspection |
-| CORE-REQ-004 | Catalog parse, migration, validation, and readiness tests | Config reload, server snapshot, and UI route tests | EXT-002 preserved-world startup, restart, and reload | Path, parser, and permission review | Forge server and client logs at exact candidate |
-| CORE-REQ-005 | Serialization, exact item proof, player lifecycle, and recovery tests | Transaction, claim, player save, restart, and reconnect | EXT-003 preserved-state or deterministic exact reproduction | Private-data minimization and unsafe-data tests | Before-and-after state diff and dedicated multiplayer runtime |
-| CORE-REQ-006 | Stock, money, escrow, replay, and concurrency tests | Shop transaction and provider integration | EXT-004 finite-stock multiplayer matrix | Duplication, replay, authority, and log privacy tests | Conservation report across retry and restart |
+| CORE-REQ-003 | Screen lifecycle and rendering regression | NeoForge client integration and line-specific PR | Owner-accepted fix rerun at exact merged revision | Client-only boundary review | Java 21 test, build, client smoke, JAR inspection, merge proof, and issue closure |
+| CORE-REQ-004 | Catalog parse, migration, validation, readiness, and beta-transition tests | Config reload, server snapshot, and UI route tests | Local current-state, direct-update, and intermediate-beta startup, restart, and reload matrix | Path, parser, and permission review | Forge logs, merged fix or owner-approved compatibility disposition, and recovery documentation |
+| CORE-REQ-005 | Serialization, exact item proof, fuzzing, crash-cut, sentinel, player lifecycle, and recovery tests | Transaction, claim, player save, ownership isolation, restart, and reconnect | Deterministic locally generated corrupt-state recovery | Private-data minimization and unsafe-data tests | Seeded before-and-after state diff and dedicated multiplayer runtime |
+| CORE-REQ-006 | Stock, money, escrow, replay, and concurrency tests | Shop transaction and provider integration | Local finite-stock multiple-client matrix under DEC-007 | Duplication, replay, authority, and log privacy tests | Conservation report across retry and restart |
 | CORE-REQ-007, CORE-REQ-008 | Selection, canonical NBT, decimal, preview, duplicate, preservation, and atomicity tests | Client-to-server request, catalog write, reload, and stale-state tests | Admin grid workflow with mixed create, skip, replace, cancel, and failure | Permission, bounds, NBT, path, and request-size tests | Forge client, server, data, build, and JAR inspection |
 | CORE-REQ-010, CORE-REQ-011 | Packet, command, path, codec, permission, replay, and negative tests | Trust-boundary and command service tests | Console and player command matrix on dedicated server | Threat model, dependency, secret, privacy, and packaging audit | Exact-revision clean security packet |
 | CORE-REQ-012, CORE-REQ-014 | Codec, migration, atomicity, concurrency, corruption, idempotency, and conservation tests | Full persistence and recovery lineage tests | Backup, restore, crash, restart, reconnect, and repeated recovery | Path boundary, deserialization, privacy, and tamper tests | Persistence inventory and recovery logs |
 | CORE-REQ-013 | State-machine and payload contract tests | Complete named subsystem and failure matrix | Dedicated multiplayer, module lifecycle, ATM, claim, Auction House, and Bazaar workflows | Cross-boundary authority and replay review | Server and client smoke logs at exact candidates |
-| CORE-REQ-015 through CORE-REQ-020 | Full deterministic suites and validation scripts | Both line-specific integration matrices | Reporter acceptance, multiplayer, restart, reconnect, and recovery | Repeated clean security and privacy audit | Exact JARs, metadata, checksums, manifests, green checks, and issue closure |
+| CORE-REQ-015 through CORE-REQ-020 | Full deterministic suites and validation scripts | Both line-specific integration matrices | Owner dispositions, local multiplayer, restart, reconnect, corruption, and recovery | Repeated clean security and privacy audit | Exact JARs, metadata, checksums, manifests, green checks, and issue closure |
 
 Verification order for a changed support line is focused regression, complete unit tests, data generation or validation when applicable, applicable GameTests, build, dedicated-server smoke, client smoke, multiplayer when state crosses the network, restart and reconnect, JAR inspection, complete diff inspection, and exact evidence retention. A later material change invalidates every downstream result it can affect and forces those results to rerun.
 
-No destructive production verification is authorized. Reporter and runtime testing must use backups or isolated copies. Failures remain recorded with exact commands, revisions, environments, and decisive errors.
+No destructive production verification is authorized. Runtime testing uses isolated copies and generated fixtures. Failures remain recorded with exact commands, revisions, environments, seeds, crash points, and decisive errors.
 
 ## 15. Compatibility, Migration, Rollout, and Recovery
 
@@ -883,7 +891,7 @@ Every changed persisted or configured representation needs a reader compatibilit
 1. Integrate NeoForge issue 22 only into `1.21.1` after its internal evidence passes.
 2. Integrate Forge fixes sequentially through the phase branches rooted in the latest approved `1.20.1` head.
 3. Do not begin a dependent Forge phase until the previous Forge phase is merged and `origin/1.20.1` contains the merge.
-4. An approved external blocker may allow independent internal phase work as defined in Section 13, but cannot authorize final closure or publication.
+4. Use repository-controlled local evidence for issues 25, 32, and 34. Historical EXT-001 through EXT-004 do not delay phase transitions or final closure.
 5. Build final candidates only from exact merged support-line revisions after all invalidated checks rerun.
 
 ### Rollback and recovery
@@ -899,7 +907,7 @@ Any unexpected maintenance mode, conservation mismatch, checksum failure, duplic
 - Preserve the repository's tracked documentation layout and update `docs/README.md` links for any added focused document.
 - Operator procedures must name exact backup scope, shutdown state, validation commands, expected output, failure stop conditions, and recovery without deletion.
 - Every issue needs exact reproduction or blocker state, implementation link, verification link, affected version, candidate revision, and closure evidence.
-- Every ready phase pull request needs deterministic checks and one private independent review when available. Merge through GitHub with the repository's required method and never push integration directly to a protected support branch.
+- Every ready phase pull request needs deterministic checks and one private independent review if the optional private review capability exists. Merge through GitHub with the repository's required method and never push integration directly to a protected support branch.
 - Candidate artifacts require correct metadata, dependency contents, SHA-256, SHA-512, source revision manifest, and verification packet.
 - This plan does not authorize release creation, CurseForge or Modrinth upload, announcement, stable designation, or a public release tag.
 
@@ -907,7 +915,8 @@ Any unexpected maintenance mode, conservation mismatch, checksum failure, duplic
 
 | Risk | Impact | Prevention | Detection | Recovery |
 |---|---|---|---|---|
-| Missing reporter or affected-state evidence | Issue cannot be closed at required fidelity | Request exact evidence early and keep deterministic local work independent | EXT-001, EXT-002, and EXT-003 status | Keep requirement and issue open; continue only independent work |
+| Beta transition ambiguity | A supported current defect could be confused with unsupported intermediate beta state | Read every issue comment and run the complete local transition and current-state matrix | Matrix row, schema, version, and first-divergence comparison | Repair supported-state defects or obtain owner approval for an evidence-backed compatibility disposition and recovery guide |
+| Local runtime fixture or capacity drift | Multiplayer or corruption evidence becomes non-reproducible | Pin exact seeds, fixture hashes, client count, memory allocation, revisions, and host role | Repeated workstation run and node1 fallback comparison when needed | Recreate the isolated fixture, rerun invalidated evidence, and never substitute live player data |
 | Cross-branch contamination | Unsupported loader or build breakage | Separate branch ancestry, work branches, PRs, versions, and toolchains | Git diff, ancestry, metadata, and build inspection | Revert only the affected line through a reviewed change; do not merge lines |
 | Player or world data damage | Data loss or unusable saves | Backups, isolated copies, versioned codecs, atomic writes, and no destructive testing | Fixture diffs, restart tests, integrity checks, and issue 32 evidence | Stop mutation, preserve all state, restore one complete matching snapshot, and repair non-destructively |
 | Item or currency duplication or loss | Economy compromise | Server authority, checked arithmetic, UUID idempotency, custody, claims, and compensation | Conservation, replay, concurrency, and fault tests | Freeze mutation, preserve journal lineage, verify recovery, deliver or compensate once |
@@ -921,14 +930,15 @@ Any unexpected maintenance mode, conservation mismatch, checksum failure, duplic
 
 ## 18. Definition of Done
 
-**Completion endpoint:** Every scoped open issue, currently issues 22, 25, 32, 33, and 34, plus every repository owned defect verified during the rolling audit, is deduplicated, fixed, regression tested, merged into the correct 1.20.1 or 1.21.1 support branch, supported by mandatory reporter acceptance or exact deterministic reproduction evidence, and closed. Both exact candidate revisions pass the complete security, privacy, command, persistence, integration, runtime, documentation, and repeated clean audit gates, all required branches and checks are green, and the validated Forge 3.0.0-beta.2 and NeoForge 2.2.1 artifacts are prepared with integrity evidence. CurseForge, Modrinth, GitHub release publication, stable publication, and announcements are not part of this endpoint and require later explicit authorization.
+**Completion endpoint:** Every scoped issue and every repository owned defect discovered by the rolling audit is deduplicated, fixed or given an evidence backed owner approved compatibility disposition, regression tested, merged into the correct support branch, and closed. Issue 22 is verified, merged into 1.21.1, and closed under explicit owner acceptance. Issues 25, 32, and 34 use local deterministic reproduction, fault injection, dedicated server, and multiple client evidence without reporter or hardware blockers. Exact Forge 3.0.0-beta.2 and NeoForge 2.2.1 candidates pass security, privacy, command, persistence, integration, runtime, documentation, and repeated clean audit gates. Publication and announcements remain excluded.
 
-**Known external blocker routing:** Issue 22 reporter acceptance on the affected NeoForge 1.21.1 Windows client environment, Issue 25 affected world evidence and reporter acceptance on Forge 1.20.1, Exact issue 32 invalid player data evidence or deterministic reproduction, and Controlled isolated Forge 1.20.1 multiplayer verification environment remain mandatory. While any is unavailable, the plan state is `NOT COMPLETE — EXTERNALLY BLOCKED`.
+**Known external blocker routing:** None. EXT-001 through EXT-004 are resolved or superseded historical traceability IDs. EXT-005 is available and authorized at intake. A later loss of GitHub access must be reported as a new execution blocker for affected remote operations, not as a pre-existing endpoint blocker.
 
 - Every CORE-REQ-001 through CORE-REQ-020 acceptance criterion has its required exact evidence.
-- Every CORE-PHASE-000 through CORE-PHASE-007 exit gate passes, including any carried external blockers.
+- Every CORE-PHASE-000 through CORE-PHASE-007 exit gate passes with no known mandatory phase-owned defect.
+- No known external blocker remains, and EXT-005 verifies final GitHub state.
 - Issues 22, 25, 32, 33, and 34 and every rolling audit issue are fixed on the correct support line, merged, verified, and closed.
-- EXT-001 and EXT-002 reporter acceptance passes, EXT-003 exact invalid-state proof passes, EXT-004 multiplayer evidence passes, and EXT-005 confirms final GitHub state.
+- EXT-001 through EXT-004 remain historically reconciled, all successor local evidence gates pass, and EXT-005 confirms final GitHub state.
 - Security, privacy, command, persistence, database, recovery, backend integration, runtime, documentation, dependency, and artifact audits rerun at both exact candidate revisions.
 - Two consecutive final audit passes at unchanged candidate revisions identify no new repository-owned defect.
 - Forge `3.0.0-beta.2` and NeoForge `2.2.1` candidate JARs, metadata, source revision manifests, SHA-256, SHA-512, and verification packets are prepared and internally consistent.
@@ -936,7 +946,7 @@ Any unexpected maintenance mode, conservation mismatch, checksum failure, duplic
 - Legacy plans remain unchanged and are retained as historical records.
 - Optional and future work remains excluded.
 - CurseForge, Modrinth, GitHub release publication, stable publication, and announcements have not occurred under this plan.
-- A genuine unavailable prerequisite leaves the plan externally blocked and cannot be replaced by mocked or lower-fidelity evidence or reported as completion.
+- No known external prerequisite blocks this plan at intake; any newly unavailable prerequisite remains visible and cannot be replaced by mocked or lower-fidelity evidence.
 
 The single completion endpoint is reached only when every scoped and rolling repository-owned defect is closed with required evidence, both support lines are green at exact merged candidate revisions, both unpublished artifacts are prepared with integrity evidence, and the repeated final audit finds no remaining known repository-owned defect.
 
@@ -945,11 +955,11 @@ The single completion endpoint is reached only when every scoped and rolling rep
 ```text
 Mandatory boundary: CORE-REQ-001 through CORE-REQ-020 on the Forge 1.20.1 and NeoForge 1.21.1 support lines, including rolling verified defects and all mandatory audits.
 Optional/future disposition: excluded
-Locked owner decisions: DEC-001 through DEC-006.
+Locked owner decisions: DEC-001 through DEC-007.
 Active phase: CORE-PHASE-000
 Next executable action: Read phases/plan-phase-000.md through EOF, verify the exact starting repository and GitHub state without changing unrelated files, and execute its first unfinished evidence gate.
 Known failing checks: None are asserted by plan authoring. Baseline and exact-candidate checks must be run and recorded by execution.
-Known external blockers: Issue 22 reporter acceptance on the affected NeoForge 1.21.1 Windows client environment, Issue 25 affected world evidence and reporter acceptance on Forge 1.20.1, Exact issue 32 invalid player data evidence or deterministic reproduction, and Controlled isolated Forge 1.20.1 multiplayer verification environment.
-Completion endpoint: Every scoped open issue, currently issues 22, 25, 32, 33, and 34, plus every repository owned defect verified during the rolling audit, is deduplicated, fixed, regression tested, merged into the correct 1.20.1 or 1.21.1 support branch, supported by mandatory reporter acceptance or exact deterministic reproduction evidence, and closed. Both exact candidate revisions pass the complete security, privacy, command, persistence, integration, runtime, documentation, and repeated clean audit gates, all required branches and checks are green, and the validated Forge 3.0.0-beta.2 and NeoForge 2.2.1 artifacts are prepared with integrity evidence. CurseForge, Modrinth, GitHub release publication, stable publication, and announcements are not part of this endpoint and require later explicit authorization.
-Required evidence gates: Valid plan set, exact baseline, issue-before-repair traceability, line-specific deterministic tests and builds, server and client smoke tests, multiplayer and recovery evidence, reporter acceptance, clean security, command, persistence, and integration audits, documentation reconciliation, exact artifact inspection, checksums, green GitHub state, and two unchanged-revision final audits.
+Known external blockers: none
+Completion endpoint: Every scoped issue and every repository owned defect discovered by the rolling audit is deduplicated, fixed or given an evidence backed owner approved compatibility disposition, regression tested, merged into the correct support branch, and closed. Issue 22 is verified, merged into 1.21.1, and closed under explicit owner acceptance. Issues 25, 32, and 34 use local deterministic reproduction, fault injection, dedicated server, and multiple client evidence without reporter or hardware blockers. Exact Forge 3.0.0-beta.2 and NeoForge 2.2.1 candidates pass security, privacy, command, persistence, integration, runtime, documentation, and repeated clean audit gates. Publication and announcements remain excluded.
+Required evidence gates: Valid plan set, every current issue comment, exact baseline, issue-before-repair traceability, line-specific deterministic tests and builds, server and client smoke tests, local multiple-client and recovery evidence, issue 22 owner acceptance and merged verification, issue 25 transition matrix and repair or owner-approved compatibility disposition, issue 32 deterministic corruption and recovery proof, clean security, command, persistence, and integration audits, documentation reconciliation, exact artifact inspection, checksums, green GitHub state, and two unchanged-revision final audits.
 ```

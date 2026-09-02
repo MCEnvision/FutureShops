@@ -22,7 +22,7 @@
       "classification": "mandatory",
       "requirementPrefix": "PHASE000",
       "phaseId": "CORE-PHASE-000",
-      "owner": "Repository governance and verification",
+      "owner": "Repository governance",
       "dependsOn": []
     },
     {
@@ -32,7 +32,7 @@
       "classification": "mandatory",
       "requirementPrefix": "PHASE001",
       "phaseId": "CORE-PHASE-001",
-      "owner": "NeoForge client and release line",
+      "owner": "NeoForge client integration",
       "dependsOn": [
         "PLAN-PHASE-000"
       ]
@@ -44,7 +44,7 @@
       "classification": "mandatory",
       "requirementPrefix": "PHASE002",
       "phaseId": "CORE-PHASE-002",
-      "owner": "Forge shop, transaction, persistence, and recovery owners",
+      "owner": "Forge defect integration",
       "dependsOn": [
         "PLAN-PHASE-000",
         "PLAN-PHASE-001"
@@ -57,7 +57,7 @@
       "classification": "mandatory",
       "requirementPrefix": "PHASE003",
       "phaseId": "CORE-PHASE-003",
-      "owner": "Forge admin editor and catalog owners",
+      "owner": "Admin shop editor",
       "dependsOn": [
         "PLAN-PHASE-002"
       ]
@@ -69,7 +69,7 @@
       "classification": "mandatory",
       "requirementPrefix": "PHASE004",
       "phaseId": "CORE-PHASE-004",
-      "owner": "Security and command owners",
+      "owner": "Security review",
       "dependsOn": [
         "PLAN-PHASE-003"
       ]
@@ -81,7 +81,7 @@
       "classification": "mandatory",
       "requirementPrefix": "PHASE005",
       "phaseId": "CORE-PHASE-005",
-      "owner": "Persistence, escrow, and recovery owners",
+      "owner": "Persistence subsystem",
       "dependsOn": [
         "PLAN-PHASE-004"
       ]
@@ -93,7 +93,7 @@
       "classification": "mandatory",
       "requirementPrefix": "PHASE006",
       "phaseId": "CORE-PHASE-006",
-      "owner": "FutureShops server integration architecture",
+      "owner": "Server integration architecture",
       "dependsOn": [
         "PLAN-PHASE-005"
       ]
@@ -105,7 +105,7 @@
       "classification": "mandatory",
       "requirementPrefix": "PHASE007",
       "phaseId": "CORE-PHASE-007",
-      "owner": "Final integration and release-readiness owner",
+      "owner": "Release readiness",
       "dependsOn": [
         "PLAN-PHASE-006"
       ]
