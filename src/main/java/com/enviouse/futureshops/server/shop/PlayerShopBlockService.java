@@ -1,5 +1,6 @@
 package com.enviouse.futureshops.server.shop;
 
+import com.enviouse.futureshops.Config;
 import com.enviouse.futureshops.block.ShopBlockEntity;
 import com.enviouse.futureshops.data.PlayerShopListingData;
 import com.enviouse.futureshops.data.PlayerShopNormalizedOfferData;
@@ -680,8 +681,12 @@ public final class PlayerShopBlockService {
         }
 
         String normalizedType = promoType == null ? "" : promoType.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!Double.isFinite(promoValue) || promoValue < 0.0D) {
+            sendResult(player, false, ShopResultCode.PROMO_FAILED);
+            return;
+        }
         boolean valid = switch (normalizedType) {
-            case "PERCENTAGE", "FLAT", "FLASH" -> promoValue > 0.0D;
+            case "PERCENTAGE", "FLAT", "FLASH" -> isValidPromoValue(normalizedType, promoValue);
             case "BUY_X_GET_Y" -> buyX > 0 && buyY > 0;
             default -> false;
         };
@@ -697,6 +702,18 @@ public final class PlayerShopBlockService {
         shop.setChanged();
         openFor(player, pos);
         sendResult(player, true, ShopResultCode.PROMO_SET);
+    }
+
+    static boolean isValidPromoValue(String promoType, double promoValue) {
+        if (!Double.isFinite(promoValue) || promoValue <= 0.0D) {
+            return false;
+        }
+        return switch (promoType) {
+            case "PERCENTAGE", "FLASH" -> promoValue <= 100.0D;
+            case "FLAT" -> promoValue <= Long.MAX_VALUE
+                    / Math.pow(10.0D, Config.economyCurrencyDecimals);
+            default -> false;
+        };
     }
 
     /**

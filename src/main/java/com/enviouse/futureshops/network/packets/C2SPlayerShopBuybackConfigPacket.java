@@ -17,6 +17,7 @@ import java.util.function.Supplier;
  */
 public record C2SPlayerShopBuybackConfigPacket(BlockPos shopPos, int listingIndex,
                                                String direction, long buybackPriceMinor, int buybackCap) {
+    private static final int MAX_DIRECTION_LENGTH = 16;
     public static void encode(C2SPlayerShopBuybackConfigPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.shopPos());
         buffer.writeVarInt(packet.listingIndex());
@@ -27,7 +28,7 @@ public record C2SPlayerShopBuybackConfigPacket(BlockPos shopPos, int listingInde
 
     public static C2SPlayerShopBuybackConfigPacket decode(FriendlyByteBuf buffer) {
         return new C2SPlayerShopBuybackConfigPacket(buffer.readBlockPos(), buffer.readVarInt(),
-                buffer.readUtf(), buffer.readLong(), buffer.readVarInt());
+                buffer.readUtf(MAX_DIRECTION_LENGTH), buffer.readLong(), buffer.readVarInt());
     }
 
     public static void handle(C2SPlayerShopBuybackConfigPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

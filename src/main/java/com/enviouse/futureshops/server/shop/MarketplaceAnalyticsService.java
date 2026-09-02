@@ -15,6 +15,7 @@ import com.enviouse.futureshops.server.economy.BalanceEntry;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
 import com.enviouse.futureshops.server.transaction.TransactionHistorySavedData;
+import com.enviouse.futureshops.server.util.PageBounds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
@@ -87,7 +88,10 @@ public final class MarketplaceAnalyticsService {
     public static void sendLeaderboard(ServerPlayer player, int page) {
         MinecraftServer server = player.server;
         EconomyProvider provider = BalanceManager.getProvider();
-        int safePage = Math.max(1, page);
+        if (page < 1 || page > PageBounds.MAX_PAGE_INDEX) {
+            return;
+        }
+        int safePage = page;
         List<BalanceTopEntry> topBalances = BalanceManager.getTopBalances(safePage, BALTOP_PAGE_SIZE).stream()
                 .map(entry -> new BalanceTopEntry(entry.playerUUID(), resolvePlayerName(server, entry.playerUUID()), entry.balanceMinorUnits()))
                 .toList();

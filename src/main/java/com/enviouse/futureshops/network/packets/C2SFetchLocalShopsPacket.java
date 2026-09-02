@@ -12,13 +12,14 @@ import java.util.function.Supplier;
  * If ownerUuid is non-null, requests the detail view for that specific owner.
  */
 public record C2SFetchLocalShopsPacket(String ownerFilter) {
+    private static final int MAX_OWNER_FILTER_LENGTH = 128;
 
     public static void encode(C2SFetchLocalShopsPacket packet, FriendlyByteBuf buffer) {
         buffer.writeUtf(packet.ownerFilter);
     }
 
     public static C2SFetchLocalShopsPacket decode(FriendlyByteBuf buffer) {
-        return new C2SFetchLocalShopsPacket(buffer.readUtf());
+        return new C2SFetchLocalShopsPacket(buffer.readUtf(MAX_OWNER_FILTER_LENGTH));
     }
 
     public static void handle(C2SFetchLocalShopsPacket packet, Supplier<NetworkEvent.Context> ctx) {
@@ -31,4 +32,3 @@ public record C2SFetchLocalShopsPacket(String ownerFilter) {
         ctx.get().setPacketHandled(true);
     }
 }
-

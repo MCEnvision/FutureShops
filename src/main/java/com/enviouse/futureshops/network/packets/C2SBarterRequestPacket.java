@@ -16,6 +16,7 @@ public record C2SBarterRequestPacket(
         int multiplier,
         UUID requestId
 ) {
+    private static final int MAX_IDENTIFIER_LENGTH = 128;
     public C2SBarterRequestPacket {
         shopId = Objects.requireNonNull(shopId, "shopId");
         recipeId = Objects.requireNonNull(recipeId, "recipeId");
@@ -42,7 +43,9 @@ public record C2SBarterRequestPacket(
     }
 
     public static C2SBarterRequestPacket decode(FriendlyByteBuf buffer) {
-        return new C2SBarterRequestPacket(buffer.readUtf(), buffer.readUtf(),
+        return new C2SBarterRequestPacket(
+                buffer.readUtf(MAX_IDENTIFIER_LENGTH),
+                buffer.readUtf(MAX_IDENTIFIER_LENGTH),
                 buffer.readVarInt(), buffer.readUUID());
     }
 

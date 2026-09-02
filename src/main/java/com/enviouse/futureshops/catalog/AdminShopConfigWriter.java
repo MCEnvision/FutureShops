@@ -12,9 +12,12 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -983,6 +986,12 @@ public final class AdminShopConfigWriter {
 
     private static JsonObject readOrInit(Path path) {
         try {
+            if (!safeParentDirectory(path)) {
+                LOGGER.error(
+                        "[FutureShops] Refused admin shop path with unsafe parent '{}'.",
+                        path);
+                return null;
+            }
             if (!Files.exists(path)) {
                 JsonObject root = new JsonObject();
                 root.addProperty("shopId", "default");
@@ -1106,6 +1115,7 @@ public final class AdminShopConfigWriter {
         String content = PRETTY.toJson(root);
         if (content.getBytes(StandardCharsets.UTF_8).length
                 > MAX_ADMIN_JSON_BYTES
+                || !safeParentDirectory(path)
                 || Files.exists(path) && !safeRegularFile(path)) {
             LOGGER.error(
                     "[FutureShops] Refused oversized or unsafe admin shop candidate at '{}'",
@@ -1204,11 +1214,58 @@ public final class AdminShopConfigWriter {
                 java.nio.file.LinkOption.NOFOLLOW_LINKS);
     }
 
-    private static String readBounded(Path path) throws IOException {
-        if (Files.size(path) > MAX_ADMIN_JSON_BYTES) {
-            throw new IOException("Admin shop catalog is too large");
+    private static boolean safeParentDirectory(Path path) {
+        Path parent = path.toAbsolutePath().normalize().getParent();
+        if (parent == null) {
+            return false;
         }
-        return Files.readString(path);
+        for (Path current = parent; current != null;
+             current = current.getParent()) {
+            if (!Files.exists(current, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                    || Files.isSymbolicLink(current)
+                    || !Files.isDirectory(current,
+                    java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static String readBounded(Path path) throws IOException {
+        try (FileChannel channel = FileChannel.open(path,
+                StandardOpenOption.READ, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+            long size = channel.size();
+            if (size > MAX_ADMIN_JSON_BYTES) {
+                throw new IOException("Admin shop catalog is too large");
+            }
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream(
+                    (int) Math.min(size, MAX_ADMIN_JSON_BYTES));
+            ByteBuffer buffer = ByteBuffer.allocate(8192);
+            int read;
+            while ((read = channel.read(buffer)) != -1) {
+                if (read == 0) {
+                    continue;
+                }
+                buffer.flip();
+                if (bytes.size() + buffer.remaining() > MAX_ADMIN_JSON_BYTES) {
+                    throw new IOException("Admin shop catalog is too large");
+                }
+                while (buffer.hasRemaining()) {
+                    bytes.write(buffer.get());
+                }
+                buffer.clear();
+            }
+            try {
+                return StandardCharsets.UTF_8.newDecoder()
+                        .onMalformedInput(CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(CodingErrorAction.REPORT)
+                        .decode(ByteBuffer.wrap(bytes.toByteArray()))
+                        .toString();
+            } catch (CharacterCodingException exception) {
+                throw new IOException("Admin shop catalog is not valid UTF8",
+                        exception);
+            }
+        }
     }
 
     private static void replace(Path source, Path target) throws IOException {

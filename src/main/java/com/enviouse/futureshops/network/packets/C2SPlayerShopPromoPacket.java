@@ -19,6 +19,7 @@ public record C2SPlayerShopPromoPacket(
         int startsInMinutes,
         int durationMinutes,
         boolean flash) {
+    private static final int MAX_PROMO_TYPE_LENGTH = 32;
     public static void encode(C2SPlayerShopPromoPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.shopPos());
         buffer.writeVarInt(packet.listingIndex());
@@ -37,7 +38,7 @@ public record C2SPlayerShopPromoPacket(
                 buffer.readBlockPos(),
                 buffer.readVarInt(),
                 buffer.readBoolean(),
-                buffer.readUtf(),
+                buffer.readUtf(MAX_PROMO_TYPE_LENGTH),
                 buffer.readDouble(),
                 buffer.readVarInt(),
                 buffer.readVarInt(),
@@ -68,4 +69,3 @@ public record C2SPlayerShopPromoPacket(
         context.setPacketHandled(true);
     }
 }
-

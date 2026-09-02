@@ -42,6 +42,34 @@ class AdminShopConfigWriterSafetyTest {
                 catalog, validLegacyRoot()));
     }
 
+    @Test
+    void readAndWriteRejectSymbolicLinkParentDirectory() throws Exception {
+        Path outside = temporaryDirectory.resolve("outside");
+        Files.createDirectories(outside);
+        Path redirected = temporaryDirectory.resolve("shops");
+        try {
+            Files.createSymbolicLink(redirected, outside.getFileName());
+        } catch (java.io.IOException | UnsupportedOperationException exception) {
+            Assumptions.assumeTrue(false,
+                    "Symbolic links are unavailable");
+            return;
+        }
+
+        Path catalog = redirected.resolve("admin.json");
+        assertNull(AdminShopConfigWriter.readRoot(catalog));
+        assertFalse(AdminShopConfigWriter.writeValidatedRoot(
+                catalog, validLegacyRoot()));
+        assertFalse(Files.exists(outside.resolve("admin.json")));
+    }
+
+    @Test
+    void readRejectsMalformedUtf8() throws Exception {
+        Path catalog = temporaryDirectory.resolve("admin.json");
+        Files.write(catalog, new byte[] {(byte) 0xc3, (byte) 0x28});
+
+        assertNull(AdminShopConfigWriter.readRoot(catalog));
+    }
+
     private static JsonObject validLegacyRoot() {
         JsonObject root = new JsonObject();
         root.addProperty("shopId", "default");

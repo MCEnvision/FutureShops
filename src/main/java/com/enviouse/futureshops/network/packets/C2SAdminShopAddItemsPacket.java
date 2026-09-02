@@ -33,10 +33,13 @@ public record C2SAdminShopAddItemsPacket(
     }
 
     private static final int MAX_ITEMS = 256;
+    private static final int MAX_ITEM_ID_LENGTH = 256;
+    private static final int MAX_CATEGORY_ID_LENGTH = 128;
 
     public static void encode(C2SAdminShopAddItemsPacket packet, FriendlyByteBuf buffer) {
-        buffer.writeCollection(packet.itemIds, FriendlyByteBuf::writeUtf);
-        buffer.writeUtf(packet.categoryId);
+        buffer.writeCollection(packet.itemIds,
+                (target, value) -> target.writeUtf(value, MAX_ITEM_ID_LENGTH));
+        buffer.writeUtf(packet.categoryId, MAX_CATEGORY_ID_LENGTH);
         buffer.writeLong(packet.buyMinor);
         buffer.writeLong(packet.sellMinor);
         buffer.writeLong(packet.stock);
@@ -53,11 +56,11 @@ public record C2SAdminShopAddItemsPacket(
         }
         java.util.List<String> itemIds = new java.util.ArrayList<>(count);
         for (int i = 0; i < count; i++) {
-            itemIds.add(buffer.readUtf());
+            itemIds.add(buffer.readUtf(MAX_ITEM_ID_LENGTH));
         }
         return new C2SAdminShopAddItemsPacket(
                 itemIds,
-                buffer.readUtf(),
+                buffer.readUtf(MAX_CATEGORY_ID_LENGTH),
                 buffer.readLong(),
                 buffer.readLong(),
                 buffer.readLong(),

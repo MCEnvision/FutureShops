@@ -21,8 +21,10 @@ import com.enviouse.futureshops.server.market.claim.MarketClaimDeliveryOutcome;
 import com.enviouse.futureshops.server.market.control.MarketControlModule;
 import com.enviouse.futureshops.server.market.control.MarketControlSavedData;
 import com.enviouse.futureshops.server.market.control.MarketModuleControl;
+import com.mojang.logging.LogUtils;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import org.slf4j.Logger;
 
 import java.time.Instant;
 import java.util.List;
@@ -32,6 +34,8 @@ import java.util.OptionalLong;
 import java.util.UUID;
 
 public final class MarketClaimCollectionService {
+    private static final Logger LOGGER = LogUtils.getLogger();
+
     private MarketClaimCollectionService() {
     }
 
@@ -61,13 +65,17 @@ public final class MarketClaimCollectionService {
                             runtime != null && runtime.isReady(),
                             control(server, command.module())));
         } catch (RuntimeException exception) {
+            LOGGER.error("FutureShops claim collection processing failed for player {} and request {}",
+                    player.getUUID(), command.requestId(), exception);
             result = MarketClaimCollectionResult.failure(command,
                     MarketClaimCollectionCode.SERVER_ERROR);
         }
         try {
             ShopPackets.sendToPlayer(player,
                     new S2CMarketClaimCollectionPacket(result));
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException exception) {
+            LOGGER.error("FutureShops claim collection response failed for player {} and request {}",
+                    player.getUUID(), command.requestId(), exception);
         }
     }
 

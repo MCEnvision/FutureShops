@@ -20,6 +20,7 @@ public record C2SSellRequestPacket(
         int quantity,
         UUID requestId
 ) {
+    private static final int MAX_IDENTIFIER_LENGTH = 128;
     public C2SSellRequestPacket {
         shopId = Objects.requireNonNull(shopId, "shopId");
         listingId = Objects.requireNonNull(listingId, "listingId");
@@ -46,7 +47,9 @@ public record C2SSellRequestPacket(
     }
 
     public static C2SSellRequestPacket decode(FriendlyByteBuf buffer) {
-        return new C2SSellRequestPacket(buffer.readUtf(), buffer.readUtf(),
+        return new C2SSellRequestPacket(
+                buffer.readUtf(MAX_IDENTIFIER_LENGTH),
+                buffer.readUtf(MAX_IDENTIFIER_LENGTH),
                 buffer.readVarInt(), buffer.readUUID());
     }
 
