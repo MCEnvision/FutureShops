@@ -41,6 +41,7 @@ public final class PlayerInventoryInsertionPlan {
         if (incoming.isEmpty() || incoming.getCount() <= 0) {
             throw new IllegalArgumentException("Cash delivery stack is empty");
         }
+        PlayerInventoryHashes.validateStackNbt(incoming);
         List<ItemStack> before = PlayerInventoryHashes.copySlots(currentSlots);
         List<ItemStack> after = new ArrayList<>(
                 PlayerInventoryHashes.copySlots(currentSlots));

@@ -17,7 +17,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
 import java.util.TreeSet;
@@ -25,6 +27,7 @@ import java.util.TreeSet;
 final class PlayerInventoryHashes {
     static final int MAIN_SLOT_COUNT = 36;
     static final int HASH_BYTES = 32;
+    static final int MAX_CANONICAL_NBT_DEPTH = 512;
 
     private PlayerInventoryHashes() {
     }
@@ -86,7 +89,12 @@ final class PlayerInventoryHashes {
         requireSlots(slots);
         List<ItemStack> copy = new ArrayList<>(slots.size());
         for (ItemStack stack : slots) {
-            copy.add(stack.copy());
+            validateStackNbt(stack);
+            try {
+                copy.add(stack.copy());
+            } catch (StackOverflowError error) {
+                throw excessiveDepth(error);
+            }
         }
         return List.copyOf(copy);
     }
@@ -135,6 +143,7 @@ final class PlayerInventoryHashes {
         if (stack.isEmpty()) {
             return new byte[]{0};
         }
+        validateStackNbt(stack);
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) {
@@ -142,6 +151,8 @@ final class PlayerInventoryHashes {
                 writeCanonicalTag(output, stack.save(new CompoundTag()));
             }
             return bytes.toByteArray();
+        } catch (StackOverflowError error) {
+            throw excessiveDepth(error);
         } catch (IOException exception) {
             throw new IllegalStateException(
                     "Unable to hash player inventory slot", exception);
@@ -153,6 +164,7 @@ final class PlayerInventoryHashes {
         if (stack.isEmpty()) {
             return new byte[]{0};
         }
+        validateStackNbt(stack);
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(bytes)) {
@@ -161,16 +173,85 @@ final class PlayerInventoryHashes {
                         stack.save(new CompoundTag()), output);
             }
             return bytes.toByteArray();
+        } catch (StackOverflowError error) {
+            throw excessiveDepth(error);
         } catch (IOException exception) {
             throw new IllegalStateException(
                     "Unable to hash legacy player inventory slot", exception);
         }
     }
 
+    static void validateStackNbt(ItemStack stack) {
+        Objects.requireNonNull(stack, "stack");
+        if (stack.isEmpty() || stack.getTag() == null) {
+            return;
+        }
+        validateTagDepth(stack.getTag());
+    }
+
+    private static void validateTagDepth(Tag root) {
+        Deque<TagFrame> pending = new ArrayDeque<>();
+        pending.push(new TagFrame(root, 0));
+        while (!pending.isEmpty()) {
+            TagFrame frame = pending.pop();
+            Tag tag = frame.tag();
+            int depth = frame.depth();
+            if (depth > MAX_CANONICAL_NBT_DEPTH) {
+                throw excessiveDepth(null);
+            }
+            if (tag instanceof ListTag list) {
+                int childDepth = depth + 1;
+                if (childDepth > MAX_CANONICAL_NBT_DEPTH
+                        && !list.isEmpty()) {
+                    throw excessiveDepth(null);
+                }
+                for (Tag child : list) {
+                    pending.push(new TagFrame(child, childDepth));
+                }
+            } else if (tag instanceof CompoundTag compound) {
+                int childDepth = depth + 1;
+                if (childDepth > MAX_CANONICAL_NBT_DEPTH
+                        && !compound.isEmpty()) {
+                    throw excessiveDepth(null);
+                }
+                for (String key : compound.getAllKeys()) {
+                    Tag child = compound.get(key);
+                    if (child == null) {
+                        throw new IllegalStateException(
+                                "Player inventory NBT key has no value");
+                    }
+                    pending.push(new TagFrame(child, childDepth));
+                }
+            }
+        }
+    }
+
+    private static IllegalArgumentException excessiveDepth(
+            Throwable cause
+    ) {
+        return new IllegalArgumentException(
+                "Canonical NBT depth exceeds the supported limit", cause);
+    }
+
+    private record TagFrame(Tag tag, int depth) {
+    }
+
     private static void writeCanonicalTag(
             DataOutputStream output,
             Tag tag
     ) throws IOException {
+        writeCanonicalTag(output, tag, 0);
+    }
+
+    private static void writeCanonicalTag(
+            DataOutputStream output,
+            Tag tag,
+            int depth
+    ) throws IOException {
+        if (depth > MAX_CANONICAL_NBT_DEPTH) {
+            throw new IllegalArgumentException(
+                    "Canonical NBT depth exceeds the supported limit");
+        }
         output.writeByte(tag.getId());
         switch (tag.getId()) {
             case Tag.TAG_END -> {
@@ -195,7 +276,7 @@ final class PlayerInventoryHashes {
                 ListTag list = (ListTag) tag;
                 output.writeInt(list.size());
                 for (Tag value : list) {
-                    writeCanonicalTag(output, value);
+                    writeCanonicalTag(output, value, depth + 1);
                 }
             }
             case Tag.TAG_COMPOUND -> {
@@ -209,7 +290,7 @@ final class PlayerInventoryHashes {
                         throw new IllegalStateException(
                                 "Canonical NBT key has no value");
                     }
-                    writeCanonicalTag(output, value);
+                    writeCanonicalTag(output, value, depth + 1);
                 }
             }
             case Tag.TAG_INT_ARRAY -> {
