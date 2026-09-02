@@ -50,5 +50,6 @@
 * [Phase 004 finding register](verification/phase-004/finding-register-2026-09-02.md)
 * [Phase 005 persistence and database audit](persistence-database-audit.md)
 * [Phase 005 persistence and recovery evidence](verification/phase-005/persistence-recovery-2026-09-01.md)
+* [Phase 006 backend integration evidence](verification/phase-006/backend-integration-2026-09-01.md)
 
 The root [README](../README.md) is the installation and contributor entry point. [Technical documentation](../DOCUMENTATION.md) is the maintainer architecture and operations reference. The active repository polish and defect closure contract is the [authoritative plan](../plan.md). The [3.0 implementation plan](../FutureShops3-0Plan.MD) and [advanced trade offers plan](../FutureShops3-1TradeOffersPlan.MD) are retained as historical records.

@@ -4912,7 +4912,12 @@ public final class MarketModuleScreen extends Screen
     private boolean moduleVisible(MarketModule target) {
         return moduleCapability(target)
                 .map(capability -> capability.availability().visible())
-                .orElse(true);
+                // Before the first capability response, use the flags carried by the
+                // authoritative open packet instead of advertising every optional module.
+                // This keeps disabled tabs hidden during the initial handshake and after a
+                // client capability cache reset. Claims remain reachable through the route
+                // explicitly opened by the server.
+                .orElseGet(() -> packetConfigured(target));
     }
 
     private boolean showNavigation() {
