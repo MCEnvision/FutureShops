@@ -31,6 +31,8 @@ enum StrictItemInventoryStackPolicy implements ItemInventoryStackPolicy {
                 return false;
             }
             return true;
+        } catch (StackOverflowError error) {
+            return false;
         } catch (RuntimeException exception) {
             return false;
         }
