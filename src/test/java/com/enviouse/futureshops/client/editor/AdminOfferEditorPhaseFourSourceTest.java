@@ -50,7 +50,7 @@ class AdminOfferEditorPhaseFourSourceTest {
         String picker = read("AdminItemPickerScreen.java");
 
         assertTrue(shop.contains(
-                "AdminItemPickerScreen.forQuickAdd"));
+                "new AdminItemPickerScreen"));
         assertTrue(shop.contains("quickAddMode()"));
         assertTrue(picker.contains(
                 "AdminOfferEditorScreen.createQuickAdd"));

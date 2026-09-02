@@ -319,8 +319,6 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
         int addW = Math.min(84, Math.max(48,
                 (gridW() - 2 * ShopUiUtil.PAD_XS - 62) / 3));
         int newOfferColumn = 2;
-        AdminItemPickerScreen.QuickAddMode quickMode =
-                quickAddMode();
         ShopUiUtil.button(
                 graphics, this.font, clickZones, mouseX, mouseY,
                 rowX, rowY, addW, 16,
@@ -328,8 +326,8 @@ public class ShopMainScreen extends Screen implements ShopScreenMarker {
                         "gui.futureshops.admin_edit.add_items"),
                 ShopUiUtil.ButtonStyle.PRIMARY, true,
                 () -> this.minecraft.setScreen(
-                        AdminItemPickerScreen.forQuickAdd(
-                                this, activeCategoryId(), quickMode)));
+                        new AdminItemPickerScreen(
+                                this, activeCategoryId())));
         ShopUiUtil.button(
                 graphics, this.font, clickZones, mouseX, mouseY,
                 rowX + addW + ShopUiUtil.PAD_XS, rowY, addW, 16,

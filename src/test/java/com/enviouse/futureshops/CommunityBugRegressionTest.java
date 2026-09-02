@@ -54,9 +54,8 @@ class CommunityBugRegressionTest {
         String shop = read("src/main/java/com/enviouse/futureshops/client/screen/ShopMainScreen.java");
         String editor = read("src/main/java/com/enviouse/futureshops/client/screen/BarterRecipeEditorScreen.java");
         String picker = read("src/main/java/com/enviouse/futureshops/client/screen/AdminItemPickerScreen.java");
-        assertTrue(shop.contains("AdminItemPickerScreen.forQuickAdd"));
-        assertTrue(shop.contains(
-                "AdminItemPickerScreen.QuickAddMode.BARTER"));
+        assertTrue(shop.contains("new AdminItemPickerScreen"));
+        assertTrue(shop.contains("quickAddMode()"));
         assertTrue(picker.contains("MAX_COLUMNS = 21"));
         assertTrue(picker.contains("MAX_VISIBLE_ROWS = 8"));
         assertTrue(picker.contains("openSimpleEditor"));

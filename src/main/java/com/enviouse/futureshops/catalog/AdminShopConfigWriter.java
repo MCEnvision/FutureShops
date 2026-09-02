@@ -1020,6 +1020,40 @@ public final class AdminShopConfigWriter {
         return writeJson(path, root);
     }
 
+    /**
+     * Persists one already planned bulk candidate and publishes it exactly once. If reload fails
+     * after the atomic replacement, the backup created by the write is restored and the previous
+     * runtime snapshot is reloaded before returning failure. Callers must build and validate the
+     * candidate before entering this synchronized boundary.
+     */
+    static synchronized boolean writeBulkCandidate(MinecraftServer server, JsonObject candidate) {
+        if (server == null || candidate == null) {
+            return false;
+        }
+        Path path = ShopDefinitionLoader.adminShopPath();
+        if (!writeJson(path, candidate)) {
+            return false;
+        }
+        try {
+            CatalogStockRuntime.reload(server);
+            return true;
+        } catch (RuntimeException exception) {
+            LOGGER.error("[FutureShops] Bulk catalog reload failed after atomic write: {}",
+                    exception.getMessage());
+            if (!restoreLatestBackup(path)) {
+                LOGGER.error("[FutureShops] Bulk catalog rollback could not restore the prior file");
+                return false;
+            }
+            try {
+                CatalogStockRuntime.reload(server);
+            } catch (RuntimeException rollbackException) {
+                LOGGER.error("[FutureShops] Bulk catalog rollback reload failed: {}",
+                        rollbackException.getMessage());
+            }
+            return false;
+        }
+    }
+
     static boolean restoreLatestBackup(Path path) {
         Path latest = backup(path, 1);
         if (!safeRegularFile(latest)

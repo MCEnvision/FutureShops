@@ -3,6 +3,7 @@
 ## Player and administrator guides
 
 * [Bulk inventory selling](bulk-selling.md)
+* [Administrator bulk catalog editing](administrator-bulk-catalog.md)
 * [Auction House and Bazaar](markets-guide.md)
 * [Physical currency and ATM](physical-currency-atm.md)
 * [Backup and restore](backup-restore.md)
