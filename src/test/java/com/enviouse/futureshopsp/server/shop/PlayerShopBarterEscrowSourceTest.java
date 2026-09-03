@@ -34,7 +34,7 @@ class PlayerShopBarterEscrowSourceTest {
         assertTrue(source.contains("barterEscrow.integrityValid()"));
         assertTrue(source.contains("barterEscrow.hasIncompleteRecords()"));
         assertTrue(source.contains("barterEscrow.markUnclean()"));
-        assertTrue(source.contains("barterEscrow.markCleanMarker()"));
+        assertTrue(source.contains("markCleanMarkerSafely(\"player shop barter escrow\""));
     }
 
     private static Path projectDirectory() {

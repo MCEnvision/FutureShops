@@ -55,7 +55,7 @@ class PlayerShopBarterSafetySourceTest {
         assertTrue(source.contains("settlements.cleanMarkerValid()"));
         assertTrue(source.contains("settlements.integrityValid()"));
         assertTrue(source.contains("settlements.markUnclean()"));
-        assertTrue(source.contains("settlements.markCleanMarker()"));
+        assertTrue(source.contains("markCleanMarkerSafely(\"player shop settlements\""));
     }
 
     private static Path projectDirectory() {
