@@ -57,8 +57,10 @@ Custody and claims are separate from provider balances. A held item cannot be cl
 Player shop settlement claims reserve a request UUID and amount in settlement SavedData before
 crediting the owner. The coordinator records the same request in the durable claim index and
 provider journal. Pending proceeds recorded while a claim is in flight remain available. The
-settlement amount is reduced only after a confirmed provider result, and retries reuse the same
-request identity.
+settlement amount is reduced only after a confirmed provider result and successful local claim
+delivery and resolution. If local claim finalization or settlement persistence fails after the
+provider confirms, the lifecycle freezes and the claim remains durable for recovery. Retries reuse
+the same request identity.
 
 ## Existing surfaces and current limits
 

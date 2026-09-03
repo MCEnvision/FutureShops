@@ -159,6 +159,19 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
+    void localFinalizationFailureFreezesAdmission() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(
+                provider, lifecycle, new InMemoryEconomyTransactionJournal());
+
+        coordinator.markRecoveryRequired("claim finalization failed");
+
+        assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
+        assertEquals("claim finalization failed", lifecycle.snapshot().diagnostic());
+    }
+
+    @Test
     void custodyAndClaimsAreIdempotentAndConservative() {
         FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
         EconomyLifecycleController lifecycle = readyLifecycle();

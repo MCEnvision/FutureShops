@@ -53,6 +53,13 @@ public final class EconomyTransactionCoordinator {
         return lifecycle.snapshot();
     }
 
+    /** Freezes admission when a confirmed provider leg cannot be finalized locally. */
+    public void markRecoveryRequired(String diagnostic) {
+        lifecycle.markAmbiguous(diagnostic == null || diagnostic.isBlank()
+                ? "economy recovery is required"
+                : diagnostic);
+    }
+
     public Optional<CustodyRecord> custody(RequestId requestId) {
         return custody.find(Objects.requireNonNull(requestId, "requestId"));
     }

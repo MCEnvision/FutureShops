@@ -136,6 +136,24 @@ class PlayerShopSaleEscrowSourceTest {
         assertTrue(storageMismatch.contains("itemEscrow.markRecoveryRequired(itemEscrowRequestId)"));
     }
 
+    @Test
+    void confirmedSettlementClaimCannotSkipLocalFinalization() throws Exception {
+        String source = Files.readString(projectDirectory().resolve(Path.of(
+                "src", "main", "java", "com", "enviouse", "futureshopsp", "server", "shop",
+                "PlayerShopBlockService.java")));
+
+        int claimStart = source.indexOf("case \"CLAIM_SETTLEMENT\"");
+        int claimEnd = source.indexOf("default ->", claimStart);
+        assertTrue(claimStart >= 0 && claimEnd > claimStart);
+        String claimPath = source.substring(claimStart, claimEnd);
+        assertTrue(claimPath.contains("coordinator.deliverClaim(requestId)"));
+        assertTrue(claimPath.contains("coordinator.resolveClaim(requestId)"));
+        assertTrue(claimPath.contains("delivered.state() != ClaimState.DELIVERED"));
+        assertTrue(claimPath.contains("resolved.state() != ClaimState.RESOLVED"));
+        assertTrue(claimPath.contains("coordinator.markRecoveryRequired"));
+        assertTrue(claimPath.contains("settlement record finalization requires recovery"));
+    }
+
     private static Path projectDirectory() {
         Path candidate = Path.of("").toAbsolutePath();
         while (candidate != null) {

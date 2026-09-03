@@ -447,13 +447,31 @@ public final class PlayerShopBlockService {
                         sendResult(player, false, mapProviderError(deposit));
                         return;
                     }
-                    if (claim.state() != ClaimState.RESOLVED) {
-                        coordinator.deliverClaim(requestId);
-                        coordinator.resolveClaim(requestId);
+                    try {
+                        ClaimRecord delivered = claim.state() == ClaimState.RESOLVED
+                                ? claim : coordinator.deliverClaim(requestId);
+                        if (delivered.state() != ClaimState.DELIVERED
+                                && delivered.state() != ClaimState.RESOLVED) {
+                            coordinator.markRecoveryRequired("settlement claim delivery requires recovery");
+                            sendResult(player, false, ShopResultCode.CLAIM_FAILED);
+                            return;
+                        }
+                        ClaimRecord resolved = delivered.state() == ClaimState.RESOLVED
+                                ? delivered : coordinator.resolveClaim(requestId);
+                        if (resolved.state() != ClaimState.RESOLVED) {
+                            coordinator.markRecoveryRequired("settlement claim resolution requires recovery");
+                            sendResult(player, false, ShopResultCode.CLAIM_FAILED);
+                            return;
+                        }
+                    } catch (RuntimeException exception) {
+                        coordinator.markRecoveryRequired("settlement claim finalization requires recovery");
+                        sendResult(player, false, ShopResultCode.CLAIM_FAILED);
+                        return;
                     }
                     if (!settlements.completeClaim(player.getUUID(), pos.asLong(), settlementClaim.requestId(),
                             settlementClaim.amountMinor())) {
-                        sendResult(player, false, ShopResultCode.SERVER_ERROR);
+                        coordinator.markRecoveryRequired("settlement record finalization requires recovery");
+                        sendResult(player, false, ShopResultCode.CLAIM_FAILED);
                         return;
                     }
                     // Record claim funds in transaction history
