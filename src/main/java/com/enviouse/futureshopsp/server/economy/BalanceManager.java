@@ -60,6 +60,7 @@ public final class BalanceManager {
             lifecycleController.resolve(ProviderLifecycle.READY, "", cleanMarkerValid, integrityValid,
                     hasIncompleteRecords);
             coordinator = new EconomyTransactionCoordinator(publicProvider, lifecycleController, journal, custody, claims);
+            recoverIncompleteJournalRecords();
             provider = new CoordinatedEconomyProvider(publicProvider, coordinator, legacy);
             return;
         }
@@ -70,6 +71,7 @@ public final class BalanceManager {
             lifecycleController.resolve(resolution.lifecycle(), resolution.diagnostic(), cleanMarkerValid, integrityValid,
                     hasIncompleteRecords);
             coordinator = new EconomyTransactionCoordinator(publicProvider, lifecycleController, journal, custody, claims);
+            recoverIncompleteJournalRecords();
             provider = new ExternalLegacyEconomyProvider(publicProvider, coordinator);
         } else {
             lifecycleController.resolve(resolution.lifecycle(), resolution.diagnostic(), cleanMarkerValid, integrityValid,
@@ -114,6 +116,21 @@ public final class BalanceManager {
     public static void beginDraining() {
         if (lifecycleController != null) {
             lifecycleController.beginDraining();
+        }
+    }
+
+    private static void recoverIncompleteJournalRecords() {
+        if (coordinator == null || journal == null) {
+            return;
+        }
+        for (EconomyJournalRecord record : journal.snapshot()) {
+            if (!record.incomplete()) {
+                continue;
+            }
+            coordinator.recover(record.request().requestId());
+            if (lifecycleController.snapshot().lifecycle() == ProviderLifecycle.FROZEN) {
+                return;
+            }
         }
     }
 
