@@ -27,6 +27,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.neoforged.fml.ModList;
@@ -192,6 +193,29 @@ public final class EconomyGameTests {
                 "Pixelmon player shop buy refusal must not prepare sale escrow");
         helper.assertTrue(BalanceManager.getCustodyStore().snapshot().isEmpty(),
                 "Pixelmon player shop buy refusal must not create custody");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void pixelmonMoneyItemRefusalBeforeConsumption(GameTestHelper helper) {
+        if (!"pixelmon".equals(BalanceManager.getLifecycleSnapshotOrUnresolved().providerId())) {
+            helper.succeed();
+            return;
+        }
+
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ItemStack money = new ItemStack(ModItems.MONEY_ITEM.get(), 1);
+        player.setItemInHand(InteractionHand.MAIN_HAND, money);
+        int before = money.getCount();
+
+        var result = ModItems.MONEY_ITEM.get().use(player.level(), player, InteractionHand.MAIN_HAND);
+
+        helper.assertTrue(result.getResult().consumesAction() == false,
+                "Pixelmon money item use must refuse without consuming the item");
+        helper.assertTrue(money.getCount() == before,
+                "Pixelmon money item refusal must preserve the item stack");
+        helper.assertTrue(BalanceManager.getCustodyStore().snapshot().isEmpty(),
+                "Pixelmon money item refusal must not create custody");
         helper.succeed();
     }
 
