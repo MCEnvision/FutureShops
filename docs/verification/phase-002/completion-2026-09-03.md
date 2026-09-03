@@ -52,6 +52,14 @@ The exact Pixelmon only command was `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd6
 
 These authorized runs prove full mod and plugin startup and the restart-only configuration path. They do not prove a player account query or permit a mutation claim. Pixelmon mutation remains refused, and the reviewed bridge remains ineligible for `vault` mutations because it lacks durable request receipts and idempotent retry.
 
+### Disposable live provider probe
+
+The exact Pixelmon only profile loaded a disposable runtime probe alongside FutureShops and Pixelmon. It queried UUID `00000000-0000-0000-0000-000000000001`, then submitted a one minor unit withdrawal through the public `EconomyTransactionCoordinator`. The probe jar SHA 256 is `27e439bb4e62b75e5ed33129e9eec271147936ca60cf2566293f05136b4c10da`.
+
+The bounded command was `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 timeout 120 bash ./run.sh nogui` from `/tmp/futureshops-pixelmon-exact.xIDOL4`. The complete log is `/tmp/futureshops-pixelmon-exact-runtime-probe-typed-refusal-20260903.log`. The server reached `Done (0.955s)` and `FutureShops server starting.` The probe reported a confirmed live Pixelmon query with `balanceMinorUnits=0`, followed by `mutationStatus=UNAVAILABLE`, `mutationError=CAPABILITY_MISSING`, and `mutationDiagnostic=provider lacks the capabilities required by this mutation`.
+
+The lifecycle snapshot's `acceptsMutations=true` field describes server lifecycle readiness and does not override the provider capability descriptor. The typed coordinator refusal occurred before journal append, custody creation, or Pixelmon `take` or `add` calls. This proves live query and pre effect mutation refusal for a disposable account. It does not claim a successful external debit, player workflow coverage, or restart recovery.
+
 The security review found no exploitable repository defect. The residual risk is the intentionally unsupported direct Pixelmon mutation path and the unproven bridge mutation path. Detailed evidence is in [Pixelmon API evidence](pixelmon-api-2026-09-03.md), [Pixelmon refusal evidence](pixelmon-refusal-2026-09-03.md), [bridge review](bridge-review-2026-09-03.md), and [security review](security-2026-09-03.md).
 
 ## Open gates and next action
