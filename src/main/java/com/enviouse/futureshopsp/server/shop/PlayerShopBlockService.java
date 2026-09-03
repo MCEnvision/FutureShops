@@ -2,6 +2,7 @@ package com.enviouse.futureshopsp.server.shop;
 
 import com.enviouse.futureshopsp.block.ShopBlockEntity;
 import com.enviouse.futureshopsp.api.economy.MutationKind;
+import com.enviouse.futureshopsp.api.economy.MutationReceipt;
 import com.enviouse.futureshopsp.api.economy.MutationRequest;
 import com.enviouse.futureshopsp.api.economy.ProviderError;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
@@ -17,7 +18,6 @@ import com.enviouse.futureshopsp.network.packets.S2CPlayerShopDataPacket;
 import com.enviouse.futureshopsp.network.packets.S2CPlayerShopResultPacket;
 import com.enviouse.futureshopsp.network.packets.S2CSettlementHistoryPacket;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
-import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import com.enviouse.futureshopsp.server.economy.TransactionResult;
 import com.enviouse.futureshopsp.server.transaction.NbtMatchUtil;
 import com.enviouse.futureshopsp.server.transaction.ShopTransactionUtil;
@@ -425,10 +425,6 @@ public final class PlayerShopBlockService {
                 String description = "player shop settlement " + pos.asLong();
                 ClaimRecord claim = coordinator.claim(requestId).orElseGet(() ->
                         coordinator.createClaim(requestId, player.getUUID(), settlementClaim.amountMinor(), description));
-                if (claim.state() == ClaimState.RESOLVED) {
-                    sendResult(player, false, ShopResultCode.NOTHING_TO_CLAIM);
-                    return;
-                }
                 MutationRequest depositRequest = MutationRequest.forPlayer(requestId, player.getUUID(),
                         settlementClaim.amountMinor(), MutationKind.DEPOSIT);
                 ProviderResult<?> deposit = coordinator.deposit(depositRequest);
@@ -436,13 +432,15 @@ public final class PlayerShopBlockService {
                     sendResult(player, false, mapProviderError(deposit));
                     return;
                 }
+                if (claim.state() != ClaimState.RESOLVED) {
+                    coordinator.deliverClaim(requestId);
+                    coordinator.resolveClaim(requestId);
+                }
                 if (!settlements.completeClaim(player.getUUID(), pos.asLong(), settlementClaim.requestId(),
                         settlementClaim.amountMinor())) {
                     sendResult(player, false, ShopResultCode.SERVER_ERROR);
                     return;
                 }
-                coordinator.deliverClaim(requestId);
-                coordinator.resolveClaim(requestId);
                 // Record claim funds in transaction history
                 TransactionHistoryService.record(
                         player,
@@ -623,7 +621,8 @@ public final class PlayerShopBlockService {
                 }
             }
 
-            EconomyProvider provider = BalanceManager.getProvider();
+            EconomyTransactionCoordinator coordinator = BalanceManager.getCoordinator();
+            RequestId transactionId = RequestId.random();
             long cost = Math.max(0L, listing.calculatePrice(qty));
             boolean withdrewFromBuyer = false;
             boolean recordedSale = false;
@@ -727,7 +726,8 @@ public final class PlayerShopBlockService {
             if (compoundTrade) {
                 // LGB#8: Skip money withdrawal if cost is 0 (100% discount)
                 if (cost > 0L) {
-                    TransactionResult moneyCheck = provider.withdraw(buyer.getUUID(), cost, "BUY");
+                    TransactionResult moneyCheck = coordinatorMutation(coordinator, transactionId,
+                            "buyer compound debit", buyer.getUUID(), null, cost, MutationKind.WITHDRAW);
                     if (!moneyCheck.success()) {
                         sendResultWithChat(buyer, false, ShopResultCode.INSUFFICIENT_FUNDS, "§cTrade cancelled: insufficient balance for compound trade.");
                         return;
@@ -743,7 +743,10 @@ public final class PlayerShopBlockService {
                             List.of(new com.enviouse.futureshopsp.event.BarterTradeEvent.IngredientEntry(listing.barterItemId(), barterAmount)));
                     net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(barterPre);
                     if (barterPre.isCanceled()) {
-                        if (withdrewFromBuyer) provider.deposit(buyer.getUUID(), cost, "BUY");
+                        if (withdrewFromBuyer) {
+                            coordinatorMutation(coordinator, transactionId, "buyer compound refund",
+                                    buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
+                        }
                         sendResult(buyer, false, ShopResultCode.CANCELLED_BY_EVENT);
                         return;
                     }
@@ -756,7 +759,8 @@ public final class PlayerShopBlockService {
                         buyer.getInventory(), barterItem, barterAmount,
                         listing.barterNbtAware(), listing.barterNbtPatch());
                 if (paymentStacks.isEmpty()) {
-                    provider.deposit(buyer.getUUID(), cost, "BUY");
+                    coordinatorMutation(coordinator, transactionId, "buyer payment refund",
+                            buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
                     sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, "§cTrade cancelled: barter items could not be taken.");
                     return;
                 }
@@ -766,7 +770,8 @@ public final class PlayerShopBlockService {
                         : insertAll(barterStorage.handler(), paymentStacks);
                 if (!insertedOk) {
                     ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), paymentStacks);
-                    provider.deposit(buyer.getUUID(), cost, "BUY");
+                    coordinatorMutation(coordinator, transactionId, "buyer storage refund",
+                            buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
                     sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, "§cTrade cancelled: the shop's storage is full.");
                     return;
                 }
@@ -784,7 +789,8 @@ public final class PlayerShopBlockService {
                         recordedSale = true;
                     }
                 } else {
-                    TransactionResult withdraw = provider.withdraw(buyer.getUUID(), cost, "BUY");
+                    TransactionResult withdraw = coordinatorMutation(coordinator, transactionId,
+                            "buyer debit", buyer.getUUID(), null, cost, MutationKind.WITHDRAW);
                     if (!withdraw.success()) {
                         if (listing.tradeMode() == ShopBlockEntity.TradeMode.BOTH) {
                             barterTrade = true;
@@ -795,7 +801,8 @@ public final class PlayerShopBlockService {
                     } else {
                         withdrewFromBuyer = true;
                         if (buyer.getServer() == null) {
-                            provider.deposit(buyer.getUUID(), cost, "BUY");
+                            coordinatorMutation(coordinator, transactionId, "buyer server refund",
+                                    buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
                             sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                             return;
                         }
@@ -867,7 +874,7 @@ public final class PlayerShopBlockService {
                                 reinsert(linkedStorage, ex);
                             }
                         }
-                        rollbackAll(linkedStorage, buyer, provider, withdrewFromBuyer, cost, recordedSale,
+                        rollbackAll(linkedStorage, buyer, coordinator, transactionId, withdrewFromBuyer, cost, recordedSale,
                                 shop.getOwnerUuid(), pos, barterItem, barterAmount, insertedPayment, compoundTrade, barterTrade,
                                 listing.barterNbtAware(), listing.barterNbtPatch());
                         sendResult(buyer, false, ShopResultCode.ROLLBACK);
@@ -880,7 +887,7 @@ public final class PlayerShopBlockService {
             }
 
             if (extracted.isEmpty()) {
-                rollbackAll(linkedStorage, buyer, provider, withdrewFromBuyer, cost, recordedSale,
+                rollbackAll(linkedStorage, buyer, coordinator, transactionId, withdrewFromBuyer, cost, recordedSale,
                         shop.getOwnerUuid(), pos, barterItem, barterAmount, insertedPayment, compoundTrade, barterTrade,
                         listing.barterNbtAware(), listing.barterNbtPatch());
                 sendResult(buyer, false, ShopResultCode.ROLLBACK);
@@ -913,11 +920,12 @@ public final class PlayerShopBlockService {
 
                 // ═══ Fire ShopTransactionEvent.Post (spec §33) ═══
                 if (com.enviouse.futureshopsp.Config.eventsTransactionEnabled) {
-                    long resultingBal = provider.getBalance(buyer.getUUID());
-                    net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
-                            new com.enviouse.futureshopsp.event.ShopTransactionEvent.Post(
-                                    buyer.getUUID(), shopIdForEvent, listing.itemId(),
-                                    qty, tradeType, barterTrade ? 0L : cost, resultingBal));
+                    long eventCost = barterTrade ? 0L : cost;
+                    coordinator.balance(buyer.getUUID()).value().ifPresent(balance ->
+                            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
+                                    new com.enviouse.futureshopsp.event.ShopTransactionEvent.Post(
+                                            buyer.getUUID(), shopIdForEvent, listing.itemId(),
+                                            qty, tradeType, eventCost, balance.balanceMinorUnits())));
 
                     // Fire BarterTradeEvent.Post for barter/compound trades
                     if (barterTrade || compoundTrade) {
@@ -1036,7 +1044,8 @@ public final class PlayerShopBlockService {
     private static void handleAdminShopBuy(ServerPlayer buyer, ShopBlockEntity shop, BlockPos pos,
                                            ShopBlockEntity.Listing listing, int qty, int deliverCount,
                                            Item saleItem, String paymentMethod) {
-        EconomyProvider provider = BalanceManager.getProvider();
+        EconomyTransactionCoordinator coordinator = BalanceManager.getCoordinator();
+        RequestId transactionId = RequestId.random();
         long cost = Math.max(0L, listing.calculatePrice(qty));
         boolean isBundle = !listing.bundleOutputs().isEmpty();
 
@@ -1101,7 +1110,8 @@ public final class PlayerShopBlockService {
         // Charge money (sunk — never deposited to owner).
         boolean withdrewFromBuyer = false;
         if ((compoundTrade || !barterTrade) && cost > 0L) {
-            TransactionResult withdraw = provider.withdraw(buyer.getUUID(), cost, "BUY");
+            TransactionResult withdraw = coordinatorMutation(coordinator, transactionId, "admin buyer debit",
+                    buyer.getUUID(), null, cost, MutationKind.WITHDRAW);
             if (!withdraw.success()) {
                 sendResult(buyer, false, ShopResultCode.INSUFFICIENT_FUNDS);
                 return;
@@ -1115,7 +1125,10 @@ public final class PlayerShopBlockService {
                     buyer.getInventory(), barterItem, barterAmount,
                     listing.barterNbtAware(), listing.barterNbtPatch());
             if (paymentStacks.isEmpty()) {
-                if (withdrewFromBuyer) provider.deposit(buyer.getUUID(), cost, "BUY");
+                if (withdrewFromBuyer) {
+                    coordinatorMutation(coordinator, transactionId, "admin buyer refund",
+                            buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
+                }
                 sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS,
                         "§cTrade cancelled: barter items could not be taken.");
                 return;
@@ -1157,11 +1170,12 @@ public final class PlayerShopBlockService {
                     historyNote);
 
             if (com.enviouse.futureshopsp.Config.eventsTransactionEnabled) {
-                long resultingBal = provider.getBalance(buyer.getUUID());
-                net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
-                        new com.enviouse.futureshopsp.event.ShopTransactionEvent.Post(
-                                buyer.getUUID(), shopIdForEvent, listing.itemId(),
-                                qty, tradeTypeForEvent, barterTrade ? 0L : cost, resultingBal));
+                long eventCost = barterTrade ? 0L : cost;
+                coordinator.balance(buyer.getUUID()).value().ifPresent(balance ->
+                        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
+                                new com.enviouse.futureshopsp.event.ShopTransactionEvent.Post(
+                                        buyer.getUUID(), shopIdForEvent, listing.itemId(),
+                                        qty, tradeTypeForEvent, eventCost, balance.balanceMinorUnits())));
             }
         }
 
@@ -1274,7 +1288,8 @@ public final class PlayerShopBlockService {
     /**
      * Unified rollback for buy() failures after payment was taken.
      */
-    private static void rollbackAll(LinkedStorage linkedStorage, ServerPlayer buyer, EconomyProvider provider,
+    private static void rollbackAll(LinkedStorage linkedStorage, ServerPlayer buyer,
+                                    EconomyTransactionCoordinator coordinator, RequestId transactionId,
                                     boolean withdrewFromBuyer, long cost, boolean recordedSale,
                                     UUID ownerUuid, BlockPos pos,
                                     Item barterItem, int barterAmount, List<ItemStack> insertedPayment,
@@ -1285,7 +1300,8 @@ public final class PlayerShopBlockService {
                 PlayerShopSettlementSavedData.get(buyer.getServer()).rollbackPending(ownerUuid, pos.asLong(), cost);
             }
             if (withdrewFromBuyer) {
-                provider.deposit(buyer.getUUID(), cost, "BUY");
+                coordinatorMutation(coordinator, transactionId, "buyer rollback",
+                        buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
             }
         }
         if (compoundTrade || barterTrade) {
@@ -1549,6 +1565,40 @@ public final class PlayerShopBlockService {
                 ? ShopResultCode.INSUFFICIENT_FUNDS : ShopResultCode.CLAIM_FAILED;
     }
 
+    private static TransactionResult coordinatorMutation(EconomyTransactionCoordinator coordinator,
+                                                         RequestId rootRequest, String role,
+                                                         UUID actor, UUID counterparty, long amount,
+                                                         MutationKind kind) {
+        if (amount <= 0L) {
+            return TransactionResult.error(ShopResultCode.INVALID_AMOUNT, 0L);
+        }
+        try {
+            MutationRequest request = new MutationRequest(rootRequest.child(role), actor,
+                    counterparty == null ? Optional.empty() : Optional.of(counterparty), amount, kind);
+            ProviderResult<MutationReceipt> result = kind == MutationKind.DEPOSIT
+                    || kind == MutationKind.TRANSFER_CREDIT
+                    ? coordinator.deposit(request) : coordinator.withdraw(request);
+            long balance = result.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
+                    ? Optional.of(receipt.resultingBalanceMinorUnits().getAsLong()) : Optional.empty()).orElse(0L);
+            return result.confirmed()
+                    ? TransactionResult.ok(balance)
+                    : TransactionResult.error(mapProviderResultCode(result), balance);
+        } catch (RuntimeException exception) {
+            return TransactionResult.error(ShopResultCode.SERVER_ERROR, 0L);
+        }
+    }
+
+    private static ShopResultCode mapProviderResultCode(ProviderResult<?> result) {
+        if (result == null) {
+            return ShopResultCode.SERVER_ERROR;
+        }
+        return switch (result.error()) {
+            case INSUFFICIENT_FUNDS -> ShopResultCode.INSUFFICIENT_FUNDS;
+            case INVALID_AMOUNT -> ShopResultCode.INVALID_AMOUNT;
+            default -> ShopResultCode.SERVER_ERROR;
+        };
+    }
+
     /**
      * Item 18: Send result with an optional chat message displayed to the buyer.
      */
@@ -1664,7 +1714,8 @@ public final class PlayerShopBlockService {
                 total = pre.getPriceMinor();
             }
 
-            EconomyProvider provider = BalanceManager.getProvider();
+            EconomyTransactionCoordinator coordinator = BalanceManager.getCoordinator();
+            RequestId transactionId = RequestId.random();
 
             if (shop.isAdminShopMode()) {
                 // Void the items, mint the money.
@@ -1675,7 +1726,8 @@ public final class PlayerShopBlockService {
                             "§cYou don't have enough of that item.");
                     return;
                 }
-                TransactionResult dep = provider.deposit(seller.getUUID(), total, "SELL_TO_SHOP");
+                TransactionResult dep = coordinatorMutation(coordinator, transactionId, "admin seller credit",
+                        seller.getUUID(), shop.getOwnerUuid(), total, MutationKind.DEPOSIT);
                 if (!dep.success()) {
                     // Roll back: return items to seller.
                     ShopTransactionUtil.insertIntoInventory(seller.getInventory(), taken);
@@ -1684,7 +1736,7 @@ public final class PlayerShopBlockService {
                 }
                 incrementBuyback(listing, qty);
                 recordSellHistory(seller, shop, listing, qty, total, "ADMIN_SHOP_BUYBACK");
-                firePostSellEvent(seller, shopIdForEvent, listing.itemId(), qty, total, provider);
+                firePostSellEvent(seller, shopIdForEvent, listing.itemId(), qty, total, coordinator);
                 shop.setChanged();
                 openFor(seller, pos, false);
                 sendResultWithChat(seller, true, ShopResultCode.SOLD, "§a✓ Sold to shop.");
@@ -1693,7 +1745,8 @@ public final class PlayerShopBlockService {
 
             // ── Player shop path ──
             UUID ownerUuid = shop.getOwnerUuid();
-            if (provider.getBalance(ownerUuid) < total) {
+            long requiredFunds = total;
+            if (coordinator.balance(ownerUuid).value().map(balance -> balance.balanceMinorUnits() < requiredFunds).orElse(true)) {
                 sendResultWithChat(seller, false, ShopResultCode.SHOP_OUT_OF_MONEY,
                         "§cThe shop owner can't afford this — try again later or sell less.");
                 return;
@@ -1734,7 +1787,8 @@ public final class PlayerShopBlockService {
             }
 
             // Withdraw from owner.
-            TransactionResult ownerWd = provider.withdraw(ownerUuid, total, "BUYBACK");
+            TransactionResult ownerWd = coordinatorMutation(coordinator, transactionId, "owner buyback debit",
+                    ownerUuid, seller.getUUID(), total, MutationKind.WITHDRAW);
             if (!ownerWd.success()) {
                 // Roll back the inserted items.
                 rollbackInsertedItems(storage, seller, saleItem, needItems, nbtAware, nbtPatch);
@@ -1744,10 +1798,12 @@ public final class PlayerShopBlockService {
             }
 
             // Credit seller.
-            TransactionResult sellerDep = provider.deposit(seller.getUUID(), total, "SELL_TO_SHOP");
+            TransactionResult sellerDep = coordinatorMutation(coordinator, transactionId, "seller buyback credit",
+                    seller.getUUID(), ownerUuid, total, MutationKind.DEPOSIT);
             if (!sellerDep.success()) {
                 // Refund owner, undo storage.
-                provider.deposit(ownerUuid, total, "BUYBACK_REFUND");
+                coordinatorMutation(coordinator, transactionId, "owner buyback refund",
+                        ownerUuid, seller.getUUID(), total, MutationKind.DEPOSIT);
                 rollbackInsertedItems(storage, seller, saleItem, needItems, nbtAware, nbtPatch);
                 sendResult(seller, false, ShopResultCode.MAX_BALANCE_EXCEEDED);
                 return;
@@ -1755,7 +1811,7 @@ public final class PlayerShopBlockService {
 
             incrementBuyback(listing, qty);
             recordSellHistory(seller, shop, listing, qty, total, "BUYBACK");
-            firePostSellEvent(seller, shopIdForEvent, listing.itemId(), qty, total, provider);
+            firePostSellEvent(seller, shopIdForEvent, listing.itemId(), qty, total, coordinator);
             shop.setChanged();
             openFor(seller, pos, false);
             sendResultWithChat(seller, true, ShopResultCode.SOLD, "§a✓ Sold to shop.");
@@ -1802,11 +1858,12 @@ public final class PlayerShopBlockService {
     }
 
     private static void firePostSellEvent(ServerPlayer seller, String shopIdForEvent, String itemId,
-                                          int qty, long total, EconomyProvider provider) {
+                                          int qty, long total, EconomyTransactionCoordinator coordinator) {
         if (!com.enviouse.futureshopsp.Config.eventsTransactionEnabled) return;
-        long bal = provider.getBalance(seller.getUUID());
-        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
-                new com.enviouse.futureshopsp.event.ShopTransactionEvent.Post(
-                        seller.getUUID(), shopIdForEvent, itemId, qty, "SELL_TO_SHOP", total, bal));
+        coordinator.balance(seller.getUUID()).value().ifPresent(balance ->
+                net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
+                        new com.enviouse.futureshopsp.event.ShopTransactionEvent.Post(
+                                seller.getUUID(), shopIdForEvent, itemId, qty, "SELL_TO_SHOP", total,
+                                balance.balanceMinorUnits())));
     }
 }

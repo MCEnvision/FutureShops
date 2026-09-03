@@ -1,6 +1,7 @@
 package com.enviouse.futureshopsp.server.shop;
 
 import org.junit.jupiter.api.Test;
+import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
 
@@ -29,6 +30,10 @@ class PlayerShopSettlementSavedDataPagingTest {
         assertNotNull(first);
         PlayerShopSettlementSavedData.SettlementClaim retry = data.beginClaim(owner, 42L);
         assertEquals(first, retry);
+
+        CompoundTag saved = data.save(new CompoundTag(), null);
+        PlayerShopSettlementSavedData restored = PlayerShopSettlementSavedData.load(saved, null);
+        assertEquals(first, restored.beginClaim(owner, 42L));
 
         data.recordSale(owner, 42L, 25L, "minecraft:dirt", 1);
         assertTrue(data.completeClaim(owner, 42L, first.requestId(), first.amountMinor()));
