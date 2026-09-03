@@ -40,6 +40,7 @@ class PlayerShopBarterEscrowSavedDataTest {
         assertEquals(PlayerShopBarterEscrowSavedData.State.PREPARED,
                 recovered.find(request).state());
         assertTrue(recovered.markRemoved(request, stacks, provider));
+        assertFalse(recovered.markComplete(request));
         assertTrue(recovered.markStored(request));
 
         CompoundTag stored = recovered.save(new CompoundTag(), provider);

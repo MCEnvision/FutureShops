@@ -146,7 +146,7 @@ public final class PlayerShopBarterEscrowSavedData extends SavedData {
 
     public synchronized boolean markComplete(UUID requestId) {
         EscrowRecord current = records.get(requestId);
-        if (current == null || (current.state() != State.STORED && current.state() != State.REMOVED)) {
+        if (current == null || current.state() != State.STORED) {
             return false;
         }
         records.put(requestId, current.withState(State.COMPLETE));
