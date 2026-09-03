@@ -28,6 +28,8 @@ The complete public economy surface was also enumerated. `BankAccountManager` on
 
 The exact 9.4.0 Pixelmon consumers confirm the same boundary. `BankTransferCommand`, `GiveMoneyCommand`, and `ShopTransactionPacket` call the direct account methods and do not pass a request identity or retain a durable receipt. Their command and shop paths also use primitive numeric overloads and discard the boolean mutation result. These consumers do not provide a transaction coordinator that FutureShops can safely adopt.
 
+The concrete `PlayerPartyStorage` implementation stores the balance as the `pixelDollars` NBT field. `add`, `take`, and `setBalance` update that field, call `updatePlayer`, and mark the storage dirty with `setNeedsSaving`; `add` and `take` then post `PostTransaction`. This is ordinary player-data persistence, not an operation journal. A crash between the field update and a FutureShops confirmation still leaves no external request identity or receipt to reconcile.
+
 The usable strict capabilities are balance query and precheck. The API does not expose an operation UUID, durable receipt, receipt lookup by request identity, or idempotent retry. A local FutureShops request UUID cannot make a boolean Pixelmon call idempotent. `setBalance`, `take`, and `add` are therefore classified as unsafe for production mutation under the current contract.
 
 ## Mapping
