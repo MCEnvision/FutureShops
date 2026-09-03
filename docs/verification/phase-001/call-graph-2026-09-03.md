@@ -64,7 +64,7 @@ The existing saved data and item records are read only inputs for the new schema
 
 ## Test and runtime inventory
 
-The repository has JUnit coverage for existing saved data, item validation, packet bounds, listing matching, and screen policy. Phase 000 added public API, registry, selection, and fail closed selection tests. There are no current coordinator, crash, custody, claim, multiplayer, migration, or lifecycle transition tests. The Gradle tasks available for this phase are `test`, `build`, `runData`, `runGameTestServer`, `runServer`, and `runClient`.
+The repository has JUnit coverage for existing saved data, item validation, packet bounds, listing matching, and screen policy. Phase 000 added public API, registry, selection, and fail closed selection tests. Phase 001 now adds coordinator, lifecycle, journal, custody, claim, settlement, and recovery tests, plus seven real NeoForge GameTests. The remaining evidence gaps are the complete player shop crash matrix and interactive multiplayer walkthrough. The Gradle tasks available for this phase are `test`, `build`, `runData`, `runGameTestServer`, `runServer`, and `runClient`.
 
 Required additions are grouped by boundary.
 
@@ -73,10 +73,10 @@ Required additions are grouped by boundary.
 | API and provider fixtures | `EconomyProviderApiTest`, `EconomyProviderRegistryTest` | Capability complete, incomplete, duplicate aware, durable lookup, timeout, exception, malformed receipt, and ambiguous fixtures |
 | Selection | `ProviderSelectionManagerTest`, `BalanceManagerSelectionTest` | Lifecycle state and restart selection integration |
 | Persistence | Existing SavedData tests only | Version, checksum, migration, unknown newer, truncated, interrupted write, clean marker, recovery checkpoint, backup, and restore fixtures |
-| Transactions | Existing shop tests are service level. `EconomyTransactionCoordinatorTest` now covers strict one leg intent, capability refusal, duplicate replay, ambiguity freeze, and lookup recovery. | Root and leg identity, intent ordering, custody conservation, receipt validation, duplicate completion, concurrency, crash point, compensation, and claim tests |
-| World and inventory | No new GameTest in Phase 000 | GameTests for shop, player shop, custody, claims, bills, restart, and full inventory |
+| Transactions | Existing shop tests are service level. `EconomyTransactionCoordinatorTest` covers strict one leg intent, capability refusal, duplicate replay, ambiguity freeze, receipt validation, custody conservation, compensation, and lookup recovery. | Complete multi leg crash point and concurrent duplicate evidence |
+| World and inventory | Seven real NeoForge GameTests cover registration, public mutations, sale and barter escrow, offline claims, and reconnect replay | Full player shop crash matrix, bills, and full inventory walkthrough |
 | Network and UI | Existing packet bounds and screen policy tests | Server snapshots, stale state, replay, reconnect, localization, disabled actions, client and dedicated server isolation |
-| Runtime | Standard server and Xvfb client startup evidence exists for Phase 000 | Clean and unclean restart, draining, recovery, frozen state, multiplayer, reconnect, provider switching, and full surface walkthrough |
+| Runtime | Standard server and Xvfb client startup evidence plus reconnect replay GameTest | Clean and unclean restart matrix, interactive multiplayer, draining, recovery, frozen state, provider switching, and full surface walkthrough |
 
 ## Direct access and preservation rules
 
