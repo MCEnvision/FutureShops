@@ -30,7 +30,7 @@ public record S2CBalTopUiPacket(
         int popularItemTrades,
         long popularItemQuantity,
         List<FranchiseLeaderboardEntry> franchises,
-        boolean balanceAvailable,
+        boolean rankingAvailable,
         String providerId,
         String providerLifecycle,
         String providerDiagnostic) implements CustomPacketPayload {
@@ -68,7 +68,7 @@ public record S2CBalTopUiPacket(
         buffer.writeVarInt(packet.popularItemTrades());
         buffer.writeLong(packet.popularItemQuantity());
         buffer.writeCollection(packet.franchises(), FranchiseLeaderboardEntry::encode);
-        buffer.writeBoolean(packet.balanceAvailable());
+        buffer.writeBoolean(packet.rankingAvailable());
         buffer.writeUtf(packet.providerId(), 64);
         buffer.writeUtf(packet.providerLifecycle(), 32);
         buffer.writeUtf(packet.providerDiagnostic(), 256);

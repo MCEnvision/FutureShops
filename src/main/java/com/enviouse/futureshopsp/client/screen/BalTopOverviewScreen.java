@@ -29,7 +29,7 @@ public class BalTopOverviewScreen extends AbstractShopScreen implements ShopScre
     private int popularItemTrades;
     private long popularItemQuantity;
     private List<FranchiseLeaderboardEntry> franchises;
-    private boolean balanceAvailable;
+    private boolean rankingAvailable;
     private String providerId;
     private String providerLifecycle;
     private String providerDiagnostic;
@@ -52,7 +52,7 @@ public class BalTopOverviewScreen extends AbstractShopScreen implements ShopScre
                                 UUID topSellerUuid, String topSellerName, int topSellerCount,
                                 String popularItemId, int popularItemTrades, long popularItemQuantity,
                                 List<FranchiseLeaderboardEntry> franchises,
-                                boolean balanceAvailable, String providerId, String providerLifecycle,
+                                boolean rankingAvailable, String providerId, String providerLifecycle,
                                 String providerDiagnostic) {
         super(Component.translatable("gui.futureshops.baltop.title"));
         this.page = page;
@@ -70,7 +70,7 @@ public class BalTopOverviewScreen extends AbstractShopScreen implements ShopScre
         this.popularItemTrades = popularItemTrades;
         this.popularItemQuantity = popularItemQuantity;
         this.franchises = List.copyOf(franchises);
-        this.balanceAvailable = balanceAvailable;
+        this.rankingAvailable = rankingAvailable;
         this.providerId = providerId;
         this.providerLifecycle = providerLifecycle;
         this.providerDiagnostic = providerDiagnostic;
@@ -124,9 +124,11 @@ public class BalTopOverviewScreen extends AbstractShopScreen implements ShopScre
     }
 
     private void renderHeader(GuiGraphics graphics) {
-        String status = balanceAvailable
+        String status = rankingAvailable
                 ? "Page " + page + " / " + totalPages
-                : Component.translatable("gui.futureshops.economy.provider_unavailable", providerId, providerLifecycle).getString();
+                : ("READY".equals(providerLifecycle)
+                ? Component.translatable("gui.futureshops.economy.leaderboard_unavailable", providerId).getString()
+                : Component.translatable("gui.futureshops.economy.provider_unavailable", providerId, providerLifecycle).getString());
         ShopUiUtil.renderHeroHeader(graphics, this.font, guiLeft + 10, guiTop + 10, guiW - 20,
                 this.title.getString(), status);
     }
@@ -154,9 +156,9 @@ public class BalTopOverviewScreen extends AbstractShopScreen implements ShopScre
             String balance = formatMinorUnits(entry.balanceMinorUnits()) + " " + currencyName;
             graphics.drawString(this.font, this.font.plainSubstrByWidth(balance, 90), panelX + panelW - 98, y + 5, ShopColors.TEXT_CURRENCY, false);
         }
-        if (!balanceAvailable) {
+        if (!rankingAvailable) {
             graphics.drawString(this.font,
-                    Component.translatable("gui.futureshops.economy.balance_unavailable").getString(),
+                    Component.translatable("gui.futureshops.economy.leaderboard_unavailable", providerId).getString(),
                     panelX + 8, panelY + 32, ShopColors.TEXT_FAINT, false);
         } else if (entries.isEmpty()) {
             graphics.drawString(this.font, "No balance data yet.", panelX + 8, panelY + 32, ShopColors.TEXT_FAINT, false);
@@ -306,7 +308,7 @@ public class BalTopOverviewScreen extends AbstractShopScreen implements ShopScre
                            UUID topSellerUuid, String topSellerName, int topSellerCount,
                            String popularItemId, int popularItemTrades, long popularItemQuantity,
                            List<FranchiseLeaderboardEntry> franchises,
-                           boolean balanceAvailable, String providerId, String providerLifecycle, String providerDiagnostic) {
+                           boolean rankingAvailable, String providerId, String providerLifecycle, String providerDiagnostic) {
         this.page = page;
         this.totalPages = Math.max(1, totalPages);
         this.entries = List.copyOf(entries);
@@ -320,7 +322,7 @@ public class BalTopOverviewScreen extends AbstractShopScreen implements ShopScre
         this.popularItemTrades = popularItemTrades;
         this.popularItemQuantity = popularItemQuantity;
         this.franchises = List.copyOf(franchises);
-        this.balanceAvailable = balanceAvailable;
+        this.rankingAvailable = rankingAvailable;
         this.providerId = providerId;
         this.providerLifecycle = providerLifecycle;
         this.providerDiagnostic = providerDiagnostic;

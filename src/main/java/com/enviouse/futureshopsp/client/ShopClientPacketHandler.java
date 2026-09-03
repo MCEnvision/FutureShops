@@ -130,7 +130,7 @@ public final class ShopClientPacketHandler {
                         packet.popularItemTrades(),
                         packet.popularItemQuantity(),
                         packet.franchises(),
-                        packet.balanceAvailable(),
+                        packet.rankingAvailable(),
                         packet.providerId(),
                         packet.providerLifecycle(),
                         packet.providerDiagnostic());
@@ -152,7 +152,7 @@ public final class ShopClientPacketHandler {
                     packet.popularItemTrades(),
                     packet.popularItemQuantity(),
                     packet.franchises(),
-                    packet.balanceAvailable(),
+                    packet.rankingAvailable(),
                     packet.providerId(),
                     packet.providerLifecycle(),
                     packet.providerDiagnostic()));

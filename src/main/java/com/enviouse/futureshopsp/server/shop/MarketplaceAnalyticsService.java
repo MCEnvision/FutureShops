@@ -97,12 +97,12 @@ public final class MarketplaceAnalyticsService {
         MinecraftServer server = player.server;
         EconomyProvider provider = BalanceManager.getProvider();
         var lifecycle = BalanceManager.getLifecycleSnapshotOrUnresolved();
-        boolean balanceAvailable = BalanceManager.isInternalEconomyReady();
+        boolean rankingAvailable = BalanceManager.isInternalEconomyReady();
         if (page < 1 || page > PageBounds.MAX_PAGE_INDEX) {
             return;
         }
         int safePage = page;
-        List<BalanceTopEntry> topBalances = (balanceAvailable ? BalanceManager.getTopBalances(safePage, BALTOP_PAGE_SIZE) : List.<BalanceEntry>of()).stream()
+        List<BalanceTopEntry> topBalances = (rankingAvailable ? BalanceManager.getTopBalances(safePage, BALTOP_PAGE_SIZE) : List.<BalanceEntry>of()).stream()
                 .map(entry -> new BalanceTopEntry(entry.playerUUID(), resolvePlayerName(server, entry.playerUUID()), entry.balanceMinorUnits()))
                 .toList();
         int totalPages = topBalances.isEmpty() && safePage > 1 ? safePage : Math.max(1, safePage + (topBalances.size() == BALTOP_PAGE_SIZE ? 1 : 0));
@@ -133,7 +133,7 @@ public final class MarketplaceAnalyticsService {
                 productMetric.tradeCount(),
                 productMetric.totalQuantity(),
                 franchises,
-                balanceAvailable,
+                rankingAvailable,
                 lifecycle.providerId(),
                 lifecycle.lifecycle().name(),
                 lifecycle.diagnostic()));

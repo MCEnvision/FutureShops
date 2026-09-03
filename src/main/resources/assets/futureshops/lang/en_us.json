@@ -1,6 +1,7 @@
 {
   "gui.futureshops.economy.balance_unavailable": "Balance unavailable",
   "gui.futureshops.economy.provider_unavailable": "%s provider is %s",
+  "gui.futureshops.economy.leaderboard_unavailable": "Balance leaderboard unavailable for %s",
   "command.futureshops.economy.internal_only": "Physical currency is available only when the internal economy is ready.",
   "command.futureshops.economy.unavailable": "Economy balance is unavailable. Try again when the provider is ready.",
   "gui.futureshops.shop.title": "Server Shop",
