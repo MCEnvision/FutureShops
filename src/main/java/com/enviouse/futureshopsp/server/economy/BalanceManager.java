@@ -1,5 +1,10 @@
 package com.enviouse.futureshopsp.server.economy;
 
+import com.enviouse.futureshopsp.Config;
+import com.enviouse.futureshopsp.api.economy.EconomyApi;
+import com.enviouse.futureshopsp.api.economy.EconomyProviderContext;
+import com.enviouse.futureshopsp.api.economy.EconomyProviderRegistry;
+import com.enviouse.futureshopsp.api.economy.ProviderResolution;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.List;
@@ -12,7 +17,16 @@ public final class BalanceManager {
     }
 
     public static void initialize(MinecraftServer server) {
-        provider = new InternalEconomyProvider(server);
+        EconomyProviderRegistry.freeze();
+        ProviderSelectionSnapshot selection = ProviderSelectionManager.resolveAtStartup(Config.economyProviderId);
+        if (EconomyApi.INTERNAL_PROVIDER_ID.equals(selection.activeProviderId())) {
+            provider = new InternalEconomyProvider(server);
+            return;
+        }
+        ProviderResolution resolution = EconomyProviderRegistry.resolve(
+                selection.activeProviderId(), new EconomyProviderContext(server));
+        provider = new UnavailableEconomyProvider(selection.activeProviderId(), resolution.lifecycle(),
+                resolution.diagnostic());
     }
 
     public static void clear() {

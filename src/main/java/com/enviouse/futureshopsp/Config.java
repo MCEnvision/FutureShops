@@ -1,5 +1,6 @@
 package com.enviouse.futureshopsp;
 
+import com.enviouse.futureshopsp.server.economy.ProviderSelectionManager;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.config.ModConfigEvent;
@@ -17,6 +18,14 @@ public class Config {
     private static final ModConfigSpec.ConfigValue<String> ECONOMY_CURRENCY_NAME = BUILDER
         .comment("Display name of the economy currency")
         .define("economy.currency_name", "Coins");
+
+    private static final ModConfigSpec.ConfigValue<String> ECONOMY_PROVIDER = BUILDER
+        .comment(
+            "Provider identifier selected on the next server restart.",
+            "The default internal provider keeps existing installations on the built in wallet.",
+            "Unknown or incompatible providers leave monetary operations unavailable without fallback."
+        )
+        .define("economy.provider", "internal");
 
     private static final ModConfigSpec.IntValue ECONOMY_DECIMALS = BUILDER
         .comment("Number of decimal places for displayed balances")
@@ -114,6 +123,7 @@ public class Config {
     static final ModConfigSpec SPEC = BUILDER.build();
 
     public static String economyCurrencyName;
+    public static String economyProviderId;
     public static int economyCurrencyDecimals;
     public static long economyStartingBalanceMinorUnits;
     public static long economyMaxBalanceMinorUnits;
@@ -148,6 +158,8 @@ public class Config {
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event) {
         economyCurrencyName = ECONOMY_CURRENCY_NAME.get();
+        economyProviderId = ECONOMY_PROVIDER.get();
+        ProviderSelectionManager.stageReload(economyProviderId);
         economyCurrencyDecimals = ECONOMY_DECIMALS.get();
         economyStartingBalanceMinorUnits = ECONOMY_STARTING_BALANCE_MINOR_UNITS.get();
         economyMaxBalanceMinorUnits = ECONOMY_MAX_BALANCE_MINOR_UNITS.get();
