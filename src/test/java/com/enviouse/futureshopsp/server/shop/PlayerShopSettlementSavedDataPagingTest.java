@@ -66,6 +66,18 @@ class PlayerShopSettlementSavedDataPagingTest {
     }
 
     @Test
+    void malformedSaleFactsAreRejectedBeforeMutation() {
+        UUID owner = UUID.randomUUID();
+        PlayerShopSettlementSavedData data = new PlayerShopSettlementSavedData();
+
+        assertFalse(data.recordSale(owner, 42L, 1L, null, 1));
+        assertFalse(data.recordSale(owner, 42L, 1L, " ", 1));
+        assertFalse(data.recordSale(owner, 42L, 1L, "minecraft:stone", 0));
+        assertFalse(data.recordSale(owner, 42L, 1L, "x".repeat(257), 1));
+        assertTrue(data.snapshot(owner, 42L, 6).rows().isEmpty());
+    }
+
+    @Test
     void checksumTamperingBlocksSettlementRecovery() {
         UUID owner = UUID.randomUUID();
         PlayerShopSettlementSavedData data = new PlayerShopSettlementSavedData();

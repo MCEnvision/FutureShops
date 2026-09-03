@@ -215,7 +215,12 @@ public final class PlayerShopSettlementSavedData extends SavedData {
     }
 
     public synchronized boolean recordSale(UUID owner, long shopPosLong, long amountMinor, String itemId, int quantity) {
-        if (!canRecordSale(owner, shopPosLong, amountMinor)) {
+        if (!canRecordSale(owner, shopPosLong, amountMinor)
+                || itemId == null || itemId.isBlank() || itemId.length() > MAX_ITEM_ID_LENGTH
+                || quantity <= 0) {
+            return false;
+        }
+        if (!rowsByOwner.containsKey(owner) && rowsByOwner.size() >= MAX_OWNERS) {
             return false;
         }
         ShopSettlement current = settlementsByShopPos.get(shopPosLong);
@@ -230,7 +235,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
                 current.claimAmount()
         ));
 
-        appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, amountMinor, "SALE", itemId == null ? "" : itemId, Math.max(0, quantity)));
+        appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, amountMinor, "SALE", itemId, quantity));
         setDirty();
         return true;
     }
