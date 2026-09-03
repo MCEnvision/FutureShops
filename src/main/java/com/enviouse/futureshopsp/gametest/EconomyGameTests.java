@@ -4,6 +4,7 @@ import com.enviouse.futureshopsp.Futureshops;
 import com.enviouse.futureshopsp.api.economy.RequestId;
 import com.enviouse.futureshopsp.api.economy.MutationKind;
 import com.enviouse.futureshopsp.api.economy.MutationRequest;
+import com.enviouse.futureshopsp.api.economy.ProviderError;
 import com.enviouse.futureshopsp.api.economy.ProviderLifecycle;
 import com.enviouse.futureshopsp.init.ModItems;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
@@ -37,6 +38,10 @@ public final class EconomyGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void internalEconomyAndRegistration(GameTestHelper helper) {
+        if (!"internal".equals(BalanceManager.getLifecycleSnapshotOrUnresolved().providerId())) {
+            helper.succeed();
+            return;
+        }
         helper.assertTrue(ModList.get().isLoaded(Futureshops.MODID),
                 "FutureShops must be loaded in the GameTest server");
         ResourceLocation moneyId = BuiltInRegistries.ITEM.getKey(ModItems.MONEY_ITEM.get());
@@ -59,6 +64,10 @@ public final class EconomyGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void publicMutationRoutesUseDurableCoordinator(GameTestHelper helper) {
+        if (!"internal".equals(BalanceManager.getLifecycleSnapshotOrUnresolved().providerId())) {
+            helper.succeed();
+            return;
+        }
         UUID payer = UUID.fromString("00000000-0000-0000-0000-000000000238");
         UUID recipient = UUID.fromString("00000000-0000-0000-0000-000000000239");
         helper.assertTrue(BalanceManager.setInternalBalance(payer, 1_000L).confirmed(),
@@ -83,7 +92,35 @@ public final class EconomyGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 100)
+    public static void pixelmonPlayerMutationRefusal(GameTestHelper helper) {
+        if (!"pixelmon".equals(BalanceManager.getLifecycleSnapshotOrUnresolved().providerId())) {
+            helper.succeed();
+            return;
+        }
+
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        var query = BalanceManager.queryBalance(player.getUUID());
+        helper.assertTrue(query.confirmed(),
+                "the exact Pixelmon provider must answer a live player balance query");
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), player.getUUID(),
+                1L, MutationKind.WITHDRAW);
+        var preflight = BalanceManager.getCoordinator().preflight(request);
+        helper.assertTrue(preflight.error() == ProviderError.CAPABILITY_MISSING,
+                "Pixelmon player preflight must refuse unsupported mutation capabilities");
+        var mutation = BalanceManager.getCoordinator().withdraw(request);
+        helper.assertTrue(mutation.error() == ProviderError.CAPABILITY_MISSING,
+                "Pixelmon player withdrawal must refuse before external mutation");
+        helper.assertTrue(BalanceManager.getCoordinator().custody(request.requestId().child("custody")).isEmpty(),
+                "Pixelmon mutation refusal must not create item custody");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
     public static void twoServerPlayersKeepIndependentAuthoritativeBalances(GameTestHelper helper) {
+        if (!"internal".equals(BalanceManager.getLifecycleSnapshotOrUnresolved().providerId())) {
+            helper.succeed();
+            return;
+        }
         ServerPlayer buyer = helper.makeMockServerPlayerInLevel();
         ServerPlayer seller = helper.makeMockServerPlayerInLevel();
         helper.assertTrue(!buyer.getUUID().equals(seller.getUUID()),
@@ -312,6 +349,10 @@ public final class EconomyGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void reconnectReplayPreservesStableRequestIdentity(GameTestHelper helper) {
+        if (!"internal".equals(BalanceManager.getLifecycleSnapshotOrUnresolved().providerId())) {
+            helper.succeed();
+            return;
+        }
         UUID player = UUID.fromString("00000000-0000-0000-0000-000000000242");
         RequestId request = new RequestId(UUID.randomUUID());
         helper.assertTrue(BalanceManager.setInternalBalance(player, 500L).confirmed(),
