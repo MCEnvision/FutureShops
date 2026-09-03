@@ -6,7 +6,7 @@ This record covers the completed local implementation work for `CORE-REQ-001`, `
 
 ## Revision and pins
 
-The starting revision was `ed41bf304a80d2c8c29f27e36e6e1fd83d8c644a`. The implementation changes are uncommitted at the time this record is authored and will be bound to the implementation commit in the completion packet.
+The starting revision was `ed41bf304a80d2c8c29f27e36e6e1fd83d8c644a`. The implementation commit is `41eb72fadf12f5a95b64afa203338d96e78ae430`, signed by EnVy, and pushed to the phase branch.
 
 The project now declares:
 
