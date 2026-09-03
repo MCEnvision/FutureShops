@@ -42,6 +42,12 @@ All new records use explicit schema versions, bounded fields, defensive enum and
 
 Custody and claims are separate from provider balances. A held item cannot be claimed or released through an invalid transition. A pending claim remains durable while the owner is offline or the lifecycle is frozen. Recovery must use the originating provider and request identity, and it must never guess an external balance or create an automatic refund for an unknown effect.
 
+Player shop settlement claims reserve a request UUID and amount in settlement SavedData before
+crediting the owner. The coordinator records the same request in the durable claim index and
+provider journal. Pending proceeds recorded while a claim is in flight remain available. The
+settlement amount is reduced only after a confirmed provider result, and retries reuse the same
+request identity.
+
 ## Existing surfaces and current limits
 
 Legacy `EconomyProvider` calls are presented through the coordinator backed view, so existing commands and public APIs receive fail closed behavior when a selected provider is unavailable. Complete checkout custody ordering, player shop multi leg settlement, external Pixelmon and Vault adapters, and the full restart and GameTest matrix are still owned by later tasks in the active phase plan.

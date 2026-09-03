@@ -42,7 +42,10 @@ public final class PlayerShopSettlementSavedData extends SavedData {
             UUID owner = row.getUUID("owner");
             long pending = row.getLong("pending");
             long lifetime = row.getLong("lifetime");
-            data.settlementsByShopPos.put(shopPos, new ShopSettlement(owner, pending, lifetime));
+            UUID claimRequest = row.hasUUID("claimRequest") ? row.getUUID("claimRequest") : null;
+            long claimAmount = Math.max(0L, row.getLong("claimAmount"));
+            data.settlementsByShopPos.put(shopPos,
+                    new ShopSettlement(owner, pending, lifetime, claimRequest, claimAmount));
         }
 
         ListTag ownerRows = tag.getList("ownerRows", Tag.TAG_COMPOUND);
@@ -81,6 +84,10 @@ public final class PlayerShopSettlementSavedData extends SavedData {
             row.putUUID("owner", entry.getValue().owner());
             row.putLong("pending", entry.getValue().pendingMinor());
             row.putLong("lifetime", entry.getValue().lifetimeMinor());
+            if (entry.getValue().claimRequest() != null) {
+                row.putUUID("claimRequest", entry.getValue().claimRequest());
+                row.putLong("claimAmount", entry.getValue().claimAmount());
+            }
             settlementList.add(row);
         }
         tag.put("settlements", settlementList);
@@ -116,30 +123,62 @@ public final class PlayerShopSettlementSavedData extends SavedData {
     public synchronized void recordSale(UUID owner, long shopPosLong, long amountMinor, String itemId, int quantity) {
         ShopSettlement current = settlementsByShopPos.get(shopPosLong);
         if (current == null || !current.owner().equals(owner)) {
-            current = new ShopSettlement(owner, 0L, 0L);
+            current = new ShopSettlement(owner, 0L, 0L, null, 0L);
         }
         settlementsByShopPos.put(shopPosLong, new ShopSettlement(
                 owner,
-                current.pendingMinor() + Math.max(0L, amountMinor),
-                current.lifetimeMinor() + Math.max(0L, amountMinor)
+                Math.addExact(current.pendingMinor(), Math.max(0L, amountMinor)),
+                Math.addExact(current.lifetimeMinor(), Math.max(0L, amountMinor)),
+                current.claimRequest(),
+                current.claimAmount()
         ));
 
         appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, amountMinor, "SALE", itemId == null ? "" : itemId, Math.max(0, quantity)));
         setDirty();
     }
 
-    public synchronized long claim(UUID owner, long shopPosLong) {
+    public synchronized SettlementClaim beginClaim(UUID owner, long shopPosLong) {
         ShopSettlement settlement = settlementsByShopPos.get(shopPosLong);
         if (settlement == null || !settlement.owner().equals(owner)) {
-            return 0L;
+            return null;
         }
         long pending = Math.max(0L, settlement.pendingMinor());
-        settlementsByShopPos.put(shopPosLong, new ShopSettlement(owner, 0L, settlement.lifetimeMinor()));
-        if (pending > 0L) {
-            appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, pending, "CLAIM", "", 0));
+        if (pending <= 0L) {
+            return null;
         }
+        UUID request = settlement.claimRequest();
+        long amount = settlement.claimAmount();
+        if (request == null || amount <= 0L) {
+            request = UUID.randomUUID();
+            amount = pending;
+            settlementsByShopPos.put(shopPosLong,
+                    new ShopSettlement(owner, pending, settlement.lifetimeMinor(), request, amount));
+            setDirty();
+        }
+        return new SettlementClaim(request, amount);
+    }
+
+    public synchronized boolean completeClaim(UUID owner, long shopPosLong,
+                                               UUID requestId, long amountMinor) {
+        if (requestId == null || amountMinor <= 0L) {
+            return false;
+        }
+        ShopSettlement settlement = settlementsByShopPos.get(shopPosLong);
+        if (settlement == null || !settlement.owner().equals(owner)
+                || !requestId.equals(settlement.claimRequest())
+                || settlement.claimAmount() != amountMinor) {
+            return false;
+        }
+        long pending = Math.max(0L, settlement.pendingMinor());
+        if (pending < amountMinor) {
+            return false;
+        }
+        settlementsByShopPos.put(shopPosLong,
+                new ShopSettlement(owner, pending - amountMinor, settlement.lifetimeMinor(), null, 0L));
+        appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong,
+                amountMinor, "CLAIM", "", 0));
         setDirty();
-        return pending;
+        return true;
     }
 
     public synchronized boolean rollbackPending(UUID owner, long shopPosLong, long amountMinor) {
@@ -154,7 +193,8 @@ public final class PlayerShopSettlementSavedData extends SavedData {
         if (currentPending < amountMinor) {
             return false;
         }
-        settlementsByShopPos.put(shopPosLong, new ShopSettlement(owner, currentPending - amountMinor, settlement.lifetimeMinor()));
+        settlementsByShopPos.put(shopPosLong, new ShopSettlement(owner, currentPending - amountMinor,
+                settlement.lifetimeMinor(), settlement.claimRequest(), settlement.claimAmount()));
         appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, amountMinor, "ROLLBACK", "", 0));
         setDirty();
         return true;
@@ -274,7 +314,11 @@ public final class PlayerShopSettlementSavedData extends SavedData {
         return snapshot;
     }
 
-    private record ShopSettlement(UUID owner, long pendingMinor, long lifetimeMinor) {
+    public record SettlementClaim(UUID requestId, long amountMinor) {
+    }
+
+    private record ShopSettlement(UUID owner, long pendingMinor, long lifetimeMinor,
+                                  UUID claimRequest, long claimAmount) {
     }
 
     private record RevenueRow(long timestampEpochSeconds, long shopPosLong, long amountMinor, String type, String itemId, int quantity) {
@@ -283,4 +327,3 @@ public final class PlayerShopSettlementSavedData extends SavedData {
     public record Snapshot(long pendingMinor, long lifetimeMinor, List<String> rows) {
     }
 }
-

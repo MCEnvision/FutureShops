@@ -1,6 +1,14 @@
 package com.enviouse.futureshopsp.server.shop;
 
 import com.enviouse.futureshopsp.block.ShopBlockEntity;
+import com.enviouse.futureshopsp.api.economy.MutationKind;
+import com.enviouse.futureshopsp.api.economy.MutationRequest;
+import com.enviouse.futureshopsp.api.economy.ProviderError;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
+import com.enviouse.futureshopsp.api.economy.RequestId;
+import com.enviouse.futureshopsp.server.economy.ClaimRecord;
+import com.enviouse.futureshopsp.server.economy.ClaimState;
+import com.enviouse.futureshopsp.server.economy.EconomyTransactionCoordinator;
 import com.enviouse.futureshopsp.data.PlayerShopListingData;
 import com.enviouse.futureshopsp.data.PlayerShopPromoData;
 import com.enviouse.futureshopsp.data.SettlementHistoryRow;
@@ -405,17 +413,36 @@ public final class PlayerShopBlockService {
                     sendResult(player, false, ShopResultCode.SERVER_ERROR);
                     return;
                 }
-                long claimed = PlayerShopSettlementSavedData.get(player.getServer()).claim(player.getUUID(), pos.asLong());
-                if (claimed <= 0L) {
+                PlayerShopSettlementSavedData settlements = PlayerShopSettlementSavedData.get(player.getServer());
+                PlayerShopSettlementSavedData.SettlementClaim settlementClaim =
+                        settlements.beginClaim(player.getUUID(), pos.asLong());
+                if (settlementClaim == null || settlementClaim.amountMinor() <= 0L) {
                     sendResult(player, false, ShopResultCode.NOTHING_TO_CLAIM);
                     return;
                 }
-                TransactionResult deposit = BalanceManager.getProvider().deposit(player.getUUID(), claimed);
-                if (!deposit.success()) {
-                    PlayerShopSettlementSavedData.get(player.getServer()).recordSale(player.getUUID(), pos.asLong(), claimed, "", 0);
-                    sendResult(player, false, ShopResultCode.CLAIM_FAILED);
+                RequestId requestId = new RequestId(settlementClaim.requestId());
+                EconomyTransactionCoordinator coordinator = BalanceManager.getCoordinator();
+                String description = "player shop settlement " + pos.asLong();
+                ClaimRecord claim = coordinator.claim(requestId).orElseGet(() ->
+                        coordinator.createClaim(requestId, player.getUUID(), settlementClaim.amountMinor(), description));
+                if (claim.state() == ClaimState.RESOLVED) {
+                    sendResult(player, false, ShopResultCode.NOTHING_TO_CLAIM);
                     return;
                 }
+                MutationRequest depositRequest = MutationRequest.forPlayer(requestId, player.getUUID(),
+                        settlementClaim.amountMinor(), MutationKind.DEPOSIT);
+                ProviderResult<?> deposit = coordinator.deposit(depositRequest);
+                if (!deposit.confirmed()) {
+                    sendResult(player, false, mapProviderError(deposit));
+                    return;
+                }
+                if (!settlements.completeClaim(player.getUUID(), pos.asLong(), settlementClaim.requestId(),
+                        settlementClaim.amountMinor())) {
+                    sendResult(player, false, ShopResultCode.SERVER_ERROR);
+                    return;
+                }
+                coordinator.deliverClaim(requestId);
+                coordinator.resolveClaim(requestId);
                 // Record claim funds in transaction history
                 TransactionHistoryService.record(
                         player,
@@ -423,7 +450,7 @@ public final class PlayerShopBlockService {
                         "CART_CLAIM",
                         "",
                         0,
-                        claimed,
+                        settlementClaim.amountMinor(),
                         "SETTLEMENT_CLAIM");
             }
             default -> {
@@ -1512,6 +1539,14 @@ public final class PlayerShopBlockService {
 
     private static void sendResult(ServerPlayer player, boolean success, ShopResultCode code) {
         ShopPackets.sendToPlayer(player, new S2CPlayerShopResultPacket(success, code.wire(), ""));
+    }
+
+    private static ShopResultCode mapProviderError(ProviderResult<?> result) {
+        if (result == null) {
+            return ShopResultCode.CLAIM_FAILED;
+        }
+        return result.error() == ProviderError.INSUFFICIENT_FUNDS
+                ? ShopResultCode.INSUFFICIENT_FUNDS : ShopResultCode.CLAIM_FAILED;
     }
 
     /**
