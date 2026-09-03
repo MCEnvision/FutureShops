@@ -90,6 +90,19 @@ class EconomyJournalSavedDataTest {
     }
 
     @Test
+    void confirmedStatusWithoutReceiptIsReadOnlyAndNeverLoadedAsSuccess() {
+        EconomyJournalSavedData data = new EconomyJournalSavedData();
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 12L, MutationKind.WITHDRAW);
+        data.append(new EconomyJournalRecord(request, EconomyTransactionState.RESOLVED,
+                Optional.empty(), ProviderResultStatus.CONFIRMED, ""));
+
+        EconomyJournalSavedData loaded = EconomyJournalSavedData.load(data.save(new CompoundTag(), null), null);
+
+        assertFalse(loaded.integrityValid());
+        assertTrue(loaded.snapshot().isEmpty());
+    }
+
+    @Test
     void newerSchemaIsReadOnlyAndNeverInterpretedAsCompleted() {
         CompoundTag saved = new CompoundTag();
         saved.putInt("schemaVersion", 99);

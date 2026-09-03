@@ -185,6 +185,9 @@ public final class EconomyJournalSavedData extends SavedData implements EconomyT
         if (receipt.isPresent() && !validReceipt(request, receipt.orElseThrow())) {
             throw new IllegalArgumentException("journal receipt does not match request");
         }
+        if ((status == ProviderResultStatus.CONFIRMED) != receipt.isPresent()) {
+            throw new IllegalArgumentException("journal confirmed status and receipt disagree");
+        }
         return new EconomyJournalRecord(request, state, receipt, status, diagnostic, providerId);
     }
 

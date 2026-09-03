@@ -571,9 +571,18 @@ public final class EconomyTransactionCoordinator {
     private ProviderResult<MutationReceipt> replay(EconomyJournalRecord record) {
         if (record.state() == EconomyTransactionState.RESOLVED
                 || record.state() == EconomyTransactionState.EXTERNAL_CONFIRMED) {
-            return record.receipt().map(ProviderResult::confirmed)
-                    .orElseGet(() -> ProviderResult.rejected(ProviderError.DUPLICATE_REQUEST,
-                            record.diagnostic()));
+            if (record.resultStatus() == ProviderResultStatus.CONFIRMED && record.receipt().isEmpty()) {
+                lifecycle.markAmbiguous("confirmed transaction receipt is missing");
+                return ProviderResult.recoveryRequired("confirmed transaction receipt is missing");
+            }
+            if (record.resultStatus() == ProviderResultStatus.CONFIRMED) {
+                return ProviderResult.confirmed(record.receipt().orElseThrow());
+            }
+            if (record.resultStatus() != ProviderResultStatus.REJECTED || record.receipt().isPresent()) {
+                lifecycle.markAmbiguous("terminal transaction outcome is inconsistent");
+                return ProviderResult.recoveryRequired("terminal transaction outcome is inconsistent");
+            }
+            return ProviderResult.rejected(ProviderError.DUPLICATE_REQUEST, record.diagnostic());
         }
         if (record.state() == EconomyTransactionState.UNCERTAIN) {
             return ProviderResult.recoveryRequired("transaction requires operator recovery");
