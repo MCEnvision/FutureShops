@@ -1,0 +1,83 @@
+package com.enviouse.futureshopsp.server.shop;
+
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.neoforged.testframework.junit.EphemeralTestServerProvider;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import java.util.List;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+@ExtendWith(EphemeralTestServerProvider.class)
+class PlayerShopBarterEscrowSavedDataTest {
+    private static final UUID BUYER = UUID.fromString("00000000-0000-0000-0000-000000000301");
+
+    @Test
+    void exactStackLifecycleSurvivesUncleanSave(MinecraftServer server) {
+        HolderLookup.Provider provider = server.registryAccess();
+        UUID request = UUID.fromString("00000000-0000-0000-0000-000000000302");
+        List<ItemStack> stacks = List.of(new ItemStack(Items.DIAMOND, 2), new ItemStack(Items.DIAMOND, 1));
+        PlayerShopBarterEscrowSavedData data = new PlayerShopBarterEscrowSavedData();
+
+        assertTrue(data.prepare(request, BUYER, 42L, "minecraft:overworld", "minecraft:diamond", 3,
+                stacks, provider));
+        data.markUnclean();
+
+        CompoundTag saved = data.save(new CompoundTag(), provider);
+        PlayerShopBarterEscrowSavedData recovered = PlayerShopBarterEscrowSavedData.load(saved, provider);
+
+        assertFalse(recovered.cleanMarkerValid());
+        assertTrue(recovered.integrityValid());
+        assertEquals(PlayerShopBarterEscrowSavedData.State.PREPARED,
+                recovered.find(request).state());
+        assertTrue(recovered.markRemoved(request, stacks, provider));
+        assertTrue(recovered.markStored(request));
+
+        CompoundTag stored = recovered.save(new CompoundTag(), provider);
+        PlayerShopBarterEscrowSavedData storedAgain = PlayerShopBarterEscrowSavedData.load(stored, provider);
+        assertEquals(PlayerShopBarterEscrowSavedData.State.STORED,
+                storedAgain.find(request).state());
+        assertTrue(storedAgain.markComplete(request));
+        assertFalse(storedAgain.hasIncompleteRecords());
+    }
+
+    @Test
+    void checksumTamperingDoesNotReconstructARecord(MinecraftServer server) {
+        HolderLookup.Provider provider = server.registryAccess();
+        UUID request = UUID.fromString("00000000-0000-0000-0000-000000000303");
+        PlayerShopBarterEscrowSavedData data = new PlayerShopBarterEscrowSavedData();
+        assertTrue(data.prepare(request, BUYER, 43L, "minecraft:overworld", "minecraft:diamond", 1,
+                List.of(new ItemStack(Items.DIAMOND)), provider));
+
+        CompoundTag saved = data.save(new CompoundTag(), provider);
+        ListTag records = saved.getList("records", 10);
+        ((CompoundTag) records.get(0)).putString("checksum", "tampered");
+
+        PlayerShopBarterEscrowSavedData recovered = PlayerShopBarterEscrowSavedData.load(saved, provider);
+        assertFalse(recovered.integrityValid());
+        assertTrue(recovered.snapshot().isEmpty());
+    }
+
+    @Test
+    void mismatchedRemovedContentsStayPreparedAndCanBeFrozen(MinecraftServer server) {
+        HolderLookup.Provider provider = server.registryAccess();
+        UUID request = UUID.fromString("00000000-0000-0000-0000-000000000304");
+        PlayerShopBarterEscrowSavedData data = new PlayerShopBarterEscrowSavedData();
+        assertTrue(data.prepare(request, BUYER, 44L, "minecraft:overworld", "minecraft:diamond", 1,
+                List.of(new ItemStack(Items.DIAMOND)), provider));
+
+        assertFalse(data.markRemoved(request, List.of(new ItemStack(Items.EMERALD)), provider));
+        assertEquals(PlayerShopBarterEscrowSavedData.State.PREPARED, data.find(request).state());
+        assertTrue(data.markRecoveryRequired(request));
+        assertTrue(data.hasIncompleteRecords());
+    }
+}
