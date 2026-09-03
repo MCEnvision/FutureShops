@@ -20,6 +20,11 @@ base {
     archivesName = mod_id
 }
 
+tasks.withType(org.gradle.api.tasks.bundling.AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 def gameTestStructure = layout.buildDirectory.file("generated/gameTestResources/data/${mod_id}/structure/empty.nbt")
