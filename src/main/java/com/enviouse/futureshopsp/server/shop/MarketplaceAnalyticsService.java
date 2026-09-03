@@ -181,7 +181,7 @@ public final class MarketplaceAnalyticsService {
             String featuredItemId = shopListingCount > 0 ? shop.getListings().get(0).itemId() : "";
             for (ShopBlockEntity.Listing listing : shop.getListings()) {
                 int stock = PlayerShopBlockService.countStock(level, shop, pos, listing);
-                shopTotalStock += stock;
+                shopTotalStock = Math.addExact(shopTotalStock, stock);
                 if (stock <= LOW_STOCK_THRESHOLD) {
                     shopLowCount++;
                     alerts.add(displayItemName(listing.itemId()) + " low at " + shopNameOrBlank
@@ -200,11 +200,11 @@ public final class MarketplaceAnalyticsService {
                     shop.getLinkedStoragePos() != null,
                     settlement.pendingMinor(),
                     settlement.lifetimeMinor()));
-            revenue += settlement.lifetimeMinor();
-            pending += settlement.pendingMinor();
-            listingCount += shopListingCount;
-            totalStock += shopTotalStock;
-            lowSupplyCount += shopLowCount;
+            revenue = Math.addExact(revenue, settlement.lifetimeMinor());
+            pending = Math.addExact(pending, settlement.pendingMinor());
+            listingCount = Math.addExact(listingCount, shopListingCount);
+            totalStock = Math.addExact(totalStock, shopTotalStock);
+            lowSupplyCount = Math.addExact(lowSupplyCount, shopLowCount);
         }
 
         summaries.sort(Comparator.comparingLong(OwnedShopSummary::lifetimeMinor).reversed());
@@ -224,7 +224,7 @@ public final class MarketplaceAnalyticsService {
         String topItemId = null;
         int topItemTradeCount = 0;
         long topItemTotalQty = 0L;
-        Map<String, int[]> productTotals = new HashMap<>(); // itemId → [tradeCount, totalQuantity]
+        Map<String, long[]> productTotals = new HashMap<>(); // itemId → [tradeCount, totalQuantity]
 
         for (Map.Entry<UUID, List<TransactionHistoryEntry>> playerEntry : entriesByPlayer.entrySet()) {
             List<TransactionHistoryEntry> entries = playerEntry.getValue();
@@ -239,13 +239,13 @@ public final class MarketplaceAnalyticsService {
                         || "cart".equalsIgnoreCase(entry.itemId())) {
                     continue;
                 }
-                int[] totals = productTotals.computeIfAbsent(entry.itemId(), ignored -> new int[]{0, 0});
-                totals[0]++;
-                totals[1] += Math.max(1, entry.quantity());
+                long[] totals = productTotals.computeIfAbsent(entry.itemId(), ignored -> new long[]{0L, 0L});
+                totals[0] = Math.addExact(totals[0], 1L);
+                totals[1] = Math.addExact(totals[1], Math.max(1L, entry.quantity()));
                 if (totals[1] > topItemTotalQty
                         || (totals[1] == topItemTotalQty && totals[0] > topItemTradeCount)) {
                     topItemId = entry.itemId();
-                    topItemTradeCount = totals[0];
+                    topItemTradeCount = Math.toIntExact(totals[0]);
                     topItemTotalQty = totals[1];
                 }
             }

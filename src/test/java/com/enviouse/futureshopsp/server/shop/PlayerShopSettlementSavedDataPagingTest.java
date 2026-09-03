@@ -10,6 +10,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PlayerShopSettlementSavedDataPagingTest {
@@ -63,6 +64,16 @@ class PlayerShopSettlementSavedDataPagingTest {
         assertFalse(data.canRecordSale(owner, 42L, 1L));
         assertFalse(data.recordSale(owner, 42L, 1L, "minecraft:dirt", 1));
         assertEquals(Long.MAX_VALUE, data.snapshot(owner, 42L, 6).pendingMinor());
+    }
+
+    @Test
+    void lifetimeAnalyticsOverflowIsRejectedInsteadOfWrapping() {
+        UUID owner = UUID.randomUUID();
+        PlayerShopSettlementSavedData data = new PlayerShopSettlementSavedData();
+        assertTrue(data.recordSale(owner, 42L, Long.MAX_VALUE, "minecraft:stone", 1));
+        assertTrue(data.recordSale(owner, 43L, Long.MAX_VALUE, "minecraft:dirt", 1));
+
+        assertThrows(ArithmeticException.class, data::snapshotLifetimeMinorByOwner);
     }
 
     @Test

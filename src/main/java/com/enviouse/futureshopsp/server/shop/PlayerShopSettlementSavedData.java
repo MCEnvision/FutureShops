@@ -415,7 +415,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
     public synchronized Map<UUID, Long> snapshotLifetimeMinorByOwner() {
         Map<UUID, Long> totals = new HashMap<>();
         for (ShopSettlement settlement : settlementsByShopPos.values()) {
-            totals.merge(settlement.owner(), Math.max(0L, settlement.lifetimeMinor()), Long::sum);
+            totals.merge(settlement.owner(), Math.max(0L, settlement.lifetimeMinor()), Math::addExact);
         }
         return totals;
     }
