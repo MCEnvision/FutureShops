@@ -171,6 +171,13 @@ public final class EconomyTransactionCoordinator {
         }
     }
 
+    public ProviderResult<BalanceSnapshot> preflight(MutationRequest request) {
+        Objects.requireNonNull(request, "request");
+        synchronized (lock) {
+            return preflightInternal(request);
+        }
+    }
+
     public ProviderResult<MutationReceipt> withdraw(MutationRequest request) {
         return execute(request, MutationKind.WITHDRAW);
     }
@@ -239,7 +246,8 @@ public final class EconomyTransactionCoordinator {
                 lifecycle.markRecovered();
                 return lookup;
             }
-            if (lookup != null && lookup.status() == ProviderResultStatus.REJECTED) {
+            if (lookup != null && lookup.status() == ProviderResultStatus.REJECTED
+                    && lookup.error() != ProviderError.RECEIPT_NOT_FOUND) {
                 replace(record, EconomyTransactionState.RESOLVED, Optional.empty(),
                         ProviderResultStatus.REJECTED, lookup.diagnostic());
                 lifecycle.markRecovered();
@@ -306,6 +314,11 @@ public final class EconomyTransactionCoordinator {
     }
 
     private ProviderResult<MutationReceipt> admit(MutationRequest request) {
+        ProviderResult<BalanceSnapshot> preflight = preflightInternal(request);
+        return preflight.confirmed() ? null : copyFailure(preflight);
+    }
+
+    private ProviderResult<BalanceSnapshot> preflightInternal(MutationRequest request) {
         EconomyLifecycleSnapshot state = lifecycle.snapshot();
         if (!state.acceptsMutations()) {
             if (state.lifecycle() == ProviderLifecycle.RECOVERING || state.lifecycle() == ProviderLifecycle.FROZEN) {
@@ -334,9 +347,9 @@ public final class EconomyTransactionCoordinator {
             return ProviderResult.unavailable(ProviderError.PROVIDER_EXCEPTION, "provider returned no precheck result");
         }
         if (!precheck.confirmed()) {
-            return copyFailure(precheck);
+            return precheck;
         }
-        return null;
+        return precheck;
     }
 
     private void requireReadyMutation() {

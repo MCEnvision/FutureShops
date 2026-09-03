@@ -107,6 +107,25 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
+    void missingReceiptDuringRecoveryFreezesInsteadOfGuessingRejection() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+        journal.append(new EconomyJournalRecord(request, EconomyTransactionState.EXTERNAL_PENDING,
+                Optional.empty(), ProviderResultStatus.UNAVAILABLE, ""));
+        lifecycle.markUncleanStart();
+
+        var result = coordinator.recover(request.requestId());
+
+        assertEquals(ProviderResultStatus.RECOVERY_REQUIRED, result.status());
+        assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
+        assertEquals(EconomyTransactionState.UNCERTAIN,
+                journal.find(request.requestId()).orElseThrow().state());
+    }
+
+    @Test
     void lifecycleWritesCleanMarkerOnlyAfterDrainFlushes() {
         EconomyLifecycleController lifecycle = readyLifecycle();
         lifecycle.beginDraining();

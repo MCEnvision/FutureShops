@@ -3,13 +3,15 @@ package com.enviouse.futureshopsp.server.economy;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Objects;
 
 /** Small integrity helper for durable economy records. */
-final class EconomyRecordChecksum {
+public final class EconomyRecordChecksum {
     private EconomyRecordChecksum() {
     }
 
-    static String sha256(String canonical) {
+    public static String sha256(String canonical) {
+        Objects.requireNonNull(canonical, "canonical");
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(canonical.getBytes(StandardCharsets.UTF_8));
