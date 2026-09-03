@@ -1,6 +1,7 @@
 package com.enviouse.futureshopsp.gametest;
 
 import com.enviouse.futureshopsp.Futureshops;
+import com.enviouse.futureshopsp.api.ShopModAPI;
 import com.enviouse.futureshopsp.api.economy.RequestId;
 import com.enviouse.futureshopsp.api.economy.MutationKind;
 import com.enviouse.futureshopsp.api.economy.MutationRequest;
@@ -110,6 +111,16 @@ public final class EconomyGameTests {
         var mutation = BalanceManager.getCoordinator().withdraw(request);
         helper.assertTrue(mutation.error() == ProviderError.CAPABILITY_MISSING,
                 "Pixelmon player withdrawal must refuse before external mutation");
+        var publicWithdrawal = BalanceManager.withdraw(player.getUUID(), 1L);
+        helper.assertTrue(!publicWithdrawal.success(),
+                "the public balance withdrawal must refuse for a Pixelmon player");
+        var publicDeposit = BalanceManager.deposit(player.getUUID(), 1L);
+        helper.assertTrue(!publicDeposit.success(),
+                "the public balance deposit must refuse for a Pixelmon player");
+        ServerPlayer recipient = helper.makeMockServerPlayerInLevel();
+        var publicTransfer = ShopModAPI.transfer(player.getUUID(), recipient.getUUID(), 1L);
+        helper.assertTrue(!publicTransfer.success(),
+                "the public economy transfer must refuse for Pixelmon players");
         helper.assertTrue(BalanceManager.getCoordinator().custody(request.requestId().child("custody")).isEmpty(),
                 "Pixelmon mutation refusal must not create item custody");
         helper.succeed();
