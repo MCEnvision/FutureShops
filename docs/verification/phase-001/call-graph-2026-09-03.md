@@ -83,3 +83,7 @@ Required additions are grouped by boundary.
 Every direct `BalanceManager` reference listed above is a Phase 001 routing target. Public API and command code must not read internal balances when an external provider is selected. No provider failure may turn into zero, internal metadata, a local shadow balance, or a successful event. Existing worlds, bills, shops, claims, and internal balances are preserved as read only migration inputs until their owning state machines are versioned and tested.
 
 Issue 66 remains frozen and was not queried or modified during this task. External Pixelmon and hybrid runtime evidence remains outside this generic core inventory and is owned by later phases.
+
+## Coordinator checkpoint
+
+The first phase implementation checkpoint adds `EconomyLifecycleController`, `EconomyTransactionCoordinator`, and the checksummed `EconomyJournalSavedData`. Legacy internal calls now use the coordinator through `CoordinatedEconomyProvider`; a selected public provider uses `ExternalLegacyEconomyProvider`. The coordinator refuses capability incomplete mutations before journal intent, preserves duplicate results by request identity, freezes ambiguous outcomes, and performs receipt lookup during recovery. Full route replacement for every shop and player shop leg, custody, claims, compensation, presentation, and security hardening remains unfinished work in this phase.

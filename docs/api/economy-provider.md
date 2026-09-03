@@ -45,4 +45,12 @@ Balances and amounts use signed `long` integer minor units. `MutationRequest` re
 
 The provider readiness snapshot exposes `UNRESOLVED`, `READY`, `DRAINING`, `MISSING`, `INCOMPATIBLE`, `FAILED`, `RECOVERING`, `FROZEN`, and `STOPPED`. FutureShops admits monetary operations only when the selected provider is ready and the operation's required capabilities are proven. Registration and selection are frozen before monetary readiness. Unclean startup and unknown outcomes require recovery, and unknown outcomes freeze external mutation until an operator resolves them with evidence.
 
+## Server coordinator
+
+`EconomyTransactionCoordinator` is the server side boundary used by the legacy provider view. It checks lifecycle and capabilities before calling a provider, writes `PREPARED` and `EXTERNAL_PENDING` journal records before a mutation, validates the returned receipt, and records `EXTERNAL_CONFIRMED` and `RESOLVED` only for a matching confirmed result. A duplicate request returns the recorded result without a second provider call. An ambiguous or exception result becomes `UNCERTAIN` and freezes the lifecycle. Recovery performs durable receipt lookup before any retry.
+
+The journal is stored as versioned `futureshops_economy_journal` SavedData with checksums, request identity, mutation state, provider result status, diagnostic, and optional receipt. It contains no external balance field. The clean marker is written only after the lifecycle enters `DRAINING` and the journal, custody, claims, and checkpoint flush gate succeeds. Missing or invalid startup state enters `RECOVERING`.
+
+Existing internal provider calls are routed through this boundary. The internal adapter supplies the same typed receipt and retry contract, while unresolved external selections stay unavailable. Concrete Pixelmon and Vault adapters remain Phase 002 work and must use this contract rather than the legacy provider interface directly.
+
 The registry, server selection, transaction journal, custody, claims, and surface routing are implemented in their owning phase. This document describes the stable public contract and must be kept aligned with the API source and compatibility tests.
