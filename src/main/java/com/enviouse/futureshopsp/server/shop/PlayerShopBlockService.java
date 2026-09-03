@@ -293,7 +293,12 @@ public final class PlayerShopBlockService {
                     sendResult(player, false, ShopResultCode.NO_LISTING);
                     return;
                 }
-                listing.setMoneyPriceMinor(listing.moneyPriceMinor() + Math.max(1, amount));
+                try {
+                    listing.setMoneyPriceMinor(Math.addExact(listing.moneyPriceMinor(), Math.max(1, amount)));
+                } catch (ArithmeticException exception) {
+                    sendResult(player, false, ShopResultCode.MAX_BALANCE_EXCEEDED);
+                    return;
+                }
             }
             case "PRICE_DOWN" -> {
                 if (listing == null) {
