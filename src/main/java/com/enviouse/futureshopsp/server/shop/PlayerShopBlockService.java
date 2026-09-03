@@ -792,7 +792,7 @@ public final class PlayerShopBlockService {
                         ? barterStorage.adapter().insert(barterStorage.blockEntity(), paymentStacks)
                         : insertAll(barterStorage.handler(), paymentStacks);
                 if (!insertedOk) {
-                    ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), paymentStacks);
+                    restorePaymentToBuyer(buyer, paymentStacks);
                     TransactionResult refund = coordinatorMutation(coordinator, transactionId,
                             "buyer storage refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
                     if (refund.success()) {
@@ -909,7 +909,7 @@ public final class PlayerShopBlockService {
                         ? barterStorage.adapter().insert(barterStorage.blockEntity(), paymentStacks)
                         : insertAll(barterStorage.handler(), paymentStacks);
                 if (!insertedOk) {
-                    ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), paymentStacks);
+                    restorePaymentToBuyer(buyer, paymentStacks);
                     sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, "§cTrade cancelled: the shop's storage is full.");
                     return;
                 }
@@ -1399,11 +1399,22 @@ public final class PlayerShopBlockService {
             return;
         }
         List<ItemStack> recovered = extractNbt(storage, barterItem, barterAmount, nbtAware, nbtPatch);
-        if (!recovered.isEmpty() && !ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), recovered)) {
-            for (ItemStack stack : recovered) {
-                if (!stack.isEmpty()) {
-                    buyer.drop(stack, false);
-                }
+        if (!recovered.isEmpty()) {
+            restorePaymentToBuyer(buyer, recovered);
+        }
+    }
+
+    private static void restorePaymentToBuyer(ServerPlayer buyer, List<ItemStack> stacks) {
+        if (stacks.isEmpty()) {
+            return;
+        }
+        if (ShopTransactionUtil.canFit(buyer.getInventory(), stacks)) {
+            ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), stacks);
+            return;
+        }
+        for (ItemStack stack : stacks) {
+            if (!stack.isEmpty()) {
+                buyer.drop(stack, false);
             }
         }
     }

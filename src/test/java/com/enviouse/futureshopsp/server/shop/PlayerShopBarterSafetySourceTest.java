@@ -19,7 +19,10 @@ class PlayerShopBarterSafetySourceTest {
         assertTrue(source.contains("if (!recorded) {\n                        rollbackBarterPayment(barterStorage"));
         assertTrue(source.contains("private static void rollbackAll(LinkedStorage linkedStorage, LinkedStorage barterStorage"));
         assertTrue(source.contains("rollbackBarterPayment(barterStorage, buyer, barterItem, barterAmount"));
+        assertTrue(source.contains("if (ShopTransactionUtil.canFit(buyer.getInventory(), stacks))"));
+        assertTrue(source.contains("private static void restorePaymentToBuyer(ServerPlayer buyer, List<ItemStack> stacks)"));
         assertFalse(source.contains("rollbackBarterPayment(linkedStorage.handler(),"));
+        assertFalse(source.contains("ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), paymentStacks)"));
     }
 
     private static Path projectDirectory() {
