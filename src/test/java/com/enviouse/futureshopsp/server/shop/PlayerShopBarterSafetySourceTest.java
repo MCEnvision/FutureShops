@@ -21,6 +21,9 @@ class PlayerShopBarterSafetySourceTest {
         assertTrue(source.contains("rollbackBarterPayment(barterStorage, buyer, barterItem, barterAmount"));
         assertTrue(source.contains("if (ShopTransactionUtil.canFit(buyer.getInventory(), stacks))"));
         assertTrue(source.contains("private static void restorePaymentToBuyer(ServerPlayer buyer, List<ItemStack> stacks)"));
+        assertTrue(source.contains("custodyId = custodyIdFor(transactionId, \"buyer compound debit\")"));
+        assertTrue(source.contains("custodyId = custodyIdFor(transactionId, \"buyer debit\")"));
+        assertTrue(source.contains("return rootRequest.child(role).child(\"custody\")"));
         assertFalse(source.contains("rollbackBarterPayment(linkedStorage.handler(),"));
         assertFalse(source.contains("ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), paymentStacks)"));
     }

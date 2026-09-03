@@ -623,7 +623,7 @@ public final class PlayerShopBlockService {
 
             EconomyTransactionCoordinator coordinator = BalanceManager.getCoordinator();
             RequestId transactionId = RequestId.random();
-            RequestId custodyId = transactionId.child("custody");
+            RequestId custodyId = null;
             String custodyItem = "player-shop:" + pos.asLong() + ":" + listing.itemId();
             long custodyQuantity = Math.max(1L, deliverCount);
             String custodyHash = com.enviouse.futureshopsp.server.economy.EconomyRecordChecksum
@@ -741,6 +741,7 @@ public final class PlayerShopBlockService {
             if (compoundTrade) {
                 // LGB#8: Skip money withdrawal if cost is 0 (100% discount)
                 if (cost > 0L) {
+                    custodyId = custodyIdFor(transactionId, "buyer compound debit");
                     ProviderResult<MutationReceipt> debit = coordinatorMutationWithCustody(coordinator,
                             transactionId, "buyer compound debit", buyer.getUUID(), cost,
                             custodyItem, custodyQuantity, custodyHash);
@@ -833,6 +834,7 @@ public final class PlayerShopBlockService {
                         recordedSale = true;
                     }
                 } else {
+                    custodyId = custodyIdFor(transactionId, "buyer debit");
                     ProviderResult<MutationReceipt> debit = coordinatorMutationWithCustody(coordinator,
                             transactionId, "buyer debit", buyer.getUUID(), cost,
                             custodyItem, custodyQuantity, custodyHash);
@@ -1700,6 +1702,10 @@ public final class PlayerShopBlockService {
         } catch (RuntimeException exception) {
             return ProviderResult.unavailable(ProviderError.UNKNOWN, "custodied mutation could not be prepared");
         }
+    }
+
+    private static RequestId custodyIdFor(RequestId rootRequest, String role) {
+        return rootRequest.child(role).child("custody");
     }
 
     private static void releaseCustody(EconomyTransactionCoordinator coordinator, RequestId custodyId,
