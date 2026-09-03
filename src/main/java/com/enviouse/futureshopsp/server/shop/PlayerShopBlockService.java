@@ -1253,6 +1253,20 @@ public final class PlayerShopBlockService {
         long cost = Math.max(0L, listing.calculatePrice(qty));
         boolean isBundle = !listing.bundleOutputs().isEmpty();
 
+        if (isBundle) {
+            for (ShopBlockEntity.BundleEntry entry : listing.bundleOutputs()) {
+                Item bundleItem = ShopTransactionUtil.resolveItem(entry.itemId());
+                if (bundleItem == null || bundleItem == Items.AIR) {
+                    sendResult(buyer, false, ShopResultCode.INVALID_ITEM);
+                    return;
+                }
+                if (checkedDeliveryCount(entry.count(), qty) <= 0) {
+                    sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+                    return;
+                }
+            }
+        }
+
         // Resolve trade-mode dispatch identically to the normal path.
         boolean compoundTrade = listing.tradeMode() == ShopBlockEntity.TradeMode.MONEY_AND_BARTER;
         boolean barterTrade;
@@ -1345,8 +1359,8 @@ public final class PlayerShopBlockService {
         if (isBundle) {
             for (ShopBlockEntity.BundleEntry entry : listing.bundleOutputs()) {
                 Item bundleItem = ShopTransactionUtil.resolveItem(entry.itemId());
-                if (bundleItem == null || bundleItem == Items.AIR) continue;
-                delivered.addAll(splitStacks(bundleItem, entry.count() * qty, entry.nbtPatch()));
+                int needed = checkedDeliveryCount(entry.count(), qty);
+                delivered.addAll(splitStacks(bundleItem, needed, entry.nbtPatch()));
             }
         } else {
             delivered.addAll(splitStacks(saleItem, deliverCount, listing.nbtAware() ? listing.nbtPatch() : null));
@@ -1997,7 +2011,11 @@ public final class PlayerShopBlockService {
                 sendResult(seller, false, ShopResultCode.UNCONFIGURED);
                 return;
             }
-            int needItems = baseQty * qty;
+            int needItems = checkedDeliveryCount(baseQty, qty);
+            if (needItems <= 0) {
+                sendResult(seller, false, ShopResultCode.INVALID_AMOUNT);
+                return;
+            }
             boolean nbtAware = listing.nbtAware();
             DataComponentPatch nbtPatch = listing.nbtPatch();
             int have = ShopTransactionUtil.countItems(seller.getInventory(), saleItem, nbtAware, nbtPatch);
