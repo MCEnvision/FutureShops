@@ -96,9 +96,10 @@ final class PublicInternalEconomyProvider implements com.enviouse.futureshopsp.a
 
     @Override
     public ProviderResult<MutationReceipt> retry(MutationRequest request) {
-        return receipts.find(request.requestId()).map(ProviderResult::confirmed)
+            return receipts.find(request.requestId()).map(ProviderResult::confirmed)
                 .orElseGet(() -> mutate(request, request.kind() == MutationKind.DEPOSIT
-                        || request.kind() == MutationKind.TRANSFER_CREDIT));
+                        || request.kind() == MutationKind.TRANSFER_CREDIT
+                        || request.kind() == MutationKind.COMPENSATION));
     }
 
     private ProviderResult<MutationReceipt> mutate(MutationRequest request, boolean deposit) {

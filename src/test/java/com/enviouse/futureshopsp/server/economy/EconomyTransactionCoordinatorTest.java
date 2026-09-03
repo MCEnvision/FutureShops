@@ -249,6 +249,53 @@ class EconomyTransactionCoordinatorTest {
         assertEquals(0L, provider.balances.getOrDefault(TARGET, 0L));
     }
 
+    @Test
+    void transferRefusesBeforeDebitWhenDepositCapabilityIsMissing() {
+        FixtureProvider provider = new FixtureProvider(new ProviderCapabilities(true, true, true, false, true, true));
+        EconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, readyLifecycle(), journal);
+
+        var result = coordinator.transfer(PLAYER, TARGET, 25L);
+
+        assertEquals(ProviderResultStatus.UNAVAILABLE, result.status());
+        assertEquals(ProviderError.CAPABILITY_MISSING, result.error());
+        assertEquals(0, provider.withdrawCalls);
+        assertEquals(0, provider.depositCalls);
+        assertTrue(journal.snapshot().isEmpty());
+    }
+
+    @Test
+    void failedTransferCompensationFreezesInsteadOfReportingACompletedTransfer() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        provider.rejectAllDeposits = true;
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        EconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+
+        var result = coordinator.transfer(PLAYER, TARGET, 25L);
+
+        assertEquals(ProviderResultStatus.RECOVERY_REQUIRED, result.status());
+        assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
+        assertEquals(75L, provider.balances.get(PLAYER));
+        assertEquals(0L, provider.balances.getOrDefault(TARGET, 0L));
+    }
+
+    @Test
+    void compensationIsExecutedAsAcreditedDeposit() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        EconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.COMPENSATION);
+
+        var result = coordinator.compensate(request);
+
+        assertTrue(result.confirmed());
+        assertEquals(1, provider.depositCalls);
+        assertEquals(0, provider.withdrawCalls);
+        assertEquals(125L, provider.balances.get(PLAYER));
+    }
+
     private static EconomyLifecycleController readyLifecycle() {
         EconomyLifecycleController lifecycle = new EconomyLifecycleController(EconomyApi.INTERNAL_PROVIDER_ID);
         lifecycle.resolve(ProviderLifecycle.READY, "", true, true, false);
@@ -263,6 +310,7 @@ class EconomyTransactionCoordinatorTest {
         private int depositCalls;
         private boolean ambiguous;
         private boolean rejectFirstDeposit;
+        private boolean rejectAllDeposits;
         private boolean lookupValueOnly;
 
         private FixtureProvider(ProviderCapabilities capabilities) {
@@ -327,7 +375,7 @@ class EconomyTransactionCoordinatorTest {
         @Override
         public ProviderResult<MutationReceipt> deposit(MutationRequest request) {
             depositCalls++;
-            if (rejectFirstDeposit && depositCalls == 1) {
+            if (rejectAllDeposits || (rejectFirstDeposit && depositCalls == 1)) {
                 return ProviderResult.rejected(ProviderError.PROVIDER_EXCEPTION, "fixture credit rejection");
             }
             long balance = balances.merge(request.actor(), request.amountMinorUnits(), Long::sum);

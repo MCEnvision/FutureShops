@@ -258,6 +258,10 @@ public final class EconomyTransactionCoordinator {
         if (from.equals(to)) {
             return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "transfer target must differ");
         }
+        if (!supportsAllMutationCapabilities()) {
+            return ProviderResult.unavailable(ProviderError.CAPABILITY_MISSING,
+                    "provider lacks the capabilities required for an atomic transfer");
+        }
         RequestId root = RequestId.random();
         MutationRequest debit = new MutationRequest(root.child("transfer debit"), from, Optional.of(to), amountMinorUnits,
                 MutationKind.TRANSFER_DEBIT);
@@ -271,10 +275,12 @@ public final class EconomyTransactionCoordinator {
         if (creditResult.confirmed()) {
             return creditResult;
         }
-        if (supportsAllMutationCapabilities()) {
-            MutationRequest compensation = new MutationRequest(root.child("transfer compensation"), from, Optional.of(to),
-                    amountMinorUnits, MutationKind.DEPOSIT);
-            execute(compensation, MutationKind.DEPOSIT);
+        MutationRequest compensation = new MutationRequest(root.child("transfer compensation"), from, Optional.of(to),
+                amountMinorUnits, MutationKind.COMPENSATION);
+        ProviderResult<MutationReceipt> compensationResult = compensate(compensation);
+        if (!compensationResult.confirmed()) {
+            lifecycle.markAmbiguous("transfer compensation requires recovery");
+            return ProviderResult.recoveryRequired("transfer compensation requires recovery");
         }
         return creditResult;
     }
@@ -359,6 +365,7 @@ public final class EconomyTransactionCoordinator {
         ProviderResult<MutationReceipt> result;
         try {
             result = expectedKind == MutationKind.DEPOSIT || expectedKind == MutationKind.TRANSFER_CREDIT
+                    || expectedKind == MutationKind.COMPENSATION
                     ? provider.deposit(request) : provider.withdraw(request);
         } catch (RuntimeException exception) {
             return ambiguous(pending, "provider mutation failed after pending state");
