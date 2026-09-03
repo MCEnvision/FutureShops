@@ -7,16 +7,20 @@ import com.enviouse.futureshopsp.api.economy.MutationKind;
 import com.enviouse.futureshopsp.api.economy.MutationRequest;
 import com.enviouse.futureshopsp.api.economy.ProviderError;
 import com.enviouse.futureshopsp.api.economy.ProviderLifecycle;
+import com.enviouse.futureshopsp.block.ShopBlockEntity;
+import com.enviouse.futureshopsp.init.ModBlocks;
 import com.enviouse.futureshopsp.init.ModItems;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
 import com.enviouse.futureshopsp.server.economy.ClaimState;
 import com.enviouse.futureshopsp.server.economy.EconomyClaimSavedData;
 import com.enviouse.futureshopsp.server.shop.PlayerShopBarterEscrowSavedData;
+import com.enviouse.futureshopsp.server.shop.PlayerShopBlockService;
 import com.enviouse.futureshopsp.server.shop.PlayerShopSaleEscrowSavedData;
 import com.enviouse.futureshopsp.server.session.ShopSessionManager;
 import com.enviouse.futureshopsp.server.transaction.ShopSellService;
 import com.enviouse.futureshopsp.network.packets.C2SSellRequestPacket;
 import com.enviouse.futureshopsp.catalog.ShopCatalog;
+import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -153,6 +157,41 @@ public final class EconomyGameTests {
                 "Pixelmon shop sell refusal must not remove the offered item");
         helper.assertTrue(BalanceManager.getCustodyStore().snapshot().isEmpty(),
                 "Pixelmon shop sell refusal must not create custody");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void pixelmonPlayerShopBuyRefusalBeforeSaleEscrow(GameTestHelper helper) {
+        if (!"pixelmon".equals(BalanceManager.getLifecycleSnapshotOrUnresolved().providerId())) {
+            helper.succeed();
+            return;
+        }
+
+        BlockPos shopPos = new BlockPos(1, 1, 1);
+        helper.setBlock(shopPos, ModBlocks.SHOP_BLOCK.get().defaultBlockState());
+        ShopBlockEntity shop = helper.getBlockEntity(shopPos);
+        helper.assertTrue(shop != null, "the player shop block entity must be available");
+        shop.setPlacedByCreative(true);
+        helper.assertTrue(shop.setAdminShopMode(true), "the disposable shop must enter admin mode");
+        shop.setOwnerUuid(UUID.fromString("00000000-0000-0000-0000-000000000240"));
+        int listingIndex = shop.addOrSelectListing("minecraft:diamond");
+        ShopBlockEntity.Listing listing = shop.getListing(listingIndex);
+        helper.assertTrue(listing != null, "the disposable admin shop must have a listing");
+        listing.setTradeMode(ShopBlockEntity.TradeMode.MONEY);
+        listing.setMoneyPriceMinor(1L);
+        listing.setBaseQuantity(1);
+
+        ServerPlayer buyer = helper.makeMockServerPlayerInLevel();
+        int diamondsBefore = buyer.getInventory().countItem(Items.DIAMOND);
+        int escrowRecordsBefore = PlayerShopSaleEscrowSavedData.get(buyer.getServer()).snapshot().size();
+        PlayerShopBlockService.buy(buyer, shopPos, listingIndex, 1, "MONEY");
+
+        helper.assertTrue(buyer.getInventory().countItem(Items.DIAMOND) == diamondsBefore,
+                "Pixelmon player shop buy refusal must not deliver an item");
+        helper.assertTrue(PlayerShopSaleEscrowSavedData.get(buyer.getServer()).snapshot().size() == escrowRecordsBefore,
+                "Pixelmon player shop buy refusal must not prepare sale escrow");
+        helper.assertTrue(BalanceManager.getCustodyStore().snapshot().isEmpty(),
+                "Pixelmon player shop buy refusal must not create custody");
         helper.succeed();
     }
 

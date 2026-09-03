@@ -837,6 +837,20 @@ public final class PlayerShopBlockService {
                 sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                 return;
             }
+
+            // Refuse unsupported money mutations before preparing any durable sale escrow.
+            // The provider capability gate must leave this route side effect free when
+            // Pixelmon direct mutations are unavailable.
+            if ((compoundTrade || !barterTrade) && cost > 0L) {
+                MutationRequest debitAdmissionRequest = MutationRequest.forPlayer(
+                        transactionId.child("buyer debit"), buyer.getUUID(), cost, MutationKind.WITHDRAW);
+                ProviderResult<BalanceSnapshot> debitAdmission = coordinator.preflight(debitAdmissionRequest);
+                if (!debitAdmission.confirmed()) {
+                    sendResult(buyer, false, mapProviderResultCode(debitAdmission));
+                    return;
+                }
+            }
+
             saleEscrow = PlayerShopSaleEscrowSavedData.get(buyer.getServer());
             List<ItemStack> salePreview = snapshotSaleStacks(linkedStorage, listing, saleItem, qty, deliverCount);
             long saleQuantity = 0L;
@@ -1604,6 +1618,18 @@ public final class PlayerShopBlockService {
         if (buyer.getServer() == null) {
             sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
             return;
+        }
+
+        // Refuse unsupported money mutations before preparing any durable sale escrow.
+        // Admin shops use the same capability boundary as regular player shops.
+        if ((compoundTrade || !barterTrade) && cost > 0L) {
+            MutationRequest debitAdmissionRequest = MutationRequest.forPlayer(
+                    transactionId.child("admin buyer debit"), buyer.getUUID(), cost, MutationKind.WITHDRAW);
+            ProviderResult<BalanceSnapshot> debitAdmission = coordinator.preflight(debitAdmissionRequest);
+            if (!debitAdmission.confirmed()) {
+                sendResult(buyer, false, mapProviderResultCode(debitAdmission));
+                return;
+            }
         }
 
         PlayerShopSaleEscrowSavedData saleEscrow = PlayerShopSaleEscrowSavedData.get(buyer.getServer());
