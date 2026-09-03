@@ -284,7 +284,13 @@ public final class BalanceManager {
             return current;
         }
 
-        long amount = Math.abs(delta);
+        long amount;
+        try {
+            amount = delta > 0L ? delta : Math.negateExact(delta);
+        } catch (ArithmeticException exception) {
+            return ProviderResult.rejected(ProviderError.INVALID_AMOUNT,
+                    "target balance delta is outside the supported range");
+        }
         MutationKind kind = delta > 0L ? MutationKind.DEPOSIT : MutationKind.WITHDRAW;
         MutationRequest request = MutationRequest.forPlayer(RequestId.random(), playerUUID, amount, kind);
         ProviderResult<com.enviouse.futureshopsp.api.economy.MutationReceipt> mutation =

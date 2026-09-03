@@ -105,6 +105,17 @@ class BalanceManagerRecoverySourceTest {
         assertTrue(source.contains("} finally {\n            provider = null;"));
     }
 
+    @Test
+    void setBalanceUsesCheckedDeltaMagnitude() throws Exception {
+        String source = Files.readString(projectDirectory().resolve(Path.of(
+                "src", "main", "java", "com", "enviouse", "futureshopsp",
+                "server", "economy", "BalanceManager.java")));
+
+        assertTrue(source.contains("amount = delta > 0L ? delta : Math.negateExact(delta);"));
+        assertTrue(source.contains("target balance delta is outside the supported range"));
+        assertTrue(!source.contains("long amount = Math.abs(delta);"));
+    }
+
     private static Path projectDirectory() {
         Path candidate = Path.of("").toAbsolutePath();
         while (candidate != null) {
