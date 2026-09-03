@@ -27,6 +27,10 @@ public final class ShopClientState {
     private static volatile long currentBalanceMinorUnits = 0L;
     private static volatile String currencyName = "Coins";
     private static volatile int currencyDecimals = 2;
+    private static volatile boolean balanceAvailable = true;
+    private static volatile String providerId = "internal";
+    private static volatile String providerLifecycle = "READY";
+    private static volatile String providerDiagnostic = "";
 
     // Catalog data — set by S2CShopDataPacket.
     private static volatile List<CatalogCategory> catalogCategories = List.of();
@@ -59,11 +63,18 @@ public final class ShopClientState {
     public static void applyShopData(String shopId, long balanceMinorUnits, String currency, int decimals,
                                      List<CatalogCategory> categories, List<CatalogItem> items,
                                      List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes,
-                                     boolean adminEnabled, List<NearbyShopEntry> nearby) {
+                                     boolean adminEnabled, List<NearbyShopEntry> nearby,
+                                     boolean balanceIsAvailable, String selectedProviderId,
+                                     String selectedProviderLifecycle, String selectedProviderDiagnostic) {
         activeShopId = shopId;
         currentBalanceMinorUnits = balanceMinorUnits;
         currencyName = currency;
         currencyDecimals = decimals;
+        balanceAvailable = balanceIsAvailable;
+        providerId = selectedProviderId == null || selectedProviderId.isBlank() ? "unknown" : selectedProviderId;
+        providerLifecycle = selectedProviderLifecycle == null || selectedProviderLifecycle.isBlank()
+                ? "UNRESOLVED" : selectedProviderLifecycle;
+        providerDiagnostic = selectedProviderDiagnostic == null ? "" : selectedProviderDiagnostic;
         catalogCategories = List.copyOf(categories);
         catalogItems = List.copyOf(items);
         catalogPromos = List.copyOf(promos);
@@ -84,6 +95,10 @@ public final class ShopClientState {
     public static void reset() {
         activeShopId = "";
         currentBalanceMinorUnits = 0L;
+        balanceAvailable = false;
+        providerId = "unknown";
+        providerLifecycle = "UNRESOLVED";
+        providerDiagnostic = "";
         catalogCategories = List.of();
         catalogItems = List.of();
         catalogPromos = List.of();
@@ -102,6 +117,27 @@ public final class ShopClientState {
 
     public static void setCurrentBalanceMinorUnits(long balanceMinorUnits) {
         currentBalanceMinorUnits = balanceMinorUnits;
+        balanceAvailable = true;
+    }
+
+    public static void setBalanceUnavailable() {
+        balanceAvailable = false;
+    }
+
+    public static boolean isBalanceAvailable() {
+        return balanceAvailable;
+    }
+
+    public static String getProviderId() {
+        return providerId;
+    }
+
+    public static String getProviderLifecycle() {
+        return providerLifecycle;
+    }
+
+    public static String getProviderDiagnostic() {
+        return providerDiagnostic;
     }
 
     public static void addToCart(String listingId, int quantity) {

@@ -26,9 +26,22 @@ public record S2CBalanceUiPacket(
         int totalStock,
         int lowSupplyCount,
         List<OwnedShopSummary> shopSummaries,
-        List<String> alerts) implements CustomPacketPayload {
+        List<String> alerts,
+        boolean balanceAvailable,
+        String providerId,
+        String providerLifecycle,
+        String providerDiagnostic) implements CustomPacketPayload {
     public static final Type<S2CBalanceUiPacket> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(Futureshops.MODID, "s2cbalanceuipacket"));
     public static final StreamCodec<RegistryFriendlyByteBuf, S2CBalanceUiPacket> STREAM_CODEC = StreamCodec.ofMember(S2CBalanceUiPacket::encode, S2CBalanceUiPacket::decode);
+
+    public S2CBalanceUiPacket(UUID playerUuid, String playerName, long balanceMinorUnits, String currencyName,
+                              int currencyDecimals, long totalRevenueMinor, long pendingSettlementMinor,
+                              int shopCount, int listingCount, int totalStock, int lowSupplyCount,
+                              List<OwnedShopSummary> shopSummaries, List<String> alerts) {
+        this(playerUuid, playerName, balanceMinorUnits, currencyName, currencyDecimals, totalRevenueMinor,
+                pendingSettlementMinor, shopCount, listingCount, totalStock, lowSupplyCount, shopSummaries,
+                alerts, true, "internal", "READY", "");
+    }
 
     @Override
     public Type<S2CBalanceUiPacket> type() {
@@ -49,6 +62,10 @@ public record S2CBalanceUiPacket(
         buffer.writeVarInt(packet.lowSupplyCount());
         buffer.writeCollection(packet.shopSummaries(), OwnedShopSummary::encode);
         buffer.writeCollection(packet.alerts(), FriendlyByteBuf::writeUtf);
+        buffer.writeBoolean(packet.balanceAvailable());
+        buffer.writeUtf(packet.providerId(), 128);
+        buffer.writeUtf(packet.providerLifecycle(), 32);
+        buffer.writeUtf(packet.providerDiagnostic(), 256);
     }
 
     public static S2CBalanceUiPacket decode(FriendlyByteBuf buffer) {
@@ -65,11 +82,14 @@ public record S2CBalanceUiPacket(
                 buffer.readVarInt(),
                 buffer.readVarInt(),
                 buffer.readList(OwnedShopSummary::decode),
-                buffer.readList(FriendlyByteBuf::readUtf));
+                buffer.readList(FriendlyByteBuf::readUtf),
+                buffer.readBoolean(),
+                buffer.readUtf(128),
+                buffer.readUtf(32),
+                buffer.readUtf(256));
     }
 
     public static void handle(S2CBalanceUiPacket packet, IPayloadContext context) {
         context.enqueueWork(() -> ShopClientPacketHandler.handleBalanceUi(packet));
     }
 }
-

@@ -1,4 +1,6 @@
 {
+  "gui.futureshops.economy.balance_unavailable": "Balance unavailable",
+  "gui.futureshops.economy.provider_unavailable": "%s provider is %s",
   "gui.futureshops.shop.title": "Server Shop",
   "gui.futureshops.shop.search": "Search",
   "gui.futureshops.shop.no_items": "No items found",

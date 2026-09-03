@@ -11,6 +11,8 @@ import com.enviouse.futureshopsp.network.packets.S2CBalanceUiPacket;
 import com.enviouse.futureshopsp.server.economy.BalanceEntry;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
 import com.enviouse.futureshopsp.server.economy.EconomyProvider;
+import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.server.transaction.TransactionHistorySavedData;
 import com.enviouse.futureshopsp.server.util.PageBounds;
 import net.minecraft.core.BlockPos;
@@ -40,10 +42,12 @@ public final class MarketplaceAnalyticsService {
     public static void sendDashboard(ServerPlayer player) {
         EconomyProvider provider = BalanceManager.getProvider();
         DashboardSnapshot snapshot = snapshotDashboard(player);
+        ProviderResult<BalanceSnapshot> balance = BalanceManager.queryBalance(player.getUUID());
+        var lifecycle = BalanceManager.getLifecycleSnapshotOrUnresolved();
         ShopPackets.sendToPlayer(player, new S2CBalanceUiPacket(
                 player.getUUID(),
                 player.getGameProfile().getName(),
-                provider.getBalance(player.getUUID()),
+                balance.value().map(BalanceSnapshot::balanceMinorUnits).orElse(0L),
                 provider.getCurrencyName(),
                 provider.getDecimalPlaces(),
                 snapshot.totalRevenueMinor(),
@@ -53,7 +57,11 @@ public final class MarketplaceAnalyticsService {
                 snapshot.totalStock(),
                 snapshot.lowSupplyCount(),
                 snapshot.shopSummaries(),
-                snapshot.alerts()));
+                snapshot.alerts(),
+                balance.confirmed(),
+                lifecycle.providerId(),
+                lifecycle.lifecycle().name(),
+                lifecycle.diagnostic()));
     }
 
     /**
@@ -63,10 +71,12 @@ public final class MarketplaceAnalyticsService {
     public static void sendDashboardForViewer(ServerPlayer viewer, ServerPlayer target) {
         EconomyProvider provider = BalanceManager.getProvider();
         DashboardSnapshot snapshot = snapshotDashboard(target);
+        ProviderResult<BalanceSnapshot> balance = BalanceManager.queryBalance(target.getUUID());
+        var lifecycle = BalanceManager.getLifecycleSnapshotOrUnresolved();
         ShopPackets.sendToPlayer(viewer, new S2CBalanceUiPacket(
                 target.getUUID(),
                 target.getGameProfile().getName(),
-                provider.getBalance(target.getUUID()),
+                balance.value().map(BalanceSnapshot::balanceMinorUnits).orElse(0L),
                 provider.getCurrencyName(),
                 provider.getDecimalPlaces(),
                 snapshot.totalRevenueMinor(),
@@ -76,7 +86,11 @@ public final class MarketplaceAnalyticsService {
                 snapshot.totalStock(),
                 snapshot.lowSupplyCount(),
                 snapshot.shopSummaries(),
-                snapshot.alerts()));
+                snapshot.alerts(),
+                balance.confirmed(),
+                lifecycle.providerId(),
+                lifecycle.lifecycle().name(),
+                lifecycle.diagnostic()));
     }
 
     public static void sendLeaderboard(ServerPlayer player, int page) {

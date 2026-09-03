@@ -4,6 +4,9 @@ import com.enviouse.futureshopsp.Config;
 import com.enviouse.futureshopsp.api.economy.EconomyApi;
 import com.enviouse.futureshopsp.api.economy.EconomyProviderContext;
 import com.enviouse.futureshopsp.api.economy.EconomyProviderRegistry;
+import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
+import com.enviouse.futureshopsp.api.economy.ProviderError;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.api.economy.ProviderResolution;
 import com.enviouse.futureshopsp.api.economy.ProviderLifecycle;
 import net.minecraft.server.MinecraftServer;
@@ -102,6 +105,24 @@ public final class BalanceManager {
         return provider.getBalance(playerUUID);
     }
 
+    /** Returns a typed balance result without exposing an unavailable state as zero. */
+    public static ProviderResult<BalanceSnapshot> queryBalance(UUID playerUUID) {
+        if (playerUUID == null) {
+            return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "player id is required");
+        }
+        if (coordinator != null) {
+            return coordinator.balance(playerUUID);
+        }
+        EconomyLifecycleSnapshot state = lifecycleController == null
+                ? EconomyLifecycleSnapshot.of("unknown", ProviderLifecycle.UNRESOLVED, "economy is not initialized")
+                : lifecycleController.snapshot();
+        if (state.lifecycle() == ProviderLifecycle.RECOVERING || state.lifecycle() == ProviderLifecycle.FROZEN) {
+            return ProviderResult.recoveryRequired(state.diagnostic());
+        }
+        return ProviderResult.unavailable(ProviderError.NOT_READY,
+                state.diagnostic().isBlank() ? "economy provider is not ready" : state.diagnostic());
+    }
+
     public static EconomyProvider getProvider() {
         if (provider == null) {
             throw new IllegalStateException("BalanceManager accessed before initialization.");
@@ -121,6 +142,13 @@ public final class BalanceManager {
             throw new IllegalStateException("Economy lifecycle accessed before initialization.");
         }
         return lifecycleController.snapshot();
+    }
+
+    /** Returns lifecycle state for presentation paths that may run during startup or shutdown. */
+    public static EconomyLifecycleSnapshot getLifecycleSnapshotOrUnresolved() {
+        return lifecycleController == null
+                ? EconomyLifecycleSnapshot.of("unknown", ProviderLifecycle.UNRESOLVED, "economy is not initialized")
+                : lifecycleController.snapshot();
     }
 
     public static EconomyCustodyStore getCustodyStore() {

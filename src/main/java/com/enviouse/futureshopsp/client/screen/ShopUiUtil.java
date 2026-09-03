@@ -10,6 +10,7 @@ import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.resources.DefaultPlayerSkin;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.nbt.CompoundTag;
@@ -286,6 +287,12 @@ public final class ShopUiUtil {
         return item.getDescription().getString();
     }
 
+    public static String formatCurrentBalance() {
+        return ShopClientState.isBalanceAvailable()
+                ? formatMinorUnits(ShopClientState.getCurrentBalanceMinorUnits())
+                : I18n.get("gui.futureshops.economy.balance_unavailable");
+    }
+
     /**
      * LGB#15: Returns the item display name with inline quantity suffix when baseQuantity > 1.
      * E.g. "Stick ×6" instead of just "Stick".
@@ -344,6 +351,14 @@ public final class ShopUiUtil {
 
     public static void renderStatusPanel(GuiGraphics graphics, Font font, int x, int y, int width) {
         ShopClientState.ShopStatus status = ShopClientState.getStatus();
+        if (status == null && (!ShopClientState.isBalanceAvailable()
+                || !"READY".equalsIgnoreCase(ShopClientState.getProviderLifecycle()))) {
+            Component message = !ShopClientState.isBalanceAvailable()
+                    ? Component.translatable("gui.futureshops.economy.balance_unavailable")
+                    : Component.translatable("gui.futureshops.economy.provider_unavailable",
+                    ShopClientState.getProviderId(), ShopClientState.getProviderLifecycle());
+            status = new ShopClientState.ShopStatus(message, false, Long.MAX_VALUE);
+        }
         if (status == null) {
             return;
         }

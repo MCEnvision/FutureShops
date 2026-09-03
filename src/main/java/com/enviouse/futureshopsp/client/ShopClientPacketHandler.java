@@ -65,7 +65,11 @@ public final class ShopClientPacketHandler {
                     packet.promos(),
                     packet.barterRecipes(),
                     packet.adminShopEnabled(),
-                    packet.nearbyShops());
+                    packet.nearbyShops(),
+                    packet.balanceAvailable(),
+                    packet.providerId(),
+                    packet.providerLifecycle(),
+                    packet.providerDiagnostic());
             ShopPackets.sendToServer(new com.enviouse.futureshopsp.network.packets.C2SInventorySyncPacket(packet.shopId()));
             if (shopScreenOpen) {
                 // Update in-place — preserves nearbyMode, scroll, tabs.
@@ -101,7 +105,11 @@ public final class ShopClientPacketHandler {
                 packet.totalStock(),
                 packet.lowSupplyCount(),
                 packet.shopSummaries(),
-                packet.alerts())));
+                packet.alerts(),
+                packet.balanceAvailable(),
+                packet.providerId(),
+                packet.providerLifecycle(),
+                packet.providerDiagnostic())));
     }
 
     public static void handleBalTopUi(S2CBalTopUiPacket packet) {
@@ -225,7 +233,11 @@ public final class ShopClientPacketHandler {
     public static void handleBuyResponse(S2CBuyResponsePacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
-            ShopClientState.setCurrentBalanceMinorUnits(packet.resultingBalanceMinorUnits());
+            if (packet.balanceAvailable()) {
+                ShopClientState.setCurrentBalanceMinorUnits(packet.resultingBalanceMinorUnits());
+            } else {
+                ShopClientState.setBalanceUnavailable();
+            }
             ShopClientState.setStatus(buildBuyMessage(packet), packet.success());
 
             if (packet.success() && packet.cartCheckout()) {
@@ -244,7 +256,11 @@ public final class ShopClientPacketHandler {
     public static void handleSellResponse(S2CSellResponsePacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
-            ShopClientState.setCurrentBalanceMinorUnits(packet.resultingBalanceMinorUnits());
+            if (packet.balanceAvailable()) {
+                ShopClientState.setCurrentBalanceMinorUnits(packet.resultingBalanceMinorUnits());
+            } else {
+                ShopClientState.setBalanceUnavailable();
+            }
             ShopClientState.setStatus(buildSellMessage(packet), packet.success());
 
             // Update ConfirmationModal if ItemDetailScreen is open

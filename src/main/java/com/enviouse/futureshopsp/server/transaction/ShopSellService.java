@@ -18,7 +18,6 @@ import com.enviouse.futureshopsp.server.economy.BalanceManager;
 import com.enviouse.futureshopsp.server.economy.CustodyState;
 import com.enviouse.futureshopsp.server.economy.EconomyRecordChecksum;
 import com.enviouse.futureshopsp.server.economy.EconomyTransactionCoordinator;
-import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import com.enviouse.futureshopsp.server.pricing.DynamicPricingEngine;
 import com.enviouse.futureshopsp.server.session.ShopSession;
 import com.enviouse.futureshopsp.server.session.ShopSessionManager;
@@ -50,7 +49,8 @@ public final class ShopSellService {
                 result.errorCode(),
                 result.resultingBalance(),
                 packet.quantity(),
-                result.totalValue()));
+                result.totalValue(),
+                result.balanceAvailable()));
 
         if (result.success() && player.getServer() != null) {
             TransactionHistoryService.record(player, result.shopId(), "SELL", registryItemId, packet.quantity(), result.totalValue(), "DETAIL");
@@ -69,32 +69,31 @@ public final class ShopSellService {
         String shopId = ShopDataService.resolveShopId(packet.shopId());
         ShopSession session = ShopSessionManager.get(player.getUUID()).orElse(null);
         if (session == null || !session.shopId().equals(shopId)) {
-            return SellResult.error(shopId, BalanceManager.getProvider().getBalance(player.getUUID()), ShopResultCode.SHOP_CLOSED);
+            return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.SHOP_CLOSED);
         }
 
         int quantity = packet.quantity();
         if (quantity <= 0 || quantity > ShopTransactionUtil.MAX_SELL_QUANTITY) {
-            return SellResult.error(shopId, BalanceManager.getProvider().getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
+            return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_ITEM);
         }
         // The wire line carries a listingId (catalog resolution key), not necessarily a registry id.
         if (packet.listingId() == null || packet.listingId().isBlank()) {
-            return SellResult.error(shopId, BalanceManager.getProvider().getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
+            return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_ITEM);
         }
 
         ReentrantLock lock = ShopTransactionUtil.lockFor(player.getUUID());
         if (!lock.tryLock()) {
-            return SellResult.error(shopId, BalanceManager.getProvider().getBalance(player.getUUID()), ShopResultCode.COOLDOWN);
+            return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.COOLDOWN);
         }
 
         try {
-            EconomyProvider provider = BalanceManager.getProvider();
             ItemDef itemDef = ShopCatalog.getItem(shopId, packet.listingId()).orElse(null);
             if (itemDef == null || itemDef.sellPriceMinorUnits() <= 0L) {
-                return SellResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
+                return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_ITEM);
             }
             // Availability-window re-check (stale client catalog).
             if (itemDef.isExpired(System.currentTimeMillis() / 1000L)) {
-                return SellResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
+                return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_ITEM);
             }
 
             // Reject Air outright. Some modded bundles report their primary item as air until fully
@@ -103,11 +102,11 @@ public final class ShopSellService {
             // listing's registry id, not the listingId (which need not be a ResourceLocation).
             String itemId = itemDef.itemId();
             if (itemId == null || itemId.isBlank() || "minecraft:air".equals(itemId)) {
-                return SellResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
+                return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_ITEM);
             }
             Item item = ShopTransactionUtil.resolveItem(itemId);
             if (item == null) {
-                return SellResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
+                return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_ITEM);
             }
 
             // NBT-aware match: for an NBT-keyed listing (enchanted book, Tacz gun, …) the player must
@@ -117,14 +116,14 @@ public final class ShopSellService {
 
             Inventory inventory = player.getInventory();
             if (ShopTransactionUtil.countItems(inventory, item, true, requiredTag) < quantity) {
-                return SellResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.MISSING_ITEMS);
+                return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.MISSING_ITEMS);
             }
 
             long totalValue;
             try {
                 totalValue = Math.multiplyExact(itemDef.sellPriceMinorUnits(), quantity);
             } catch (ArithmeticException ex) {
-                return SellResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.SERVER_ERROR);
+                return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.SERVER_ERROR);
             }
 
             // Fire cancellable ShopTransactionEvent.Pre (spec §33) — registry itemId for API consumers.
@@ -132,7 +131,7 @@ public final class ShopSellService {
                     player, shopId, itemId, quantity, "SELL", totalValue);
             net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(preEvent);
             if (preEvent.isCanceled()) {
-                return SellResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.CANCELLED_BY_EVENT);
+                return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.CANCELLED_BY_EVENT);
             }
             // Allow event listeners to modify the price
             totalValue = preEvent.getPriceMinor();
@@ -143,19 +142,19 @@ public final class ShopSellService {
                     MutationKind.DEPOSIT);
             ProviderResult<BalanceSnapshot> preflight = coordinator.preflight(creditRequest);
             if (!preflight.confirmed()) {
-                return SellResult.error(shopId, safeBalance(provider, player.getUUID()), mapError(preflight.error()));
+                return SellResult.error(shopId, balanceView(player.getUUID()), mapError(preflight.error()));
             }
             RequestId custodyId = creditRequest.requestId().child("custody");
             try {
                 coordinator.holdCustody(custodyId, player.getUUID(), itemId, quantity,
                         EconomyRecordChecksum.sha256(itemId + "|" + itemDef.nbtJson()));
             } catch (RuntimeException exception) {
-                return SellResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.SERVER_ERROR);
+                return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.SERVER_ERROR);
             }
 
             if (!ShopTransactionUtil.removeItems(inventory, item, quantity, true, requiredTag)) {
                 coordinator.releaseCustody(custodyId);
-                return SellResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.MISSING_ITEMS);
+                return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.MISSING_ITEMS);
             }
 
             ProviderResult<MutationReceipt> deposit = coordinator.executeWithCustody(creditRequest,
@@ -169,8 +168,11 @@ public final class ShopSellService {
                 }
                 long balance = deposit.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
                         ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong()) : java.util.Optional.empty())
-                        .orElseGet(() -> safeBalance(provider, player.getUUID()));
-                return SellResult.error(shopId, balance, mapError(deposit.error()));
+                        .orElseGet(() -> balanceView(player.getUUID()).amount());
+                return SellResult.error(shopId, new BalanceView(balance,
+                                deposit.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
+                                        ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong()) : java.util.Optional.empty()).isPresent()),
+                        mapError(deposit.error()));
             }
 
             if (!ShopCatalog.incrementStock(shopId, packet.listingId(), quantity)) {
@@ -182,14 +184,14 @@ public final class ShopSellService {
                     inventory.setChanged();
                     coordinator.releaseCustody(custodyId);
                 }
-                return SellResult.error(shopId, safeBalance(provider, player.getUUID()),
+                return SellResult.error(shopId, balanceView(player.getUUID()),
                         compensation.confirmed() ? ShopResultCode.SERVER_ERROR : mapError(compensation.error()));
             }
 
             try {
                 coordinator.releaseCustody(custodyId);
             } catch (RuntimeException exception) {
-                return SellResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.SERVER_ERROR);
+                return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.SERVER_ERROR);
             }
 
             inventory.setChanged();
@@ -197,7 +199,9 @@ public final class ShopSellService {
             long resultingBalance = deposit.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
                     ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong()) : java.util.Optional.empty())
                     .orElse(0L);
-            return SellResult.success(shopId, resultingBalance, totalValue);
+            return SellResult.success(shopId, resultingBalance, totalValue,
+                    deposit.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
+                            ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong()) : java.util.Optional.empty()).isPresent());
         } finally {
             lock.unlock();
         }
@@ -210,22 +214,27 @@ public final class ShopSellService {
         return stack;
     }
 
-    private record SellResult(boolean success, String shopId, ShopResultCode errorCode, long resultingBalance, long totalValue) {
-        private static SellResult success(String shopId, long resultingBalance, long totalValue) {
-            return new SellResult(true, shopId, ShopResultCode.OK, resultingBalance, totalValue);
+    private record SellResult(boolean success, String shopId, ShopResultCode errorCode, long resultingBalance, long totalValue,
+                              boolean balanceAvailable) {
+        private static SellResult success(String shopId, long resultingBalance, long totalValue, boolean balanceAvailable) {
+            return new SellResult(true, shopId, ShopResultCode.OK, resultingBalance, totalValue, balanceAvailable);
         }
 
         private static SellResult error(String shopId, long resultingBalance, ShopResultCode errorCode) {
-            return new SellResult(false, shopId, errorCode, resultingBalance, 0L);
+            return new SellResult(false, shopId, errorCode, resultingBalance, 0L, true);
+        }
+
+        private static SellResult error(String shopId, BalanceView balance, ShopResultCode errorCode) {
+            return new SellResult(false, shopId, errorCode, balance.amount(), 0L, balance.available());
         }
     }
 
-    private static long safeBalance(EconomyProvider provider, java.util.UUID playerId) {
-        try {
-            return provider.getBalance(playerId);
-        } catch (RuntimeException exception) {
-            return 0L;
-        }
+    private record BalanceView(long amount, boolean available) {
+    }
+
+    private static BalanceView balanceView(java.util.UUID playerId) {
+        ProviderResult<BalanceSnapshot> result = BalanceManager.queryBalance(playerId);
+        return new BalanceView(result.value().map(BalanceSnapshot::balanceMinorUnits).orElse(0L), result.confirmed());
     }
 
     private static ShopResultCode mapError(ProviderError error) {

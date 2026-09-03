@@ -19,9 +19,15 @@ public record S2CSellResponsePacket(
         ShopResultCode errorCode,
         long resultingBalanceMinorUnits,
         int quantity,
-        long totalMinorUnits) implements CustomPacketPayload {
+        long totalMinorUnits,
+        boolean balanceAvailable) implements CustomPacketPayload {
     public static final Type<S2CSellResponsePacket> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(Futureshops.MODID, "s2csellresponsepacket"));
     public static final StreamCodec<RegistryFriendlyByteBuf, S2CSellResponsePacket> STREAM_CODEC = StreamCodec.ofMember(S2CSellResponsePacket::encode, S2CSellResponsePacket::decode);
+
+    public S2CSellResponsePacket(boolean success, String shopId, String itemId, ShopResultCode errorCode,
+                                 long resultingBalanceMinorUnits, int quantity, long totalMinorUnits) {
+        this(success, shopId, itemId, errorCode, resultingBalanceMinorUnits, quantity, totalMinorUnits, true);
+    }
 
     @Override
     public Type<S2CSellResponsePacket> type() {
@@ -38,6 +44,7 @@ public record S2CSellResponsePacket(
         buffer.writeLong(packet.resultingBalanceMinorUnits);
         buffer.writeVarInt(packet.quantity);
         buffer.writeLong(packet.totalMinorUnits);
+        buffer.writeBoolean(packet.balanceAvailable);
     }
 
     public static S2CSellResponsePacket decode(FriendlyByteBuf buffer) {
@@ -54,11 +61,11 @@ public record S2CSellResponsePacket(
         long bal = buffer.readLong();
         int qty = buffer.readVarInt();
         long totalMu = buffer.readLong();
-        return new S2CSellResponsePacket(success, shopId, itemId, code, bal, qty, totalMu);
+        boolean balanceAvailable = buffer.readBoolean();
+        return new S2CSellResponsePacket(success, shopId, itemId, code, bal, qty, totalMu, balanceAvailable);
     }
 
     public static void handle(S2CSellResponsePacket packet, IPayloadContext context) {
         context.enqueueWork(() -> ShopClientPacketHandler.handleSellResponse(packet));
     }
 }
-
