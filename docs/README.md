@@ -6,6 +6,7 @@ FutureShops documentation is organized by topic. The phase verification packet r
 
 * [Project README](../README.md)
 * [Porting notes](../PORTING_NOTES.md)
+* [Maintainer documentation](general/documentation.md)
 
 ## API
 

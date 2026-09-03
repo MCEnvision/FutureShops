@@ -15,7 +15,7 @@ This branch targets the following runtime.
 | Parchment | 2024.11.17 |
 | GeckoLib | 4.8.4 |
 
-Client and server should use the same FutureShops build. This `2.3.0` NeoForge candidate is prepared locally and remains unpublished. The provider API, deterministic registry, and restart only selection contract are present. Full transaction journaling, custody, external adapters, and recovery validation remain phase work. Back up the complete world and configuration before replacing an older installation. The runtime mod identifier and all resource namespaces remain `futureshops`, while the Java package for this port is `com.enviouse.futureshopsp`.
+Client and server should use the same FutureShops build. This `2.3.0` NeoForge candidate is prepared locally and remains unpublished. The provider API, deterministic registry, restart only selection contract, checksummed transaction journal, durable custody and claims, lifecycle gate, and clean marker handling are present. External adapters, complete route coverage, and recovery validation remain phase work. Back up the complete world and configuration before replacing an older installation. The runtime mod identifier and all resource namespaces remain `futureshops`, while the Java package for this port is `com.enviouse.futureshopsp`.
 
 ## Installation
 
