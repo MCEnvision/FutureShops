@@ -32,6 +32,15 @@ class EconomyMoneySafetySourceTest {
         assertTrue(withdrawSource.contains("withdraw custody finalization requires recovery"));
     }
 
+    @Test
+    void adminOfflineViewsUseTypedBalanceResults() throws Exception {
+        String source = read("src/main/java/com/enviouse/futureshopsp/command/ShopAdminCommand.java");
+
+        assertTrue(source.contains("ProviderResult<BalanceSnapshot> balanceResult = BalanceManager.queryBalance(targetUuid)"));
+        assertTrue(source.contains("if (!balanceResult.confirmed())"));
+        assertTrue(!source.contains("long balance = provider.getBalance(targetUuid)"));
+    }
+
     private static String read(String relativePath) throws Exception {
         return Files.readString(projectDirectory().resolve(relativePath));
     }

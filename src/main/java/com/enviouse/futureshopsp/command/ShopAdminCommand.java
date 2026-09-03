@@ -978,7 +978,13 @@ public final class ShopAdminCommand {
         } else {
             // Offline player — send a lightweight balance-only view
             EconomyProvider provider = BalanceManager.getProvider();
-            long balance = provider.getBalance(targetUuid);
+            ProviderResult<BalanceSnapshot> balanceResult = BalanceManager.queryBalance(targetUuid);
+            if (!balanceResult.confirmed()) {
+                source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
+                        .withStyle(ChatFormatting.RED));
+                return 0;
+            }
+            long balance = balanceResult.value().orElseThrow().balanceMinorUnits();
             String formatted = EconomyCommandUtil.formatMinorUnits(balance, provider.getDecimalPlaces());
             source.sendSuccess(() -> Component.translatable(
                     "command.futureshops.admin.view.offline_header", targetName)
