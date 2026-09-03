@@ -32,7 +32,7 @@ The reruns prove full startup and optional class loading under owner authorized 
 
 The exact Pixelmon only profile also loaded a disposable runtime probe compiled for Java 21. The probe queried UUID `00000000-0000-0000-0000-000000000001`, then submitted a one minor unit preflight and withdrawal through the public `EconomyTransactionCoordinator`. The probe jar SHA 256 is `1756394e915f718e7b41d962fec62925408fca38955ddb749692698803dab476`.
 
-The bounded command was the direct Java 21 NeoForge launch from `/tmp/futureshops-pixelmon-exact.xIDOL4`. The complete log is `/tmp/futureshops-pixelmon-packaged-java21-current-20260903.log`. It reached `Done (1.015s)` and `FutureShops server starting.` and emitted:
+The bounded command was the direct Java 21 NeoForge launch from `/tmp/futureshops-pixelmon-exact.xIDOL4`. The complete log is `/tmp/futureshops-pixelmon-packaged-java21-4ac51e9.log`. It reached `Done (0.859s)` and `FutureShops server starting.` and emitted:
 
 ```text
 FUTURESHOPS_PROBE lifecycle=EconomyLifecycleSnapshot[providerId=pixelmon, lifecycle=READY, diagnostic=, acceptsQueries=true, acceptsMutations=true] resultStatus=CONFIRMED resultError=NONE resultDiagnostic= resultValue=Optional[BalanceSnapshot[playerId=00000000-0000-0000-0000-000000000001, balanceMinorUnits=0]] preflightStatus=UNAVAILABLE preflightError=CAPABILITY_MISSING preflightDiagnostic=provider lacks the capabilities required by this mutation mutationStatus=UNAVAILABLE mutationError=CAPABILITY_MISSING mutationDiagnostic=provider lacks the capabilities required by this mutation
