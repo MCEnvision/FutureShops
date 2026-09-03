@@ -37,16 +37,21 @@ public final class BalanceManager {
         custody = ephemeral ? new InMemoryEconomyCustodyStore() : EconomyCustodySavedData.get(server);
         claims = ephemeral ? new InMemoryEconomyClaimStore() : EconomyClaimSavedData.get(server);
         receipts = ephemeral ? new InMemoryInternalEconomyReceiptStore() : InternalEconomyReceiptSavedData.get(server);
+        boolean internalSelection = EconomyApi.INTERNAL_PROVIDER_ID.equals(selection.activeProviderId());
         boolean cleanMarkerValid = journal.cleanMarkerValid() && custody.cleanMarkerValid() && claims.cleanMarkerValid();
-        cleanMarkerValid &= receipts.cleanMarkerValid();
+        if (internalSelection) {
+            cleanMarkerValid &= receipts.cleanMarkerValid();
+        }
         boolean integrityValid = journal.integrityValid() && custody.integrityValid() && claims.integrityValid()
-                && receipts.integrityValid();
+                && (!internalSelection || receipts.integrityValid());
         boolean hasIncompleteRecords = journal.hasIncompleteRecords() || custody.hasIncompleteRecords()
                 || claims.hasIncompleteRecords();
         journal.markUnclean();
         custody.markUnclean();
         claims.markUnclean();
-        receipts.markUnclean();
+        if (internalSelection) {
+            receipts.markUnclean();
+        }
         lifecycleController = new EconomyLifecycleController(selection.activeProviderId());
         if (EconomyApi.INTERNAL_PROVIDER_ID.equals(selection.activeProviderId())) {
             InternalEconomyProvider legacy = new InternalEconomyProvider(server);
