@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
   "planId": "PLAN-MASTER",
-  "planSetSha256": "9fa6cbb672eadbd7b15a7f14cd4f9d4b8b2583ec769d68bebb4cad910d80aff7",
+  "planSetSha256": "d8ffaef4b5daa00ff515dc87708e4656992ec1b61e630a931e6b94b6e6ded97d",
   "planningSubject": {
-    "name": "FutureShops 2.3.0 external economy providers for Minecraft 1.21.1 NeoForge, with Pixelmon 9.4.0 support and a Vault bridge API",
+    "name": "FutureShops 2.3.0 strict external economy safety for Minecraft 1.21.1 NeoForge, with capability gated Pixelmon 9.4.0 and Vault bridge interoperability",
     "requestedArtifact": "authoritative_plan",
     "planProfile": "software_product",
     "sources": [
@@ -48,6 +48,13 @@
         "subject": "Vault API economy boundary",
         "source": "https://github.com/MilkBowl/VaultAPI and https://milkbowl.github.io/VaultAPI/overview-summary.html",
         "use": "separate bridge boundary and exact checked conversion evidence"
+      },
+      {
+        "id": "SRC-007",
+        "role": "owner_request",
+        "subject": "strict restart safe economy amendment and 3.0.0 issue guidance",
+        "source": "current owner request and accepted design discussion",
+        "use": "binding safety model, direct Pixelmon classification, issue 66 guidance, and unchanged unpublished endpoint"
       }
     ]
   },
@@ -55,79 +62,79 @@
     {
       "area": "component architecture",
       "status": "covered",
-      "source": "SRC-002",
-      "plan_section": "Architecture contract",
-      "rationale": "The plan freezes orchestration, provider registry, internal provider, Pixelmon adapter, separate Vault bridge, and dependency direction."
+      "source": "SRC-001",
+      "plan_section": "Product Contract and Profile Coverage",
+      "rationale": "covered by the updated strict external economy plan and its registered phase evidence"
     },
     {
       "area": "determinism",
       "status": "covered",
-      "source": "SRC-001",
-      "plan_section": "Transaction and determinism contract",
-      "rationale": "Stable request identities, checked arithmetic, frozen selection, idempotent outcomes, and exact artifact evidence define repeatability."
+      "source": "SRC-007",
+      "plan_section": "Product Contract and Profile Coverage",
+      "rationale": "covered by the updated strict external economy plan and its registered phase evidence"
     },
     {
       "area": "failure taxonomy",
       "status": "covered",
       "source": "SRC-001",
-      "plan_section": "Failure semantics",
-      "rationale": "The plan distinguishes missing, incompatible, failed, recovery-required, authorization, validation, and dependency failures."
+      "plan_section": "Product Contract and Profile Coverage",
+      "rationale": "covered by the updated strict external economy plan and its registered phase evidence"
     },
     {
       "area": "generalization",
       "status": "covered",
       "source": "SRC-001",
-      "plan_section": "Compatibility matrix",
-      "rationale": "The plan distinguishes standard NeoForge, exact Pixelmon, exact reviewed hybrid stack, unsupported versions, and future adapters."
+      "plan_section": "Product Contract and Profile Coverage",
+      "rationale": "covered by the updated strict external economy plan and its registered phase evidence"
     },
     {
       "area": "inputs and outputs",
       "status": "covered",
       "source": "SRC-001",
-      "plan_section": "Required behavior by surface",
-      "rationale": "The plan defines provider configuration, APIs, commands, gameplay inputs, typed outcomes, UI states, artifacts, and tracking output."
+      "plan_section": "Product Contract and Profile Coverage",
+      "rationale": "covered by the updated strict external economy plan and its registered phase evidence"
     },
     {
       "area": "release lifecycle",
       "status": "covered",
       "source": "SRC-001",
-      "plan_section": "Documentation, operations, and release boundaries",
-      "rationale": "The endpoint is one fully validated unpublished 2.3.0 artifact plus the actual 3.0.0 issue, with publication excluded."
+      "plan_section": "Product Contract and Profile Coverage",
+      "rationale": "covered by the updated strict external economy plan and its registered phase evidence"
     },
     {
       "area": "security",
       "status": "covered",
       "source": "SRC-001",
-      "plan_section": "Security, privacy, and determinism",
-      "rationale": "The plan covers untrusted inputs, permissions, class isolation, artifacts, secrets, logs, replay, and dependency risk."
+      "plan_section": "Product Contract and Profile Coverage",
+      "rationale": "covered by the updated strict external economy plan and its registered phase evidence"
     },
     {
       "area": "state and persistence",
       "status": "covered",
-      "source": "SRC-001",
-      "plan_section": "State ownership and persistence",
-      "rationale": "The plan separates provider balances from durable request, outcome, custody, claims, recovery, analytics, and internal state."
+      "source": "SRC-007",
+      "plan_section": "Product Contract and Profile Coverage",
+      "rationale": "covered by the updated strict external economy plan and its registered phase evidence"
     },
     {
       "area": "test system",
       "status": "external_prerequisite",
       "source": "EXT-001",
-      "plan_section": "Verification contract",
-      "rationale": "Deterministic tests are planned, while exact Pixelmon and Vault environments are known external blockers for highest-fidelity proof."
+      "plan_section": "Product Contract and Profile Coverage",
+      "rationale": "exact external runtime evidence remains an endpoint prerequisite"
     },
     {
       "area": "versioning",
       "status": "covered",
-      "source": "SRC-004",
-      "plan_section": "Versioning and compatibility",
-      "rationale": "The plan pins product, Minecraft, NeoForge, Pixelmon, public API, configuration, and persistence compatibility."
+      "source": "SRC-001",
+      "plan_section": "Product Contract and Profile Coverage",
+      "rationale": "covered by the updated strict external economy plan and its registered phase evidence"
     }
   ],
   "mandatoryRequirements": [
     {
       "id": "CORE-REQ-001",
-      "summary": "Target FutureShops 2.3.0 and NeoForge 21.1.248 while preserving unrelated pinned boundaries and one client-server jar.",
-      "source": "SRC-001 and SRC-004",
+      "summary": "platform and dependency baseline",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-000`",
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
@@ -143,8 +150,8 @@
     },
     {
       "id": "CORE-REQ-002",
-      "summary": "Ship a public versioned NeoForge economy provider API with deterministic registration, typed state, checked minor units, idempotent mutation, and recovery.",
-      "source": "SRC-001",
+      "summary": "public economy provider API",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-000`",
       "contributors": "`CORE-PHASE-001`, `CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
@@ -155,6 +162,8 @@
         "DEC-007",
         "DEC-009",
         "DEC-013",
+        "DEC-017",
+        "DEC-018",
         "EXT-003"
       ],
       "lifecycleStage": "change",
@@ -164,8 +173,8 @@
     },
     {
       "id": "CORE-REQ-003",
-      "summary": "Select internal by default and resolve a validated restart-only provider without hot switching or fallback.",
-      "source": "SRC-001",
+      "summary": "provider selection and restart semantics",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-000`",
       "contributors": "`CORE-PHASE-001`, `CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
@@ -181,14 +190,16 @@
     },
     {
       "id": "CORE-REQ-004",
-      "summary": "Keep the server online and fail all monetary mutations closed when an external provider is unavailable or unsafe.",
-      "source": "SRC-001",
+      "summary": "fail closed provider lifecycle and restart control",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-001`",
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
         "CORE-REQ-002",
         "CORE-REQ-003",
-        "DEC-006"
+        "DEC-006",
+        "DEC-009",
+        "DEC-017"
       ],
       "lifecycleStage": "continuous",
       "productionVerification": "nondestructive",
@@ -197,8 +208,8 @@
     },
     {
       "id": "CORE-REQ-005",
-      "summary": "Keep every provider decision and money mutation authoritative on the logical server.",
-      "source": "SRC-001",
+      "summary": "server authority and route enforcement",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-001`",
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
@@ -214,8 +225,8 @@
     },
     {
       "id": "CORE-REQ-006",
-      "summary": "Use provider-owned currency metadata and exact checked integer minor units across all values and conversions.",
-      "source": "SRC-001",
+      "summary": "values, metadata, and checked arithmetic",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-001`",
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
@@ -230,8 +241,8 @@
     },
     {
       "id": "CORE-REQ-007",
-      "summary": "Coordinate every money mutation through durable stable request and leg identities with idempotent outcomes, recovery, and compensation.",
-      "source": "SRC-001",
+      "summary": "write-ahead journal, escrow, and durable transaction coordination",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-001`",
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
@@ -240,6 +251,7 @@
         "CORE-REQ-006",
         "DEC-009",
         "DEC-014",
+        "DEC-017",
         "EXT-003"
       ],
       "lifecycleStage": "continuous",
@@ -249,8 +261,8 @@
     },
     {
       "id": "CORE-REQ-008",
-      "summary": "Keep external balances provider-owned while persisting only transaction facts, custody, claims, recovery, and confirmed analytics.",
-      "source": "SRC-001",
+      "summary": "authoritative state and analytics separation",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-001`",
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
@@ -266,8 +278,8 @@
     },
     {
       "id": "CORE-REQ-009",
-      "summary": "Route every balance and monetary surface through the provider and transaction boundaries without bypasses.",
-      "source": "SRC-001 and SRC-002",
+      "summary": "complete monetary surface routing",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-001`",
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
@@ -284,8 +296,8 @@
     },
     {
       "id": "CORE-REQ-010",
-      "summary": "Preserve independent internal and external balances, avoid automatic migration, and bind unresolved requests to their originating provider.",
-      "source": "SRC-001",
+      "summary": "provider switching and existing data",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-001`",
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
@@ -301,8 +313,8 @@
     },
     {
       "id": "CORE-REQ-011",
-      "summary": "Preserve bill registration and saves while disabling money item, deposit, withdrawal, redemption, and future ATM mutations under external providers.",
-      "source": "SRC-001",
+      "summary": "physical money and inactive mutations",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-001`",
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
@@ -320,8 +332,8 @@
     },
     {
       "id": "CORE-REQ-012",
-      "summary": "Present currency and provider state accurately while retaining browsing and pure barter during monetary unavailability.",
-      "source": "SRC-001",
+      "summary": "player and operator presentation",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-001`",
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
@@ -337,8 +349,8 @@
     },
     {
       "id": "CORE-REQ-013",
-      "summary": "Provide bounded actionable provider, request, recovery, and failure diagnostics without sensitive data or log spam.",
-      "source": "SRC-001",
+      "summary": "diagnostics and support evidence",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-001`",
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
@@ -352,8 +364,8 @@
     },
     {
       "id": "CORE-REQ-014",
-      "summary": "Keep provider discovery and external I/O out of hot paths and forbid full balance scans or synchronization.",
-      "source": "SRC-001",
+      "summary": "bounded integration cost",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-001`",
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
@@ -369,8 +381,8 @@
     },
     {
       "id": "CORE-REQ-015",
-      "summary": "Validate untrusted provider and gameplay inputs, contain failures, isolate optional classes, and review exact external artifacts.",
-      "source": "SRC-001",
+      "summary": "provider and artifact security",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-001`",
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
@@ -389,8 +401,8 @@
     },
     {
       "id": "CORE-REQ-016",
-      "summary": "Provide non-destructive recovery and rollback for incomplete provider operations, claims, custody, bills, and independent balances.",
-      "source": "SRC-001",
+      "summary": "operational draining, backup, recovery, and rollback",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-001`",
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
@@ -398,7 +410,8 @@
         "CORE-REQ-007",
         "CORE-REQ-008",
         "CORE-REQ-010",
-        "CORE-REQ-013"
+        "CORE-REQ-013",
+        "DEC-017"
       ],
       "lifecycleStage": "continuous",
       "productionVerification": "nondestructive",
@@ -407,8 +420,8 @@
     },
     {
       "id": "CORE-REQ-017",
-      "summary": "Bundle an optional adapter for exactly Pixelmon 9.4.0 without bundling or requiring Pixelmon on ordinary startup.",
-      "source": "SRC-001 and SRC-004",
+      "summary": "bundled capability-gated Pixelmon adapter",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-002`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-003`",
       "dependencies": [
@@ -420,9 +433,12 @@
         "CORE-REQ-009",
         "CORE-REQ-015",
         "CORE-REQ-016",
+        "DEC-017",
+        "DEC-018",
         "EXT-001",
         "EXT-002",
-        "EXT-003"
+        "EXT-003",
+        "EXT-008"
       ],
       "lifecycleStage": "change",
       "productionVerification": "nondestructive",
@@ -431,8 +447,8 @@
     },
     {
       "id": "CORE-REQ-018",
-      "summary": "Interoperate with one exact separately installed Vault bridge and hybrid stack without Bukkit, Vault, reflection, or bridge code inside FutureShops.",
-      "source": "SRC-001 and SRC-006",
+      "summary": "separate Vault bridge interoperability",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-002`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-003`",
       "dependencies": [
@@ -442,9 +458,11 @@
         "CORE-REQ-009",
         "CORE-REQ-015",
         "CORE-REQ-016",
+        "DEC-017",
         "EXT-004",
         "EXT-005",
-        "EXT-006"
+        "EXT-006",
+        "EXT-008"
       ],
       "lifecycleStage": "change",
       "productionVerification": "nondestructive",
@@ -453,8 +471,8 @@
     },
     {
       "id": "CORE-REQ-019",
-      "summary": "Execute complete deterministic, runtime, multiplayer, restart, failure, recovery, external integration, dependency, security, jar, and diff validation.",
-      "source": "SRC-001",
+      "summary": "complete production validation",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-003`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`",
       "dependencies": [
@@ -490,8 +508,8 @@
     },
     {
       "id": "CORE-REQ-020",
-      "summary": "Document user, API, integration, configuration, migration, recovery, security, verification, and support behavior proven by the final build.",
-      "source": "SRC-001",
+      "summary": "user, API, maintainer, and operator documentation",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-003`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`",
       "dependencies": [
@@ -522,8 +540,8 @@
     },
     {
       "id": "CORE-REQ-021",
-      "summary": "Produce one reproducible inspected SHA-256 and SHA-512 hashed unpublished 2.3.0 candidate artifact.",
-      "source": "SRC-001",
+      "summary": "validated unpublished artifact",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-003`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`",
       "dependencies": [
@@ -538,8 +556,8 @@
     },
     {
       "id": "CORE-REQ-022",
-      "summary": "Plan authoring already created and read back issue 66 immediately after plan validation, and CORE-PHASE-003 later searches, verifies, updates, and keeps that same issue open after artifact validation.",
-      "source": "SRC-001",
+      "summary": "actual 3.0.0 continuation issue 66",
+      "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-003`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`",
       "dependencies": [
@@ -558,80 +576,80 @@
   "optionalFutureScope": [
     {
       "id": "FUT-001",
-      "summary": "Maintain the existing 3.0.0 Forge 1.20.1 beta.",
-      "source": "SRC-001",
+      "summary": "Add this strict external economy design to the existing 3.0.0 beta on Forge 1.20.1",
+      "source": "SRC-001 and SRC-007",
       "disposition": "excluded"
     },
     {
       "id": "FUT-002",
-      "summary": "Port 3.0.0 to Minecraft 1.21.1.",
-      "source": "SRC-001",
+      "summary": "Carry the same design into a future 3.0.0 Minecraft 1.21.1 port",
+      "source": "SRC-001 and SRC-007",
       "disposition": "excluded"
     },
     {
       "id": "FUT-003",
-      "summary": "Add an ATM interface and command.",
-      "source": "SRC-001",
+      "summary": "ATM user interface and commands",
+      "source": "SRC-001 and SRC-007",
       "disposition": "excluded"
     },
     {
       "id": "FUT-004",
-      "summary": "Add external adapters beyond internal, Pixelmon 9.4.0, and the separately validated Vault bridge.",
-      "source": "SRC-001",
+      "summary": "Additional external economy adapters",
+      "source": "SRC-001 and SRC-007",
       "disposition": "excluded"
     }
   ],
   "nonGoals": [
     {
       "id": "NG-001",
-      "summary": "Publish 2.3.0 to GitHub, CurseForge, Modrinth, or another distribution service.",
+      "summary": "Publishing 2.3.0 to GitHub, CurseForge, Modrinth, or another distribution service.",
       "source": "SRC-001"
     },
     {
       "id": "NG-002",
-      "summary": "Automatically copy, convert, reconcile, or merge balances between providers.",
+      "summary": "Automatically copying, converting, reconciling, or merging balances between providers.",
       "source": "SRC-001"
     },
     {
       "id": "NG-003",
-      "summary": "Ship Bukkit, Vault, an economy plugin, a hybrid server, bridge code, or their APIs inside FutureShops.",
+      "summary": "Shipping Bukkit, Vault, an economy plugin, a hybrid server, bridge code, or their APIs inside FutureShops.",
       "source": "SRC-001"
     },
     {
       "id": "NG-004",
-      "summary": "Hot switch, late activate, fall back, or priority-select providers at runtime.",
+      "summary": "Hot switching, late activation, automatic fallback, or provider priority selection.",
       "source": "SRC-001"
     },
     {
       "id": "NG-005",
-      "summary": "Mirror an external provider balance ledger inside FutureShops.",
+      "summary": "Mirroring an external provider balance ledger inside FutureShops.",
       "source": "SRC-001"
     },
     {
       "id": "NG-006",
-      "summary": "Support Pixelmon versions other than 9.4.0 in this release.",
+      "summary": "Supporting Pixelmon versions other than exactly 9.4.0 in this release.",
       "source": "SRC-001"
     },
     {
       "id": "NG-007",
-      "summary": "Upgrade unrelated platform or dependency boundaries.",
+      "summary": "Upgrading unrelated platform or dependency boundaries.",
       "source": "SRC-001"
     },
     {
       "id": "NG-008",
-      "summary": "Add telemetry, remote balance services, distributed market authority, or cross-server balance synchronization.",
+      "summary": "Adding telemetry, remote balance services, distributed market authority, or cross-server balance synchronization.",
       "source": "SRC-001"
     },
     {
       "id": "NG-009",
-      "summary": "Weaken browsing, barter, custody, claims, or save compatibility for provider integration.",
+      "summary": "Weakening browsing, barter, custody, claims, or save compatibility for provider integration.",
       "source": "SRC-001"
     }
   ],
   "ownerDecisions": [
     {
       "id": "DEC-001",
-      "question": "Which product and platform target applies?",
+      "question": "Product and platform target",
       "selectedChoice": "FutureShops 2.3.0 on Minecraft 1.21.1 and NeoForge 21.1.248, with unrelated boundaries preserved.",
       "rationale": "Pixelmon 9.4.0 compatibility requires the exact NeoForge update while unrelated pins remain stable.",
       "affectedRequirements": [
@@ -644,7 +662,7 @@
     },
     {
       "id": "DEC-002",
-      "question": "How is the mod packaged?",
+      "question": "Packaging",
       "selectedChoice": "The same FutureShops jar is installed on client and server, with optional integrations isolated.",
       "rationale": "One artifact must remain safe on dedicated servers and clients without optional dependencies.",
       "affectedRequirements": [
@@ -657,7 +675,7 @@
     },
     {
       "id": "DEC-003",
-      "question": "Who owns provider and transaction authority?",
+      "question": "Authority",
       "selectedChoice": "The logical server owns provider selection, readiness, authorization, transactions, custody, claims, and outcomes.",
       "rationale": "Monetary state and permissions require one authoritative mutation boundary.",
       "affectedRequirements": [
@@ -669,7 +687,7 @@
     },
     {
       "id": "DEC-004",
-      "question": "How are providers integrated?",
+      "question": "Integration boundary",
       "selectedChoice": "A public NeoForge provider API, bundled internal and optional Pixelmon adapter, and a separate bridge registering vault.",
       "rationale": "The core API supports exact integrations without embedding unrelated platforms.",
       "affectedRequirements": [
@@ -682,7 +700,7 @@
     },
     {
       "id": "DEC-005",
-      "question": "How is provider selection applied?",
+      "question": "Provider selection",
       "selectedChoice": "Internal is default and selection is restart-only without hot activation or fallback.",
       "rationale": "Frozen startup selection prevents inconsistent state ownership.",
       "affectedRequirements": [
@@ -694,7 +712,7 @@
     },
     {
       "id": "DEC-006",
-      "question": "What happens when an external provider fails?",
+      "question": "External provider failure",
       "selectedChoice": "Server remains online, monetary mutations fail closed, browsing and pure barter remain available.",
       "rationale": "Dependency failure must not corrupt monetary or unrelated marketplace state.",
       "affectedRequirements": [
@@ -707,7 +725,7 @@
     },
     {
       "id": "DEC-007",
-      "question": "Who owns currency metadata and precision?",
+      "question": "Currency representation",
       "selectedChoice": "The selected provider owns them and every accepted conversion is exact checked integer minor units.",
       "rationale": "Exact provider metadata and checked values prevent loss and overflow.",
       "affectedRequirements": [
@@ -721,7 +739,7 @@
     },
     {
       "id": "DEC-008",
-      "question": "Are balances migrated automatically?",
+      "question": "Balance migration",
       "selectedChoice": "No. Internal and external balances remain independent and internal starting balance is internal-only.",
       "rationale": "Provider selection does not authorize transferring or inventing value.",
       "affectedRequirements": [
@@ -732,12 +750,15 @@
     },
     {
       "id": "DEC-009",
-      "question": "How are multi-leg and offline operations protected?",
-      "selectedChoice": "Durable request and leg identities, idempotent outcomes, recovery, compensation, and no mirrored balance ledger.",
-      "rationale": "Every retry and restart must converge without duplicate value movement.",
+      "question": "Multi-leg protection",
+      "selectedChoice": "Durable root and leg identities, write-ahead intent, checksummed journal state, item custody and claims, capability-gated external effects, idempotent outcomes where supported, and no mirrored balance ledger.",
+      "rationale": "A retry or restart may proceed only when durable evidence proves it safe; otherwise the economy freezes without duplicating value or discarding custody.",
       "affectedRequirements": [
         "CORE-REQ-002",
+        "CORE-REQ-004",
         "CORE-REQ-007",
+        "CORE-REQ-009",
+        "CORE-REQ-016",
         "CORE-REQ-017",
         "CORE-REQ-018"
       ],
@@ -745,7 +766,7 @@
     },
     {
       "id": "DEC-010",
-      "question": "What happens to physical money under external providers?",
+      "question": "Physical money",
       "selectedChoice": "Keep registrations and saves, disable all value mutation, and allow redemption only after returning to internal.",
       "rationale": "Existing inventories remain compatible without bypassing an external provider.",
       "affectedRequirements": [
@@ -755,7 +776,7 @@
     },
     {
       "id": "DEC-011",
-      "question": "Is ATM functionality part of 2.3.0?",
+      "question": "ATM scope",
       "selectedChoice": "No ATM UI or command is added.",
       "rationale": "ATM functionality is excluded from 2.3.0.",
       "affectedRequirements": [
@@ -766,9 +787,9 @@
     },
     {
       "id": "DEC-012",
-      "question": "Which Pixelmon integration is shipped?",
+      "question": "Pixelmon integration",
       "selectedChoice": "A bundled optional adapter for exactly Pixelmon 9.4.0, without bundling Pixelmon.",
-      "rationale": "Compatibility claims remain limited to reviewed exact artifacts.",
+      "rationale": "This original choice remains historical, but exact runtime evidence now proves that direct Pixelmon 9.4.0 lacks the request identity, durable receipt, idempotent retry, and outcome lookup required for production mutation in strict mode.",
       "affectedRequirements": [
         "CORE-REQ-017"
       ],
@@ -776,7 +797,7 @@
     },
     {
       "id": "DEC-013",
-      "question": "How is Vault supported?",
+      "question": "Vault support",
       "selectedChoice": "A separately installed reviewed bridge registers vault; FutureShops contains no Bukkit or Vault dependency or reflection.",
       "rationale": "The bridge owns hybrid-platform dependencies and lifecycle adaptation.",
       "affectedRequirements": [
@@ -787,21 +808,22 @@
     },
     {
       "id": "DEC-014",
-      "question": "What external economy data may FutureShops persist?",
-      "selectedChoice": "Only transaction facts, requests, outcomes, custody, claims, and confirmed analytics, never a mirrored external balance ledger.",
+      "question": "Persisted external data",
+      "selectedChoice": "Only transaction facts, write-ahead requests, outcomes, custody, claims, recovery state, clean-shutdown evidence, and confirmed analytics, never a mirrored external balance ledger.",
       "rationale": "The external provider remains the sole balance authority.",
       "affectedRequirements": [
         "CORE-REQ-007",
         "CORE-REQ-008",
-        "CORE-REQ-014"
+        "CORE-REQ-014",
+        "CORE-REQ-016"
       ],
       "supersedes": []
     },
     {
       "id": "DEC-015",
-      "question": "Is the 3.0.0 issue created now?",
-      "selectedChoice": "Create and read back the actual issue after plan validation with the existing 3.0 beta maintenance milestone and enhancement, forge, neoforge, and ready labels.",
-      "rationale": "Initial tracking is authoring output; CORE-PHASE-003 later verifies and updates the same open issue after product validation.",
+      "question": "Continuation issue timing",
+      "selectedChoice": "Preserve the existing issue 66 created and read back by plan authoring, then update that issue only after 2.3.0 artifact validation with the strict economy gate, lifecycle, journal, escrow, capability, recovery, backup, and direct Pixelmon limitation design for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.",
+      "rationale": "This plan implements only 2.3.0. The 3.0.0 lines receive one actionable design issue and no code, duplicate issue, early mutation, or closure.",
       "affectedRequirements": [
         "CORE-REQ-022"
       ],
@@ -809,7 +831,7 @@
     },
     {
       "id": "DEC-016",
-      "question": "Is publication authorized?",
+      "question": "Publication",
       "selectedChoice": "No publication, release tag, mod platform upload, or public artifact is authorized.",
       "rationale": "The selected endpoint is a validated unpublished candidate and open tracking issue.",
       "affectedRequirements": [
@@ -817,6 +839,48 @@
         "CORE-REQ-022"
       ],
       "supersedes": []
+    },
+    {
+      "id": "DEC-017",
+      "question": "Strict external transaction safety",
+      "selectedChoice": "FutureShops 2.3.0 has one strict production mode. It requires a server-owned economy gate, write-ahead transaction journal, durable item custody and claims, orderly `DRAINING`, startup `RECOVERING`, fail-closed `FROZEN`, provider capability gating, and external mutation only when the requested operation has a provable outcome and safe retry contract. It provides no unsafe or experimental override.",
+      "rationale": "FutureShops can protect its own items and records, but it cannot infer whether a fallible external ledger changed during a crash window. Refusing or freezing is safer than a duplicate debit, duplicate credit, fabricated refund, or balance rewrite.",
+      "affectedRequirements": [
+        "CORE-REQ-002",
+        "CORE-REQ-004",
+        "CORE-REQ-005",
+        "CORE-REQ-007",
+        "CORE-REQ-009",
+        "CORE-REQ-012",
+        "CORE-REQ-013",
+        "CORE-REQ-014",
+        "CORE-REQ-016",
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-020",
+        "CORE-REQ-021"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-018",
+      "question": "Direct Pixelmon capability classification",
+      "selectedChoice": "Bundle an exact Pixelmon 9.4.0 capability adapter without bundling Pixelmon. It may expose verified query and precheck behavior, but strict mode must not enable production mutation through the direct API unless exact reviewed evidence supplies durable request identity, receipt lookup, and idempotent retry. With the currently observed API, mutation-required surfaces are unavailable and the product claims safe capability detection and refusal, not direct Pixelmon production mutation support.",
+      "rationale": "The exact runtime exposes boolean `add` and `take` calls and balance events but no operation identity or durable outcome lookup. A local journal cannot make that external effect atomic or safely replayable.",
+      "affectedRequirements": [
+        "CORE-REQ-002",
+        "CORE-REQ-003",
+        "CORE-REQ-007",
+        "CORE-REQ-012",
+        "CORE-REQ-017",
+        "CORE-REQ-019",
+        "CORE-REQ-020",
+        "CORE-REQ-021"
+      ],
+      "supersedes": [
+        "DEC-012"
+      ]
     }
   ],
   "externalPrerequisites": [
@@ -834,6 +898,9 @@
       "availability": "unknown",
       "authorization": "not_required",
       "blocked_plan_approved": true,
+      "required_evidence": [
+        "Acquire exact official artifacts and record version, source, hashes, compatibility, license provenance, archive review, and security review."
+      ],
       "artifact_evidence": [
         "exact_version",
         "authoritative_source",
@@ -842,9 +909,6 @@
         "compatibility",
         "license_provenance",
         "security_review"
-      ],
-      "required_evidence": [
-        "Exact official artifact filenames or coordinates, authoritative URLs, versions, byte sizes, SHA-256 and SHA-512, publisher identity, compatibility, license or terms, archive and dependency security review."
       ]
     },
     {
@@ -861,7 +925,7 @@
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Reproducible environment manifest for Minecraft 1.21.1, NeoForge 21.1.248, Pixelmon 9.4.0, exact FutureShops artifact, sanitized logs, and isolation from production credentials and data."
+        "Provision the exact isolated runtime and record its reproducible manifest and sanitized logs."
       ]
     },
     {
@@ -878,7 +942,7 @@
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Verified API signatures, values, lifecycle, persistence, exact conversion, idempotent mutation or durable receipt design, outcome lookup, failure behavior, and duplicate prevention."
+        "Prove exact values, lifecycle, persistence, durable outcomes, recovery, and duplicate prevention against the reviewed API."
       ]
     },
     {
@@ -895,6 +959,9 @@
       "availability": "unknown",
       "authorization": "not_required",
       "blocked_plan_approved": true,
+      "required_evidence": [
+        "Acquire and review the exact bridge artifact, source, hashes, compatibility, license provenance, and security boundary."
+      ],
       "artifact_evidence": [
         "exact_version",
         "authoritative_source",
@@ -903,9 +970,6 @@
         "compatibility",
         "license_provenance",
         "security_review"
-      ],
-      "required_evidence": [
-        "Exact bridge version, authoritative source, byte size, SHA-256 and SHA-512, API compatibility, license or provenance, source or binary security review, and registration contract."
       ]
     },
     {
@@ -917,12 +981,12 @@
         "CORE-REQ-021"
       ],
       "mandatory_for_endpoint": true,
-      "kind": "group",
+      "kind": "other",
       "availability": "unknown",
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Exact versions, authoritative sources, byte sizes, SHA-256 and SHA-512 for every artifact, compatibility, licenses or provenance, security review, and supported limitations."
+        "Select and review every exact artifact and record versions, sources, hashes, compatibility, licenses, and security conclusions."
       ]
     },
     {
@@ -939,7 +1003,7 @@
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Reproducible hybrid environment manifest, exact reviewed artifacts, exact FutureShops jar, sanitized logs, and isolation from production credentials and data."
+        "Provision the isolated exact hybrid environment and record its reproducible manifest and sanitized logs."
       ]
     },
     {
@@ -952,9 +1016,36 @@
       "kind": "service",
       "availability": "available",
       "authorization": "authorized",
-      "blocked_plan_approved": false,
+      "blocked_plan_approved": true,
       "required_evidence": [
-        "Authenticated EnVisione identity, MCEnvision/FutureShops repository, existing 3.0 beta maintenance milestone, required labels, duplicate search, issue creation result, and readback."
+        "Preserve the completed authoring search, creation, and readback for issue 66, then verify and update that same open issue in CORE-PHASE-003 only after artifact validation."
+      ]
+    },
+    {
+      "id": "EXT-008",
+      "name": "Owner acceptance of applicable EULA and terms for disposable runtime validation",
+      "affected_requirements": [
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-021"
+      ],
+      "mandatory_for_endpoint": true,
+      "kind": "authorization",
+      "availability": "unavailable",
+      "authorization": "unknown",
+      "blocked_plan_approved": true,
+      "required_evidence": [
+        "Accept the applicable Minecraft and external runtime terms for the exact disposable environments before their first full launch. Never infer or write acceptance on the owner's behalf."
+      ],
+      "scope_binding": [
+        "runbook_digest",
+        "artifact_identities",
+        "systems",
+        "operations",
+        "operators",
+        "time_window",
+        "rollback"
       ]
     }
   ],
@@ -970,20 +1061,17 @@
         "DEC-005",
         "DEC-006",
         "DEC-007",
-        "DEC-008",
         "DEC-009",
-        "DEC-012",
         "DEC-013",
-        "DEC-014",
-        "DEC-015",
-        "DEC-016",
+        "DEC-017",
+        "DEC-018",
         "EXT-001",
         "EXT-002",
         "EXT-003",
         "EXT-004",
         "EXT-005",
         "EXT-006",
-        "EXT-007"
+        "EXT-008"
       ],
       "canonicalRequirements": [
         "CORE-REQ-001",
@@ -1009,6 +1097,8 @@
         "DEC-010",
         "DEC-011",
         "DEC-014",
+        "DEC-017",
+        "DEC-018",
         "EXT-003"
       ],
       "canonicalRequirements": [
@@ -1032,34 +1122,24 @@
       "owner": "Exact external provider integrations",
       "dependencies": [
         "CORE-PHASE-001",
-        "CORE-REQ-001",
         "CORE-REQ-002",
         "CORE-REQ-004",
+        "CORE-REQ-005",
         "CORE-REQ-006",
         "CORE-REQ-007",
         "CORE-REQ-009",
         "CORE-REQ-015",
         "CORE-REQ-016",
-        "DEC-001",
-        "DEC-002",
-        "DEC-003",
-        "DEC-004",
-        "DEC-005",
-        "DEC-006",
-        "DEC-007",
-        "DEC-008",
-        "DEC-009",
-        "DEC-010",
-        "DEC-011",
-        "DEC-012",
         "DEC-013",
-        "DEC-014",
+        "DEC-017",
+        "DEC-018",
         "EXT-001",
         "EXT-002",
         "EXT-003",
         "EXT-004",
         "EXT-005",
-        "EXT-006"
+        "EXT-006",
+        "EXT-008"
       ],
       "canonicalRequirements": [
         "CORE-REQ-017",
@@ -1091,13 +1171,16 @@
         "CORE-REQ-018",
         "DEC-015",
         "DEC-016",
+        "DEC-017",
+        "DEC-018",
         "EXT-001",
         "EXT-002",
         "EXT-003",
         "EXT-004",
         "EXT-005",
         "EXT-006",
-        "EXT-007"
+        "EXT-007",
+        "EXT-008"
       ],
       "canonicalRequirements": [
         "CORE-REQ-019",
@@ -1107,15 +1190,15 @@
       ]
     }
   ],
-  "completionEndpoint": "One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven against internal, exact Pixelmon 9.4.0, and one exact reviewed Vault bridge stack, plus an actual read-back GitHub issue for 3.0.0 Forge maintenance and its future 1.21.1 port.",
+  "completionEndpoint": "One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior and strict capability-gated behavior against exact Pixelmon 9.4.0 and one exact reviewed Vault bridge stack, enabling external writes only where durable outcome and idempotent retry capabilities are proven and otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.",
   "goalCreator": {
     "mandatoryBoundary": "CORE-REQ-001 through CORE-REQ-022 across CORE-PHASE-000 through CORE-PHASE-003, including exact external integration evidence, the unpublished artifact, and the two-stage open issue lifecycle.",
     "optionalFutureDisposition": "excluded",
-    "lockedOwnerDecisions": "DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012, DEC-013, DEC-014, DEC-015, DEC-016",
+    "lockedOwnerDecisions": "DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018",
     "activePhase": "CORE-PHASE-000",
     "nextExecutableAction": "Execute P000-TASK-001 to reconfirm repository identity, toolchain, product metadata, economy ownership, and the complete provider call graph before implementation.",
     "knownFailingChecks": "none at validated plan handoff; execution checks have not yet run.",
-    "knownExternalBlockers": "Official Pixelmon 9.4.0 runtime and development artifacts; Disposable exact Pixelmon 9.4.0 integration environment; Pixelmon economy API feasibility proof; Separately installed Vault bridge artifact; Exact reviewed hybrid runtime, Vault, and economy plugin stack; Disposable exact Vault bridge integration environment.",
-    "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, resolve EXT-001 through EXT-006 with exact evidence, pass deterministic and runtime matrices, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation."
+    "knownExternalBlockers": "Official Pixelmon 9.4.0 runtime and development artifacts; Disposable exact Pixelmon 9.4.0 integration environment; Pixelmon economy API feasibility proof; Separately installed Vault bridge artifact; Exact reviewed hybrid runtime, Vault, and economy plugin stack; Disposable exact Vault bridge integration environment; Owner acceptance of applicable EULA and terms for disposable runtime validation under EXT-008.",
+    "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, classify EXT-001 through EXT-006 with exact evidence, satisfy EXT-008 before full external runtime proof, pass journal, escrow, draining, recovery, frozen, capability, deterministic, and runtime matrices, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation."
   }
 }

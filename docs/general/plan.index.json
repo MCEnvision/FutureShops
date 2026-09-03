@@ -22,7 +22,7 @@
       "classification": "mandatory",
       "requirementPrefix": "PHASE000",
       "phaseId": "CORE-PHASE-000",
-      "owner": "FutureShops platform and public economy API",
+      "owner": "FutureShops repository",
       "dependsOn": []
     },
     {
@@ -32,7 +32,7 @@
       "classification": "mandatory",
       "requirementPrefix": "PHASE001",
       "phaseId": "CORE-PHASE-001",
-      "owner": "Server-authoritative economy orchestration and all FutureShops monetary surfaces",
+      "owner": "FutureShops repository",
       "dependsOn": [
         "PLAN-PHASE-000"
       ]
@@ -56,7 +56,7 @@
       "classification": "mandatory",
       "requirementPrefix": "PHASE003",
       "phaseId": "CORE-PHASE-003",
-      "owner": "FutureShops production validation and delivery evidence",
+      "owner": "FutureShops repository",
       "dependsOn": [
         "PLAN-PHASE-002"
       ]
