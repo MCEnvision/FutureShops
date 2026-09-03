@@ -64,7 +64,7 @@ The existing saved data and item records are read only inputs for the new schema
 
 ## Test and runtime inventory
 
-The repository has JUnit coverage for existing saved data, item validation, packet bounds, listing matching, and screen policy. Phase 000 added public API, registry, selection, and fail closed selection tests. Phase 001 now adds coordinator, lifecycle, journal, custody, claim, settlement, and recovery tests, plus seven real NeoForge GameTests. The remaining evidence gaps are the complete player shop crash matrix and interactive multiplayer walkthrough. The Gradle tasks available for this phase are `test`, `build`, `runData`, `runGameTestServer`, `runServer`, and `runClient`.
+The repository has JUnit coverage for existing saved data, item validation, packet bounds, listing matching, and screen policy. Phase 000 added public API, registry, selection, and fail closed selection tests. Phase 001 now adds coordinator, lifecycle, journal, custody, claim, settlement, and recovery tests, plus ten real NeoForge GameTests. The remaining evidence gaps are the interactive multiplayer walkthrough and the final phase audit and integration gates. The Gradle tasks available for this phase are `test`, `build`, `runData`, `runGameTestServer`, `runServer`, and `runClient`.
 
 Required additions are grouped by boundary.
 
@@ -74,7 +74,7 @@ Required additions are grouped by boundary.
 | Selection | `ProviderSelectionManagerTest`, `BalanceManagerSelectionTest` | Lifecycle state and restart selection integration |
 | Persistence | Existing SavedData tests only | Version, checksum, migration, unknown newer, truncated, interrupted write, clean marker, recovery checkpoint, backup, and restore fixtures |
 | Transactions | Existing shop tests are service level. `EconomyTransactionCoordinatorTest` covers strict one leg intent, capability refusal, sequential and concurrent duplicate replay, ambiguity freeze, receipt validation, custody conservation, compensation, and lookup recovery. | Complete multi leg crash point evidence |
-| World and inventory | Seven real NeoForge GameTests cover registration, public mutations, sale and barter escrow, offline claims, and reconnect replay | Full player shop crash matrix, bills, and full inventory walkthrough |
+| World and inventory | Ten real NeoForge GameTests cover registration, public mutations, sale and barter escrow at prepared, removed, stored, and delivered restart boundaries, offline claims, and reconnect replay | Bills, full inventory walkthrough, and interactive multiplayer |
 | Network and UI | Existing packet bounds and screen policy tests | Server snapshots, stale state, replay, reconnect, localization, disabled actions, client and dedicated server isolation |
 | Runtime | Standard server and Xvfb client startup evidence plus reconnect replay GameTest | Clean and unclean restart matrix, interactive multiplayer, draining, recovery, frozen state, provider switching, and full surface walkthrough |
 
@@ -135,3 +135,7 @@ Source commit `989cef3` adds `EconomyGameTests.reconnectReplayPreservesStableReq
 The rebuilt unpublished `futureshops-2.3.0.jar` for source commit `989cef3` passed `unzip -tq` and the optional provider class scan. Its SHA 256 is `51e8085466c58431fbcd2f46c6f74540d0986f39599a00b5c1c3cb58613dc18b` and its SHA 512 is `5d8fa35ce6dcded18a74bcf4715d042fc17ed4addbf9da87ac6dbade4c1bbf7ddb1392b1cd08a15265569483ded38551bcab56e6277fb014b2001d01c5227d0f`.
 
 Source commit `0d38ecf` adds `EconomyTransactionCoordinatorTest.concurrentDuplicateRequestsProduceOneProviderMutation`. Two concurrent callers using the same request identity both receive the same confirmed receipt, while the fixture provider records one withdrawal. The focused coordinator suite passed with this coverage.
+
+Source commit `ddc6652` extends the real NeoForge restart matrix with sale escrow after exact item removal, sale escrow after delivery, and barter escrow after exact payment removal. Each unclean reload retains the checksum, request identity, exact stack, and interrupted state, then requires an explicit `RECOVERY_REQUIRED` transition before retry. The complete `test` task and all ten required GameTests passed in `/tmp/futureshops-gametest-crash-matrix-20260903.log`. The rebuilt unpublished jar passes `unzip -tq`, with SHA 256 `0977b2f8470840b14d39697e2b95b53f034fae29a907fe558e00bbad8e98352b` and SHA 512 `ceafe9b4eaca97bf9eab9185c9bb6cb96add6a6bee7fc4f8b822aaee7e8552403d001f61a5bfffa56aaad32539e160da2176b8b531b084f548dce52e321835d9`.
+
+Against that same build, the bounded dedicated server reached `FutureShops common setup complete` and `FutureShops server starting` in `/tmp/futureshops-runserver-crash-matrix-20260903.log` before the expected timeout exit `124`. The Xvfb client reached `FutureShops common setup complete` in `/tmp/futureshops-runclient-crash-matrix-20260903.log` before the expected timeout exit `124`; only the existing GeckoLib and Mixin Java 21 class version warnings appeared.
