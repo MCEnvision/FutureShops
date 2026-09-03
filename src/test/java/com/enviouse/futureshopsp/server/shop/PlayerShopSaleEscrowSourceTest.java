@@ -109,6 +109,26 @@ class PlayerShopSaleEscrowSourceTest {
         assertTrue(credit > remove);
     }
 
+    @Test
+    void buybackRemovalMismatchCannotSilentlyRefundUnrestoredItems() throws Exception {
+        String source = Files.readString(projectDirectory().resolve(Path.of(
+                "src", "main", "java", "com", "enviouse", "futureshopsp", "server", "shop",
+                "PlayerShopBlockService.java")));
+
+        int firstMismatch = source.indexOf("if (!itemEscrow.markRemoved(itemEscrowRequestId, taken");
+        int secondMismatch = source.indexOf("if (!itemEscrow.markRemoved(itemEscrowRequestId, paymentStacks");
+        assertTrue(firstMismatch >= 0);
+        assertTrue(secondMismatch > firstMismatch);
+
+        String adminMismatch = source.substring(firstMismatch, secondMismatch);
+        String playerMismatch = source.substring(secondMismatch,
+                source.indexOf("// Capacity was simulated", secondMismatch));
+        assertTrue(adminMismatch.contains("ShopTransactionUtil.canFit(seller.getInventory(), taken)"));
+        assertTrue(adminMismatch.contains("itemEscrow.markRecoveryRequired(itemEscrowRequestId)"));
+        assertTrue(playerMismatch.contains("ShopTransactionUtil.canFit(seller.getInventory(), paymentStacks)"));
+        assertTrue(playerMismatch.contains("itemEscrow.markRecoveryRequired(itemEscrowRequestId)"));
+    }
+
     private static Path projectDirectory() {
         Path candidate = Path.of("").toAbsolutePath();
         while (candidate != null) {

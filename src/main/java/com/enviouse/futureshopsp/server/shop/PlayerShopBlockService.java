@@ -2445,9 +2445,14 @@ public final class PlayerShopBlockService {
                     return;
                 }
                 if (!itemEscrow.markRemoved(itemEscrowRequestId, taken, seller.level().registryAccess())) {
-                    ShopTransactionUtil.insertIntoInventory(seller.getInventory(), taken);
-                    itemEscrow.markRefunded(itemEscrowRequestId);
-                    sendResult(seller, false, ShopResultCode.SERVER_ERROR);
+                    boolean restored = ShopTransactionUtil.canFit(seller.getInventory(), taken)
+                            && ShopTransactionUtil.insertIntoInventory(seller.getInventory(), taken);
+                    if (restored && itemEscrow.markRefunded(itemEscrowRequestId)) {
+                        sendResult(seller, false, ShopResultCode.SERVER_ERROR);
+                    } else {
+                        itemEscrow.markRecoveryRequired(itemEscrowRequestId);
+                        sendResult(seller, false, ShopResultCode.RECOVERY_REQUIRED);
+                    }
                     return;
                 }
                 // The admin shop is the terminal sink for the sold stacks.
@@ -2545,9 +2550,14 @@ public final class PlayerShopBlockService {
                 return;
             }
             if (!itemEscrow.markRemoved(itemEscrowRequestId, paymentStacks, seller.level().registryAccess())) {
-                ShopTransactionUtil.insertIntoInventory(seller.getInventory(), paymentStacks);
-                itemEscrow.markRefunded(itemEscrowRequestId);
-                sendResult(seller, false, ShopResultCode.SERVER_ERROR);
+                boolean restored = ShopTransactionUtil.canFit(seller.getInventory(), paymentStacks)
+                        && ShopTransactionUtil.insertIntoInventory(seller.getInventory(), paymentStacks);
+                if (restored && itemEscrow.markRefunded(itemEscrowRequestId)) {
+                    sendResult(seller, false, ShopResultCode.SERVER_ERROR);
+                } else {
+                    itemEscrow.markRecoveryRequired(itemEscrowRequestId);
+                    sendResult(seller, false, ShopResultCode.RECOVERY_REQUIRED);
+                }
                 return;
             }
             // Capacity was simulated against the exact escrow stacks, then insertion is attempted.
