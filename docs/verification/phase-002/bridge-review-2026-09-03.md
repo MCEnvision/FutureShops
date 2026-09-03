@@ -14,6 +14,8 @@ The available bridge files were inspected outside the repository.
 
 The bridge contains `v1_21_R1` classes and can wire Pixelmon to Vault on a hybrid server. It is still a Bukkit plugin stack, not a NeoForge provider API. The exact profile below includes its required EverNifeCore artifact.
 
+The public EverNife repositories for PixelmonEconomyBridge, FinalEconomy, and EverNifeCore expose no GitHub license metadata and no root license file. Their separately installed artifacts therefore remain license provenance unresolved for this phase. The Youer repository declares a `LICENSE.md`, but its GitHub license metadata is `NOASSERTION`.
+
 ## Exact hybrid profile
 
 The disposable profile `/tmp/futureshops-youer-pixelmon-248.zhVzs4` contains the exact FutureShops 2.3.0, Pixelmon 9.4.0, GeckoLib 4.8.4, Youer `1.21.1-d4a204a0`, NeoForge 21.1.248, Vault 1.7.3, FinalEconomy 1.0.9, PixelmonEconomyBridge 1.1.6, and EverNifeCore 2.0.4.4 artifacts above. Its FutureShops configuration selects `pixelmon` and its `eula.txt` remains `eula=false`.
