@@ -16,11 +16,21 @@ class PlayerShopBarterSafetySourceTest {
                 "server", "shop", "PlayerShopBlockService.java")));
 
         assertTrue(source.contains("boolean recorded = PlayerShopSettlementSavedData.get(buyer.getServer())"));
-        assertTrue(source.contains("if (!recorded) {\n                        rollbackBarterPayment(barterStorage"));
-        assertTrue(source.contains("private static void rollbackAll(LinkedStorage linkedStorage, LinkedStorage barterStorage"));
+        assertTrue(source.contains("if (!recorded) {"));
         assertTrue(source.contains("rollbackBarterPayment(barterStorage, buyer, barterItem, barterAmount"));
-        assertTrue(source.contains("if (ShopTransactionUtil.canFit(buyer.getInventory(), stacks))"));
-        assertTrue(source.contains("private static void restorePaymentToBuyer(ServerPlayer buyer, List<ItemStack> stacks)"));
+        assertTrue(source.contains("private static boolean rollbackAll(LinkedStorage linkedStorage, LinkedStorage barterStorage"));
+        assertTrue(source.contains("rollbackBarterPayment(barterStorage, buyer, barterItem, barterAmount"));
+        assertTrue(source.contains("if (!ShopTransactionUtil.canFit(buyer.getInventory(), stacks))"));
+        assertTrue(source.contains("private static boolean restorePaymentToBuyer(ServerPlayer buyer, List<ItemStack> stacks)"));
+        assertTrue(source.contains("return false;\n        }\n        return ShopTransactionUtil.insertIntoInventory"));
+        assertTrue(source.contains("barterEscrow.markRecoveryRequired(barterEscrowRequestId)"));
+        assertTrue(source.contains("private static boolean rollbackBarterPayment"));
+        int restoreStart = source.indexOf("private static boolean restorePaymentToBuyer");
+        int restoreEnd = source.indexOf("private static boolean reinsert", restoreStart);
+        assertTrue(restoreStart >= 0 && restoreEnd > restoreStart);
+        assertFalse(source.substring(restoreStart, restoreEnd).contains(".drop("));
+        assertTrue(source.contains("boolean complete = true;"));
+        assertTrue(source.contains("return complete;"));
         assertTrue(source.contains("custodyId = custodyIdFor(transactionId, \"buyer compound debit\")"));
         assertTrue(source.contains("custodyId = custodyIdFor(transactionId, \"buyer debit\")"));
         assertTrue(source.contains("return rootRequest.child(role).child(\"custody\")"));
