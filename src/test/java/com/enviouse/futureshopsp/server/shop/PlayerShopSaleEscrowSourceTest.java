@@ -127,6 +127,13 @@ class PlayerShopSaleEscrowSourceTest {
         assertTrue(adminMismatch.contains("itemEscrow.markRecoveryRequired(itemEscrowRequestId)"));
         assertTrue(playerMismatch.contains("ShopTransactionUtil.canFit(seller.getInventory(), paymentStacks)"));
         assertTrue(playerMismatch.contains("itemEscrow.markRecoveryRequired(itemEscrowRequestId)"));
+
+        int storageFailure = source.indexOf("if (!inserted) {", secondMismatch);
+        assertTrue(storageFailure > secondMismatch);
+        String storageMismatch = source.substring(storageFailure,
+                source.indexOf("if (!itemEscrow.markStored", storageFailure));
+        assertTrue(storageMismatch.contains("ShopTransactionUtil.canFit(seller.getInventory(), paymentStacks)"));
+        assertTrue(storageMismatch.contains("itemEscrow.markRecoveryRequired(itemEscrowRequestId)"));
     }
 
     private static Path projectDirectory() {

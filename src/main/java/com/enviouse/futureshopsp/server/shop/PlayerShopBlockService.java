@@ -2565,10 +2565,15 @@ public final class PlayerShopBlockService {
                     ? storage.adapter().insert(storage.blockEntity(), paymentStacks)
                     : insertAll(storage.handler(), paymentStacks);
             if (!inserted) {
-                ShopTransactionUtil.insertIntoInventory(seller.getInventory(), paymentStacks);
-                itemEscrow.markRefunded(itemEscrowRequestId);
-                sendResultWithChat(seller, false, ShopResultCode.STORAGE_FULL,
-                        "§cThe shop's storage is full and can't accept those items.");
+                boolean restored = ShopTransactionUtil.canFit(seller.getInventory(), paymentStacks)
+                        && ShopTransactionUtil.insertIntoInventory(seller.getInventory(), paymentStacks);
+                if (restored && itemEscrow.markRefunded(itemEscrowRequestId)) {
+                    sendResultWithChat(seller, false, ShopResultCode.STORAGE_FULL,
+                            "§cThe shop's storage is full and can't accept those items.");
+                } else {
+                    itemEscrow.markRecoveryRequired(itemEscrowRequestId);
+                    sendResult(seller, false, ShopResultCode.RECOVERY_REQUIRED);
+                }
                 return;
             }
             if (!itemEscrow.markStored(itemEscrowRequestId)) {
