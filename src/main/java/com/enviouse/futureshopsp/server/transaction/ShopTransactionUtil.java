@@ -64,6 +64,9 @@ public final class ShopTransactionUtil {
     }
 
     public static boolean insertIntoInventory(Inventory inventory, List<ItemStack> stacks) {
+        if (!canFit(inventory, stacks)) {
+            return false;
+        }
         for (ItemStack stack : stacks) {
             ItemStack copy = stack.copy();
             insertIntoLiveSlots(inventory.items, copy);
