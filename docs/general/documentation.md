@@ -34,6 +34,8 @@ Only `InternalEconomyProvider` owns the internal balance saved data. External pr
 
 The public provider contract requires balance query, precheck, withdraw, deposit, durable receipt lookup, and idempotent retry capabilities for a mutation. A provider that cannot prove a capability is refused before journal intent and before custody. A receipt resulting balance is evidence for the caller and is not copied into a FutureShops ledger.
 
+All server price, barter, bundle, buyback, and physical money value totals use checked integer arithmetic. Catalog or listing overflow returns an invalid result before a provider or item effect. Transaction event listeners may adjust a price, but every override is revalidated and buy cart totals are recomputed with checked addition before debit admission.
+
 ## Durable records
 
 `EconomyJournalSavedData` stores versioned, checksummed request and outcome records under `futureshops_economy_journal`. It stores no external balance field. `EconomyCustodySavedData` stores bounded item identity, owner, quantity, content hash, and `HELD`, `DELIVERED`, `CLAIMED`, or `RELEASED` state under `futureshops_economy_custody`. `EconomyClaimSavedData` stores claimant, exact amount, description, and non expiring `PENDING`, `DELIVERED`, or `RESOLVED` state under `futureshops_economy_claims`.
