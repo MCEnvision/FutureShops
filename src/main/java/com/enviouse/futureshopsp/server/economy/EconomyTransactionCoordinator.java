@@ -304,12 +304,14 @@ public final class EconomyTransactionCoordinator {
                         ProviderResultStatus.AMBIGUOUS, "receipt lookup failed");
                 return ProviderResult.recoveryRequired("receipt lookup failed");
             }
-            if (lookup != null && lookup.confirmed() && validReceipt(record.request(), lookup.value().orElse(null))) {
-                replace(record, EconomyTransactionState.EXTERNAL_CONFIRMED, lookup.receipt(),
+            MutationReceipt recoveredReceipt = lookup == null ? null
+                    : lookup.receipt().orElse(lookup.value().orElse(null));
+            if (lookup != null && lookup.confirmed() && validReceipt(record.request(), recoveredReceipt)) {
+                replace(record, EconomyTransactionState.EXTERNAL_CONFIRMED, Optional.of(recoveredReceipt),
                         ProviderResultStatus.CONFIRMED, "");
-                replace(record, EconomyTransactionState.RESOLVED, lookup.receipt(),
+                replace(record, EconomyTransactionState.RESOLVED, Optional.of(recoveredReceipt),
                         ProviderResultStatus.CONFIRMED, "");
-                publishConfirmedBalanceChange(record.request(), lookup.receipt().orElse(null));
+                publishConfirmedBalanceChange(record.request(), recoveredReceipt);
                 lifecycle.markRecovered();
                 return lookup;
             }

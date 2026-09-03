@@ -110,6 +110,26 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
+    void recoveryPersistsReceiptWhenLookupUsesValueOnly() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        provider.lookupValueOnly = true;
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+        MutationReceipt receipt = provider.receipt(request);
+        journal.append(new EconomyJournalRecord(request, EconomyTransactionState.EXTERNAL_PENDING,
+                Optional.empty(), ProviderResultStatus.UNAVAILABLE, ""));
+        provider.receipts.put(request.requestId(), receipt);
+        lifecycle.markUncleanStart();
+
+        var result = coordinator.recover(request.requestId());
+
+        assertTrue(result.confirmed());
+        assertEquals(Optional.of(receipt), journal.find(request.requestId()).orElseThrow().receipt());
+    }
+
+    @Test
     void missingReceiptDuringRecoveryFreezesInsteadOfGuessingRejection() {
         FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
         EconomyLifecycleController lifecycle = readyLifecycle();
@@ -243,6 +263,7 @@ class EconomyTransactionCoordinatorTest {
         private int depositCalls;
         private boolean ambiguous;
         private boolean rejectFirstDeposit;
+        private boolean lookupValueOnly;
 
         private FixtureProvider(ProviderCapabilities capabilities) {
             this.capabilities = capabilities;
@@ -319,7 +340,12 @@ class EconomyTransactionCoordinatorTest {
         @Override
         public ProviderResult<MutationReceipt> lookup(RequestId requestId) {
             MutationReceipt receipt = receipts.get(requestId);
-            return receipt == null ? ProviderResult.rejected(ProviderError.RECEIPT_NOT_FOUND, "missing")
+            if (receipt == null) {
+                return ProviderResult.rejected(ProviderError.RECEIPT_NOT_FOUND, "missing");
+            }
+            return lookupValueOnly
+                    ? new ProviderResult<>(ProviderResultStatus.CONFIRMED, ProviderError.NONE,
+                    Optional.of(receipt), Optional.empty(), "")
                     : ProviderResult.confirmed(receipt);
         }
 
