@@ -19,6 +19,7 @@ import net.minecraft.server.MinecraftServer;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
 
 public final class BalanceManager {
     private static EconomyProvider provider;
@@ -96,52 +97,79 @@ public final class BalanceManager {
     }
 
     public static void clear() {
-        if (lifecycleController != null) {
-            if (lifecycleController.snapshot().lifecycle() == ProviderLifecycle.READY) {
-                lifecycleController.beginDraining();
+        try {
+            EconomyLifecycleController controller = lifecycleController;
+            if (controller == null) {
+                return;
             }
-            boolean journalFlushed = journal == null || journal.flush();
-            boolean custodyFlushed = custody == null || custody.flush();
-            boolean claimsFlushed = claims == null || claims.flush();
-            boolean barterEscrowFlushed = barterEscrow == null || barterEscrow.flush();
-            boolean saleEscrowFlushed = saleEscrow == null || saleEscrow.flush();
-            boolean settlementsFlushed = settlements == null || settlements.flush();
-            boolean receiptsFlushed = receipts == null || receipts.flush();
-            if (lifecycleController.writeCleanMarkerLast(journalFlushed && receiptsFlushed,
-                    custodyFlushed, claimsFlushed, barterEscrowFlushed && saleEscrowFlushed && settlementsFlushed)) {
-                if (journal != null) {
-                    journal.markCleanMarker();
-                }
-                if (custody != null) {
-                    custody.markCleanMarker();
-                }
-                if (claims != null) {
-                    claims.markCleanMarker();
-                }
-                if (barterEscrow != null) {
-                    barterEscrow.markCleanMarker();
-                }
-                if (saleEscrow != null) {
-                    saleEscrow.markCleanMarker();
-                }
-                if (settlements != null) {
-                    settlements.markCleanMarker();
-                }
-                if (receipts != null) {
-                    receipts.markCleanMarker();
-                }
+            if (controller.snapshot().lifecycle() == ProviderLifecycle.READY) {
+                controller.beginDraining();
             }
+            boolean journalFlushed = flushSafely("transaction journal", () -> journal == null || journal.flush());
+            boolean custodyFlushed = flushSafely("economy custody", () -> custody == null || custody.flush());
+            boolean claimsFlushed = flushSafely("economy claims", () -> claims == null || claims.flush());
+            boolean barterEscrowFlushed = flushSafely("player shop barter escrow",
+                    () -> barterEscrow == null || barterEscrow.flush());
+            boolean saleEscrowFlushed = flushSafely("player shop sale escrow",
+                    () -> saleEscrow == null || saleEscrow.flush());
+            boolean settlementsFlushed = flushSafely("player shop settlements",
+                    () -> settlements == null || settlements.flush());
+            boolean receiptsFlushed = flushSafely("internal economy receipts",
+                    () -> receipts == null || receipts.flush());
+            boolean markerWritten;
+            try {
+                markerWritten = controller.writeCleanMarkerLast(journalFlushed && receiptsFlushed,
+                        custodyFlushed, claimsFlushed,
+                        barterEscrowFlushed && saleEscrowFlushed && settlementsFlushed);
+            } catch (RuntimeException exception) {
+                com.mojang.logging.LogUtils.getLogger().error("economy clean marker write failed", exception);
+                markerWritten = false;
+            }
+            if (markerWritten) {
+                markCleanMarkerSafely("transaction journal", journal == null ? null : journal::markCleanMarker);
+                markCleanMarkerSafely("economy custody", custody == null ? null : custody::markCleanMarker);
+                markCleanMarkerSafely("economy claims", claims == null ? null : claims::markCleanMarker);
+                markCleanMarkerSafely("player shop barter escrow",
+                        barterEscrow == null ? null : barterEscrow::markCleanMarker);
+                markCleanMarkerSafely("player shop sale escrow",
+                        saleEscrow == null ? null : saleEscrow::markCleanMarker);
+                markCleanMarkerSafely("player shop settlements",
+                        settlements == null ? null : settlements::markCleanMarker);
+                markCleanMarkerSafely("internal economy receipts",
+                        receipts == null ? null : receipts::markCleanMarker);
+            }
+        } finally {
+            provider = null;
+            coordinator = null;
+            lifecycleController = null;
+            journal = null;
+            custody = null;
+            claims = null;
+            receipts = null;
+            barterEscrow = null;
+            saleEscrow = null;
+            settlements = null;
         }
-        provider = null;
-        coordinator = null;
-        lifecycleController = null;
-        journal = null;
-        custody = null;
-        claims = null;
-        receipts = null;
-        barterEscrow = null;
-        saleEscrow = null;
-        settlements = null;
+    }
+
+    private static boolean flushSafely(String name, BooleanSupplier flush) {
+        try {
+            return flush.getAsBoolean();
+        } catch (RuntimeException exception) {
+            com.mojang.logging.LogUtils.getLogger().error("economy {} flush failed", name, exception);
+            return false;
+        }
+    }
+
+    private static void markCleanMarkerSafely(String name, Runnable marker) {
+        if (marker == null) {
+            return;
+        }
+        try {
+            marker.run();
+        } catch (RuntimeException exception) {
+            com.mojang.logging.LogUtils.getLogger().error("economy {} clean marker failed", name, exception);
+        }
     }
 
     public static void beginDraining() {

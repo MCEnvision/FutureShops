@@ -91,6 +91,20 @@ class BalanceManagerRecoverySourceTest {
         assertTrue(source.contains("lifecycle.markAmbiguous(\"economy claims require operator recovery\")"));
     }
 
+    @Test
+    void shutdownFlushesEachIndexSafelyBeforeCleanMarker() throws Exception {
+        String source = Files.readString(projectDirectory().resolve(Path.of(
+                "src", "main", "java", "com", "enviouse", "futureshopsp",
+                "server", "economy", "BalanceManager.java")));
+
+        assertTrue(source.contains("try {\n            EconomyLifecycleController controller = lifecycleController;"));
+        assertTrue(source.contains("flushSafely(\"transaction journal\""));
+        assertTrue(source.contains("flushSafely(\"player shop sale escrow\""));
+        assertTrue(source.contains("controller.writeCleanMarkerLast"));
+        assertTrue(source.contains("markCleanMarkerSafely"));
+        assertTrue(source.contains("} finally {\n            provider = null;"));
+    }
+
     private static Path projectDirectory() {
         Path candidate = Path.of("").toAbsolutePath();
         while (candidate != null) {
