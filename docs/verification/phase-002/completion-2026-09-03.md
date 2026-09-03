@@ -2,7 +2,9 @@
 
 ## Scope and source identity
 
-This packet records the current Phase 002 result for FutureShops 2.3.0 on Minecraft 1.21.1 and NeoForge 21.1.248. The implementation source baseline is revision `87ceb41` on `envy/phase-002-pixelmon-vault`. Subsequent evidence updates are committed on that same phase branch, whose remote tip is the authoritative packet revision.
+This packet records the current Phase 002 result for FutureShops 2.3.0 on Minecraft 1.21.1 and NeoForge 21.1.248. The implementation source baseline for this packet is revision `bf32b0a` on `envy/phase-002-pixelmon-vault`. Subsequent evidence updates are committed on that same phase branch, whose remote tip is the authoritative packet revision.
+
+The current artifact source revision is `bf32b0a` on `envy/phase-002-pixelmon-vault`.
 
 Phase 002 is not closed. Its independent Pixelmon query and refusal work is complete, but a mutation capable bridge, full player workflow coverage, and complete recovery matrices remain unresolved. No pull request, phase integration, tag, release, upload, or issue 66 mutation is authorized by this packet.
 

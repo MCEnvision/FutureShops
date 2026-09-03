@@ -50,6 +50,8 @@ The exact Pixelmon only profile was started with the Java 21 probe, waited until
 
 The rebuilt `build/libs/futureshops-2.3.0.jar` from the current phase branch passed `unzip -tq`. Its SHA 256 is `af55ca241f7774aba61181d29370245e1faa5750d0fe347c2f78bbee110b69c7`. Its SHA 512 is `2c00e7deabfa3e4216ac6084b34ff35004415e972b83387d377f40631e1968bc8d6a828170cfb3034780397951fb69e9634bc55c594064ed7d44d8f01e07c0eb`. The archive contains FutureShops adapter and GameTest classes, but no `com/pixelmonmod`, Bukkit, Spigot, Vault, bridge, or external test fixture classes. `jdeps` reports only Java, FutureShops, and NeoForge references for the adapter. No Pixelmon, Bukkit, Spigot, or bridge dependency is declared.
 
+The current artifact source revision is `bf32b0a` on `envy/phase-002-pixelmon-vault`.
+
 ## Failure matrix
 
 | Scenario | Result |
