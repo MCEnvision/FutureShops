@@ -47,7 +47,12 @@ public final class PlayerShopSettlementSavedData extends SavedData {
             data.cleanMarkerValid = tag.getBoolean("cleanMarker");
         }
 
-        ListTag settlementList = tag.getList("settlements", Tag.TAG_COMPOUND);
+        Tag rawSettlements = tag.get("settlements");
+        if (rawSettlements != null && !(rawSettlements instanceof ListTag)) {
+            data.integrityValid = false;
+            return data;
+        }
+        ListTag settlementList = rawSettlements instanceof ListTag list ? list : new ListTag();
         if (settlementList.size() > MAX_SETTLEMENTS) {
             data.integrityValid = false;
             return data;
@@ -75,7 +80,12 @@ public final class PlayerShopSettlementSavedData extends SavedData {
             }
         }
 
-        ListTag ownerRows = tag.getList("ownerRows", Tag.TAG_COMPOUND);
+        Tag rawOwnerRows = tag.get("ownerRows");
+        if (rawOwnerRows != null && !(rawOwnerRows instanceof ListTag)) {
+            data.integrityValid = false;
+            return data;
+        }
+        ListTag ownerRows = rawOwnerRows instanceof ListTag list ? list : new ListTag();
         if (ownerRows.size() > MAX_OWNERS) {
             data.integrityValid = false;
             return data;
@@ -86,13 +96,22 @@ public final class PlayerShopSettlementSavedData extends SavedData {
                 continue;
             }
             UUID owner = ownerCompound.getUUID("owner");
-            ListTag rowsTag = ownerCompound.getList("rows", Tag.TAG_COMPOUND);
-            if (rowsTag.size() > MAX_ROWS_PER_OWNER || data.rowsByOwner.containsKey(owner)) {
+            if (data.rowsByOwner.containsKey(owner)) {
+                data.integrityValid = false;
+                continue;
+            }
+            Tag rawRows = ownerCompound.get("rows");
+            if (rawRows != null && !(rawRows instanceof ListTag)) {
+                data.integrityValid = false;
+                continue;
+            }
+            ListTag rowsList = rawRows instanceof ListTag list ? list : new ListTag();
+            if (rowsList.size() > MAX_ROWS_PER_OWNER) {
                 data.integrityValid = false;
                 continue;
             }
             List<RevenueRow> rows = new ArrayList<>();
-            for (Tag rowTag : rowsTag) {
+            for (Tag rowTag : rowsList) {
                 if (!(rowTag instanceof CompoundTag row)
                         || !row.contains("ts", Tag.TAG_LONG)
                         || !row.contains("shopPos", Tag.TAG_LONG)

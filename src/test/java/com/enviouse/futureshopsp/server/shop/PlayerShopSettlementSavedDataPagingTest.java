@@ -133,4 +133,27 @@ class PlayerShopSettlementSavedDataPagingTest {
         assertTrue(migrated.contains("checksum", Tag.TAG_STRING));
         assertTrue(PlayerShopSettlementSavedData.load(migrated, null).integrityValid());
     }
+
+    @Test
+    void wrongSettlementTagTypeBlocksRecovery() {
+        CompoundTag saved = new CompoundTag();
+        saved.putString("settlements", "not a list");
+
+        PlayerShopSettlementSavedData restored = PlayerShopSettlementSavedData.load(saved, null);
+
+        assertFalse(restored.integrityValid());
+        assertTrue(restored.snapshot(UUID.randomUUID(), 42L, 6).rows().isEmpty());
+    }
+
+    @Test
+    void wrongOwnerRowsTagTypeBlocksRecovery() {
+        CompoundTag saved = new CompoundTag();
+        saved.put("settlements", new ListTag());
+        saved.putString("ownerRows", "not a list");
+
+        PlayerShopSettlementSavedData restored = PlayerShopSettlementSavedData.load(saved, null);
+
+        assertFalse(restored.integrityValid());
+        assertTrue(restored.snapshot(UUID.randomUUID(), 42L, 6).rows().isEmpty());
+    }
 }
