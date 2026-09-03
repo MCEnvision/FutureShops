@@ -22,6 +22,9 @@ public final class PlayerShopBarterEscrowSavedData extends SavedData {
     private static final int CURRENT_VERSION = 1;
     private static final int MAX_RECORDS = 10_000;
     private static final int MAX_STACKS_PER_RECORD = 128;
+    private static final int MAX_DIMENSION_LENGTH = 128;
+    private static final int MAX_ITEM_ID_LENGTH = 256;
+    private static final int MAX_SERIALIZED_CHARS = 1_000_000;
 
     public enum State {
         PREPARED,
@@ -113,20 +116,26 @@ public final class PlayerShopBarterEscrowSavedData extends SavedData {
                                          HolderLookup.Provider provider) {
         if (requestId == null || buyer == null || quantity <= 0 || stacks == null
                 || stacks.isEmpty() || stacks.size() > MAX_STACKS_PER_RECORD
-                || itemId == null || itemId.isBlank() || records.containsKey(requestId)
+                || itemId == null || itemId.isBlank() || itemId.length() > MAX_ITEM_ID_LENGTH
+                || dimension != null && dimension.length() > MAX_DIMENSION_LENGTH
+                || records.containsKey(requestId)
                 || records.size() >= MAX_RECORDS) {
             return false;
         }
         List<CompoundTag> encoded = new ArrayList<>();
         int encodedQuantity = 0;
-        for (ItemStack stack : stacks) {
-            if (stack == null || stack.isEmpty()) {
-                return false;
+        try {
+            for (ItemStack stack : stacks) {
+                if (stack == null || stack.isEmpty()) {
+                    return false;
+                }
+                encodedQuantity = Math.addExact(encodedQuantity, stack.getCount());
+                encoded.add((CompoundTag) stack.save(provider));
             }
-            encodedQuantity = Math.addExact(encodedQuantity, stack.getCount());
-            encoded.add((CompoundTag) stack.save(provider));
+        } catch (RuntimeException exception) {
+            return false;
         }
-        if (encodedQuantity != quantity) {
+        if (encodedQuantity != quantity || encoded.toString().length() > MAX_SERIALIZED_CHARS) {
             return false;
         }
         EscrowRecord record = new EscrowRecord(requestId, buyer, shopPos,
@@ -259,6 +268,12 @@ public final class PlayerShopBarterEscrowSavedData extends SavedData {
         if (stackList.isEmpty() || stackList.size() > MAX_STACKS_PER_RECORD) {
             throw new IllegalArgumentException("barter escrow stack list is invalid");
         }
+        String dimension = entry.getString("dimension");
+        String itemId = entry.getString("itemId");
+        if (dimension.length() > MAX_DIMENSION_LENGTH || itemId.isBlank()
+                || itemId.length() > MAX_ITEM_ID_LENGTH) {
+            throw new IllegalArgumentException("barter escrow identifiers are invalid");
+        }
         List<CompoundTag> stacks = new ArrayList<>();
         for (Tag raw : stackList) {
             if (!(raw instanceof CompoundTag stack)) {
@@ -266,8 +281,11 @@ public final class PlayerShopBarterEscrowSavedData extends SavedData {
             }
             stacks.add(stack.copy());
         }
+        if (stacks.toString().length() > MAX_SERIALIZED_CHARS) {
+            throw new IllegalArgumentException("barter escrow stacks are too large");
+        }
         return new EscrowRecord(entry.getUUID("request"), entry.getUUID("buyer"), entry.getLong("shopPos"),
-                entry.getString("dimension"), entry.getString("itemId"), entry.getInt("quantity"),
+                dimension, itemId, entry.getInt("quantity"),
                 stacks, State.valueOf(entry.getString("state")));
     }
 

@@ -104,4 +104,34 @@ class PlayerShopBarterEscrowSavedDataTest {
         assertTrue(complete.markComplete(completeRequest));
         assertFalse(complete.markRefunded(completeRequest));
     }
+
+    @Test
+    void oversizedIdentifiersAreRejectedBeforePersistence(MinecraftServer server) {
+        HolderLookup.Provider provider = server.registryAccess();
+        PlayerShopBarterEscrowSavedData data = new PlayerShopBarterEscrowSavedData();
+        List<ItemStack> stacks = List.of(new ItemStack(Items.DIAMOND));
+
+        assertFalse(data.prepare(UUID.fromString("00000000-0000-0000-0000-000000000307"), BUYER, 47L,
+                "d".repeat(129), "minecraft:diamond", 1, stacks, provider));
+        assertFalse(data.prepare(UUID.fromString("00000000-0000-0000-0000-000000000308"), BUYER, 48L,
+                "minecraft:overworld", "i".repeat(257), 1, stacks, provider));
+        assertTrue(data.snapshot().isEmpty());
+    }
+
+    @Test
+    void oversizedPersistedIdentifiersAreReadOnly(MinecraftServer server) {
+        HolderLookup.Provider provider = server.registryAccess();
+        PlayerShopBarterEscrowSavedData data = new PlayerShopBarterEscrowSavedData();
+        UUID request = UUID.fromString("00000000-0000-0000-0000-000000000309");
+        assertTrue(data.prepare(request, BUYER, 49L, "minecraft:overworld", "minecraft:diamond", 1,
+                List.of(new ItemStack(Items.DIAMOND)), provider));
+
+        CompoundTag saved = data.save(new CompoundTag(), provider);
+        CompoundTag record = (CompoundTag) saved.getList("records", 10).get(0);
+        record.putString("dimension", "d".repeat(129));
+        PlayerShopBarterEscrowSavedData recovered = PlayerShopBarterEscrowSavedData.load(saved, provider);
+
+        assertFalse(recovered.integrityValid());
+        assertTrue(recovered.snapshot().isEmpty());
+    }
 }
