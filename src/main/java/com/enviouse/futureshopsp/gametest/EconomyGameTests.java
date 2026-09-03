@@ -2,6 +2,8 @@ package com.enviouse.futureshopsp.gametest;
 
 import com.enviouse.futureshopsp.Futureshops;
 import com.enviouse.futureshopsp.api.economy.RequestId;
+import com.enviouse.futureshopsp.api.economy.MutationKind;
+import com.enviouse.futureshopsp.api.economy.MutationRequest;
 import com.enviouse.futureshopsp.api.economy.ProviderLifecycle;
 import com.enviouse.futureshopsp.init.ModItems;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
@@ -175,6 +177,29 @@ public final class EconomyGameTests {
         helper.assertTrue(recovered.hasIncompleteRecords(), "pending proceeds must remain recoverable");
         helper.assertTrue(recovered.find(request).orElseThrow().state() == ClaimState.PENDING,
                 "recovery must preserve the original claim identity and pending state");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void reconnectReplayPreservesStableRequestIdentity(GameTestHelper helper) {
+        UUID player = UUID.fromString("00000000-0000-0000-0000-000000000242");
+        RequestId request = new RequestId(UUID.fromString("00000000-0000-0000-0000-000000000243"));
+        helper.assertTrue(BalanceManager.setInternalBalance(player, 500L).confirmed(),
+                "the reconnect fixture balance must be initialized");
+
+        MutationRequest withdrawal = MutationRequest.forPlayer(request, player, 125L, MutationKind.WITHDRAW);
+        var first = BalanceManager.getCoordinator().withdraw(withdrawal);
+        helper.assertTrue(first.confirmed(), "the initial request must be confirmed");
+        helper.assertTrue(BalanceManager.queryBalance(player).value().orElseThrow().balanceMinorUnits() == 375L,
+                "the initial request must debit the authoritative balance once");
+
+        // A reconnect resubmits the same server owned request identity.
+        var replay = BalanceManager.getCoordinator().withdraw(withdrawal);
+        helper.assertTrue(replay.confirmed(), "a reconnect replay must return the confirmed result");
+        helper.assertTrue(replay.receipt().equals(first.receipt()),
+                "a reconnect replay must return the original receipt");
+        helper.assertTrue(BalanceManager.queryBalance(player).value().orElseThrow().balanceMinorUnits() == 375L,
+                "a reconnect replay must not debit the balance twice");
         helper.succeed();
     }
 }
