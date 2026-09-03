@@ -20,7 +20,7 @@ The official [Pixelmon downloads page](https://pixelmonmod.com/downloads.php) li
 
 ## Reviewed API map
 
-`com.pixelmonmod.pixelmon.api.economy.BankAccountProxy` provides `hasImplementation()`, `getBankAccountNow(UUID)`, and an asynchronous `getBankAccount(UUID)`. `com.pixelmonmod.pixelmon.api.economy.BankAccount` provides `getIdentifier()`, `getBalance()`, `setBalance(BigDecimal)`, `hasBalance(BigDecimal)`, boolean `take(BigDecimal)`, boolean `add(BigDecimal)`, and primitive overload defaults.
+The published [Pixelmon 9.4.0 `BankAccount` API](https://reforged.gg/docs/1211/com/pixelmonmod/pixelmon/api/economy/BankAccount.html) documents `getIdentifier()`, `getBalance()`, `setBalance(BigDecimal)`, `hasBalance(BigDecimal)`, boolean `take(BigDecimal)`, boolean `add(BigDecimal)`, and primitive overload defaults. The [economy event API](https://reforged.gg/docs/1211/com/pixelmonmod/pixelmon/api/economy/EconomyEvent.html) documents balance and transaction events, but no request identity or receipt surface. The exact artifact inspection additionally confirmed that `BankAccountProxy` provides `hasImplementation()`, `getBankAccountNow(UUID)`, and an asynchronous `getBankAccount(UUID)`.
 
 A disposable Java probe compiled successfully against the exact 9.4.0 universal artifact. It exercised the reviewed `BankAccount` type, UUID identity check, exact `BigDecimal` amount construction, balance null guard, and `hasBalance` call. The probe source and classes remain outside the repository at `/tmp/pixelmon-api-probe`.
 
