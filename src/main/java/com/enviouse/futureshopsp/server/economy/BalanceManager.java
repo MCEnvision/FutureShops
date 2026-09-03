@@ -13,6 +13,7 @@ import com.enviouse.futureshopsp.api.economy.ProviderResolution;
 import com.enviouse.futureshopsp.api.economy.ProviderLifecycle;
 import com.enviouse.futureshopsp.api.economy.RequestId;
 import com.enviouse.futureshopsp.server.shop.PlayerShopBarterEscrowSavedData;
+import com.enviouse.futureshopsp.server.shop.PlayerShopSaleEscrowSavedData;
 import com.enviouse.futureshopsp.server.shop.PlayerShopSettlementSavedData;
 import net.minecraft.server.MinecraftServer;
 
@@ -28,6 +29,7 @@ public final class BalanceManager {
     private static EconomyClaimStore claims;
     private static InternalEconomyReceiptStore receipts;
     private static PlayerShopBarterEscrowSavedData barterEscrow;
+    private static PlayerShopSaleEscrowSavedData saleEscrow;
     private static PlayerShopSettlementSavedData settlements;
 
     private BalanceManager() {
@@ -42,22 +44,24 @@ public final class BalanceManager {
         claims = ephemeral ? new InMemoryEconomyClaimStore() : EconomyClaimSavedData.get(server);
         receipts = ephemeral ? new InMemoryInternalEconomyReceiptStore() : InternalEconomyReceiptSavedData.get(server);
         barterEscrow = ephemeral ? new PlayerShopBarterEscrowSavedData() : PlayerShopBarterEscrowSavedData.get(server);
+        saleEscrow = ephemeral ? new PlayerShopSaleEscrowSavedData() : PlayerShopSaleEscrowSavedData.get(server);
         settlements = ephemeral ? new PlayerShopSettlementSavedData() : PlayerShopSettlementSavedData.get(server);
         boolean internalSelection = EconomyApi.INTERNAL_PROVIDER_ID.equals(selection.activeProviderId());
         boolean cleanMarkerValid = journal.cleanMarkerValid() && custody.cleanMarkerValid() && claims.cleanMarkerValid()
-                && barterEscrow.cleanMarkerValid() && settlements.cleanMarkerValid();
+                && barterEscrow.cleanMarkerValid() && saleEscrow.cleanMarkerValid() && settlements.cleanMarkerValid();
         if (internalSelection) {
             cleanMarkerValid &= receipts.cleanMarkerValid();
         }
         boolean integrityValid = journal.integrityValid() && custody.integrityValid() && claims.integrityValid()
-                && barterEscrow.integrityValid() && settlements.integrityValid()
+                && barterEscrow.integrityValid() && saleEscrow.integrityValid() && settlements.integrityValid()
                 && (!internalSelection || receipts.integrityValid());
         boolean hasIncompleteRecords = journal.hasIncompleteRecords() || custody.hasIncompleteRecords()
-                || claims.hasIncompleteRecords() || barterEscrow.hasIncompleteRecords();
+                || claims.hasIncompleteRecords() || barterEscrow.hasIncompleteRecords() || saleEscrow.hasIncompleteRecords();
         journal.markUnclean();
         custody.markUnclean();
         claims.markUnclean();
         barterEscrow.markUnclean();
+        saleEscrow.markUnclean();
         settlements.markUnclean();
         if (internalSelection) {
             receipts.markUnclean();
@@ -100,10 +104,11 @@ public final class BalanceManager {
             boolean custodyFlushed = custody == null || custody.flush();
             boolean claimsFlushed = claims == null || claims.flush();
             boolean barterEscrowFlushed = barterEscrow == null || barterEscrow.flush();
+            boolean saleEscrowFlushed = saleEscrow == null || saleEscrow.flush();
             boolean settlementsFlushed = settlements == null || settlements.flush();
             boolean receiptsFlushed = receipts == null || receipts.flush();
             if (lifecycleController.writeCleanMarkerLast(journalFlushed && receiptsFlushed,
-                    custodyFlushed, claimsFlushed, barterEscrowFlushed && settlementsFlushed)) {
+                    custodyFlushed, claimsFlushed, barterEscrowFlushed && saleEscrowFlushed && settlementsFlushed)) {
                 if (journal != null) {
                     journal.markCleanMarker();
                 }
@@ -115,6 +120,9 @@ public final class BalanceManager {
                 }
                 if (barterEscrow != null) {
                     barterEscrow.markCleanMarker();
+                }
+                if (saleEscrow != null) {
+                    saleEscrow.markCleanMarker();
                 }
                 if (settlements != null) {
                     settlements.markCleanMarker();
@@ -132,6 +140,7 @@ public final class BalanceManager {
         claims = null;
         receipts = null;
         barterEscrow = null;
+        saleEscrow = null;
         settlements = null;
     }
 
@@ -154,7 +163,7 @@ public final class BalanceManager {
                 return;
             }
         }
-        if (freezeIfUnresolvedItemState(lifecycleController, custody, claims, barterEscrow)) {
+        if (freezeIfUnresolvedItemState(lifecycleController, custody, claims, barterEscrow, saleEscrow)) {
             return;
         }
         lifecycleController.markRecovered();
@@ -164,6 +173,14 @@ public final class BalanceManager {
                                                EconomyCustodyStore custody,
                                                EconomyClaimStore claims,
                                                PlayerShopBarterEscrowSavedData barterEscrow) {
+        return freezeIfUnresolvedItemState(lifecycle, custody, claims, barterEscrow, null);
+    }
+
+    static boolean freezeIfUnresolvedItemState(EconomyLifecycleController lifecycle,
+                                               EconomyCustodyStore custody,
+                                               EconomyClaimStore claims,
+                                               PlayerShopBarterEscrowSavedData barterEscrow,
+                                               PlayerShopSaleEscrowSavedData saleEscrow) {
         if (custody != null && custody.hasIncompleteRecords()) {
             lifecycle.markAmbiguous("item custody requires operator recovery");
             return true;
@@ -174,6 +191,10 @@ public final class BalanceManager {
         }
         if (barterEscrow != null && barterEscrow.hasIncompleteRecords()) {
             lifecycle.markAmbiguous("player shop barter escrow requires operator recovery");
+            return true;
+        }
+        if (saleEscrow != null && saleEscrow.hasIncompleteRecords()) {
+            lifecycle.markAmbiguous("player shop sale escrow requires operator recovery");
             return true;
         }
         return false;
@@ -296,6 +317,13 @@ public final class BalanceManager {
             throw new IllegalStateException("Economy claims accessed before initialization.");
         }
         return claims;
+    }
+
+    public static PlayerShopSaleEscrowSavedData getSaleEscrow() {
+        if (saleEscrow == null) {
+            throw new IllegalStateException("player shop sale escrow accessed before initialization.");
+        }
+        return saleEscrow;
     }
 
     public static TransactionResult transfer(UUID fromPlayerUUID, UUID toPlayerUUID, long amountMinorUnits) {

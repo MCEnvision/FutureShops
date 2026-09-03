@@ -71,6 +71,22 @@ public final class ForgeCapabilityStorageAdapter implements ExternalStorageAdapt
     }
 
     @Override
+    public List<ItemStack> snapshot(BlockEntity blockEntity, Item item, int count,
+                                    boolean nbtAware, @Nullable DataComponentPatch requiredPatch) {
+        IItemHandler handler = getHandler(blockEntity);
+        if (handler == null || count <= 0) return List.of();
+        List<ItemStack> result = new ArrayList<>();
+        int remaining = count;
+        for (int i = 0; i < handler.getSlots() && remaining > 0; i++) {
+            ItemStack probe = handler.extractItem(i, remaining, true);
+            if (probe.isEmpty() || !NbtMatchUtil.matches(probe, item, nbtAware, requiredPatch)) continue;
+            result.add(probe.copy());
+            remaining -= probe.getCount();
+        }
+        return remaining <= 0 ? List.copyOf(result) : List.of();
+    }
+
+    @Override
     public List<ItemStack> extract(BlockEntity blockEntity, Item item, int count) {
         return extract(blockEntity, item, count, false, null);
     }
@@ -90,7 +106,15 @@ public final class ForgeCapabilityStorageAdapter implements ExternalStorageAdapt
                 result.add(real);
             }
         }
-        return remaining <= 0 ? result : List.of();
+        if (remaining <= 0) return result;
+        for (ItemStack stack : result) {
+            ItemStack pending = stack.copy();
+            for (int i = 0; i < handler.getSlots() && !pending.isEmpty(); i++) {
+                pending = handler.insertItem(i, pending, false);
+            }
+            if (!pending.isEmpty()) return List.of();
+        }
+        return List.of();
     }
 
     @Override

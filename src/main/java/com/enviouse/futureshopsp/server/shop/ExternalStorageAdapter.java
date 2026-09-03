@@ -49,6 +49,15 @@ public interface ExternalStorageAdapter {
     }
 
     /**
+     * Returns an exact simulated extraction for durable custody preparation.
+     * Implementations that cannot provide a non mutating snapshot must return an empty list.
+     */
+    default List<ItemStack> snapshot(BlockEntity blockEntity, Item item, int count,
+                                     boolean nbtAware, @Nullable DataComponentPatch requiredPatch) {
+        return List.of();
+    }
+
+    /**
      * Extracts the given quantity from storage (type-only match). Returns extracted stacks.
      */
     List<ItemStack> extract(BlockEntity blockEntity, Item item, int count);

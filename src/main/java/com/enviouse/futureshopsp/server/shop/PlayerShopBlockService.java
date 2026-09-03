@@ -554,6 +554,9 @@ public final class PlayerShopBlockService {
         }
 
         ReentrantLock lock = SHOP_LOCKS.computeIfAbsent(pos.asLong(), ignored -> new ReentrantLock());
+        PlayerShopSaleEscrowSavedData saleEscrow = null;
+        UUID saleEscrowRequestId = null;
+        boolean saleEscrowPrepared = false;
         lock.lock();
         try {
             if (quantity <= 0 || quantity > ShopTransactionUtil.MAX_BUY_QUANTITY) {
@@ -657,6 +660,7 @@ public final class PlayerShopBlockService {
             UUID barterEscrowRequestId = transactionId.child("barter item escrow").value();
             boolean barterEscrowPrepared = false;
             List<ItemStack> escrowPreview = List.of();
+            saleEscrowRequestId = transactionId.child("sale item escrow").value();
 
             boolean barterTrade;
             boolean compoundTrade = listing.tradeMode() == ShopBlockEntity.TradeMode.MONEY_AND_BARTER;
@@ -769,12 +773,38 @@ public final class PlayerShopBlockService {
                 }
             }
 
+            // Persist the exact sale stacks before any barter removal or provider effect. This
+            // record is the durable delivery entitlement used when a restart interrupts a buy.
+            if (buyer.getServer() == null) {
+                sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                return;
+            }
+            saleEscrow = PlayerShopSaleEscrowSavedData.get(buyer.getServer());
+            List<ItemStack> salePreview = snapshotSaleStacks(linkedStorage, listing, saleItem, qty, deliverCount);
+            long saleQuantity = 0L;
+            try {
+                for (ItemStack stack : salePreview) {
+                    saleQuantity = Math.addExact(saleQuantity, stack.getCount());
+                }
+            } catch (ArithmeticException exception) {
+                saleQuantity = -1L;
+            }
+            if (salePreview.isEmpty() || saleQuantity <= 0L
+                    || !saleEscrow.prepare(saleEscrowRequestId, buyer.getUUID(), pos.asLong(),
+                    buyer.level().dimension().location().toString(), listing.itemId(), saleQuantity,
+                    salePreview, buyer.level().registryAccess())) {
+                sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                return;
+            }
+            saleEscrowPrepared = true;
+
             if (compoundTrade || barterTrade) {
                 if (buyer.getServer() == null || escrowPreview.isEmpty()
                         || !((barterEscrow = PlayerShopBarterEscrowSavedData.get(buyer.getServer())).prepare(
                         barterEscrowRequestId, buyer.getUUID(), pos.asLong(),
                         buyer.level().dimension().location().toString(), listing.itemId(), barterAmount,
                         escrowPreview, buyer.level().registryAccess()))) {
+                    markSaleRefunded(saleEscrow, saleEscrowRequestId);
                     sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                     return;
                 }
@@ -793,6 +823,7 @@ public final class PlayerShopBlockService {
                         if (barterEscrowPrepared) {
                             barterEscrow.markRefunded(barterEscrowRequestId);
                         }
+                        markSaleForProviderFailure(saleEscrow, saleEscrowRequestId, debit);
                         sendResultWithChat(buyer, false, mapProviderResultCode(debit), "§cTrade cancelled: the economy provider could not confirm this payment.");
                         return;
                     }
@@ -816,7 +847,12 @@ public final class PlayerShopBlockService {
                                     "buyer compound refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
                             if (refund.success()) {
                                 releaseCustody(coordinator, custodyId, custodyHeld);
+                                markSaleRefunded(saleEscrow, saleEscrowRequestId);
+                            } else {
+                                markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
                             }
+                        } else {
+                            markSaleRefunded(saleEscrow, saleEscrowRequestId);
                         }
                         sendResult(buyer, false, ShopResultCode.CANCELLED_BY_EVENT);
                         return;
@@ -837,6 +873,9 @@ public final class PlayerShopBlockService {
                             "buyer payment refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
                     if (refund.success()) {
                         releaseCustody(coordinator, custodyId, custodyHeld);
+                        markSaleRefunded(saleEscrow, saleEscrowRequestId);
+                    } else {
+                        markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
                     }
                     sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, "§cTrade cancelled: barter items could not be taken.");
                     return;
@@ -849,6 +888,9 @@ public final class PlayerShopBlockService {
                             "buyer escrow mismatch refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
                     if (refund.success()) {
                         releaseCustody(coordinator, custodyId, custodyHeld);
+                        markSaleRefunded(saleEscrow, saleEscrowRequestId);
+                    } else {
+                        markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
                     }
                     sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                     return;
@@ -866,6 +908,9 @@ public final class PlayerShopBlockService {
                             "buyer storage refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
                     if (refund.success()) {
                         releaseCustody(coordinator, custodyId, custodyHeld);
+                        markSaleRefunded(saleEscrow, saleEscrowRequestId);
+                    } else {
+                        markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
                     }
                     sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, "§cTrade cancelled: the shop's storage is full.");
                     return;
@@ -888,6 +933,9 @@ public final class PlayerShopBlockService {
                             rollbackBarterPayment(barterStorage, buyer, barterItem, barterAmount,
                                     insertedPayment, listing.barterNbtAware(), listing.barterNbtPatch(),
                                     barterEscrow, barterEscrowRequestId);
+                            markSaleRefunded(saleEscrow, saleEscrowRequestId);
+                        } else {
+                            markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
                         }
                         sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                         return;
@@ -902,6 +950,7 @@ public final class PlayerShopBlockService {
                         boolean recorded = PlayerShopSettlementSavedData.get(buyer.getServer())
                                 .recordSale(shop.getOwnerUuid(), pos.asLong(), 0L, listing.itemId(), qty);
                         if (!recorded) {
+                            markSaleRefunded(saleEscrow, saleEscrowRequestId);
                             sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                             return;
                         }
@@ -917,6 +966,7 @@ public final class PlayerShopBlockService {
                                 && debit.error() == ProviderError.INSUFFICIENT_FUNDS) {
                             barterTrade = true;
                         } else {
+                            markSaleForProviderFailure(saleEscrow, saleEscrowRequestId, debit);
                             sendResult(buyer, false, mapProviderResultCode(debit));
                             return;
                         }
@@ -928,6 +978,9 @@ public final class PlayerShopBlockService {
                                     "buyer server refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
                             if (refund.success()) {
                                 releaseCustody(coordinator, custodyId, custodyHeld);
+                                markSaleRefunded(saleEscrow, saleEscrowRequestId);
+                            } else {
+                                markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
                             }
                             sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                             return;
@@ -940,6 +993,9 @@ public final class PlayerShopBlockService {
                                     MutationKind.DEPOSIT);
                             if (refund.success()) {
                                 releaseCustody(coordinator, custodyId, custodyHeld);
+                                markSaleRefunded(saleEscrow, saleEscrowRequestId);
+                            } else {
+                                markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
                             }
                             sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                             return;
@@ -954,6 +1010,7 @@ public final class PlayerShopBlockService {
                     barterItem = ShopTransactionUtil.resolveItem(listing.barterItemId());
                     barterAmount = listing.effectiveBarterTotal(qty);
                     if (barterAmount < 0) {
+                        markSaleRefunded(saleEscrow, saleEscrowRequestId);
                         sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
                         return;
                     }
@@ -962,6 +1019,7 @@ public final class PlayerShopBlockService {
                             listing.barterNbtAware(), listing.barterNbtPatch()) < barterAmount) {
                         sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS,
                                 "§cTrade cancelled: you don't have enough barter items.");
+                        markSaleRefunded(saleEscrow, saleEscrowRequestId);
                         return;
                     }
                 }
@@ -970,6 +1028,7 @@ public final class PlayerShopBlockService {
                     barterStorage = resolveBarterStorage(buyer.level(), shop, pos);
                 }
                 if (barterStorage == null) {
+                    markSaleRefunded(saleEscrow, saleEscrowRequestId);
                     sendResultWithChat(buyer, false, ShopResultCode.NO_LINK, "§cTrade cancelled: barter storage is not linked.");
                     return;
                 }
@@ -985,6 +1044,7 @@ public final class PlayerShopBlockService {
                             barterEscrowRequestId, buyer.getUUID(), pos.asLong(),
                             buyer.level().dimension().location().toString(), listing.itemId(), barterAmount,
                             escrowPreview, buyer.level().registryAccess()))) {
+                        markSaleRefunded(saleEscrow, saleEscrowRequestId);
                         sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                         return;
                     }
@@ -1002,6 +1062,7 @@ public final class PlayerShopBlockService {
                         if (barterEscrowPrepared) {
                             barterEscrow.markRefunded(barterEscrowRequestId);
                         }
+                        markSaleRefunded(saleEscrow, saleEscrowRequestId);
                         sendResult(buyer, false, ShopResultCode.CANCELLED_BY_EVENT);
                         return;
                     }
@@ -1015,6 +1076,7 @@ public final class PlayerShopBlockService {
                     if (barterEscrowPrepared) {
                         barterEscrow.markRefunded(barterEscrowRequestId);
                     }
+                    markSaleRefunded(saleEscrow, saleEscrowRequestId);
                     sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, "§cTrade cancelled: barter items could not be taken.");
                     return;
                 }
@@ -1022,6 +1084,7 @@ public final class PlayerShopBlockService {
                         buyer.level().registryAccess())) {
                     restorePaymentToBuyer(buyer, paymentStacks);
                     barterEscrow.markRefunded(barterEscrowRequestId);
+                    markSaleRefunded(saleEscrow, saleEscrowRequestId);
                     sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                     return;
                 }
@@ -1033,6 +1096,7 @@ public final class PlayerShopBlockService {
                     if (barterEscrowPrepared) {
                         barterEscrow.markRefunded(barterEscrowRequestId);
                     }
+                    markSaleRefunded(saleEscrow, saleEscrowRequestId);
                     sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, "§cTrade cancelled: the shop's storage is full.");
                     return;
                 }
@@ -1048,6 +1112,7 @@ public final class PlayerShopBlockService {
                     if (!recorded) {
                         rollbackBarterPayment(barterStorage, buyer, barterItem, barterAmount, insertedPayment,
                                 listing.barterNbtAware(), listing.barterNbtPatch(), barterEscrow, barterEscrowRequestId);
+                        markSaleRefunded(saleEscrow, saleEscrowRequestId);
                         sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                         return;
                     }
@@ -1067,16 +1132,23 @@ public final class PlayerShopBlockService {
                                 withdrewFromBuyer, cost, recordedSale,
                                 shop.getOwnerUuid(), pos, barterItem, barterAmount, insertedPayment, compoundTrade, barterTrade,
                                 listing.barterNbtAware(), listing.barterNbtPatch(), barterEscrow, barterEscrowRequestId);
+                        markSaleRefunded(saleEscrow, saleEscrowRequestId);
                         sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
                         return;
                     }
                     List<ItemStack> part = extractNbt(linkedStorage, bundleItem, needed, entry.nbtPatch() != null, entry.nbtPatch());
                     if (part.isEmpty()) {
                         // Rollback already-extracted items
+                        boolean restored = true;
                         for (ItemStack ex : extracted) {
                             if (!ex.isEmpty()) {
-                                reinsert(linkedStorage, ex);
+                                restored &= reinsert(linkedStorage, ex);
                             }
+                        }
+                        if (restored) {
+                            markSaleRefunded(saleEscrow, saleEscrowRequestId);
+                        } else {
+                            markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
                         }
                         rollbackAll(linkedStorage, barterStorage, buyer, coordinator, transactionId, custodyId, custodyHeld,
                                 withdrewFromBuyer, cost, recordedSale,
@@ -1096,7 +1168,29 @@ public final class PlayerShopBlockService {
                         withdrewFromBuyer, cost, recordedSale,
                         shop.getOwnerUuid(), pos, barterItem, barterAmount, insertedPayment, compoundTrade, barterTrade,
                         listing.barterNbtAware(), listing.barterNbtPatch(), barterEscrow, barterEscrowRequestId);
+                markSaleRefunded(saleEscrow, saleEscrowRequestId);
                 sendResult(buyer, false, ShopResultCode.ROLLBACK);
+                return;
+            }
+
+            if (saleEscrowPrepared && !saleEscrow.markRemoved(saleEscrowRequestId, extracted,
+                    buyer.level().registryAccess())) {
+                boolean restored = true;
+                for (ItemStack stack : extracted) {
+                    if (!stack.isEmpty()) {
+                        restored &= reinsert(linkedStorage, stack);
+                    }
+                }
+                if (restored) {
+                    markSaleRefunded(saleEscrow, saleEscrowRequestId);
+                } else {
+                    markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
+                }
+                rollbackAll(linkedStorage, barterStorage, buyer, coordinator, transactionId, custodyId, custodyHeld,
+                        withdrewFromBuyer, cost, recordedSale,
+                        shop.getOwnerUuid(), pos, barterItem, barterAmount, insertedPayment, compoundTrade, barterTrade,
+                        listing.barterNbtAware(), listing.barterNbtPatch(), barterEscrow, barterEscrowRequestId);
+                sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                 return;
             }
 
@@ -1113,12 +1207,20 @@ public final class PlayerShopBlockService {
                     coordinator.deliverCustody(custodyId);
                     coordinator.claimCustody(custodyId);
                 } catch (RuntimeException exception) {
+                    markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
                     sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                     return;
                 }
             }
             if (barterEscrowPrepared && !barterEscrow.markComplete(barterEscrowRequestId)) {
                 barterEscrow.markRecoveryRequired(barterEscrowRequestId);
+                markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
+                sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                return;
+            }
+            if (saleEscrowPrepared && (!saleEscrow.markDelivered(saleEscrowRequestId)
+                    || !saleEscrow.markClaimed(saleEscrowRequestId))) {
+                markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
                 sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                 return;
             }
@@ -1162,6 +1264,14 @@ public final class PlayerShopBlockService {
             openFor(buyer, pos, isOwnerOrFranchiseMember(shop, buyer));
             sendResult(buyer, true, ShopResultCode.BOUGHT);
         } finally {
+            if (saleEscrowPrepared && saleEscrow != null) {
+                var record = saleEscrow.find(saleEscrowRequestId).orElse(null);
+                if (record != null && record.state() != PlayerShopSaleEscrowSavedData.State.CLAIMED
+                        && record.state() != PlayerShopSaleEscrowSavedData.State.REFUNDED
+                        && record.state() != PlayerShopSaleEscrowSavedData.State.RECOVERY_REQUIRED) {
+                    saleEscrow.markRecoveryRequired(saleEscrowRequestId);
+                }
+            }
             lock.unlock();
         }
     }
@@ -1592,15 +1702,20 @@ public final class PlayerShopBlockService {
         }
     }
 
-    private static void reinsert(LinkedStorage storage, ItemStack stack) {
+    private static boolean reinsert(LinkedStorage storage, ItemStack stack) {
+        if (storage == null || stack == null || stack.isEmpty()) {
+            return false;
+        }
         if (storage.hasAdapter()) {
-            storage.adapter().insert(storage.blockEntity(), List.of(stack));
+            return storage.adapter().insert(storage.blockEntity(), List.of(stack));
         } else if (storage.handler() != null) {
             ItemStack remaining = stack.copy();
             for (int i = 0; i < storage.handler().getSlots() && !remaining.isEmpty(); i++) {
                 remaining = storage.handler().insertItem(i, remaining, false);
             }
+            return remaining.isEmpty();
         }
+        return false;
     }
 
     // ═══ NBT-aware extraction helpers ═══
@@ -1619,6 +1734,61 @@ public final class PlayerShopBlockService {
             return storage.adapter().extract(storage.blockEntity(), item, count, nbtAware, nbtPatch);
         }
         return extract(storage.handler(), item, count, nbtAware, nbtPatch);
+    }
+
+    private static List<ItemStack> snapshotNbt(LinkedStorage storage, Item item, int count,
+                                                boolean nbtAware, DataComponentPatch nbtPatch) {
+        if (storage == null || item == null || count <= 0) {
+            return List.of();
+        }
+        if (storage.hasAdapter()) {
+            return storage.adapter().snapshot(storage.blockEntity(), item, count, nbtAware, nbtPatch);
+        }
+        return snapshot(storage.handler(), item, count, nbtAware, nbtPatch);
+    }
+
+    private static List<ItemStack> snapshot(IItemHandler handler, Item item, int count,
+                                             boolean nbtAware, DataComponentPatch nbtPatch) {
+        if (handler == null || item == null || count <= 0) {
+            return List.of();
+        }
+        List<ItemStack> result = new ArrayList<>();
+        int remaining = count;
+        for (int i = 0; i < handler.getSlots() && remaining > 0; i++) {
+            ItemStack probe = handler.extractItem(i, remaining, true);
+            if (probe.isEmpty() || !NbtMatchUtil.matches(probe, item, nbtAware, nbtPatch)) {
+                continue;
+            }
+            result.add(probe.copy());
+            remaining -= probe.getCount();
+        }
+        return remaining <= 0 ? List.copyOf(result) : List.of();
+    }
+
+    private static List<ItemStack> snapshotSaleStacks(LinkedStorage storage, ShopBlockEntity.Listing listing,
+                                                       Item saleItem, int quantity, int deliverCount) {
+        if (listing == null || storage == null) {
+            return List.of();
+        }
+        List<ItemStack> result = new ArrayList<>();
+        if (listing.bundleOutputs().isEmpty()) {
+            result.addAll(snapshotNbt(storage, saleItem, deliverCount, listing.nbtAware(), listing.nbtPatch()));
+        } else {
+            for (ShopBlockEntity.BundleEntry entry : listing.bundleOutputs()) {
+                Item item = ShopTransactionUtil.resolveItem(entry.itemId());
+                int count = checkedDeliveryCount(entry.count(), quantity);
+                if (item == null || item == Items.AIR || count <= 0) {
+                    return List.of();
+                }
+                List<ItemStack> part = snapshotNbt(storage, item, count,
+                        entry.nbtPatch() != null, entry.nbtPatch());
+                if (part.isEmpty()) {
+                    return List.of();
+                }
+                result.addAll(part);
+            }
+        }
+        return List.copyOf(result);
     }
 
     private static int extractAmount(IItemHandler handler, Item item, int amount,
@@ -1787,6 +1957,27 @@ public final class PlayerShopBlockService {
             }
         }
         return List.of();
+    }
+
+    private static void markSaleRefunded(PlayerShopSaleEscrowSavedData escrow, UUID requestId) {
+        if (escrow != null && requestId != null) {
+            escrow.markRefunded(requestId);
+        }
+    }
+
+    private static void markSaleRecoveryRequired(PlayerShopSaleEscrowSavedData escrow, UUID requestId) {
+        if (escrow != null && requestId != null) {
+            escrow.markRecoveryRequired(requestId);
+        }
+    }
+
+    private static void markSaleForProviderFailure(PlayerShopSaleEscrowSavedData escrow, UUID requestId,
+                                                   ProviderResult<?> result) {
+        if (result != null && result.safeToRetry()) {
+            markSaleRefunded(escrow, requestId);
+        } else {
+            markSaleRecoveryRequired(escrow, requestId);
+        }
     }
 
     private static boolean canInsertAll(IItemHandler handler, List<ItemStack> stacks) {
