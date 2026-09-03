@@ -33,6 +33,8 @@ The bridge therefore does not satisfy `CORE-REQ-018`. FutureShops does not add a
 
 The public [DanConomy](https://github.com/Dandelion1608/danconomy) repository was inspected at commit `63aecdac12e437ae1f3de2801cdea0105b3d7e06`. It targets NeoForge 21.1.209 and implements an optional Pixelmon mirrored currency. Its source falls back to a local ledger when Pixelmon reads or writes fail and mirrors observed Pixelmon balances into `data/danconomy_ledger.dat`. This is explicitly outside the FutureShops contract because it creates a second ledger and can report local success without a proven external outcome. It is not a bridge candidate for `CORE-REQ-018`.
 
+An older public [pixelmon ecobridge](https://github.com/nkomarn/pixelmon-ecobridge) repository was also checked at commit `3d33d5e451b8e0536584fdbde8aaa2f159ee84d3`. Its build targets Pixelmon `1.12.2-8.2.0` and the source uses the removed `IPixelmonBankAccount` API. Its Vault implementation calls direct `changeMoney` methods, truncates primitive amounts, returns null `EconomyResponse` values, and has no receipt or retry journal. It cannot be used for the 1.21.1 target or the strict mutation contract.
+
 ## Reclassification gate
 
 Vault mutation support can be reconsidered only with an exact separately installed bridge that provides a stable request identity, durable receipt lookup, idempotent retry, exact integer conversion, and crash recovery evidence for every enabled route. Phase 003 owns any later issue 66 update and final artifact validation.
