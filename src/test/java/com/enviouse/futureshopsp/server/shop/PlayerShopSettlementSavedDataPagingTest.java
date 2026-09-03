@@ -70,4 +70,29 @@ class PlayerShopSettlementSavedDataPagingTest {
         assertFalse(restored.cleanMarkerValid());
         assertEquals(0L, restored.snapshot(owner, 42L, 6).pendingMinor());
     }
+
+    @Test
+    void legacySettlementDataMigratesToChecksummedSchema() {
+        UUID owner = UUID.randomUUID();
+        CompoundTag legacy = new CompoundTag();
+        legacy.putInt("schemaVersion", 1);
+        ListTag settlements = new ListTag();
+        CompoundTag settlement = new CompoundTag();
+        settlement.putLong("shopPos", 42L);
+        settlement.putUUID("owner", owner);
+        settlement.putLong("pending", 100L);
+        settlement.putLong("lifetime", 100L);
+        settlements.add(settlement);
+        legacy.put("settlements", settlements);
+        legacy.put("ownerRows", new ListTag());
+
+        PlayerShopSettlementSavedData restored = PlayerShopSettlementSavedData.load(legacy, null);
+        assertTrue(restored.integrityValid());
+        assertEquals(100L, restored.snapshot(owner, 42L, 6).pendingMinor());
+
+        CompoundTag migrated = restored.save(new CompoundTag(), null);
+        assertEquals(2, migrated.getInt("schemaVersion"));
+        assertTrue(migrated.contains("checksum", Tag.TAG_STRING));
+        assertTrue(PlayerShopSettlementSavedData.load(migrated, null).integrityValid());
+    }
 }
