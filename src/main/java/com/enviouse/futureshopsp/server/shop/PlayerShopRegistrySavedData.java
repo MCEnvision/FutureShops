@@ -21,6 +21,7 @@ public final class PlayerShopRegistrySavedData extends SavedData {
     private static final int CURRENT_VERSION = 1;
     private static final int MAX_OWNERS = 10_000;
     private static final int MAX_SHOPS_PER_OWNER = 1_000;
+    private static final int MAX_DIMENSION_LENGTH = 256;
 
     private final Map<UUID, List<ShopRef>> shopsByOwner = new HashMap<>();
     private boolean integrityValid = true;
@@ -68,8 +69,17 @@ public final class PlayerShopRegistrySavedData extends SavedData {
                     continue;
                 }
                 try {
-                    refs.add(new ShopRef(ResourceLocation.parse(shopCompound.getString("dimension")),
-                            shopCompound.getLong("pos")));
+                    String dimension = shopCompound.getString("dimension");
+                    if (dimension.isBlank() || dimension.length() > MAX_DIMENSION_LENGTH) {
+                        data.integrityValid = false;
+                        continue;
+                    }
+                    ShopRef ref = new ShopRef(ResourceLocation.parse(dimension), shopCompound.getLong("pos"));
+                    if (refs.contains(ref)) {
+                        data.integrityValid = false;
+                        continue;
+                    }
+                    refs.add(ref);
                 } catch (RuntimeException exception) {
                     data.integrityValid = false;
                 }
@@ -110,6 +120,9 @@ public final class PlayerShopRegistrySavedData extends SavedData {
 
     public synchronized void register(UUID owner, ResourceLocation dimension, long posLong) {
         if (owner == null || dimension == null) {
+            return;
+        }
+        if (!shopsByOwner.containsKey(owner) && shopsByOwner.size() >= MAX_OWNERS) {
             return;
         }
         List<ShopRef> refs = shopsByOwner.computeIfAbsent(owner, ignored -> new ArrayList<>());
