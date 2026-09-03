@@ -149,7 +149,11 @@ public final class ShopBuyService {
                     return BuyResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.SERVER_ERROR);
                 }
 
-                totalQuantity += quantity;
+                try {
+                    totalQuantity = Math.addExact(totalQuantity, quantity);
+                } catch (ArithmeticException ex) {
+                    return BuyResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.SERVER_ERROR);
+                }
                 ItemStack rewardStack = new ItemStack(item, quantity);
                 // Apply saved NBT (SNBT) when present so enchanted books, Tacz guns,
                 // named/lored items round-trip through /shop buys with their tag
@@ -285,7 +289,12 @@ public final class ShopBuyService {
             }
             // Merge by listingId: two listings sharing a registry itemId but distinct listingIds
             // must NOT collapse — that is the whole point of multi-variant NBT listings.
-            merged.merge(lineItem.listingId(), lineItem.quantity(), Integer::sum);
+            try {
+                merged.merge(lineItem.listingId(), lineItem.quantity(), Math::addExact);
+            } catch (ArithmeticException ex) {
+                // Reject an overflowing duplicate listing before catalog or economy state changes.
+                return Map.of();
+            }
         }
         return merged;
     }
