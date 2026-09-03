@@ -51,6 +51,23 @@ public final class ShopTransactionUtil {
         return result;
     }
 
+    /** Restores the main inventory and offhand slots from an exact snapshot. */
+    public static boolean restoreInventorySlots(Inventory inventory, List<ItemStack> snapshot) {
+        int expectedSize = inventory.items.size() + inventory.offhand.size();
+        if (snapshot.size() != expectedSize) {
+            return false;
+        }
+
+        int snapshotIndex = 0;
+        for (int slot = 0; slot < inventory.items.size(); slot++) {
+            inventory.items.set(slot, snapshot.get(snapshotIndex++).copy());
+        }
+        for (int slot = 0; slot < inventory.offhand.size(); slot++) {
+            inventory.offhand.set(slot, snapshot.get(snapshotIndex++).copy());
+        }
+        return true;
+    }
+
     public static boolean canFit(Inventory inventory, List<ItemStack> stacks) {
         List<ItemStack> simulation = snapshotInventorySlots(inventory);
         for (ItemStack stack : stacks) {

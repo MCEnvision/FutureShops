@@ -32,4 +32,21 @@ class ShopTransactionUtilInventoryTest {
         assertFalse(ShopTransactionUtil.insertIntoInventory(inventory, List.of(new ItemStack(Items.DIAMOND, 2))));
         assertEquals(63, inventory.items.get(0).getCount());
     }
+
+    @Test
+    void restoresExactMainAndOffhandSnapshot(MinecraftServer server) {
+        Inventory inventory = new Inventory(null);
+        inventory.items.set(0, new ItemStack(Items.DIAMOND, 3));
+        inventory.offhand.set(0, new ItemStack(Items.EMERALD, 2));
+        List<ItemStack> snapshot = ShopTransactionUtil.snapshotInventorySlots(inventory);
+
+        inventory.items.set(0, ItemStack.EMPTY);
+        inventory.offhand.set(0, new ItemStack(Items.STONE, 1));
+
+        assertTrue(ShopTransactionUtil.restoreInventorySlots(inventory, snapshot));
+        assertEquals(Items.DIAMOND, inventory.items.get(0).getItem());
+        assertEquals(3, inventory.items.get(0).getCount());
+        assertEquals(Items.EMERALD, inventory.offhand.get(0).getItem());
+        assertEquals(2, inventory.offhand.get(0).getCount());
+    }
 }
