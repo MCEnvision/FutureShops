@@ -211,6 +211,24 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
+    void providerMutationExceptionFreezesWithAnUncertainJournalRecord() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        provider.throwMutation = true;
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+
+        var result = coordinator.withdraw(request);
+
+        assertEquals(ProviderResultStatus.AMBIGUOUS, result.status());
+        assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
+        assertEquals(EconomyTransactionState.UNCERTAIN,
+                journal.find(request.requestId()).orElseThrow().state());
+        assertEquals(1, provider.withdrawCalls);
+    }
+
+    @Test
     void recoveryUsesDurableLookupBeforeRetry() {
         FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
         EconomyLifecycleController lifecycle = readyLifecycle();
@@ -583,6 +601,7 @@ class EconomyTransactionCoordinatorTest {
         private boolean rejectAllDeposits;
         private boolean lookupValueOnly;
         private boolean throwCapabilities;
+        private boolean throwMutation;
 
         private FixtureProvider(ProviderCapabilities capabilities) {
             this.capabilities = capabilities;
@@ -635,6 +654,9 @@ class EconomyTransactionCoordinatorTest {
         @Override
         public ProviderResult<MutationReceipt> withdraw(MutationRequest request) {
             withdrawCalls++;
+            if (throwMutation) {
+                throw new IllegalStateException("fixture mutation failure");
+            }
             if (ambiguous) {
                 return ProviderResult.ambiguous("fixture ambiguity");
             }
