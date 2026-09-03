@@ -1,6 +1,7 @@
 package com.enviouse.futureshopsp.server.economy;
 
 import com.enviouse.futureshopsp.Config;
+import com.enviouse.futureshopsp.api.economy.EconomyAmounts;
 import com.enviouse.futureshopsp.event.BalanceChangeEvent;
 import com.enviouse.futureshopsp.server.shop.ShopResultCode;
 import com.enviouse.futureshopsp.server.util.PageBounds;
@@ -54,7 +55,12 @@ public class InternalEconomyProvider implements EconomyProvider {
             return TransactionResult.error(ShopResultCode.CANCELLED_BY_EVENT, currentBalance);
         }
 
-        long newBalance = currentBalance - amountMinorUnits;
+        long newBalance;
+        try {
+            newBalance = EconomyAmounts.subtractExact(currentBalance, amountMinorUnits);
+        } catch (ArithmeticException exception) {
+            return TransactionResult.error(ShopResultCode.SERVER_ERROR, currentBalance);
+        }
         getData().setBalance(playerUUID, newBalance);
 
         // Fire BalanceChangeEvent.Post
@@ -75,7 +81,12 @@ public class InternalEconomyProvider implements EconomyProvider {
         }
 
         long currentBalance = getBalance(playerUUID);
-        long newBalance = currentBalance + amountMinorUnits;
+        long newBalance;
+        try {
+            newBalance = EconomyAmounts.addExact(currentBalance, amountMinorUnits);
+        } catch (ArithmeticException exception) {
+            return TransactionResult.error(ShopResultCode.MAX_BALANCE_EXCEEDED, currentBalance);
+        }
         if (newBalance > Config.economyMaxBalanceMinorUnits) {
             return TransactionResult.error(ShopResultCode.MAX_BALANCE_EXCEEDED, currentBalance);
         }

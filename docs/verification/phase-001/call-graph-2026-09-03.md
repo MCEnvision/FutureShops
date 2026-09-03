@@ -73,7 +73,7 @@ Required additions are grouped by boundary.
 | API and provider fixtures | `EconomyProviderApiTest`, `EconomyProviderRegistryTest` | Capability complete, incomplete, duplicate aware, durable lookup, timeout, exception, malformed receipt, and ambiguous fixtures |
 | Selection | `ProviderSelectionManagerTest`, `BalanceManagerSelectionTest` | Lifecycle state and restart selection integration |
 | Persistence | Existing SavedData tests only | Version, checksum, migration, unknown newer, truncated, interrupted write, clean marker, recovery checkpoint, backup, and restore fixtures |
-| Transactions | Existing shop tests are service level | Root and leg identity, intent ordering, custody conservation, receipt validation, duplicate completion, concurrency, crash point, compensation, and claim tests |
+| Transactions | Existing shop tests are service level. `EconomyTransactionCoordinatorTest` now covers strict one leg intent, capability refusal, duplicate replay, ambiguity freeze, and lookup recovery. | Root and leg identity, intent ordering, custody conservation, receipt validation, duplicate completion, concurrency, crash point, compensation, and claim tests |
 | World and inventory | No new GameTest in Phase 000 | GameTests for shop, player shop, custody, claims, bills, restart, and full inventory |
 | Network and UI | Existing packet bounds and screen policy tests | Server snapshots, stale state, replay, reconnect, localization, disabled actions, client and dedicated server isolation |
 | Runtime | Standard server and Xvfb client startup evidence exists for Phase 000 | Clean and unclean restart, draining, recovery, frozen state, multiplayer, reconnect, provider switching, and full surface walkthrough |

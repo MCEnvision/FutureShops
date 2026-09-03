@@ -33,6 +33,8 @@ The server configuration key is `economy.provider`. An absent value selects `int
 
 Balances and amounts use signed `long` integer minor units. `MutationRequest` requires a positive amount, a server supplied `RequestId`, an actor UUID, an optional counterparty, and a `MutationKind`. Providers must preserve the request identity across their durable operation and receipt records. A locally generated UUID does not make an external operation idempotent unless the external system binds that identity to lookup and replay behavior.
 
+`EconomyAmounts` provides checked addition, subtraction, multiplication, sign validation, and exact decimal parsing. Lossy precision and overflow are rejected before a provider call.
+
 `CurrencyMetadata` validates singular and plural display names and a decimal precision from zero through six. The selected provider owns this metadata for the server lifecycle.
 
 ## Results and recovery

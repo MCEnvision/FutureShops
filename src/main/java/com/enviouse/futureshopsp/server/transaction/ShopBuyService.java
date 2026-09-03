@@ -179,21 +179,26 @@ public final class ShopBuyService {
                 }
             }
 
-            TransactionResult withdrawal = provider.withdraw(player.getUUID(), totalCost, "BUY");
-            if (!withdrawal.success()) {
-                return BuyResult.error(shopId, withdrawal.resultingBalance(), withdrawal.errorCode());
-            }
-
             List<PreparedLine> reserved = new ArrayList<>();
             for (PreparedLine line : preparedLines) {
                 if (!ShopCatalog.reserveStock(shopId, line.listingId(), line.quantity())) {
                     for (PreparedLine rollback : reserved) {
                         ShopCatalog.restoreStock(shopId, rollback.listingId(), rollback.quantity());
                     }
-                    provider.deposit(player.getUUID(), totalCost, "BUY");
                     return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.OUT_OF_STOCK);
                 }
                 reserved.add(line);
+            }
+
+            // Reserve the exact shop inventory before the coordinated debit. The coordinator
+            // persists the request intent before invoking the provider, so a failed debit restores
+            // the reservation without exposing a partially paid listing.
+            TransactionResult withdrawal = provider.withdraw(player.getUUID(), totalCost, "BUY");
+            if (!withdrawal.success()) {
+                for (PreparedLine rollback : reserved) {
+                    ShopCatalog.restoreStock(shopId, rollback.listingId(), rollback.quantity());
+                }
+                return BuyResult.error(shopId, withdrawal.resultingBalance(), withdrawal.errorCode());
             }
 
             if (!ShopTransactionUtil.insertIntoInventory(inventory, rewards)) {
@@ -242,5 +247,4 @@ public final class ShopBuyService {
         }
     }
 }
-
 
