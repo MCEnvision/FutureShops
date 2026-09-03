@@ -1,6 +1,8 @@
 package com.enviouse.futureshopsp.server.shop;
 
+import com.enviouse.futureshopsp.server.SavedDataMigrations;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.HolderLookup;
@@ -16,23 +18,60 @@ import java.util.UUID;
  */
 public final class ShopLimitsSavedData extends SavedData {
     private static final String DATA_NAME = "futureshops_shop_limits";
+    private static final int CURRENT_VERSION = 1;
+    private static final int MAX_PLAYERS = 10_000;
+    private static final int MAX_LIMIT = 1_000_000;
 
     /** Per-player max shop blocks. -1 = unlimited. */
     private final Map<UUID, Integer> maxShopBlocks = new HashMap<>();
+    private boolean integrityValid = true;
 
     public static ShopLimitsSavedData load(CompoundTag tag, HolderLookup.Provider provider) {
         ShopLimitsSavedData data = new ShopLimitsSavedData();
-        CompoundTag limits = tag.getCompound("MaxShopBlocks");
-        for (String key : limits.getAllKeys()) {
-            try {
-                data.maxShopBlocks.put(UUID.fromString(key), limits.getInt(key));
-            } catch (IllegalArgumentException ignored) {}
+        int version = SavedDataMigrations.readVersion(tag);
+        if (version > CURRENT_VERSION) {
+            data.integrityValid = false;
+            return data;
         }
+        SavedDataMigrations.needsMigration(DATA_NAME, version, CURRENT_VERSION);
+        Tag rawLimits = tag.get("MaxShopBlocks");
+        if (rawLimits != null && !(rawLimits instanceof CompoundTag)) {
+            data.integrityValid = false;
+            return data;
+        }
+        if (!(rawLimits instanceof CompoundTag limits)) {
+            return data;
+        }
+        if (limits.size() > MAX_PLAYERS) {
+            data.integrityValid = false;
+            return data;
+        }
+        Map<UUID, Integer> staged = new HashMap<>();
+        for (String key : limits.getAllKeys()) {
+            if (!limits.contains(key, Tag.TAG_INT)) {
+                data.integrityValid = false;
+                return data;
+            }
+            UUID player;
+            try {
+                player = UUID.fromString(key);
+            } catch (IllegalArgumentException exception) {
+                data.integrityValid = false;
+                return data;
+            }
+            int max = limits.getInt(key);
+            if (max < -1 || max > MAX_LIMIT || staged.put(player, max) != null) {
+                data.integrityValid = false;
+                return data;
+            }
+        }
+        data.maxShopBlocks.putAll(staged);
         return data;
     }
 
     @Override
-    public CompoundTag save(CompoundTag tag, HolderLookup.Provider provider) {
+    public synchronized CompoundTag save(CompoundTag tag, HolderLookup.Provider provider) {
+        SavedDataMigrations.writeVersion(tag, CURRENT_VERSION);
         CompoundTag limits = new CompoundTag();
         maxShopBlocks.forEach((uuid, max) -> limits.putInt(uuid.toString(), max));
         tag.put("MaxShopBlocks", limits);
@@ -45,12 +84,15 @@ public final class ShopLimitsSavedData extends SavedData {
     }
 
     /** Get max shop blocks for a player. Returns -1 (unlimited) if not set. */
-    public int getMaxShopBlocks(UUID player) {
+    public synchronized int getMaxShopBlocks(UUID player) {
+        if (player == null) return -1;
         return maxShopBlocks.getOrDefault(player, -1);
     }
 
     /** Set max shop blocks for a player. -1 = unlimited. */
-    public void setMaxShopBlocks(UUID player, int max) {
+    public synchronized void setMaxShopBlocks(UUID player, int max) {
+        if (player == null) return;
+        if (max > MAX_LIMIT) return;
         if (max < 0) {
             maxShopBlocks.remove(player);
         } else {
@@ -60,9 +102,13 @@ public final class ShopLimitsSavedData extends SavedData {
     }
 
     /** Check if a player can place another shop block. */
-    public boolean canPlace(UUID player, int currentCount) {
+    public synchronized boolean canPlace(UUID player, int currentCount) {
+        if (player == null || currentCount < 0) return false;
         int max = getMaxShopBlocks(player);
         return max < 0 || currentCount < max;
     }
-}
 
+    public synchronized boolean integrityValid() {
+        return integrityValid;
+    }
+}
