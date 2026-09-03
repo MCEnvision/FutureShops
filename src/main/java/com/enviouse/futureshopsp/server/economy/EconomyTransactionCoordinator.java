@@ -374,9 +374,20 @@ public final class EconomyTransactionCoordinator {
                 return ProviderResult.recoveryRequired("transaction provider binding requires recovery");
             }
             if (!record.incomplete()) {
-                return record.receipt().map(ProviderResult::confirmed)
-                        .orElseGet(() -> ProviderResult.rejected(ProviderError.DUPLICATE_REQUEST,
-                                "transaction is already resolved"));
+                if (record.resultStatus() == ProviderResultStatus.CONFIRMED) {
+                    MutationReceipt receipt = record.receipt().orElse(null);
+                    if (!validReceipt(record.request(), receipt)) {
+                        lifecycle.markAmbiguous("terminal transaction receipt is invalid");
+                        return ProviderResult.recoveryRequired("terminal transaction receipt is invalid");
+                    }
+                    return ProviderResult.confirmed(receipt);
+                }
+                if (record.resultStatus() == ProviderResultStatus.REJECTED && record.receipt().isEmpty()) {
+                    return ProviderResult.rejected(ProviderError.DUPLICATE_REQUEST,
+                            "transaction is already resolved");
+                }
+                lifecycle.markAmbiguous("terminal transaction outcome is inconsistent");
+                return ProviderResult.recoveryRequired("terminal transaction outcome is inconsistent");
             }
             if (!supports(EconomyCapability.RECEIPT_LOOKUP)) {
                 lifecycle.markAmbiguous("provider cannot look up pending transaction");
@@ -576,7 +587,12 @@ public final class EconomyTransactionCoordinator {
                 return ProviderResult.recoveryRequired("confirmed transaction receipt is missing");
             }
             if (record.resultStatus() == ProviderResultStatus.CONFIRMED) {
-                return ProviderResult.confirmed(record.receipt().orElseThrow());
+                MutationReceipt receipt = record.receipt().orElse(null);
+                if (!validReceipt(record.request(), receipt)) {
+                    lifecycle.markAmbiguous("terminal transaction receipt is invalid");
+                    return ProviderResult.recoveryRequired("terminal transaction receipt is invalid");
+                }
+                return ProviderResult.confirmed(receipt);
             }
             if (record.resultStatus() != ProviderResultStatus.REJECTED || record.receipt().isPresent()) {
                 lifecycle.markAmbiguous("terminal transaction outcome is inconsistent");

@@ -90,6 +90,25 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
+    void terminalRecordWithMismatchedReceiptFreezesDuringRecovery() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+        MutationReceipt mismatched = new MutationReceipt(request.requestId(), MutationKind.DEPOSIT,
+                request.amountMinorUnits(), "mismatched", OptionalLong.of(75L));
+        journal.append(new EconomyJournalRecord(request, EconomyTransactionState.RESOLVED,
+                Optional.of(mismatched), ProviderResultStatus.CONFIRMED, "", provider.providerId()));
+
+        var result = coordinator.recover(request.requestId());
+
+        assertEquals(ProviderResultStatus.RECOVERY_REQUIRED, result.status());
+        assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
+        assertEquals(0, provider.withdrawCalls);
+    }
+
+    @Test
     void providerBoundRecordCannotBeReplayedByAnotherProvider() {
         FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
         EconomyLifecycleController lifecycle = readyLifecycle();
