@@ -35,6 +35,8 @@ The public [DanConomy](https://github.com/Dandelion1608/danconomy) repository wa
 
 An older public [pixelmon ecobridge](https://github.com/nkomarn/pixelmon-ecobridge) repository was also checked at commit `3d33d5e451b8e0536584fdbde8aaa2f159ee84d3`. Its build targets Pixelmon `1.12.2-8.2.0` and the source uses the removed `IPixelmonBankAccount` API. Its Vault implementation calls direct `changeMoney` methods, truncates primitive amounts, returns null `EconomyResponse` values, and has no receipt or retry journal. It cannot be used for the 1.21.1 target or the strict mutation contract.
 
+The public [Youer](https://github.com/MohistMC/Youer) `1.21.1` branch was checked at commit `d15aeebe02cd818dc7ba11952771ef071674707b`. It targets NeoForge `21.1.249`, not the pinned `21.1.248`, and its `:youer:createLauncherProfile` task failed because the declared `bungeecord-chat` `1.20-R0.2-deprecated+build.18` artifact was unavailable from the configured repositories. No exact hybrid runtime profile was produced from this candidate.
+
 ## Reclassification gate
 
 Vault mutation support can be reconsidered only with an exact separately installed bridge that provides a stable request identity, durable receipt lookup, idempotent retry, exact integer conversion, and crash recovery evidence for every enabled route. Phase 003 owns any later issue 66 update and final artifact validation.
