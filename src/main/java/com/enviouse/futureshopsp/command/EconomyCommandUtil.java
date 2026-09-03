@@ -8,7 +8,6 @@ import com.enviouse.futureshopsp.api.economy.ProviderError;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
 
 import java.math.BigDecimal;
-import java.util.Locale;
 
 public final class EconomyCommandUtil {
     private EconomyCommandUtil() {
@@ -36,13 +35,7 @@ public final class EconomyCommandUtil {
         if (decimals <= 0) {
             return Long.toString(value);
         }
-
-        long absValue = Math.abs(value);
-        long scale = (long) Math.pow(10.0D, decimals);
-        long whole = absValue / scale;
-        long fractional = absValue % scale;
-        String sign = value < 0L ? "-" : "";
-        return String.format(Locale.ROOT, "%s%d.%0" + decimals + "d", sign, whole, fractional);
+        return BigDecimal.valueOf(value, decimals).toPlainString();
     }
 
     /**
