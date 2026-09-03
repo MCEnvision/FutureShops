@@ -10,13 +10,15 @@ Phase 002 is not closed. Its independent Pixelmon query and refusal work is comp
 
 The exact reviewed runtime is `/tmp/Pixelmon-1.21.1-9.4.0-universal.jar` with SHA 256 `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2` and SHA 512 `b1485031c27cbe0dd7125f11d3b003954e654f66c102479d443841071a37131067371bfc5e1fc2d8bf96a7195afa3ca02fc1525d343fc096d5bc598680bccafe`.
 
+The official downloads page links a public MDK, but its current main revision is configured for Pixelmon 9.3.1 and NeoForge 21.1.170 rather than the exact 9.4.0 target. The exact 9.4.0 interface injection file was downloaded separately with SHA 256 `79bc83342ba0a3ee170c2883dbe30910adcb13fb6c73743ab70180ea30f9e666`. A disposable Java probe compiled against the exact universal artifact and exercised the reviewed `BankAccount` query and precheck surface. This narrows the development input gap but does not replace the exact authorized runtime environment.
+
 The exact `BankAccount` surface supports UUID lookup, integer compatible `BigDecimal` balance reads, and `hasBalance`. Its `add` and `take` methods are boolean mutations. The reviewed classes expose no durable request identity, receipt lookup, idempotent retry, or outcome journal. The adapter therefore declares balance query and precheck only. All mutation required operations return typed capability refusal before transaction intent, custody, inventory, claims, analytics, events, or Pixelmon mutation.
 
 `PixelmonEconomyProviderTest` proves exact conversion, missing and unavailable accounts, implementation readiness, insufficient funds, malformed values, and mutation refusal. The fixture records zero `BankAccount.add` and `BankAccount.take` calls. Coordinator coverage proves an empty journal and custody store when the capability gate refuses the request.
 
 ## Bridge result
 
-The reviewed separately installed candidate is `PixelmonEconomyBridge` 1.1.6 with SHA 256 `409896ee42f4163b616c5ab0964c220fc0a1c910ce8c3e2a0c05c4d78bd21da6`. Its companion artifacts are Vault 1.7.3 with SHA 256 `a6b5ed97f43a5cf5bbaf00a7c8cd23c5afc9bd003f849875af8b36e6cf77d01d` and FinalEconomy 1.0.9 with SHA 256 `4cc7ba1aab02fffd86d2aa009a51ac4e6ca8590776ce9a13c8a2f45fdf01f529`.
+The reviewed separately installed candidate is `PixelmonEconomyBridge` 1.1.6 with SHA 256 `409896ee42f4163b616c5ab0964c220fc0a1c910ce8c3e2a0c05c4d78bd21da6` and SHA 512 `c4fb7cda655b5e63d485fef9e44bfa3a2b0d421ebccb458c15cb002942ef4f7f73c2a80b99c6ac41d7d744dff4aab4788f02e3e81ed55a3b5e0fdd77c4369adb`. Its companion artifacts are Vault 1.7.3 with SHA 256 `a6b5ed97f43a5cf5bbaf00a7c8cd23c5afc9bd003f849875af8b36e6cf77d01d` and SHA 512 `aa02af3c9770249bda77b91058ce97240d4fd4cba3f07918534127acace297feb05445122b499c2623123dfde49670e9a763221e0f41ef03f51e6880ea8f6647`, and FinalEconomy 1.0.9 with SHA 256 `4cc7ba1aab02fffd86d2aa009a51ac4e6ca8590776ce9a13c8a2f45fdf01f529` and SHA 512 `8d5b75a993c0fa6ca5c07a3d796a431f18b18d96239a9bb73dc5de1ab93c405cf52bf5fe40a47b5b9ad720da32666bf426f70b62a5a75a5c176c061502ef8be4`.
 
 The bridge is a Bukkit plugin. Its v1_21_R1 implementation delegates to Vault double based calls, floors balance values, returns boolean or void mutation results, and exposes no FutureShops request identity, durable receipt store, receipt lookup, or idempotent retry. EverNifeCore, a required dependency, is absent from the inspected disposable set. This candidate does not satisfy CORE-REQ-018 and is not registered as `vault`.
 
@@ -32,6 +34,6 @@ The security review found no exploitable repository defect. The residual risk is
 
 ## Open gates and next action
 
-The exact official Pixelmon development bundle remains unavailable. The exact disposable Pixelmon and hybrid runtime workflows remain unverified under the required owner authorization record. The reviewed bridge lacks the strict mutation and recovery capabilities required for `vault`. These gates keep CORE-REQ-018 open and prevent Phase 002 pull request integration.
+The exact official Pixelmon development bundle remains unavailable, although the exact universal artifact and interface injection file now support a disposable compile probe. The exact disposable Pixelmon and hybrid runtime workflows remain unverified under the required owner authorization record. The reviewed bridge lacks the strict mutation and recovery capabilities required for `vault`. These gates keep CORE-REQ-018 open and prevent Phase 002 pull request integration.
 
 The next safe action is to obtain the exact authorized development and runtime inputs, or a separately installed bridge that provides stable request identity, durable receipts, exact integer conversion, and idempotent retry. Reclassify and rerun only the affected capability, crash, recovery, and surface matrices when those inputs exist. Issue 66 remains frozen until Phase 003 validates the final artifact.

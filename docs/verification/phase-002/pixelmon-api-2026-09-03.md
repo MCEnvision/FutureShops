@@ -16,9 +16,13 @@ The exact Pixelmon 1.21.1 9.4.0 universal artifact was inspected outside the rep
 
 The artifact is evidence input only. It is not copied into `libs`, declared as a Gradle dependency, or bundled in the FutureShops jar.
 
+The official [Pixelmon downloads page](https://pixelmonmod.com/downloads.php) lists this 9.4.0 release and links the public [Pixelmon MDK](https://github.com/EnvyWare/Pixelmon-MDK). The linked MDK main revision `4309ac5fc79b6a167edfc922f055d1b4d2d56744` is an example project configured for Pixelmon 9.3.1 and NeoForge 21.1.170, so it is not an exact 9.4.0 development bundle. The exact interface injection file is available at the official artifact path and was retained outside the repository at `/tmp/Pixelmon-1.21.1-9.4.0-universal-interfaceinjection.json`. Its SHA 256 is `79bc83342ba0a3ee170c2883dbe30910adcb13fb6c73743ab70180ea30f9e666`.
+
 ## Reviewed API map
 
 `com.pixelmonmod.pixelmon.api.economy.BankAccountProxy` provides `hasImplementation()`, `getBankAccountNow(UUID)`, and an asynchronous `getBankAccount(UUID)`. `com.pixelmonmod.pixelmon.api.economy.BankAccount` provides `getIdentifier()`, `getBalance()`, `setBalance(BigDecimal)`, `hasBalance(BigDecimal)`, boolean `take(BigDecimal)`, boolean `add(BigDecimal)`, and primitive overload defaults.
+
+A disposable Java probe compiled successfully against the exact 9.4.0 universal artifact. It exercised the reviewed `BankAccount` type, UUID identity check, exact `BigDecimal` amount construction, balance null guard, and `hasBalance` call. The probe source and classes remain outside the repository at `/tmp/pixelmon-api-probe`.
 
 The usable strict capabilities are balance query and precheck. The API does not expose an operation UUID, durable receipt, receipt lookup by request identity, or idempotent retry. A local FutureShops request UUID cannot make a boolean Pixelmon call idempotent. `setBalance`, `take`, and `add` are therefore classified as unsafe for production mutation under the current contract.
 
