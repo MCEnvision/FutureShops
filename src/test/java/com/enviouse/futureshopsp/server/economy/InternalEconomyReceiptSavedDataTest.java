@@ -53,4 +53,15 @@ class InternalEconomyReceiptSavedDataTest {
         data.markCleanMarker();
         assertTrue(data.cleanMarkerValid());
     }
+
+    @Test
+    void wrongReceiptsTagTypeIsReadOnly() {
+        CompoundTag saved = new CompoundTag();
+        saved.putString("receipts", "not a list");
+
+        InternalEconomyReceiptSavedData loaded = InternalEconomyReceiptSavedData.load(saved, null);
+
+        assertFalse(loaded.integrityValid());
+        assertTrue(loaded.find(new RequestId(REQUEST_UUID)).isEmpty());
+    }
 }
