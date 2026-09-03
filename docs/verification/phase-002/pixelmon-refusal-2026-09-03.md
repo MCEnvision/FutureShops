@@ -28,7 +28,7 @@ The reruns prove full startup and optional class loading under owner authorized 
 
 The exact Pixelmon only profile also loaded a disposable runtime probe. The probe queried UUID `00000000-0000-0000-0000-000000000001`, then submitted a one minor unit preflight and withdrawal through the public `EconomyTransactionCoordinator`. The probe jar SHA 256 is `02c7799a6907b57ad9c4b9ffbb57c04d8641fa9ab9dac316476a90c5f03763d1`.
 
-The bounded command was `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 timeout 120 bash ./run.sh nogui` from `/tmp/futureshops-pixelmon-exact.xIDOL4`. The complete log is `/tmp/futureshops-pixelmon-exact-runtime-probe-preflight-20260903.log`. It reached `Done (0.922s)` and `FutureShops server starting.` and emitted:
+The bounded command was `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 timeout 120 bash ./run.sh nogui` from `/tmp/futureshops-pixelmon-exact.xIDOL4`. The complete log is `/tmp/futureshops-pixelmon-packaged-public-routes-20260903.log`. It reached `Done (0.897s)` and `FutureShops server starting.` and emitted:
 
 ```text
 FUTURESHOPS_PROBE lifecycle=EconomyLifecycleSnapshot[providerId=pixelmon, lifecycle=READY, diagnostic=, acceptsQueries=true, acceptsMutations=true] resultStatus=CONFIRMED resultError=NONE resultDiagnostic= resultValue=Optional[BalanceSnapshot[playerId=00000000-0000-0000-0000-000000000001, balanceMinorUnits=0]] preflightStatus=UNAVAILABLE preflightError=CAPABILITY_MISSING preflightDiagnostic=provider lacks the capabilities required by this mutation mutationStatus=UNAVAILABLE mutationError=CAPABILITY_MISSING mutationDiagnostic=provider lacks the capabilities required by this mutation
