@@ -29,6 +29,10 @@ The inspected FinalEconomy and Vault APIs expose `double` balances and `EconomyR
 
 The bridge therefore does not satisfy `CORE-REQ-018`. FutureShops does not add a bridge dependency, does not use reflection or service lookup for Bukkit or Vault, and does not register `vault` for this stack. The Pixelmon adapter remains query and precheck only, and all mutation surfaces remain refused before journal or custody effects.
 
+## Additional NeoForge candidate review
+
+The public [DanConomy](https://github.com/Dandelion1608/danconomy) repository was inspected at commit `63aecdac12e437ae1f3de2801cdea0105b3d7e06`. It targets NeoForge 21.1.209 and implements an optional Pixelmon mirrored currency. Its source falls back to a local ledger when Pixelmon reads or writes fail and mirrors observed Pixelmon balances into `data/danconomy_ledger.dat`. This is explicitly outside the FutureShops contract because it creates a second ledger and can report local success without a proven external outcome. It is not a bridge candidate for `CORE-REQ-018`.
+
 ## Reclassification gate
 
 Vault mutation support can be reconsidered only with an exact separately installed bridge that provides a stable request identity, durable receipt lookup, idempotent retry, exact integer conversion, and crash recovery evidence for every enabled route. Phase 003 owns any later issue 66 update and final artifact validation.
