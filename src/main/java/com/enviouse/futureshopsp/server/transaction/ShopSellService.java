@@ -197,7 +197,7 @@ public final class ShopSellService {
 
             if (!ShopCatalog.incrementStock(shopId, packet.listingId(), quantity)) {
                 MutationRequest compensationRequest = MutationRequest.forPlayer(requestId.child("sell compensation"),
-                        player.getUUID(), totalValue, MutationKind.COMPENSATION);
+                        player.getUUID(), totalValue, MutationKind.WITHDRAW);
                 ProviderResult<MutationReceipt> compensation = coordinator.withdraw(compensationRequest);
                 if (compensation.confirmed()) {
                     boolean restored = ShopTransactionUtil.insertIntoInventory(inventory,

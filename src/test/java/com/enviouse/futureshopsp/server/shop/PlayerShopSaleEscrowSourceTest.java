@@ -202,6 +202,12 @@ class PlayerShopSaleEscrowSourceTest {
         assertTrue(sellSource.contains("sell compensation item restoration requires recovery"));
         assertTrue(sellSource.contains("coordinator.markRecoveryRequired(\"sell compensation requires recovery\")"));
         assertTrue(sellSource.contains("sell compensation custody release requires recovery"));
+        int compensationRequest = sellSource.indexOf("requestId.child(\"sell compensation\")");
+        int compensationKind = sellSource.indexOf("MutationKind.WITHDRAW", compensationRequest);
+        int compensationCall = sellSource.indexOf("coordinator.withdraw(compensationRequest)", compensationKind);
+        assertTrue(compensationRequest >= 0);
+        assertTrue(compensationKind > compensationRequest);
+        assertTrue(compensationCall > compensationKind);
     }
 
     private static Path projectDirectory() {
