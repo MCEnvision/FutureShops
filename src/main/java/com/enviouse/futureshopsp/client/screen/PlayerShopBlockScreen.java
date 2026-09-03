@@ -1205,7 +1205,7 @@ public class PlayerShopBlockScreen extends AbstractShopScreen implements ShopScr
 
             // Visitor: total cost at bottom of detail
             if (!"BARTER".equalsIgnoreCase(listing.tradeMode())) {
-                long total = listing.effectiveUnitPriceMinor() * getQuantity();
+                long total = saturatingMultiply(listing.effectiveUnitPriceMinor(), getQuantity());
                 String totalStr = total <= 0
                         ? I18n.get("gui.futureshops.player_shop_block.detail.visitor.total_free")
                         : I18n.get("gui.futureshops.player_shop_block.detail.visitor.total", ShopUiUtil.formatMinorUnits(total));
@@ -1263,7 +1263,7 @@ public class PlayerShopBlockScreen extends AbstractShopScreen implements ShopScr
                 detailX + 8 + previewW / 2, bottomStackY + 12, ShopColors.TEXT_SECONDARY);
 
         if (!"BARTER".equalsIgnoreCase(listing.tradeMode())) {
-            long total = listing.effectiveUnitPriceMinor() * getQuantity();
+            long total = saturatingMultiply(listing.effectiveUnitPriceMinor(), getQuantity());
             String totalLabel = total <= 0
                     ? I18n.get("gui.futureshops.player_shop_block.detail.free")
                     : "§a" + ShopUiUtil.formatMinorUnits(total);
