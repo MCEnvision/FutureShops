@@ -7,8 +7,18 @@ import com.enviouse.futureshopsp.network.ShopPackets;
 import com.enviouse.futureshopsp.network.packets.C2SBuyRequestPacket;
 import com.enviouse.futureshopsp.network.packets.S2CBuyResponsePacket;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
+import com.enviouse.futureshopsp.server.economy.EconomyRecordChecksum;
+import com.enviouse.futureshopsp.server.economy.EconomyTransactionCoordinator;
 import com.enviouse.futureshopsp.server.economy.EconomyProvider;
-import com.enviouse.futureshopsp.server.economy.TransactionResult;
+import com.enviouse.futureshopsp.server.economy.CustodyState;
+import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
+import com.enviouse.futureshopsp.api.economy.MutationKind;
+import com.enviouse.futureshopsp.api.economy.MutationReceipt;
+import com.enviouse.futureshopsp.api.economy.MutationRequest;
+import com.enviouse.futureshopsp.api.economy.ProviderError;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
+import com.enviouse.futureshopsp.api.economy.ProviderResultStatus;
+import com.enviouse.futureshopsp.api.economy.RequestId;
 import com.enviouse.futureshopsp.server.pricing.DynamicPricingEngine;
 import com.enviouse.futureshopsp.server.session.ShopSession;
 import com.enviouse.futureshopsp.server.session.ShopSessionManager;
@@ -97,47 +107,47 @@ public final class ShopBuyService {
                 String listingId = entry.getKey();
                 int quantity = entry.getValue();
                 if (quantity <= 0 || quantity > ShopTransactionUtil.MAX_BUY_QUANTITY) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
+                    return BuyResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.INVALID_ITEM);
                 }
                 if (listingId == null || listingId.isBlank()) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
+                    return BuyResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.INVALID_ITEM);
                 }
 
                 ItemDef itemDef = ShopCatalog.getItem(shopId, listingId).orElse(null);
                 if (itemDef == null || itemDef.buyPriceMinorUnits() <= 0L) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
+                    return BuyResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.INVALID_ITEM);
                 }
                 // Availability-window re-check: the client may hold a stale catalog in which this
                 // listing was still live. Never sell an expired listing.
                 if (itemDef.isExpired(nowSec)) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
+                    return BuyResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.INVALID_ITEM);
                 }
 
                 // Registry id is what we mint/resolve; reject Air here (a listingId is never "air").
                 String itemId = itemDef.itemId();
                 if (itemId == null || itemId.isBlank() || "minecraft:air".equals(itemId)) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
+                    return BuyResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.INVALID_ITEM);
                 }
 
                 int currentStock = ShopCatalog.getCurrentStock(shopId, listingId);
                 if (currentStock >= 0 && currentStock < quantity) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.OUT_OF_STOCK);
+                    return BuyResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.OUT_OF_STOCK);
                 }
 
                 Item item = ShopTransactionUtil.resolveItem(itemId);
                 if (item == null) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
+                    return BuyResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.INVALID_ITEM);
                 }
 
                 long lineCost = ShopCatalog.calculateLineCost(shopId, listingId, quantity);
                 if (lineCost <= 0L) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVALID_ITEM);
+                    return BuyResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.INVALID_ITEM);
                 }
 
                 try {
                     totalCost = Math.addExact(totalCost, lineCost);
                 } catch (ArithmeticException ex) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.SERVER_ERROR);
+                    return BuyResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.SERVER_ERROR);
                 }
 
                 totalQuantity += quantity;
@@ -162,11 +172,11 @@ public final class ShopBuyService {
             }
 
             if (!ShopTransactionUtil.canFit(inventory, rewards)) {
-                return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INVENTORY_FULL);
+                return BuyResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.INVENTORY_FULL);
             }
 
-            if (provider.getBalance(player.getUUID()) < totalCost) {
-                return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.INSUFFICIENT_FUNDS);
+            if (safeBalance(provider, player.getUUID()) < totalCost) {
+                return BuyResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.INSUFFICIENT_FUNDS);
             }
 
             // Fire cancellable ShopTransactionEvent.Pre (spec §33) — allows other mods to cancel or modify price
@@ -175,8 +185,17 @@ public final class ShopBuyService {
                         player, shopId, line.itemId(), line.quantity(), "BUY", line.lineCost());
                 net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(preEvent);
                 if (preEvent.isCanceled()) {
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.CANCELLED_BY_EVENT);
+                    return BuyResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.CANCELLED_BY_EVENT);
                 }
+            }
+
+            EconomyTransactionCoordinator coordinator = BalanceManager.getCoordinator();
+            RequestId requestId = RequestId.random();
+            MutationRequest debitRequest = MutationRequest.forPlayer(requestId, player.getUUID(), totalCost,
+                    MutationKind.WITHDRAW);
+            ProviderResult<BalanceSnapshot> preflight = coordinator.preflight(debitRequest);
+            if (!preflight.confirmed()) {
+                return BuyResult.error(shopId, safeBalance(provider, player.getUUID()), mapError(preflight.error()));
             }
 
             List<PreparedLine> reserved = new ArrayList<>();
@@ -185,24 +204,32 @@ public final class ShopBuyService {
                     for (PreparedLine rollback : reserved) {
                         ShopCatalog.restoreStock(shopId, rollback.listingId(), rollback.quantity());
                     }
-                    return BuyResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.OUT_OF_STOCK);
+                    return BuyResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.OUT_OF_STOCK);
                 }
                 reserved.add(line);
             }
 
-            // Reserve the exact shop inventory before the coordinated debit. The coordinator
-            // persists the request intent before invoking the provider, so a failed debit restores
-            // the reservation without exposing a partially paid listing.
-            TransactionResult withdrawal = provider.withdraw(player.getUUID(), totalCost, "BUY");
-            if (!withdrawal.success()) {
-                for (PreparedLine rollback : reserved) {
-                    ShopCatalog.restoreStock(shopId, rollback.listingId(), rollback.quantity());
+            // The coordinator persists the delivery entitlement before invoking the provider.
+            String custodyItem = "shop:" + shopId;
+            String custodyHash = EconomyRecordChecksum.sha256(preparedLines.toString());
+            ProviderResult<MutationReceipt> withdrawal = coordinator.executeWithCustody(debitRequest,
+                    player.getUUID(), custodyItem, totalQuantity, custodyHash, CustodyState.DELIVERED);
+            if (!withdrawal.confirmed()) {
+                if (withdrawal.status() != ProviderResultStatus.AMBIGUOUS
+                        && withdrawal.status() != ProviderResultStatus.RECOVERY_REQUIRED) {
+                    for (PreparedLine rollback : reserved) {
+                        ShopCatalog.restoreStock(shopId, rollback.listingId(), rollback.quantity());
+                    }
                 }
-                return BuyResult.error(shopId, withdrawal.resultingBalance(), withdrawal.errorCode());
+                long balance = withdrawal.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
+                        ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong()) : java.util.Optional.empty())
+                        .orElseGet(() -> safeBalance(provider, player.getUUID()));
+                return BuyResult.error(shopId, balance, mapError(withdrawal.error()));
             }
 
+            RequestId custodyId = debitRequest.requestId().child("custody");
             if (!ShopTransactionUtil.insertIntoInventory(inventory, rewards)) {
-                // Drop any remaining items at the player's feet instead of rolling back
+                // Drop any remaining items at the player's feet. Custody still records delivery.
                 for (ItemStack stack : rewards) {
                     if (!stack.isEmpty()) {
                         player.drop(stack, false);
@@ -210,9 +237,20 @@ public final class ShopBuyService {
                 }
             }
 
+            try {
+                coordinator.claimCustody(custodyId);
+            } catch (RuntimeException exception) {
+                return BuyResult.error(shopId, withdrawal.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
+                        ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong()) : java.util.Optional.empty())
+                        .orElse(0L), ShopResultCode.SERVER_ERROR);
+            }
+
             inventory.setChanged();
             player.inventoryMenu.broadcastChanges();
-            return BuyResult.success(shopId, withdrawal.resultingBalance(), totalCost, totalQuantity, List.copyOf(preparedLines));
+            long resultingBalance = withdrawal.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
+                    ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong()) : java.util.Optional.empty())
+                    .orElse(0L);
+            return BuyResult.success(shopId, resultingBalance, totalCost, totalQuantity, List.copyOf(preparedLines));
         } finally {
             lock.unlock();
         }
@@ -246,5 +284,22 @@ public final class ShopBuyService {
             return new BuyResult(false, shopId, errorCode, resultingBalance, 0L, 0, List.of());
         }
     }
-}
 
+    private static long safeBalance(EconomyProvider provider, java.util.UUID playerId) {
+        try {
+            return provider.getBalance(playerId);
+        } catch (RuntimeException exception) {
+            return 0L;
+        }
+    }
+
+    private static ShopResultCode mapError(ProviderError error) {
+        return switch (error) {
+            case INSUFFICIENT_FUNDS -> ShopResultCode.INSUFFICIENT_FUNDS;
+            case INVALID_REQUEST, INVALID_AMOUNT -> ShopResultCode.INVALID_AMOUNT;
+            case CAPABILITY_MISSING, NOT_READY, INCOMPATIBLE, RECEIPT_NOT_FOUND,
+                 PROVIDER_EXCEPTION, TIMEOUT, UNKNOWN -> ShopResultCode.SERVER_ERROR;
+            default -> ShopResultCode.SERVER_ERROR;
+        };
+    }
+}

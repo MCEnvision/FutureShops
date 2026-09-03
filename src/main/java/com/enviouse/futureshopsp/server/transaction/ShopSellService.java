@@ -6,9 +6,19 @@ import com.enviouse.futureshopsp.event.ShopTransactionEvent;
 import com.enviouse.futureshopsp.network.ShopPackets;
 import com.enviouse.futureshopsp.network.packets.C2SSellRequestPacket;
 import com.enviouse.futureshopsp.network.packets.S2CSellResponsePacket;
+import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
+import com.enviouse.futureshopsp.api.economy.MutationKind;
+import com.enviouse.futureshopsp.api.economy.MutationReceipt;
+import com.enviouse.futureshopsp.api.economy.MutationRequest;
+import com.enviouse.futureshopsp.api.economy.ProviderError;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
+import com.enviouse.futureshopsp.api.economy.ProviderResultStatus;
+import com.enviouse.futureshopsp.api.economy.RequestId;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
+import com.enviouse.futureshopsp.server.economy.CustodyState;
+import com.enviouse.futureshopsp.server.economy.EconomyRecordChecksum;
+import com.enviouse.futureshopsp.server.economy.EconomyTransactionCoordinator;
 import com.enviouse.futureshopsp.server.economy.EconomyProvider;
-import com.enviouse.futureshopsp.server.economy.TransactionResult;
 import com.enviouse.futureshopsp.server.pricing.DynamicPricingEngine;
 import com.enviouse.futureshopsp.server.session.ShopSession;
 import com.enviouse.futureshopsp.server.session.ShopSessionManager;
@@ -127,27 +137,67 @@ public final class ShopSellService {
             // Allow event listeners to modify the price
             totalValue = preEvent.getPriceMinor();
 
-            if (!ShopTransactionUtil.removeItems(inventory, item, quantity, true, requiredTag)) {
-                return SellResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.MISSING_ITEMS);
+            EconomyTransactionCoordinator coordinator = BalanceManager.getCoordinator();
+            RequestId requestId = RequestId.random();
+            MutationRequest creditRequest = MutationRequest.forPlayer(requestId, player.getUUID(), totalValue,
+                    MutationKind.DEPOSIT);
+            ProviderResult<BalanceSnapshot> preflight = coordinator.preflight(creditRequest);
+            if (!preflight.confirmed()) {
+                return SellResult.error(shopId, safeBalance(provider, player.getUUID()), mapError(preflight.error()));
+            }
+            RequestId custodyId = creditRequest.requestId().child("custody");
+            try {
+                coordinator.holdCustody(custodyId, player.getUUID(), itemId, quantity,
+                        EconomyRecordChecksum.sha256(itemId + "|" + itemDef.nbtJson()));
+            } catch (RuntimeException exception) {
+                return SellResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.SERVER_ERROR);
             }
 
-            TransactionResult deposit = provider.deposit(player.getUUID(), totalValue, "SELL");
-            if (!deposit.success()) {
-                ShopTransactionUtil.insertIntoInventory(inventory, java.util.List.of(refundStack(item, quantity, requiredTag)));
-                inventory.setChanged();
-                return SellResult.error(shopId, deposit.resultingBalance(), deposit.errorCode());
+            if (!ShopTransactionUtil.removeItems(inventory, item, quantity, true, requiredTag)) {
+                coordinator.releaseCustody(custodyId);
+                return SellResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.MISSING_ITEMS);
+            }
+
+            ProviderResult<MutationReceipt> deposit = coordinator.executeWithCustody(creditRequest,
+                    player.getUUID(), itemId, quantity,
+                    EconomyRecordChecksum.sha256(itemId + "|" + itemDef.nbtJson()), CustodyState.HELD);
+            if (!deposit.confirmed()) {
+                if (deposit.status() != ProviderResultStatus.AMBIGUOUS
+                        && deposit.status() != ProviderResultStatus.RECOVERY_REQUIRED) {
+                    ShopTransactionUtil.insertIntoInventory(inventory, java.util.List.of(refundStack(item, quantity, requiredTag)));
+                    inventory.setChanged();
+                }
+                long balance = deposit.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
+                        ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong()) : java.util.Optional.empty())
+                        .orElseGet(() -> safeBalance(provider, player.getUUID()));
+                return SellResult.error(shopId, balance, mapError(deposit.error()));
             }
 
             if (!ShopCatalog.incrementStock(shopId, packet.listingId(), quantity)) {
-                provider.withdraw(player.getUUID(), totalValue, "SELL");
-                ShopTransactionUtil.insertIntoInventory(inventory, java.util.List.of(refundStack(item, quantity, requiredTag)));
-                inventory.setChanged();
-                return SellResult.error(shopId, provider.getBalance(player.getUUID()), ShopResultCode.SERVER_ERROR);
+                MutationRequest compensationRequest = MutationRequest.forPlayer(requestId.child("sell compensation"),
+                        player.getUUID(), totalValue, MutationKind.COMPENSATION);
+                ProviderResult<MutationReceipt> compensation = coordinator.withdraw(compensationRequest);
+                if (compensation.confirmed()) {
+                    ShopTransactionUtil.insertIntoInventory(inventory, java.util.List.of(refundStack(item, quantity, requiredTag)));
+                    inventory.setChanged();
+                    coordinator.releaseCustody(custodyId);
+                }
+                return SellResult.error(shopId, safeBalance(provider, player.getUUID()),
+                        compensation.confirmed() ? ShopResultCode.SERVER_ERROR : mapError(compensation.error()));
+            }
+
+            try {
+                coordinator.releaseCustody(custodyId);
+            } catch (RuntimeException exception) {
+                return SellResult.error(shopId, safeBalance(provider, player.getUUID()), ShopResultCode.SERVER_ERROR);
             }
 
             inventory.setChanged();
             player.inventoryMenu.broadcastChanges();
-            return SellResult.success(shopId, deposit.resultingBalance(), totalValue);
+            long resultingBalance = deposit.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
+                    ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong()) : java.util.Optional.empty())
+                    .orElse(0L);
+            return SellResult.success(shopId, resultingBalance, totalValue);
         } finally {
             lock.unlock();
         }
@@ -169,6 +219,20 @@ public final class ShopSellService {
             return new SellResult(false, shopId, errorCode, resultingBalance, 0L);
         }
     }
+
+    private static long safeBalance(EconomyProvider provider, java.util.UUID playerId) {
+        try {
+            return provider.getBalance(playerId);
+        } catch (RuntimeException exception) {
+            return 0L;
+        }
+    }
+
+    private static ShopResultCode mapError(ProviderError error) {
+        return switch (error) {
+            case INSUFFICIENT_FUNDS -> ShopResultCode.INSUFFICIENT_FUNDS;
+            case INVALID_REQUEST, INVALID_AMOUNT -> ShopResultCode.INVALID_AMOUNT;
+            default -> ShopResultCode.SERVER_ERROR;
+        };
+    }
 }
-
-

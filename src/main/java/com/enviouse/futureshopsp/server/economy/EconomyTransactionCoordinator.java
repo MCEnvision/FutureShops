@@ -186,6 +186,56 @@ public final class EconomyTransactionCoordinator {
         return execute(request, MutationKind.DEPOSIT);
     }
 
+    public ProviderResult<MutationReceipt> executeWithCustody(MutationRequest request, UUID owner,
+                                                               String itemKey, long quantity,
+                                                               String contentHash, CustodyState terminalState) {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(terminalState, "terminalState");
+        if (terminalState != CustodyState.HELD && terminalState != CustodyState.DELIVERED && terminalState != CustodyState.CLAIMED
+                && terminalState != CustodyState.RELEASED) {
+            return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "invalid custody terminal state");
+        }
+        synchronized (lock) {
+            ProviderResult<BalanceSnapshot> preflight = preflightInternal(request);
+            if (!preflight.confirmed()) {
+                return copyFailure(preflight);
+            }
+            RequestId custodyId = request.requestId().child("custody");
+            try {
+                holdCustody(custodyId, owner, itemKey, quantity, contentHash);
+            } catch (RuntimeException exception) {
+                return ProviderResult.unavailable(ProviderError.UNKNOWN,
+                        "custody could not be persisted");
+            }
+            ProviderResult<MutationReceipt> result = execute(request, request.kind());
+            if (!result.confirmed()) {
+                if (result.status() != ProviderResultStatus.AMBIGUOUS
+                        && result.status() != ProviderResultStatus.RECOVERY_REQUIRED) {
+                    releaseCustody(custodyId);
+                }
+                return result;
+            }
+            try {
+                if (terminalState == CustodyState.HELD) {
+                    return result;
+                }
+                if (terminalState == CustodyState.CLAIMED) {
+                    deliverCustody(custodyId);
+                    claimCustody(custodyId);
+                } else if (terminalState == CustodyState.DELIVERED) {
+                    deliverCustody(custodyId);
+                } else {
+                    releaseCustody(custodyId);
+                }
+            } catch (RuntimeException exception) {
+                lifecycle.markAmbiguous("custody finalization failed after provider confirmation");
+                return ProviderResult.recoveryRequired("custody finalization requires recovery");
+            }
+            return result;
+        }
+    }
+
     public ProviderResult<MutationReceipt> transfer(UUID from, UUID to, long amountMinorUnits) {
         Objects.requireNonNull(from, "from");
         Objects.requireNonNull(to, "to");
