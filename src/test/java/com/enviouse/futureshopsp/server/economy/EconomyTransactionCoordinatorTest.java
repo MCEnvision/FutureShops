@@ -23,6 +23,10 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -70,6 +74,29 @@ class EconomyTransactionCoordinatorTest {
         assertEquals(ProviderResultStatus.REJECTED, result.status());
         assertEquals(ProviderError.INVALID_REQUEST, result.error());
         assertEquals(1, provider.withdrawCalls);
+    }
+
+    @Test
+    void concurrentDuplicateRequestsProduceOneProviderMutation() throws Exception {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, readyLifecycle(),
+                new InMemoryEconomyTransactionJournal());
+        MutationRequest request = MutationRequest.forPlayer(
+                new RequestId(UUID.fromString("00000000-0000-0000-0000-000000000012")), PLAYER, 25L,
+                MutationKind.WITHDRAW);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<ProviderResult<MutationReceipt>> first = executor.submit(() -> coordinator.withdraw(request));
+            Future<ProviderResult<MutationReceipt>> second = executor.submit(() -> coordinator.withdraw(request));
+            ProviderResult<MutationReceipt> firstResult = first.get(5L, TimeUnit.SECONDS);
+            ProviderResult<MutationReceipt> secondResult = second.get(5L, TimeUnit.SECONDS);
+            assertTrue(firstResult.confirmed());
+            assertTrue(secondResult.confirmed());
+            assertEquals(firstResult.receipt(), secondResult.receipt());
+            assertEquals(1, provider.withdrawCalls);
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test
