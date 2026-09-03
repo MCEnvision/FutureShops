@@ -93,7 +93,9 @@ public final class BalanceManager {
 
     public static void clear() {
         if (lifecycleController != null) {
-            lifecycleController.beginDraining();
+            if (lifecycleController.snapshot().lifecycle() == ProviderLifecycle.READY) {
+                lifecycleController.beginDraining();
+            }
             boolean journalFlushed = journal == null || journal.flush();
             boolean custodyFlushed = custody == null || custody.flush();
             boolean claimsFlushed = claims == null || claims.flush();
@@ -152,10 +154,24 @@ public final class BalanceManager {
                 return;
             }
         }
-        if (barterEscrow != null && barterEscrow.hasIncompleteRecords()) {
+        if (freezeIfUnresolvedItemState(lifecycleController, custody, barterEscrow)) {
             return;
         }
         lifecycleController.markRecovered();
+    }
+
+    static boolean freezeIfUnresolvedItemState(EconomyLifecycleController lifecycle,
+                                               EconomyCustodyStore custody,
+                                               PlayerShopBarterEscrowSavedData barterEscrow) {
+        if (custody != null && custody.hasIncompleteRecords()) {
+            lifecycle.markAmbiguous("item custody requires operator recovery");
+            return true;
+        }
+        if (barterEscrow != null && barterEscrow.hasIncompleteRecords()) {
+            lifecycle.markAmbiguous("player shop barter escrow requires operator recovery");
+            return true;
+        }
+        return false;
     }
 
     public static long getBalance(UUID playerUUID) {

@@ -26,7 +26,7 @@ Only `InternalEconomyProvider` owns the internal balance saved data. External pr
 
 `BalanceManager.initialize` freezes provider registration, resolves the restart selected provider, loads the transaction journal, custody index, claim index, barter escrow, and player shop settlement index, and marks each index unclean before readiness. The lifecycle controller admits queries and mutations only in `READY`. `DRAINING` rejects new mutations while allowing the shutdown checkpoint. `RECOVERING` permits only safe reconciliation. `FROZEN` preserves evidence when a provider outcome cannot be proven. `MISSING`, `INCOMPATIBLE`, and `FAILED` remain unavailable until a corrected restart. `STOPPED` is terminal for the current server lifecycle.
 
-`BalanceManager.clear` begins draining, flushes every economy index, and writes clean markers only after the complete flush gate succeeds. A missing marker or invalid checksum causes recovery on the next start. The server never falls back to the internal wallet during an external provider failure.
+`BalanceManager.clear` begins draining when the provider is ready, flushes every economy index for every lifecycle state, and writes clean markers only after the complete flush gate succeeds. A missing marker or invalid checksum causes recovery on the next start. After journal recovery, any held item custody or non terminal player shop barter escrow keeps the lifecycle frozen for operator recovery instead of returning to ready with an unresolved item. The server never falls back to the internal wallet during an external provider failure.
 
 ## Transaction ordering
 
