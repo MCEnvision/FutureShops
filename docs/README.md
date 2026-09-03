@@ -31,5 +31,6 @@ FutureShops documentation is organized by topic. The phase verification packet r
 * [Phase 002 Pixelmon refusal evidence](verification/phase-002/pixelmon-refusal-2026-09-03.md)
 * [Phase 002 bridge review](verification/phase-002/bridge-review-2026-09-03.md)
 * [Phase 002 security review](verification/phase-002/security-2026-09-03.md)
+* [Phase 002 completion packet](verification/phase-002/completion-2026-09-03.md)
 * [Phase 004 security and command audit](verification/phase-004/neoforge-2026-09-02.md)
 * [Phase 000 baseline evidence](verification/phase-000/baseline-2026-09-02.md)

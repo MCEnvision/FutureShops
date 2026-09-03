@@ -1,0 +1,37 @@
+# Phase 002 completion packet
+
+## Scope and source identity
+
+This packet records the current Phase 002 result for FutureShops 2.3.0 on Minecraft 1.21.1 and NeoForge 21.1.248. The implementation evidence is bound to source revision `e63c91bdb991766bb4666350ea3c9ea850e41eb6` on `envy/phase-002-pixelmon-vault`. That revision is four commits ahead of the integrated `1.21.1` revision `b591413cc88590dd70caca3e23aad5ee5e6f8406` and was clean and pushed when the implementation evidence was generated.
+
+Phase 002 is not closed. Its independent Pixelmon query and refusal work is complete, but exact external runtime authorization and a mutation capable bridge remain unresolved. No pull request, phase integration, tag, release, upload, or issue 66 mutation is authorized by this packet.
+
+## Pixelmon result
+
+The exact reviewed runtime is `/tmp/Pixelmon-1.21.1-9.4.0-universal.jar` with SHA 256 `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2` and SHA 512 `b1485031c27cbe0dd7125f11d3b003954e654f66c102479d443841071a37131067371bfc5e1fc2d8bf96a7195afa3ca02fc1525d343fc096d5bc598680bccafe`.
+
+The exact `BankAccount` surface supports UUID lookup, integer compatible `BigDecimal` balance reads, and `hasBalance`. Its `add` and `take` methods are boolean mutations. The reviewed classes expose no durable request identity, receipt lookup, idempotent retry, or outcome journal. The adapter therefore declares balance query and precheck only. All mutation required operations return typed capability refusal before transaction intent, custody, inventory, claims, analytics, events, or Pixelmon mutation.
+
+`PixelmonEconomyProviderTest` proves exact conversion, missing and unavailable accounts, implementation readiness, insufficient funds, malformed values, and mutation refusal. The fixture records zero `BankAccount.add` and `BankAccount.take` calls. Coordinator coverage proves an empty journal and custody store when the capability gate refuses the request.
+
+## Bridge result
+
+The reviewed separately installed candidate is `PixelmonEconomyBridge` 1.1.6 with SHA 256 `409896ee42f4163b616c5ab0964c220fc0a1c910ce8c3e2a0c05c4d78bd21da6`. Its companion artifacts are Vault 1.7.3 with SHA 256 `a6b5ed97f43a5cf5bbaf00a7c8cd23c5afc9bd003f849875af8b36e6cf77d01d` and FinalEconomy 1.0.9 with SHA 256 `4cc7ba1aab02fffd86d2aa009a51ac4e6ca8590776ce9a13c8a2f45fdf01f529`.
+
+The bridge is a Bukkit plugin. Its v1_21_R1 implementation delegates to Vault double based calls, floors balance values, returns boolean or void mutation results, and exposes no FutureShops request identity, durable receipt store, receipt lookup, or idempotent retry. EverNifeCore, a required dependency, is absent from the inspected disposable set. This candidate does not satisfy CORE-REQ-018 and is not registered as `vault`.
+
+## Verification evidence
+
+The complete unit suite passed with `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash ./gradlew test --no-daemon`. The complete build passed with `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash ./gradlew build --no-daemon`.
+
+The real NeoForge GameTest server passed all eleven economy tests in `/tmp/futureshops-phase002-gametest-20260903-v2.log`. The bounded standard dedicated server reached common setup and server start in `/tmp/futureshops-phase002-server-20260903-v3.log`. The bounded Xvfb client reached common setup in `/tmp/futureshops-phase002-client-20260903-v3.log`. Their timeout exits were expected bounded smoke termination, not startup failures.
+
+The rebuilt `build/libs/futureshops-2.3.0.jar` passed `unzip -tq`. Its SHA 256 is `30b02e65ecd2dce47accdfa0bfbbb4e1464c43f25d7774eaab8b0bcecec2b6ba` and its SHA 512 is `1ab37a9ed664ce57d547a699d9d9a16d50d833296e0a3d18725d29232034723546e4e9e878cbb23f967cef334b53287869734f843030df7abcd472c8b03d9896`. The jar contains no Pixelmon, Bukkit, Spigot, Vault, bridge, or test fixture classes. The optional adapter has no forbidden external dependency according to the dependency and `jdeps` scans.
+
+The security review found no exploitable repository defect. The residual risk is the intentionally unsupported direct Pixelmon mutation path and the unproven bridge mutation path. Detailed evidence is in [Pixelmon API evidence](pixelmon-api-2026-09-03.md), [Pixelmon refusal evidence](pixelmon-refusal-2026-09-03.md), [bridge review](bridge-review-2026-09-03.md), and [security review](security-2026-09-03.md).
+
+## Open gates and next action
+
+The exact official Pixelmon development bundle remains unavailable. The exact disposable Pixelmon and hybrid runtime workflows remain unverified under the required owner authorization record. The reviewed bridge lacks the strict mutation and recovery capabilities required for `vault`. These gates keep CORE-REQ-018 open and prevent Phase 002 pull request integration.
+
+The next safe action is to obtain the exact authorized development and runtime inputs, or a separately installed bridge that provides stable request identity, durable receipts, exact integer conversion, and idempotent retry. Reclassify and rerun only the affected capability, crash, recovery, and surface matrices when those inputs exist. Issue 66 remains frozen until Phase 003 validates the final artifact.
