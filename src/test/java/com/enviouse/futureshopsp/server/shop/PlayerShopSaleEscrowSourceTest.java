@@ -57,6 +57,30 @@ class PlayerShopSaleEscrowSourceTest {
         assertTrue(source.indexOf("settlementLock.unlock()", settlementLock) > settlementLock);
     }
 
+    @Test
+    void playerShopBuybackPreflightsAndEscrowsBeforeValueLegs() throws Exception {
+        String source = Files.readString(projectDirectory().resolve(Path.of(
+                "src", "main", "java", "com", "enviouse", "futureshopsp", "server", "shop",
+                "PlayerShopBlockService.java")));
+
+        int playerPath = source.indexOf("// ── Player shop path ──");
+        int ownerPreflight = source.indexOf("coordinator.preflight(ownerDebitRequest)", playerPath);
+        int escrowPrepare = source.indexOf("itemEscrow.prepare", playerPath);
+        int itemRemoval = source.indexOf("collectAndRemoveItems", playerPath);
+        int ownerDebit = source.indexOf("coordinator.withdraw(ownerDebitRequest)", playerPath);
+        int sellerCredit = source.indexOf("coordinator.deposit(sellerCreditRequest)", playerPath);
+        int stored = source.indexOf("itemEscrow.markStored", playerPath);
+        int complete = source.indexOf("itemEscrow.markComplete", playerPath);
+        assertTrue(playerPath >= 0);
+        assertTrue(ownerPreflight > playerPath);
+        assertTrue(escrowPrepare > ownerPreflight);
+        assertTrue(itemRemoval > escrowPrepare);
+        assertTrue(stored > itemRemoval);
+        assertTrue(ownerDebit > itemRemoval);
+        assertTrue(sellerCredit > ownerDebit);
+        assertTrue(complete > sellerCredit);
+    }
+
     private static Path projectDirectory() {
         Path candidate = Path.of("").toAbsolutePath();
         while (candidate != null) {

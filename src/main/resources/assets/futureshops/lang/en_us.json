@@ -96,6 +96,7 @@
   "gui.futureshops.player_shop.result.missing_barter_items": "Missing Barter Items",
   "gui.futureshops.player_shop.result.nothing_to_claim": "No Settlement To Claim",
   "gui.futureshops.player_shop.result.claim_failed": "Claim Failed",
+  "gui.futureshops.player_shop.result.recovery_required": "Recovery Required",
   "gui.futureshops.player_shop.result.promo_set": "Promo Applied",
   "gui.futureshops.player_shop.result.promo_cleared": "Promo Cleared",
   "gui.futureshops.player_shop.result.server_error": "Server Error",

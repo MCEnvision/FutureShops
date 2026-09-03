@@ -7,6 +7,7 @@ import com.enviouse.futureshopsp.api.economy.MutationRequest;
 import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
 import com.enviouse.futureshopsp.api.economy.ProviderError;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
+import com.enviouse.futureshopsp.api.economy.ProviderResultStatus;
 import com.enviouse.futureshopsp.api.economy.RequestId;
 import com.enviouse.futureshopsp.server.economy.ClaimRecord;
 import com.enviouse.futureshopsp.server.economy.ClaimState;
@@ -2098,6 +2099,11 @@ public final class PlayerShopBlockService {
                 ? ShopResultCode.INSUFFICIENT_FUNDS : ShopResultCode.CLAIM_FAILED;
     }
 
+    private static ShopResultCode mapBuybackOwnerError(ProviderResult<?> result) {
+        return result != null && result.error() == ProviderError.INSUFFICIENT_FUNDS
+                ? ShopResultCode.SHOP_OUT_OF_MONEY : mapProviderResultCode(result);
+    }
+
     private static TransactionResult coordinatorMutation(EconomyTransactionCoordinator coordinator,
                                                          RequestId rootRequest, String role,
                                                          UUID actor, UUID counterparty, long amount,
@@ -2324,12 +2330,6 @@ public final class PlayerShopBlockService {
 
             // ── Player shop path ──
             UUID ownerUuid = shop.getOwnerUuid();
-            long requiredFunds = total;
-            if (coordinator.balance(ownerUuid).value().map(balance -> balance.balanceMinorUnits() < requiredFunds).orElse(true)) {
-                sendResultWithChat(seller, false, ShopResultCode.SHOP_OUT_OF_MONEY,
-                        "§cThe shop owner can't afford this — try again later or sell less.");
-                return;
-            }
             LinkedStorage storage = resolveLinkedStorage(seller.level(), shop, pos);
             if (storage == null) {
                 sendResultWithChat(seller, false, ShopResultCode.NO_LINK,
@@ -2337,57 +2337,126 @@ public final class PlayerShopBlockService {
                 return;
             }
 
-            // Collect actual stacks (NBT intact) from seller — but only after we've verified insertion is possible.
-            List<ItemStack> paymentStacks = ShopTransactionUtil.collectAndRemoveItems(
-                    seller.getInventory(), saleItem, needItems, nbtAware, nbtPatch);
-            if (paymentStacks.isEmpty()) {
-                sendResultWithChat(seller, false, ShopResultCode.MISSING_ITEMS,
-                        "§cYou don't have enough of that item.");
+            // Reject unsupported or unavailable value legs before moving the seller's item or
+            // creating durable item custody.
+            MutationRequest ownerDebitRequest = new MutationRequest(
+                    transactionId.child("owner buyback debit"), ownerUuid,
+                    Optional.of(seller.getUUID()), total, MutationKind.WITHDRAW);
+            MutationRequest sellerCreditRequest = new MutationRequest(
+                    transactionId.child("seller buyback credit"), seller.getUUID(),
+                    Optional.of(ownerUuid), total, MutationKind.DEPOSIT);
+            ProviderResult<BalanceSnapshot> ownerAdmission = coordinator.preflight(ownerDebitRequest);
+            if (!ownerAdmission.confirmed()) {
+                sendResultWithChat(seller, false, mapBuybackOwnerError(ownerAdmission),
+                        "§cThe shop owner can't afford this — try again later or sell less.");
                 return;
             }
-            // Capacity check, then atomic insert.
-            boolean canInsert = storage.hasAdapter()
-                    ? storage.adapter().canInsert(storage.blockEntity(), paymentStacks)
-                    : canInsertAll(storage.handler(), paymentStacks);
-            if (!canInsert) {
-                ShopTransactionUtil.insertIntoInventory(seller.getInventory(), paymentStacks);
+            ProviderResult<BalanceSnapshot> sellerAdmission = coordinator.preflight(sellerCreditRequest);
+            if (!sellerAdmission.confirmed()) {
+                sendResult(seller, false, mapProviderResultCode(sellerAdmission));
+                return;
+            }
+
+            if (seller.getServer() == null) {
+                sendResult(seller, false, ShopResultCode.SERVER_ERROR);
+                return;
+            }
+            PlayerShopBarterEscrowSavedData itemEscrow = PlayerShopBarterEscrowSavedData.get(seller.getServer());
+            UUID itemEscrowRequestId = transactionId.child("buyback item escrow").value();
+            List<ItemStack> escrowPreview = ShopTransactionUtil.snapshotMatchingItems(
+                    seller.getInventory(), saleItem, needItems, nbtAware, nbtPatch);
+            if (escrowPreview.isEmpty() || !storageCanInsert(storage, escrowPreview)
+                    || !itemEscrow.prepare(itemEscrowRequestId, seller.getUUID(), pos.asLong(),
+                    seller.level().dimension().location().toString(), listing.itemId(), needItems,
+                    escrowPreview, seller.level().registryAccess())) {
                 sendResultWithChat(seller, false, ShopResultCode.STORAGE_FULL,
                         "§cThe shop's storage is full and can't accept those items.");
                 return;
             }
+
+            // Collect actual stacks (NBT intact) only after the exact item escrow is durable.
+            List<ItemStack> paymentStacks = ShopTransactionUtil.collectAndRemoveItems(
+                    seller.getInventory(), saleItem, needItems, nbtAware, nbtPatch);
+            if (paymentStacks.isEmpty()) {
+                itemEscrow.markRefunded(itemEscrowRequestId);
+                sendResultWithChat(seller, false, ShopResultCode.MISSING_ITEMS,
+                        "§cYou don't have enough of that item.");
+                return;
+            }
+            if (!itemEscrow.markRemoved(itemEscrowRequestId, paymentStacks, seller.level().registryAccess())) {
+                ShopTransactionUtil.insertIntoInventory(seller.getInventory(), paymentStacks);
+                itemEscrow.markRefunded(itemEscrowRequestId);
+                sendResult(seller, false, ShopResultCode.SERVER_ERROR);
+                return;
+            }
+            // Capacity was simulated against the exact escrow stacks, then insertion is attempted.
             boolean inserted = storage.hasAdapter()
                     ? storage.adapter().insert(storage.blockEntity(), paymentStacks)
                     : insertAll(storage.handler(), paymentStacks);
             if (!inserted) {
                 ShopTransactionUtil.insertIntoInventory(seller.getInventory(), paymentStacks);
+                itemEscrow.markRefunded(itemEscrowRequestId);
                 sendResultWithChat(seller, false, ShopResultCode.STORAGE_FULL,
                         "§cThe shop's storage is full and can't accept those items.");
                 return;
             }
+            if (!itemEscrow.markStored(itemEscrowRequestId)) {
+                itemEscrow.markRecoveryRequired(itemEscrowRequestId);
+                sendResult(seller, false, ShopResultCode.SERVER_ERROR);
+                return;
+            }
 
-            // Withdraw from owner.
-            TransactionResult ownerWd = coordinatorMutation(coordinator, transactionId, "owner buyback debit",
-                    ownerUuid, seller.getUUID(), total, MutationKind.WITHDRAW);
-            if (!ownerWd.success()) {
-                // Roll back the inserted items.
-                rollbackInsertedItems(storage, seller, saleItem, needItems, nbtAware, nbtPatch);
-                sendResultWithChat(seller, false, ShopResultCode.SHOP_OUT_OF_MONEY,
+            // Withdraw from owner only after the exact item is in durable escrow and storage.
+            ProviderResult<MutationReceipt> ownerDebit = coordinator.withdraw(ownerDebitRequest);
+            if (!ownerDebit.confirmed()) {
+                if (ownerDebit.status() == ProviderResultStatus.AMBIGUOUS
+                        || ownerDebit.status() == ProviderResultStatus.RECOVERY_REQUIRED) {
+                    itemEscrow.markRecoveryRequired(itemEscrowRequestId);
+                    sendResult(seller, false, ShopResultCode.RECOVERY_REQUIRED);
+                    return;
+                }
+                if (rollbackInsertedItems(storage, seller, paymentStacks)) {
+                    itemEscrow.markRefunded(itemEscrowRequestId);
+                } else {
+                    itemEscrow.markRecoveryRequired(itemEscrowRequestId);
+                }
+                sendResultWithChat(seller, false, mapBuybackOwnerError(ownerDebit),
                         "§cThe shop owner can't afford this — try again later or sell less.");
                 return;
             }
 
             // Credit seller.
-            TransactionResult sellerDep = coordinatorMutation(coordinator, transactionId, "seller buyback credit",
-                    seller.getUUID(), ownerUuid, total, MutationKind.DEPOSIT);
-            if (!sellerDep.success()) {
-                // Refund owner, undo storage.
-                coordinatorMutation(coordinator, transactionId, "owner buyback refund",
-                        ownerUuid, seller.getUUID(), total, MutationKind.DEPOSIT);
-                rollbackInsertedItems(storage, seller, saleItem, needItems, nbtAware, nbtPatch);
-                sendResult(seller, false, ShopResultCode.MAX_BALANCE_EXCEEDED);
+            ProviderResult<MutationReceipt> sellerCredit = coordinator.deposit(sellerCreditRequest);
+            if (!sellerCredit.confirmed()) {
+                if (sellerCredit.status() == ProviderResultStatus.AMBIGUOUS
+                        || sellerCredit.status() == ProviderResultStatus.RECOVERY_REQUIRED) {
+                    itemEscrow.markRecoveryRequired(itemEscrowRequestId);
+                    sendResult(seller, false, ShopResultCode.RECOVERY_REQUIRED);
+                    return;
+                }
+                ProviderResult<MutationReceipt> refund = coordinator.deposit(new MutationRequest(
+                        transactionId.child("owner buyback refund"), ownerUuid,
+                        Optional.of(seller.getUUID()), total, MutationKind.DEPOSIT));
+                if (!refund.confirmed()) {
+                    itemEscrow.markRecoveryRequired(itemEscrowRequestId);
+                    sendResult(seller, false, ShopResultCode.RECOVERY_REQUIRED);
+                    return;
+                }
+                if (rollbackInsertedItems(storage, seller, paymentStacks)) {
+                    itemEscrow.markRefunded(itemEscrowRequestId);
+                    sendResult(seller, false, mapProviderResultCode(sellerCredit));
+                } else {
+                    itemEscrow.markRecoveryRequired(itemEscrowRequestId);
+                    sendResult(seller, false, ShopResultCode.RECOVERY_REQUIRED);
+                }
                 return;
             }
 
+            if (!itemEscrow.markComplete(itemEscrowRequestId)) {
+                itemEscrow.markRecoveryRequired(itemEscrowRequestId);
+                sendResult(seller, false, ShopResultCode.RECOVERY_REQUIRED);
+                return;
+            }
             incrementBuyback(listing, qty);
             recordSellHistory(seller, shop, listing, qty, total, "BUYBACK");
             firePostSellEvent(seller, shopIdForEvent, listing.itemId(), qty, total, coordinator);
@@ -2407,20 +2476,58 @@ public final class PlayerShopBlockService {
         listing.setBuybackBought(newCount);
     }
 
-    private static void rollbackInsertedItems(LinkedStorage storage, ServerPlayer seller, Item item, int amount,
-                                              boolean nbtAware,  DataComponentPatch nbtPatch) {
-        if (storage.hasAdapter()) {
-            List<ItemStack> recovered = storage.adapter().extract(storage.blockEntity(), item, amount, nbtAware, nbtPatch);
-            if (!recovered.isEmpty()) {
-                ShopTransactionUtil.insertIntoInventory(seller.getInventory(), recovered);
-            }
-        } else if (storage.handler() != null) {
-            int got = extractAmount(storage.handler(), item, amount, nbtAware, nbtPatch);
-            if (got > 0) {
-                ShopTransactionUtil.insertIntoInventory(seller.getInventory(),
-                        splitStacks(item, got, nbtPatch));
+    private static boolean rollbackInsertedItems(LinkedStorage storage, ServerPlayer seller,
+                                                 List<ItemStack> expected) {
+        if (storage == null || seller == null || expected == null || expected.isEmpty()
+                || !ShopTransactionUtil.canFit(seller.getInventory(), expected)) {
+            return false;
+        }
+        for (ItemStack stack : expected) {
+            if (stack == null || stack.isEmpty()
+                    || !canExtractNbt(storage, stack.getItem(), stack.getCount(), true,
+                    stack.getComponentsPatch())) {
+                return false;
             }
         }
+        List<ItemStack> recovered = new ArrayList<>();
+        for (ItemStack stack : expected) {
+            List<ItemStack> part = extractNbt(storage, stack.getItem(), stack.getCount(), true,
+                    stack.getComponentsPatch());
+            int count = 0;
+            try {
+                for (ItemStack extracted : part) {
+                    count = Math.addExact(count, extracted.getCount());
+                }
+            } catch (ArithmeticException exception) {
+                count = -1;
+            }
+            if (count != stack.getCount()) {
+                for (ItemStack extracted : recovered) {
+                    reinsert(storage, extracted);
+                }
+                for (ItemStack extracted : part) {
+                    reinsert(storage, extracted);
+                }
+                return false;
+            }
+            recovered.addAll(part);
+        }
+        if (!ShopTransactionUtil.insertIntoInventory(seller.getInventory(), recovered)) {
+            for (ItemStack extracted : recovered) {
+                reinsert(storage, extracted);
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean storageCanInsert(LinkedStorage storage, List<ItemStack> stacks) {
+        if (storage == null || stacks == null || stacks.isEmpty()) {
+            return false;
+        }
+        return storage.hasAdapter()
+                ? storage.adapter().canInsert(storage.blockEntity(), stacks)
+                : canInsertAll(storage.handler(), stacks);
     }
 
     private static void recordSellHistory(ServerPlayer seller, ShopBlockEntity shop,

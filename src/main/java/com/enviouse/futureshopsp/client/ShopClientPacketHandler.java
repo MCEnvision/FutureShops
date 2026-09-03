@@ -404,7 +404,7 @@ public final class ShopClientPacketHandler {
                  NO_LINK, BAD_LINK_TARGET, RS_NOT_CONTROLLER, STORAGE_FULL,
                  MISSING_BARTER_ITEMS, ROLLBACK, NOTHING_TO_CLAIM, CLAIM_FAILED,
                  PROMO_FAILED, NO_CLIPBOARD, INVALID_REQUEST, INVALID_TARGET, SERVER_ERROR,
-                 CANCELLED_BY_EVENT, SHOP_OUT_OF_MONEY, BUYBACK_CAP_REACHED
+                 CANCELLED_BY_EVENT, SHOP_OUT_OF_MONEY, BUYBACK_CAP_REACHED, RECOVERY_REQUIRED
                     -> "command.futureshops.error.server";
         };
     }
