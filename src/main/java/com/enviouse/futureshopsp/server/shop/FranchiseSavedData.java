@@ -26,6 +26,9 @@ import java.util.UUID;
 public class FranchiseSavedData extends SavedData {
     private static final String DATA_ID = "futureshops_franchises";
     private static final int CURRENT_VERSION = 1;
+    private static final int MAX_FRANCHISES = 10_000;
+    private static final int MAX_MEMBERS_PER_FRANCHISE = 20;
+    private static final int MAX_NAME_LENGTH = 32;
 
     /** Maps franchise UUID → franchise data. */
     private final Map<UUID, Franchise> franchises = new HashMap<>();
@@ -33,6 +36,7 @@ public class FranchiseSavedData extends SavedData {
     private final Map<UUID, UUID> playerToFranchise = new HashMap<>();
     /** Pending invites: invited player UUID → franchise UUID. */
     private final Map<UUID, UUID> pendingInvites = new HashMap<>();
+    private boolean integrityValid = true;
 
     public FranchiseSavedData() {
     }
@@ -40,6 +44,10 @@ public class FranchiseSavedData extends SavedData {
     // ═══ Franchise management ═══
 
     public CreateResult createFranchise(UUID leader, String name) {
+        if (leader == null || name == null || name.isBlank() || name.trim().length() > MAX_NAME_LENGTH
+                || franchises.size() >= MAX_FRANCHISES) {
+            return new CreateResult(false, "INVALID_INPUT");
+        }
         if (playerToFranchise.containsKey(leader)) {
             return new CreateResult(false, "ALREADY_IN_FRANCHISE");
         }
@@ -53,17 +61,19 @@ public class FranchiseSavedData extends SavedData {
     }
 
     public boolean invite(UUID inviter, UUID target) {
+        if (inviter == null || target == null || pendingInvites.size() >= MAX_FRANCHISES) return false;
         UUID franchiseId = playerToFranchise.get(inviter);
         if (franchiseId == null) return false;
         Franchise franchise = franchises.get(franchiseId);
         if (franchise == null || !franchise.leader.equals(inviter)) return false;
         if (playerToFranchise.containsKey(target)) return false;
-        if (franchise.members.size() >= 20) return false; // Max members
+        if (franchise.members.size() >= MAX_MEMBERS_PER_FRANCHISE) return false;
         pendingInvites.put(target, franchiseId);
         return true;
     }
 
     public boolean acceptInvite(UUID player) {
+        if (player == null) return false;
         UUID franchiseId = pendingInvites.remove(player);
         if (franchiseId == null) return false;
         Franchise franchise = franchises.get(franchiseId);
@@ -76,10 +86,11 @@ public class FranchiseSavedData extends SavedData {
     }
 
     public boolean declineInvite(UUID player) {
-        return pendingInvites.remove(player) != null;
+        return player != null && pendingInvites.remove(player) != null;
     }
 
     public boolean kick(UUID leader, UUID target) {
+        if (leader == null || target == null) return false;
         UUID franchiseId = playerToFranchise.get(leader);
         if (franchiseId == null) return false;
         Franchise franchise = franchises.get(franchiseId);
@@ -92,6 +103,7 @@ public class FranchiseSavedData extends SavedData {
     }
 
     public boolean promote(UUID leader, UUID newLeader) {
+        if (leader == null || newLeader == null) return false;
         UUID franchiseId = playerToFranchise.get(leader);
         if (franchiseId == null) return false;
         Franchise franchise = franchises.get(franchiseId);
@@ -103,6 +115,7 @@ public class FranchiseSavedData extends SavedData {
     }
 
     public boolean leave(UUID player) {
+        if (player == null) return false;
         UUID franchiseId = playerToFranchise.get(player);
         if (franchiseId == null) return false;
         Franchise franchise = franchises.get(franchiseId);
@@ -120,6 +133,7 @@ public class FranchiseSavedData extends SavedData {
     }
 
     public boolean disband(UUID leader) {
+        if (leader == null) return false;
         UUID franchiseId = playerToFranchise.get(leader);
         if (franchiseId == null) return false;
         Franchise franchise = franchises.get(franchiseId);
@@ -139,6 +153,7 @@ public class FranchiseSavedData extends SavedData {
      * Returns true if the shop owner and the acting player are franchise members.
      */
     public boolean isFranchiseMember(UUID shopOwner, UUID actingPlayer) {
+        if (shopOwner == null || actingPlayer == null) return false;
         UUID ownerFranchise = playerToFranchise.get(shopOwner);
         if (ownerFranchise == null) return false;
         UUID actorFranchise = playerToFranchise.get(actingPlayer);
@@ -146,16 +161,17 @@ public class FranchiseSavedData extends SavedData {
     }
 
     public Franchise getFranchise(UUID player) {
+        if (player == null) return null;
         UUID franchiseId = playerToFranchise.get(player);
         return franchiseId == null ? null : franchises.get(franchiseId);
     }
 
     public boolean hasPendingInvite(UUID player) {
-        return pendingInvites.containsKey(player);
+        return player != null && pendingInvites.containsKey(player);
     }
 
     public UUID getPendingInviteFranchise(UUID player) {
-        return pendingInvites.get(player);
+        return player == null ? null : pendingInvites.get(player);
     }
 
     /**
@@ -198,25 +214,80 @@ public class FranchiseSavedData extends SavedData {
     public static FranchiseSavedData load(CompoundTag tag, HolderLookup.Provider provider) {
         FranchiseSavedData data = new FranchiseSavedData();
         int version = SavedDataMigrations.readVersion(tag);
+        if (version > CURRENT_VERSION) {
+            data.integrityValid = false;
+            return data;
+        }
         SavedDataMigrations.needsMigration(DATA_ID, version, CURRENT_VERSION);
-        ListTag franchiseList = tag.getList("Franchises", Tag.TAG_COMPOUND);
+        Tag rawFranchises = tag.get("Franchises");
+        if (rawFranchises != null && !(rawFranchises instanceof ListTag)) {
+            data.integrityValid = false;
+            return data;
+        }
+        ListTag franchiseList = rawFranchises instanceof ListTag list ? list : new ListTag();
+        if (franchiseList.size() > MAX_FRANCHISES) {
+            data.integrityValid = false;
+            return data;
+        }
+
+        Map<UUID, Franchise> stagedFranchises = new HashMap<>();
+        Map<UUID, UUID> stagedPlayers = new HashMap<>();
         for (Tag fTag : franchiseList) {
-            CompoundTag fCompound = (CompoundTag) fTag;
+            if (!(fTag instanceof CompoundTag fCompound)
+                    || !fCompound.hasUUID("Id")
+                    || !fCompound.hasUUID("Leader")
+                    || !fCompound.contains("Name", Tag.TAG_STRING)
+                    || !fCompound.contains("CreatedAt", Tag.TAG_LONG)) {
+                data.integrityValid = false;
+                return data;
+            }
             UUID id = fCompound.getUUID("Id");
-            String name = fCompound.getString("Name");
+            String name = fCompound.getString("Name").trim();
             UUID leader = fCompound.getUUID("Leader");
             long createdAt = fCompound.getLong("CreatedAt");
+            if (name.isEmpty() || name.length() > MAX_NAME_LENGTH || createdAt < 0L
+                    || stagedFranchises.containsKey(id)) {
+                data.integrityValid = false;
+                return data;
+            }
+
+            Tag rawMembers = fCompound.get("Members");
+            if (!(rawMembers instanceof ListTag memberList)
+                    || memberList.size() == 0
+                    || memberList.size() > MAX_MEMBERS_PER_FRANCHISE) {
+                data.integrityValid = false;
+                return data;
+            }
+            Set<UUID> members = new HashSet<>();
+            for (Tag mTag : memberList) {
+                if (!(mTag instanceof CompoundTag mCompound) || !mCompound.hasUUID("UUID")) {
+                    data.integrityValid = false;
+                    return data;
+                }
+                UUID member = mCompound.getUUID("UUID");
+                if (!members.add(member) || (stagedPlayers.containsKey(member)
+                        && !stagedPlayers.get(member).equals(id))) {
+                    data.integrityValid = false;
+                    return data;
+                }
+                stagedPlayers.put(member, id);
+            }
+            if (!members.contains(leader)) {
+                data.integrityValid = false;
+                return data;
+            }
             Franchise franchise = new Franchise(id, name, leader);
             franchise.createdAt = createdAt;
-            ListTag memberList = fCompound.getList("Members", Tag.TAG_COMPOUND);
-            for (Tag mTag : memberList) {
-                UUID member = ((CompoundTag) mTag).getUUID("UUID");
-                franchise.members.add(member);
-                data.playerToFranchise.put(member, id);
-            }
-            data.franchises.put(id, franchise);
+            franchise.members.addAll(members);
+            stagedFranchises.put(id, franchise);
         }
+        data.franchises.putAll(stagedFranchises);
+        data.playerToFranchise.putAll(stagedPlayers);
         return data;
+    }
+
+    public boolean integrityValid() {
+        return integrityValid;
     }
 
     public static FranchiseSavedData get(MinecraftServer server) {
@@ -250,4 +321,3 @@ public class FranchiseSavedData extends SavedData {
     public record FranchiseLeaderEntry(UUID franchiseId, String name, UUID leader, int memberCount) {
     }
 }
-
