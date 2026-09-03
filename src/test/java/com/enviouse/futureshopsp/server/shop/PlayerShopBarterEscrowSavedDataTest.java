@@ -81,4 +81,27 @@ class PlayerShopBarterEscrowSavedDataTest {
         assertTrue(data.markRecoveryRequired(request));
         assertTrue(data.hasIncompleteRecords());
     }
+
+    @Test
+    void storedPaymentCanRefundButCompletedPaymentCannot(MinecraftServer server) {
+        HolderLookup.Provider provider = server.registryAccess();
+        UUID storedRequest = UUID.fromString("00000000-0000-0000-0000-000000000305");
+        UUID completeRequest = UUID.fromString("00000000-0000-0000-0000-000000000306");
+        List<ItemStack> stacks = List.of(new ItemStack(Items.DIAMOND));
+
+        PlayerShopBarterEscrowSavedData stored = new PlayerShopBarterEscrowSavedData();
+        assertTrue(stored.prepare(storedRequest, BUYER, 45L, "minecraft:overworld", "minecraft:diamond", 1,
+                stacks, provider));
+        assertTrue(stored.markRemoved(storedRequest, stacks, provider));
+        assertTrue(stored.markStored(storedRequest));
+        assertTrue(stored.markRefunded(storedRequest));
+
+        PlayerShopBarterEscrowSavedData complete = new PlayerShopBarterEscrowSavedData();
+        assertTrue(complete.prepare(completeRequest, BUYER, 46L, "minecraft:overworld", "minecraft:diamond", 1,
+                stacks, provider));
+        assertTrue(complete.markRemoved(completeRequest, stacks, provider));
+        assertTrue(complete.markStored(completeRequest));
+        assertTrue(complete.markComplete(completeRequest));
+        assertFalse(complete.markRefunded(completeRequest));
+    }
 }

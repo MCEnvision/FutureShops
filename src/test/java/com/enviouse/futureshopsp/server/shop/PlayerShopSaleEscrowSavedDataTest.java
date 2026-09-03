@@ -76,4 +76,21 @@ class PlayerShopSaleEscrowSavedDataTest {
         assertTrue(data.markRecoveryRequired(request));
         assertTrue(data.hasIncompleteRecords());
     }
+
+    @Test
+    void deliveredSaleCannotBeRefunded(MinecraftServer server) {
+        HolderLookup.Provider provider = server.registryAccess();
+        UUID request = UUID.fromString("00000000-0000-0000-0000-000000000405");
+        PlayerShopSaleEscrowSavedData data = new PlayerShopSaleEscrowSavedData();
+        List<ItemStack> stacks = List.of(new ItemStack(Items.DIAMOND));
+
+        assertTrue(data.prepare(request, BUYER, 45L, "minecraft:overworld", "minecraft:diamond", 1,
+                stacks, provider));
+        assertTrue(data.markRemoved(request, stacks, provider));
+        assertTrue(data.markDelivered(request));
+        assertFalse(data.markRefunded(request));
+        assertEquals(PlayerShopSaleEscrowSavedData.State.DELIVERED, data.find(request).orElseThrow().state());
+        assertTrue(data.markClaimed(request));
+        assertFalse(data.markRefunded(request));
+    }
 }

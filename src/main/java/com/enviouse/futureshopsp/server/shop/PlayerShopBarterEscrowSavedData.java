@@ -156,8 +156,12 @@ public final class PlayerShopBarterEscrowSavedData extends SavedData {
 
     public synchronized boolean markRefunded(UUID requestId) {
         EscrowRecord current = records.get(requestId);
-        if (current == null || current.state() == State.COMPLETE || current.state() == State.REFUNDED) {
+        if (current == null || current.state() == State.REFUNDED) {
             return current != null && current.state() == State.REFUNDED;
+        }
+        if (current.state() != State.PREPARED && current.state() != State.REMOVED
+                && current.state() != State.STORED) {
+            return false;
         }
         records.put(requestId, current.withState(State.REFUNDED));
         setDirty();
