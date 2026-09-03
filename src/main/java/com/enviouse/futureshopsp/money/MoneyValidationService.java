@@ -162,7 +162,7 @@ public final class MoneyValidationService {
         }
 
         public long acceptedValueMinor() {
-            return denominationMinorUnits * (long) accepted;
+            return Math.multiplyExact(denominationMinorUnits, (long) accepted);
         }
 
         public static ConsumeOutcome reject(int count, String errorCode) {
