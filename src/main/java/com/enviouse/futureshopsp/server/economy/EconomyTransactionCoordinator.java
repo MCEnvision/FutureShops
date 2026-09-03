@@ -208,6 +208,17 @@ public final class EconomyTransactionCoordinator {
     public ProviderResult<MutationReceipt> executeWithCustody(MutationRequest request, UUID owner,
                                                                String itemKey, long quantity,
                                                                String contentHash, CustodyState terminalState) {
+        return executeWithCustody(request, owner, itemKey, quantity, contentHash, terminalState, true);
+    }
+
+    /**
+     * Executes a custodied provider leg with an explicit definitive-failure custody policy.
+     * Callers that retain custody must restore or resolve it after a proven provider rejection.
+     */
+    public ProviderResult<MutationReceipt> executeWithCustody(MutationRequest request, UUID owner,
+                                                               String itemKey, long quantity,
+                                                               String contentHash, CustodyState terminalState,
+                                                               boolean releaseCustodyOnDefinitiveFailure) {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(owner, "owner");
         Objects.requireNonNull(terminalState, "terminalState");
@@ -233,14 +244,20 @@ public final class EconomyTransactionCoordinator {
             } catch (RuntimeException exception) {
                 replace(prepared, EconomyTransactionState.RESOLVED, Optional.empty(),
                         ProviderResultStatus.REJECTED, "custody could not be persisted");
-                return ProviderResult.unavailable(ProviderError.UNKNOWN,
-                        "custody could not be persisted");
+                lifecycle.markAmbiguous("custody persistence failed before provider mutation");
+                return ProviderResult.recoveryRequired("custody persistence requires recovery");
             }
             ProviderResult<MutationReceipt> result = executeAfterPrepared(request, request.kind());
             if (!result.confirmed()) {
-                if (result.status() != ProviderResultStatus.AMBIGUOUS
+                if (releaseCustodyOnDefinitiveFailure
+                        && result.status() != ProviderResultStatus.AMBIGUOUS
                         && result.status() != ProviderResultStatus.RECOVERY_REQUIRED) {
-                    releaseCustody(custodyId);
+                    try {
+                        releaseCustody(custodyId);
+                    } catch (RuntimeException exception) {
+                        lifecycle.markAmbiguous("custody release failed after provider rejection");
+                        return ProviderResult.recoveryRequired("custody release requires recovery");
+                    }
                 }
                 return result;
             }

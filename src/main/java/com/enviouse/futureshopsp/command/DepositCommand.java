@@ -15,6 +15,7 @@ import com.enviouse.futureshopsp.api.economy.MutationKind;
 import com.enviouse.futureshopsp.api.economy.MutationRequest;
 import com.enviouse.futureshopsp.api.economy.MutationReceipt;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
+import com.enviouse.futureshopsp.api.economy.ProviderResultStatus;
 import com.enviouse.futureshopsp.api.economy.RequestId;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -79,7 +80,18 @@ public final class DepositCommand {
             return 0;
         }
 
-        long totalAvailableMinor = planned.stream().mapToLong(p -> p.denomination * p.available).sum();
+        long totalAvailableMinor;
+        try {
+            totalAvailableMinor = 0L;
+            for (PlannedStack plannedStack : planned) {
+                totalAvailableMinor = Math.addExact(totalAvailableMinor,
+                        Math.multiplyExact(plannedStack.denomination, plannedStack.available));
+            }
+        } catch (ArithmeticException exception) {
+            player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                    "command.futureshops.error.invalid_amount")));
+            return 0;
+        }
 
         long amountMinorUnits = totalAvailableMinor;
         if (requestedAmount != null) {
@@ -124,11 +136,31 @@ public final class DepositCommand {
         }
 
         // Consume mint ledger + shrink stacks greedily after durable custody is held.
-        int acceptedTotal = consumeCoinsForAmount(mintData, planned, amountMinorUnits);
+        int acceptedTotal;
+        try {
+            acceptedTotal = consumeCoinsForAmount(mintData, planned, amountMinorUnits);
+        } catch (ArithmeticException exception) {
+            restoreConsumedCoins(mintData, planned);
+            try {
+                BalanceManager.getCoordinator().releaseCustody(custodyId);
+            } catch (RuntimeException releaseException) {
+                BalanceManager.getCoordinator().markRecoveryRequired("deposit arithmetic custody release requires recovery");
+            }
+            player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                    "command.futureshops.economy.recovery_required")));
+            return 0;
+        }
         long creditedMinor = consumedValue(planned);
         if (creditedMinor != plannedMinor) {
             restoreConsumedCoins(mintData, planned);
-            BalanceManager.getCoordinator().releaseCustody(custodyId);
+            try {
+                BalanceManager.getCoordinator().releaseCustody(custodyId);
+            } catch (RuntimeException exception) {
+                BalanceManager.getCoordinator().markRecoveryRequired("deposit custody release requires recovery");
+                player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                        "command.futureshops.economy.recovery_required")));
+                return 0;
+            }
             player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
                     "command.futureshops.economy.recovery_required")));
             return 0;
@@ -136,10 +168,18 @@ public final class DepositCommand {
 
         ProviderResult<MutationReceipt> mutation = BalanceManager.getCoordinator().deposit(request);
         if (!mutation.confirmed()) {
-            restoreConsumedCoins(mintData, planned);
-            try {
-                BalanceManager.getCoordinator().releaseCustody(custodyId);
-            } catch (RuntimeException ignored) {
+            if (mutation.status() != ProviderResultStatus.AMBIGUOUS
+                    && mutation.status() != ProviderResultStatus.RECOVERY_REQUIRED) {
+                restoreConsumedCoins(mintData, planned);
+                try {
+                    BalanceManager.getCoordinator().releaseCustody(custodyId);
+                } catch (RuntimeException exception) {
+                    BalanceManager.getCoordinator().markRecoveryRequired("deposit custody release requires recovery");
+                    player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                            "command.futureshops.economy.recovery_required")));
+                }
+            } else {
+                BalanceManager.getCoordinator().markRecoveryRequired("deposit mutation requires recovery");
                 player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
                         "command.futureshops.economy.recovery_required")));
             }
@@ -150,6 +190,7 @@ public final class DepositCommand {
             BalanceManager.getCoordinator().deliverCustody(custodyId);
             BalanceManager.getCoordinator().claimCustody(custodyId);
         } catch (RuntimeException exception) {
+            BalanceManager.getCoordinator().markRecoveryRequired("deposit custody finalization requires recovery");
             player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
                     "command.futureshops.economy.recovery_required")));
             return 0;
@@ -227,9 +268,10 @@ public final class DepositCommand {
             if (remaining <= 0L) break;
             if (p.available <= 0) continue;
 
-            long coinsNeeded = (remaining + p.denomination - 1L) / p.denomination;
+            long coinsNeeded = remaining / p.denomination
+                    + (remaining % p.denomination == 0L ? 0L : 1L);
             int toTake = (int) Math.min(coinsNeeded, p.available);
-            long valueRemoved = p.denomination * toTake;
+            long valueRemoved = Math.multiplyExact(p.denomination, toTake);
             if (valueRemoved > remaining && toTake > 1) {
                 toTake = (int) (remaining / p.denomination);
                 valueRemoved = p.denomination * toTake;
@@ -242,8 +284,9 @@ public final class DepositCommand {
             }
             p.stack.shrink(r.accepted());
             p.taken += r.accepted();
-            remaining -= p.denomination * r.accepted();
-            totalAccepted += r.accepted();
+            remaining = Math.subtractExact(remaining,
+                    Math.multiplyExact(p.denomination, r.accepted()));
+            totalAccepted = Math.addExact(totalAccepted, r.accepted());
         }
         return totalAccepted;
     }

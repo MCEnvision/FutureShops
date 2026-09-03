@@ -248,6 +248,23 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
+    void retainedCustodySurvivesDefinitiveProviderRejection() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        provider.rejectAllDeposits = true;
+        InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        InMemoryEconomyCustodyStore custody = new InMemoryEconomyCustodyStore();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(
+                provider, readyLifecycle(), journal, custody, new InMemoryEconomyClaimStore());
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.DEPOSIT);
+
+        var result = coordinator.executeWithCustody(request, PLAYER, "minecraft:diamond", 1L, "hash",
+                CustodyState.HELD, false);
+
+        assertFalse(result.confirmed());
+        assertEquals(CustodyState.HELD, custody.find(request.requestId().child("custody")).orElseThrow().state());
+    }
+
+    @Test
     void transferCompensationCreditsSenderAfterCreditRejection() {
         FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
         provider.rejectFirstDeposit = true;

@@ -251,20 +251,22 @@ public final class ShopBuyService {
 
             RequestId custodyId = debitRequest.requestId().child("custody");
             if (!ShopTransactionUtil.insertIntoInventory(inventory, rewards)) {
-                // Drop any remaining items at the player's feet. Custody still records delivery.
-                for (ItemStack stack : rewards) {
-                    if (!stack.isEmpty()) {
-                        player.drop(stack, false);
-                    }
-                }
+                // Keep the durable delivery entitlement unresolved. Never drop a paid reward or
+                // claim custody after an unproven inventory insertion failure.
+                coordinator.markRecoveryRequired("shop delivery requires recovery");
+                return BuyResult.error(shopId, withdrawal.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
+                        ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong()) : java.util.Optional.empty())
+                        .map(value -> new BalanceView(value, true)).orElseGet(() -> balanceView(player.getUUID())),
+                        ShopResultCode.RECOVERY_REQUIRED);
             }
 
             try {
                 coordinator.claimCustody(custodyId);
             } catch (RuntimeException exception) {
+                coordinator.markRecoveryRequired("shop delivery claim requires recovery");
                 return BuyResult.error(shopId, withdrawal.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
                         ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong()) : java.util.Optional.empty())
-                        .map(value -> new BalanceView(value, true)).orElseGet(() -> balanceView(player.getUUID())), ShopResultCode.SERVER_ERROR);
+                        .map(value -> new BalanceView(value, true)).orElseGet(() -> balanceView(player.getUUID())), ShopResultCode.RECOVERY_REQUIRED);
             }
 
             inventory.setChanged();

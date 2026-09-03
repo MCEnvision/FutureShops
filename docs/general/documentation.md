@@ -48,7 +48,11 @@ The same exact stack escrow also protects player shop buyback sales. The seller'
 
 Inventory delivery uses a capacity simulation before mutating live player slots. Player shop sale escrow checks the buyer capacity before any debit or item removal, and admin shop delivery performs the same check before charging. `ShopTransactionUtil.insertIntoInventory` returns false without partial insertion when the complete stack list cannot fit. An unexpected player shop delivery failure remains in sale escrow as `RECOVERY_REQUIRED` rather than dropping paid items.
 
+Server shop delivery and sell paths apply the same conservation rule. A confirmed buy debit whose inventory delivery or custody claim cannot be finalized freezes the economy and leaves the delivery entitlement unresolved. A sell keeps its item custody held until the provider credit, stock update, and final release are proven. Definitive provider rejection restores the exact item stack before releasing custody, while failed restoration, compensation, or custody release returns `RECOVERY_REQUIRED` and keeps recovery evidence available.
+
 Physical currency commands and right click deposits check the selected provider and lifecycle before validating or consuming a bill. They are active only for a ready internal provider. Bills remain registered and decodable, but are inert when an external provider or any unsafe lifecycle state is selected.
+
+Physical money uses the same strict boundary. Deposit restores coins only after a definitive provider rejection and never restores them for an ambiguous or recovery required result. A successful compensation must release the original custody record, and any failed compensation or custody finalization freezes recovery. Withdraw mints all bill stacks into an atomic inventory insertion before registering mint records, so a delivery failure cannot leave a partial payout untracked.
 
 All new records use explicit schema versions, bounded fields, defensive enum and identifier decoding, and SHA 256 checksums. Unknown newer versions, malformed entries, duplicate identities, or checksum failures are read only recovery blockers. In memory stores are used only by ephemeral unit test servers without a world.
 

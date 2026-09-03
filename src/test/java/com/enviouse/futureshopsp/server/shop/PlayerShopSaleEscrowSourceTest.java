@@ -154,6 +154,27 @@ class PlayerShopSaleEscrowSourceTest {
         assertTrue(claimPath.contains("settlement record finalization requires recovery"));
     }
 
+    @Test
+    void serverShopDeliveryAndSellRestoreNeverDropOrForgetCustody() throws Exception {
+        String buySource = Files.readString(projectDirectory().resolve(Path.of(
+                "src", "main", "java", "com", "enviouse", "futureshopsp", "server", "transaction",
+                "ShopBuyService.java")));
+        String sellSource = Files.readString(projectDirectory().resolve(Path.of(
+                "src", "main", "java", "com", "enviouse", "futureshopsp", "server", "transaction",
+                "ShopSellService.java")));
+
+        assertFalse(buySource.contains("player.drop(stack, false)"));
+        assertTrue(buySource.contains("coordinator.markRecoveryRequired(\"shop delivery requires recovery\")"));
+        assertTrue(buySource.contains("coordinator.markRecoveryRequired(\"shop delivery claim requires recovery\")"));
+        assertTrue(buySource.contains("ShopResultCode.RECOVERY_REQUIRED"));
+        assertTrue(sellSource.contains("CustodyState.HELD, false"));
+        assertTrue(sellSource.contains("boolean restored = ShopTransactionUtil.insertIntoInventory"));
+        assertTrue(sellSource.contains("sell item restoration requires recovery"));
+        assertTrue(sellSource.contains("sell compensation item restoration requires recovery"));
+        assertTrue(sellSource.contains("coordinator.markRecoveryRequired(\"sell compensation requires recovery\")"));
+        assertTrue(sellSource.contains("sell compensation custody release requires recovery"));
+    }
+
     private static Path projectDirectory() {
         Path candidate = Path.of("").toAbsolutePath();
         while (candidate != null) {

@@ -105,7 +105,15 @@ public class MoneyItem extends Item {
                 if (compensation.confirmed()) {
                     mintData.restore(outcome.mintId(), outcome.accepted(), outcome.denominationMinorUnits(),
                             validation.authorizedCount());
+                    try {
+                        BalanceManager.getCoordinator().releaseCustody(requestId.child("custody"));
+                    } catch (RuntimeException exception) {
+                        BalanceManager.getCoordinator().markRecoveryRequired("money deposit custody release requires recovery");
+                        serverPlayer.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                                "command.futureshops.economy.recovery_required")));
+                    }
                 } else {
+                    BalanceManager.getCoordinator().markRecoveryRequired("money deposit compensation requires recovery");
                     serverPlayer.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
                             "command.futureshops.economy.recovery_required")));
                 }
@@ -120,6 +128,7 @@ public class MoneyItem extends Item {
                 BalanceManager.getCoordinator().deliverCustody(requestId.child("custody"));
                 BalanceManager.getCoordinator().claimCustody(requestId.child("custody"));
             } catch (RuntimeException exception) {
+                BalanceManager.getCoordinator().markRecoveryRequired("money deposit custody finalization requires recovery");
                 serverPlayer.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
                         "command.futureshops.economy.recovery_required")));
                 return InteractionResultHolder.fail(stack);

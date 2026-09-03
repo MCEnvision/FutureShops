@@ -886,8 +886,9 @@ public final class PlayerShopBlockService {
                         if (withdrewFromBuyer) {
                             TransactionResult refund = coordinatorMutation(coordinator, transactionId,
                                     "buyer compound refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
-                            if (refund.success()) {
-                                releaseCustody(coordinator, custodyId, custodyHeld);
+                            boolean custodyReleased = refund.success()
+                                    && releaseCustody(coordinator, custodyId, custodyHeld);
+                            if (custodyReleased) {
                                 markSaleRefunded(saleEscrow, saleEscrowRequestId);
                             } else {
                                 markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
@@ -912,8 +913,9 @@ public final class PlayerShopBlockService {
                     }
                     TransactionResult refund = coordinatorMutation(coordinator, transactionId,
                             "buyer payment refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
-                    if (refund.success()) {
-                        releaseCustody(coordinator, custodyId, custodyHeld);
+                    boolean custodyReleased = refund.success()
+                            && releaseCustody(coordinator, custodyId, custodyHeld);
+                    if (custodyReleased) {
                         markSaleRefunded(saleEscrow, saleEscrowRequestId);
                     } else {
                         markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
@@ -932,8 +934,9 @@ public final class PlayerShopBlockService {
                     }
                     TransactionResult refund = coordinatorMutation(coordinator, transactionId,
                             "buyer escrow mismatch refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
-                    if (refund.success()) {
-                        releaseCustody(coordinator, custodyId, custodyHeld);
+                    boolean custodyReleased = refund.success()
+                            && releaseCustody(coordinator, custodyId, custodyHeld);
+                    if (custodyReleased) {
                         markSaleRefunded(saleEscrow, saleEscrowRequestId);
                     } else {
                         markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
@@ -1042,8 +1045,9 @@ public final class PlayerShopBlockService {
                         if (buyer.getServer() == null) {
                             TransactionResult refund = coordinatorMutation(coordinator, transactionId,
                                     "buyer server refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
-                            if (refund.success()) {
-                                releaseCustody(coordinator, custodyId, custodyHeld);
+                            boolean custodyReleased = refund.success()
+                                    && releaseCustody(coordinator, custodyId, custodyHeld);
+                            if (custodyReleased) {
                                 markSaleRefunded(saleEscrow, saleEscrowRequestId);
                             } else {
                                 markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
@@ -1057,8 +1061,9 @@ public final class PlayerShopBlockService {
                             TransactionResult refund = coordinatorMutation(coordinator, transactionId,
                                     "buyer settlement overflow refund", buyer.getUUID(), null, cost,
                                     MutationKind.DEPOSIT);
-                            if (refund.success()) {
-                                releaseCustody(coordinator, custodyId, custodyHeld);
+                            boolean custodyReleased = refund.success()
+                                    && releaseCustody(coordinator, custodyId, custodyHeld);
+                            if (custodyReleased) {
                                 markSaleRefunded(saleEscrow, saleEscrowRequestId);
                             } else {
                                 markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);

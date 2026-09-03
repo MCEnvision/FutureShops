@@ -156,18 +156,35 @@ public final class ShopSellService {
             }
 
             if (!ShopTransactionUtil.removeItems(inventory, item, quantity, true, requiredTag)) {
-                coordinator.releaseCustody(custodyId);
+                try {
+                    coordinator.releaseCustody(custodyId);
+                } catch (RuntimeException exception) {
+                    coordinator.markRecoveryRequired("sell custody release requires recovery");
+                    return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.RECOVERY_REQUIRED);
+                }
                 return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.MISSING_ITEMS);
             }
 
             ProviderResult<MutationReceipt> deposit = coordinator.executeWithCustody(creditRequest,
                     player.getUUID(), itemId, quantity,
-                    EconomyRecordChecksum.sha256(itemId + "|" + itemDef.nbtJson()), CustodyState.HELD);
+                    EconomyRecordChecksum.sha256(itemId + "|" + itemDef.nbtJson()), CustodyState.HELD, false);
             if (!deposit.confirmed()) {
                 if (deposit.status() != ProviderResultStatus.AMBIGUOUS
                         && deposit.status() != ProviderResultStatus.RECOVERY_REQUIRED) {
-                    ShopTransactionUtil.insertIntoInventory(inventory, java.util.List.of(refundStack(item, quantity, requiredTag)));
-                    inventory.setChanged();
+                    boolean restored = ShopTransactionUtil.insertIntoInventory(inventory,
+                            java.util.List.of(refundStack(item, quantity, requiredTag)));
+                    if (restored) {
+                        inventory.setChanged();
+                        try {
+                            coordinator.releaseCustody(custodyId);
+                        } catch (RuntimeException exception) {
+                            coordinator.markRecoveryRequired("sell custody release requires recovery");
+                            return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.RECOVERY_REQUIRED);
+                        }
+                    } else {
+                        coordinator.markRecoveryRequired("sell item restoration requires recovery");
+                        return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.RECOVERY_REQUIRED);
+                    }
                 }
                 long balance = deposit.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
                         ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong()) : java.util.Optional.empty())
@@ -183,18 +200,33 @@ public final class ShopSellService {
                         player.getUUID(), totalValue, MutationKind.COMPENSATION);
                 ProviderResult<MutationReceipt> compensation = coordinator.withdraw(compensationRequest);
                 if (compensation.confirmed()) {
-                    ShopTransactionUtil.insertIntoInventory(inventory, java.util.List.of(refundStack(item, quantity, requiredTag)));
-                    inventory.setChanged();
-                    coordinator.releaseCustody(custodyId);
+                    boolean restored = ShopTransactionUtil.insertIntoInventory(inventory,
+                            java.util.List.of(refundStack(item, quantity, requiredTag)));
+                    if (restored) {
+                        inventory.setChanged();
+                        try {
+                            coordinator.releaseCustody(custodyId);
+                        } catch (RuntimeException exception) {
+                            coordinator.markRecoveryRequired("sell compensation custody release requires recovery");
+                            return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.RECOVERY_REQUIRED);
+                        }
+                    } else {
+                        coordinator.markRecoveryRequired("sell compensation item restoration requires recovery");
+                        return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.RECOVERY_REQUIRED);
+                    }
+                } else {
+                    coordinator.markRecoveryRequired("sell compensation requires recovery");
+                    return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.RECOVERY_REQUIRED);
                 }
                 return SellResult.error(shopId, balanceView(player.getUUID()),
-                        compensation.confirmed() ? ShopResultCode.SERVER_ERROR : mapError(compensation.error()));
+                        ShopResultCode.SERVER_ERROR);
             }
 
             try {
                 coordinator.releaseCustody(custodyId);
             } catch (RuntimeException exception) {
-                return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.SERVER_ERROR);
+                coordinator.markRecoveryRequired("sell custody release requires recovery");
+                return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.RECOVERY_REQUIRED);
             }
 
             inventory.setChanged();

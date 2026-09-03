@@ -10,6 +10,7 @@ import com.enviouse.futureshopsp.server.economy.BalanceManager;
 import com.enviouse.futureshopsp.server.economy.CustodyState;
 import com.enviouse.futureshopsp.server.economy.EconomyRecordChecksum;
 import com.enviouse.futureshopsp.server.economy.EconomyProvider;
+import com.enviouse.futureshopsp.server.transaction.ShopTransactionUtil;
 import com.enviouse.futureshopsp.api.economy.MutationKind;
 import com.enviouse.futureshopsp.api.economy.MutationRequest;
 import com.enviouse.futureshopsp.api.economy.MutationReceipt;
@@ -128,6 +129,7 @@ public final class WithdrawCommand {
 
         // Mint and give coins
         if (!giveAllBills(player, bills)) {
+            BalanceManager.getCoordinator().markRecoveryRequired("withdraw delivery requires recovery");
             player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
                     "command.futureshops.economy.recovery_required")));
             return 0;
@@ -137,6 +139,7 @@ public final class WithdrawCommand {
             BalanceManager.getCoordinator().deliverCustody(requestId.child("custody"));
             BalanceManager.getCoordinator().claimCustody(requestId.child("custody"));
         } catch (RuntimeException exception) {
+            BalanceManager.getCoordinator().markRecoveryRequired("withdraw custody finalization requires recovery");
             player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
                     "command.futureshops.economy.recovery_required")));
             return 0;
@@ -194,14 +197,18 @@ public final class WithdrawCommand {
 
     private static boolean giveAllBills(ServerPlayer player, List<BillEntry> bills) {
         SpentMintsSavedData mintData = SpentMintsSavedData.get(player.getServer());
-
+        List<ItemStack> mintedStacks = new ArrayList<>(bills.size());
         for (BillEntry bill : bills) {
-            ItemStack stack = MoneyMintService.mintStack(player, bill.count, bill.denominationMinor);
+            mintedStacks.add(MoneyMintService.mintStack(player, bill.count, bill.denominationMinor));
+        }
+        if (!ShopTransactionUtil.insertIntoInventory(player.getInventory(), mintedStacks)) {
+            return false;
+        }
+        player.getInventory().setChanged();
 
-            if (!player.getInventory().add(stack)) {
-                return false;
-            }
-
+        for (int index = 0; index < bills.size(); index++) {
+            BillEntry bill = bills.get(index);
+            ItemStack stack = mintedStacks.get(index);
             CoinData moneyData = stack.get(ModDataComponents.COIN_DATA.get());
             // authorizedCount == batch size; the entire stack shares one mint ID so
             // it remains stackable with itself across splits.
