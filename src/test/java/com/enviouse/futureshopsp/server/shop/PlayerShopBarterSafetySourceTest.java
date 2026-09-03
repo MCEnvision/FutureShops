@@ -33,6 +33,19 @@ class PlayerShopBarterSafetySourceTest {
         assertFalse(source.contains("ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), paymentStacks)"));
     }
 
+    @Test
+    void settlementSavedDataParticipatesInLifecycleIntegrity() throws Exception {
+        String source = Files.readString(projectDirectory().resolve(Path.of(
+                "src", "main", "java", "com", "enviouse", "futureshopsp",
+                "server", "economy", "BalanceManager.java")));
+
+        assertTrue(source.contains("PlayerShopSettlementSavedData settlements"));
+        assertTrue(source.contains("settlements.cleanMarkerValid()"));
+        assertTrue(source.contains("settlements.integrityValid()"));
+        assertTrue(source.contains("settlements.markUnclean()"));
+        assertTrue(source.contains("settlements.markCleanMarker()"));
+    }
+
     private static Path projectDirectory() {
         Path candidate = Path.of("").toAbsolutePath();
         while (candidate != null) {

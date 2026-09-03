@@ -2,6 +2,8 @@ package com.enviouse.futureshopsp.server.shop;
 
 import org.junit.jupiter.api.Test;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 
 import java.util.UUID;
 
@@ -33,6 +35,7 @@ class PlayerShopSettlementSavedDataPagingTest {
 
         CompoundTag saved = data.save(new CompoundTag(), null);
         PlayerShopSettlementSavedData restored = PlayerShopSettlementSavedData.load(saved, null);
+        assertTrue(restored.integrityValid());
         assertEquals(first, restored.beginClaim(owner, 42L));
 
         data.recordSale(owner, 42L, 25L, "minecraft:dirt", 1);
@@ -49,5 +52,22 @@ class PlayerShopSettlementSavedDataPagingTest {
         assertFalse(data.canRecordSale(owner, 42L, 1L));
         assertFalse(data.recordSale(owner, 42L, 1L, "minecraft:dirt", 1));
         assertEquals(Long.MAX_VALUE, data.snapshot(owner, 42L, 6).pendingMinor());
+    }
+
+    @Test
+    void checksumTamperingBlocksSettlementRecovery() {
+        UUID owner = UUID.randomUUID();
+        PlayerShopSettlementSavedData data = new PlayerShopSettlementSavedData();
+        assertTrue(data.recordSale(owner, 42L, 100L, "minecraft:stone", 1));
+        data.markUnclean();
+
+        CompoundTag saved = data.save(new CompoundTag(), null);
+        ListTag settlements = saved.getList("settlements", Tag.TAG_COMPOUND);
+        ((CompoundTag) settlements.get(0)).putLong("pending", 1L);
+
+        PlayerShopSettlementSavedData restored = PlayerShopSettlementSavedData.load(saved, null);
+        assertFalse(restored.integrityValid());
+        assertFalse(restored.cleanMarkerValid());
+        assertEquals(0L, restored.snapshot(owner, 42L, 6).pendingMinor());
     }
 }

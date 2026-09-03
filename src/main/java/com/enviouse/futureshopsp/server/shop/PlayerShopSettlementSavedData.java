@@ -4,6 +4,7 @@ import com.enviouse.futureshopsp.server.util.PageBounds;
 
 import com.enviouse.futureshopsp.data.SettlementHistoryRow;
 import com.enviouse.futureshopsp.server.SavedDataMigrations;
+import com.enviouse.futureshopsp.server.economy.EconomyRecordChecksum;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -21,61 +22,106 @@ import java.util.UUID;
 
 public final class PlayerShopSettlementSavedData extends SavedData {
     private static final String DATA_NAME = "futureshops_player_shop_settlements";
-    private static final int CURRENT_VERSION = 1;
+    private static final int CURRENT_VERSION = 2;
+    private static final int MAX_SETTLEMENTS = 10_000;
+    private static final int MAX_OWNERS = 10_000;
     private static final int MAX_ROWS_PER_OWNER = 40;
 
     private final Map<Long, ShopSettlement> settlementsByShopPos = new HashMap<>();
     private final Map<UUID, List<RevenueRow>> rowsByOwner = new HashMap<>();
+    private boolean integrityValid = true;
+    private boolean cleanMarkerValid = true;
 
     public static PlayerShopSettlementSavedData load(CompoundTag tag, HolderLookup.Provider provider) {
         PlayerShopSettlementSavedData data = new PlayerShopSettlementSavedData();
         int version = SavedDataMigrations.readVersion(tag);
+        if (version > CURRENT_VERSION) {
+            data.integrityValid = false;
+            return data;
+        }
         SavedDataMigrations.needsMigration(DATA_NAME, version, CURRENT_VERSION);
+        if (tag.contains("cleanMarker", Tag.TAG_BYTE)) {
+            data.cleanMarkerValid = tag.getBoolean("cleanMarker");
+        }
 
         ListTag settlementList = tag.getList("settlements", Tag.TAG_COMPOUND);
+        if (settlementList.size() > MAX_SETTLEMENTS) {
+            data.integrityValid = false;
+            return data;
+        }
         for (Tag value : settlementList) {
-            CompoundTag row = (CompoundTag) value;
-            long shopPos = row.getLong("shopPos");
-            if (!row.hasUUID("owner")) {
+            if (!(value instanceof CompoundTag row)
+                    || !row.contains("shopPos", Tag.TAG_LONG)
+                    || !row.hasUUID("owner")
+                    || !row.contains("pending", Tag.TAG_LONG)
+                    || !row.contains("lifetime", Tag.TAG_LONG)) {
+                data.integrityValid = false;
                 continue;
             }
             UUID owner = row.getUUID("owner");
             long pending = row.getLong("pending");
             long lifetime = row.getLong("lifetime");
             UUID claimRequest = row.hasUUID("claimRequest") ? row.getUUID("claimRequest") : null;
-            long claimAmount = Math.max(0L, row.getLong("claimAmount"));
-            data.settlementsByShopPos.put(shopPos,
-                    new ShopSettlement(owner, pending, lifetime, claimRequest, claimAmount));
+            long claimAmount = row.contains("claimAmount", Tag.TAG_LONG) ? row.getLong("claimAmount") : 0L;
+            if (pending < 0L || lifetime < 0L || claimAmount < 0L
+                    || (claimRequest == null && claimAmount != 0L)
+                    || (claimRequest != null && claimAmount <= 0L)
+                    || data.settlementsByShopPos.put(row.getLong("shopPos"),
+                    new ShopSettlement(owner, pending, lifetime, claimRequest, claimAmount)) != null) {
+                data.integrityValid = false;
+            }
         }
 
         ListTag ownerRows = tag.getList("ownerRows", Tag.TAG_COMPOUND);
+        if (ownerRows.size() > MAX_OWNERS) {
+            data.integrityValid = false;
+            return data;
+        }
         for (Tag ownerTag : ownerRows) {
-            CompoundTag ownerCompound = (CompoundTag) ownerTag;
-            if (!ownerCompound.hasUUID("owner")) {
+            if (!(ownerTag instanceof CompoundTag ownerCompound) || !ownerCompound.hasUUID("owner")) {
+                data.integrityValid = false;
                 continue;
             }
             UUID owner = ownerCompound.getUUID("owner");
             ListTag rowsTag = ownerCompound.getList("rows", Tag.TAG_COMPOUND);
+            if (rowsTag.size() > MAX_ROWS_PER_OWNER || data.rowsByOwner.containsKey(owner)) {
+                data.integrityValid = false;
+                continue;
+            }
             List<RevenueRow> rows = new ArrayList<>();
             for (Tag rowTag : rowsTag) {
-                CompoundTag row = (CompoundTag) rowTag;
-                rows.add(new RevenueRow(
-                        row.getLong("ts"),
-                        row.getLong("shopPos"),
-                        row.getLong("amount"),
-                        row.getString("type"),
-                        row.getString("itemId"),
-                        row.getInt("quantity")
-                ));
+                if (!(rowTag instanceof CompoundTag row)
+                        || !row.contains("ts", Tag.TAG_LONG)
+                        || !row.contains("shopPos", Tag.TAG_LONG)
+                        || !row.contains("amount", Tag.TAG_LONG)
+                        || !row.contains("type", Tag.TAG_STRING)
+                        || !row.contains("itemId", Tag.TAG_STRING)
+                        || !row.contains("quantity", Tag.TAG_INT)
+                        || row.getLong("amount") < 0L || row.getInt("quantity") < 0) {
+                    data.integrityValid = false;
+                    continue;
+                }
+                rows.add(new RevenueRow(row.getLong("ts"), row.getLong("shopPos"), row.getLong("amount"),
+                        row.getString("type"), row.getString("itemId"), row.getInt("quantity")));
             }
             data.rowsByOwner.put(owner, rows);
+        }
+
+        if (data.integrityValid && version >= 2
+                && (!tag.contains("checksum", Tag.TAG_STRING)
+                || !tag.getString("checksum").equals(data.checksum()))) {
+            data.integrityValid = false;
+        }
+        if (!data.integrityValid) {
+            data.settlementsByShopPos.clear();
+            data.rowsByOwner.clear();
         }
 
         return data;
     }
 
     @Override
-    public CompoundTag save(CompoundTag tag, HolderLookup.Provider provider) {
+    public synchronized CompoundTag save(CompoundTag tag, HolderLookup.Provider provider) {
         SavedDataMigrations.writeVersion(tag, CURRENT_VERSION);
         ListTag settlementList = new ListTag();
         for (Map.Entry<Long, ShopSettlement> entry : settlementsByShopPos.entrySet()) {
@@ -111,6 +157,8 @@ public final class PlayerShopSettlementSavedData extends SavedData {
             ownerRows.add(ownerTag);
         }
         tag.put("ownerRows", ownerRows);
+        tag.putString("checksum", checksum());
+        tag.putBoolean("cleanMarker", cleanMarkerValid);
 
         return tag;
     }
@@ -121,7 +169,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
     }
 
     public synchronized boolean canRecordSale(UUID owner, long shopPosLong, long amountMinor) {
-        if (amountMinor < 0L) {
+        if (owner == null || amountMinor < 0L) {
             return false;
         }
         ShopSettlement current = settlementsByShopPos.get(shopPosLong);
@@ -160,6 +208,9 @@ public final class PlayerShopSettlementSavedData extends SavedData {
     }
 
     public synchronized SettlementClaim beginClaim(UUID owner, long shopPosLong) {
+        if (owner == null) {
+            return null;
+        }
         ShopSettlement settlement = settlementsByShopPos.get(shopPosLong);
         if (settlement == null || !settlement.owner().equals(owner)) {
             return null;
@@ -182,7 +233,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
 
     public synchronized boolean completeClaim(UUID owner, long shopPosLong,
                                                UUID requestId, long amountMinor) {
-        if (requestId == null || amountMinor <= 0L) {
+        if (owner == null || requestId == null || amountMinor <= 0L) {
             return false;
         }
         ShopSettlement settlement = settlementsByShopPos.get(shopPosLong);
@@ -204,6 +255,9 @@ public final class PlayerShopSettlementSavedData extends SavedData {
     }
 
     public synchronized boolean rollbackPending(UUID owner, long shopPosLong, long amountMinor) {
+        if (owner == null) {
+            return false;
+        }
         if (amountMinor <= 0L) {
             return true;
         }
@@ -223,6 +277,9 @@ public final class PlayerShopSettlementSavedData extends SavedData {
     }
 
     public synchronized Snapshot snapshot(UUID owner, long shopPosLong, int maxRows) {
+        if (owner == null) {
+            return new Snapshot(0L, 0L, List.of());
+        }
         ShopSettlement settlement = settlementsByShopPos.get(shopPosLong);
         long pending = 0L;
         long lifetime = 0L;
@@ -252,6 +309,9 @@ public final class PlayerShopSettlementSavedData extends SavedData {
                                           SettlementHistoryRow.SettlementFilter filter,
                                           long fromEpochSeconds,
                                           long toEpochSeconds) {
+        if (owner == null) {
+            return 1;
+        }
         int safePageSize = Math.max(1, pageSize);
         long count = rowsByOwner.getOrDefault(owner, List.of()).stream()
                 .filter(row -> row.shopPosLong() == shopPosLong)
@@ -269,6 +329,9 @@ public final class PlayerShopSettlementSavedData extends SavedData {
                                                            SettlementHistoryRow.SettlementFilter filter,
                                                            long fromEpochSeconds,
                                                            long toEpochSeconds) {
+        if (owner == null) {
+            return List.of();
+        }
         int safePage = PageBounds.normalizePage(page);
         int safePageSize = PageBounds.normalizePageSize(pageSize);
         List<RevenueRow> filtered = rowsByOwner.getOrDefault(owner, List.of()).stream()
@@ -334,6 +397,53 @@ public final class PlayerShopSettlementSavedData extends SavedData {
                 shopPos,
                 new Snapshot(settlement.pendingMinor(), settlement.lifetimeMinor(), List.of())));
         return snapshot;
+    }
+
+    public synchronized boolean integrityValid() {
+        return integrityValid;
+    }
+
+    public synchronized boolean cleanMarkerValid() {
+        return cleanMarkerValid;
+    }
+
+    public synchronized boolean flush() {
+        return true;
+    }
+
+    public synchronized void markUnclean() {
+        cleanMarkerValid = false;
+        setDirty();
+    }
+
+    public synchronized void markCleanMarker() {
+        cleanMarkerValid = true;
+        setDirty();
+    }
+
+    private String checksum() {
+        StringBuilder canonical = new StringBuilder();
+        settlementsByShopPos.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> {
+                    ShopSettlement value = entry.getValue();
+                    canonical.append("s|").append(entry.getKey()).append('|').append(value.owner()).append('|')
+                            .append(value.pendingMinor()).append('|').append(value.lifetimeMinor()).append('|')
+                            .append(value.claimRequest() == null ? "" : value.claimRequest()).append('|')
+                            .append(value.claimAmount()).append('\n');
+                });
+        rowsByOwner.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> {
+                    canonical.append("o|").append(entry.getKey()).append('|');
+                    for (RevenueRow row : entry.getValue()) {
+                        canonical.append(row.timestampEpochSeconds()).append('|').append(row.shopPosLong()).append('|')
+                                .append(row.amountMinor()).append('|').append(row.type()).append('|')
+                                .append(row.itemId()).append('|').append(row.quantity()).append(';');
+                    }
+                    canonical.append('\n');
+                });
+        return EconomyRecordChecksum.sha256(canonical.toString());
     }
 
     public record SettlementClaim(UUID requestId, long amountMinor) {

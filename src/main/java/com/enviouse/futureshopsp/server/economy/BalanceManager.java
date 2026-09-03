@@ -13,6 +13,7 @@ import com.enviouse.futureshopsp.api.economy.ProviderResolution;
 import com.enviouse.futureshopsp.api.economy.ProviderLifecycle;
 import com.enviouse.futureshopsp.api.economy.RequestId;
 import com.enviouse.futureshopsp.server.shop.PlayerShopBarterEscrowSavedData;
+import com.enviouse.futureshopsp.server.shop.PlayerShopSettlementSavedData;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.List;
@@ -27,6 +28,7 @@ public final class BalanceManager {
     private static EconomyClaimStore claims;
     private static InternalEconomyReceiptStore receipts;
     private static PlayerShopBarterEscrowSavedData barterEscrow;
+    private static PlayerShopSettlementSavedData settlements;
 
     private BalanceManager() {
     }
@@ -40,14 +42,15 @@ public final class BalanceManager {
         claims = ephemeral ? new InMemoryEconomyClaimStore() : EconomyClaimSavedData.get(server);
         receipts = ephemeral ? new InMemoryInternalEconomyReceiptStore() : InternalEconomyReceiptSavedData.get(server);
         barterEscrow = ephemeral ? new PlayerShopBarterEscrowSavedData() : PlayerShopBarterEscrowSavedData.get(server);
+        settlements = ephemeral ? new PlayerShopSettlementSavedData() : PlayerShopSettlementSavedData.get(server);
         boolean internalSelection = EconomyApi.INTERNAL_PROVIDER_ID.equals(selection.activeProviderId());
         boolean cleanMarkerValid = journal.cleanMarkerValid() && custody.cleanMarkerValid() && claims.cleanMarkerValid()
-                && barterEscrow.cleanMarkerValid();
+                && barterEscrow.cleanMarkerValid() && settlements.cleanMarkerValid();
         if (internalSelection) {
             cleanMarkerValid &= receipts.cleanMarkerValid();
         }
         boolean integrityValid = journal.integrityValid() && custody.integrityValid() && claims.integrityValid()
-                && barterEscrow.integrityValid()
+                && barterEscrow.integrityValid() && settlements.integrityValid()
                 && (!internalSelection || receipts.integrityValid());
         boolean hasIncompleteRecords = journal.hasIncompleteRecords() || custody.hasIncompleteRecords()
                 || claims.hasIncompleteRecords() || barterEscrow.hasIncompleteRecords();
@@ -55,6 +58,7 @@ public final class BalanceManager {
         custody.markUnclean();
         claims.markUnclean();
         barterEscrow.markUnclean();
+        settlements.markUnclean();
         if (internalSelection) {
             receipts.markUnclean();
         }
@@ -94,9 +98,10 @@ public final class BalanceManager {
             boolean custodyFlushed = custody == null || custody.flush();
             boolean claimsFlushed = claims == null || claims.flush();
             boolean barterEscrowFlushed = barterEscrow == null || barterEscrow.flush();
+            boolean settlementsFlushed = settlements == null || settlements.flush();
             boolean receiptsFlushed = receipts == null || receipts.flush();
             if (lifecycleController.writeCleanMarkerLast(journalFlushed && receiptsFlushed,
-                    custodyFlushed, claimsFlushed, barterEscrowFlushed)) {
+                    custodyFlushed, claimsFlushed, barterEscrowFlushed && settlementsFlushed)) {
                 if (journal != null) {
                     journal.markCleanMarker();
                 }
@@ -108,6 +113,9 @@ public final class BalanceManager {
                 }
                 if (barterEscrow != null) {
                     barterEscrow.markCleanMarker();
+                }
+                if (settlements != null) {
+                    settlements.markCleanMarker();
                 }
                 if (receipts != null) {
                     receipts.markCleanMarker();
@@ -122,6 +130,7 @@ public final class BalanceManager {
         claims = null;
         receipts = null;
         barterEscrow = null;
+        settlements = null;
     }
 
     public static void beginDraining() {
