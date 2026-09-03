@@ -5,10 +5,13 @@ import com.enviouse.futureshopsp.api.economy.EconomyApi;
 import com.enviouse.futureshopsp.api.economy.EconomyProviderContext;
 import com.enviouse.futureshopsp.api.economy.EconomyProviderRegistry;
 import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
+import com.enviouse.futureshopsp.api.economy.MutationKind;
+import com.enviouse.futureshopsp.api.economy.MutationRequest;
 import com.enviouse.futureshopsp.api.economy.ProviderError;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.api.economy.ProviderResolution;
 import com.enviouse.futureshopsp.api.economy.ProviderLifecycle;
+import com.enviouse.futureshopsp.api.economy.RequestId;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.List;
@@ -121,6 +124,52 @@ public final class BalanceManager {
         }
         return ProviderResult.unavailable(ProviderError.NOT_READY,
                 state.diagnostic().isBlank() ? "economy provider is not ready" : state.diagnostic());
+    }
+
+    /** Adjusts a ready internal balance through the durable coordinator. */
+    public static ProviderResult<BalanceSnapshot> setInternalBalance(UUID playerUUID, long targetMinorUnits) {
+        if (playerUUID == null) {
+            return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "player id is required");
+        }
+        if (targetMinorUnits < 0L) {
+            return ProviderResult.rejected(ProviderError.INVALID_AMOUNT, "target balance must not be negative");
+        }
+        if (!isInternalEconomyReady()) {
+            EconomyLifecycleSnapshot state = getLifecycleSnapshotOrUnresolved();
+            if (state.lifecycle() == ProviderLifecycle.RECOVERING || state.lifecycle() == ProviderLifecycle.FROZEN) {
+                return ProviderResult.recoveryRequired(state.diagnostic());
+            }
+            return ProviderResult.unavailable(ProviderError.NOT_READY,
+                    state.diagnostic().isBlank() ? "internal economy is not ready" : state.diagnostic());
+        }
+
+        ProviderResult<BalanceSnapshot> current = queryBalance(playerUUID);
+        if (!current.confirmed()) {
+            return current;
+        }
+        long delta;
+        try {
+            delta = Math.subtractExact(targetMinorUnits, current.value().orElseThrow().balanceMinorUnits());
+        } catch (ArithmeticException exception) {
+            return ProviderResult.rejected(ProviderError.INVALID_AMOUNT, "target balance is outside the supported range");
+        }
+        if (delta == 0L) {
+            return current;
+        }
+
+        long amount = Math.abs(delta);
+        MutationKind kind = delta > 0L ? MutationKind.DEPOSIT : MutationKind.WITHDRAW;
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), playerUUID, amount, kind);
+        ProviderResult<com.enviouse.futureshopsp.api.economy.MutationReceipt> mutation =
+                kind == MutationKind.DEPOSIT ? coordinator.deposit(request) : coordinator.withdraw(request);
+        if (!mutation.confirmed()) {
+            return new ProviderResult<>(mutation.status(), mutation.error(), java.util.Optional.empty(),
+                    java.util.Optional.empty(), mutation.diagnostic());
+        }
+        long resultingBalance = mutation.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
+                ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong())
+                : java.util.Optional.empty()).orElse(targetMinorUnits);
+        return ProviderResult.confirmed(new BalanceSnapshot(playerUUID, resultingBalance));
     }
 
     public static EconomyProvider getProvider() {

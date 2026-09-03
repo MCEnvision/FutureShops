@@ -882,28 +882,16 @@ public final class ShopAdminCommand {
             return 0;
         }
 
-        // Direct set via the saved data — bypasses max_balance checks (admin override)
-        MinecraftServer server = source.getServer();
-        net.minecraft.server.level.ServerLevel overworld = server.overworld();
-        com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData balData = overworld.getDataStorage()
-                .computeIfAbsent(new net.minecraft.world.level.saveddata.SavedData.Factory<>(com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::new, com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::load, null), com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData.DATA_NAME);
-
         int successCount = 0;
         String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, provider.getDecimalPlaces());
         final long setAmount = amountMinor;
         for (GameProfile profile : targets) {
-            ProviderResult<BalanceSnapshot> oldBalanceResult = BalanceManager.queryBalance(profile.getId());
-            if (!oldBalanceResult.confirmed()) {
+            ProviderResult<BalanceSnapshot> result = BalanceManager.setInternalBalance(profile.getId(), setAmount);
+            if (!result.confirmed()) {
                 source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
                         .withStyle(ChatFormatting.RED));
                 continue;
             }
-            long oldBalance = oldBalanceResult.value().orElseThrow().balanceMinorUnits();
-            balData.setBalance(profile.getId(), setAmount);
-            // Fire BalanceChangeEvent.Post (spec §33) — admin set bypasses Pre since it's non-cancellable admin action
-            long delta = setAmount - oldBalance;
-            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
-                    new com.enviouse.futureshopsp.event.BalanceChangeEvent.Post(profile.getId(), delta, "ADMIN", setAmount));
             source.sendSuccess(() -> Component.translatable(
                     "command.futureshops.admin.bal.set_success",
                     profile.getName(), formatted, provider.getCurrencyName())
@@ -944,30 +932,21 @@ public final class ShopAdminCommand {
         long startingBalance = com.enviouse.futureshopsp.Config.economyStartingBalanceMinorUnits;
         String formatted = EconomyCommandUtil.formatMinorUnits(startingBalance, provider.getDecimalPlaces());
 
-        MinecraftServer server = source.getServer();
-        net.minecraft.server.level.ServerLevel overworld = server.overworld();
-        com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData balData = overworld.getDataStorage()
-                .computeIfAbsent(new net.minecraft.world.level.saveddata.SavedData.Factory<>(com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::new, com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::load, null), com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData.DATA_NAME);
-
+        int successCount = 0;
         for (GameProfile profile : targets) {
-            ProviderResult<BalanceSnapshot> oldBalanceResult = BalanceManager.queryBalance(profile.getId());
-            if (!oldBalanceResult.confirmed()) {
+            ProviderResult<BalanceSnapshot> result = BalanceManager.setInternalBalance(profile.getId(), startingBalance);
+            if (!result.confirmed()) {
                 source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
                         .withStyle(ChatFormatting.RED));
                 continue;
             }
-            long oldBalance = oldBalanceResult.value().orElseThrow().balanceMinorUnits();
-            balData.setBalance(profile.getId(), startingBalance);
-            // Fire BalanceChangeEvent.Post (spec §33) — admin reset
-            long delta = startingBalance - oldBalance;
-            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
-                    new com.enviouse.futureshopsp.event.BalanceChangeEvent.Post(profile.getId(), delta, "ADMIN", startingBalance));
             source.sendSuccess(() -> Component.translatable(
                     "command.futureshops.admin.bal.reset_success",
                     profile.getName(), formatted, provider.getCurrencyName())
                     .withStyle(ChatFormatting.YELLOW), true);
+            successCount++;
         }
-        return targets.size();
+        return successCount;
     }
 
     // -------------------------------------------------------------------------

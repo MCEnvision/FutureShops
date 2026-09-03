@@ -197,21 +197,17 @@ public final class ShopModAPI {
     // ═══════════════════════════════════════════════
 
     /**
-     * Sets a player's balance directly (admin override). Bypasses max_balance checks.
-     * Fires {@link com.enviouse.futureshopsp.event.BalanceChangeEvent.Post} with reason "ADMIN".
+     * Sets a player's internal balance through the durable economy coordinator.
+     * This operation is available only while the internal provider is ready.
      */
     public static void setBalance(MinecraftServer server, UUID playerUUID, long amountMinor) {
-        if (!BalanceManager.isInternalEconomyReady()) {
-            throw new IllegalStateException("Direct balance overrides require the ready internal economy.");
+        if (server == null) {
+            throw new IllegalArgumentException("server is required");
         }
-        var overworld = server.overworld();
-        var balData = overworld.getDataStorage()
-                .computeIfAbsent(new net.minecraft.world.level.saveddata.SavedData.Factory<>(com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::new, com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::load, null), com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData.DATA_NAME);
-        long oldBalance = BalanceManager.getBalance(playerUUID);
-        balData.setBalance(playerUUID, amountMinor);
-        long delta = amountMinor - oldBalance;
-        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
-                new com.enviouse.futureshopsp.event.BalanceChangeEvent.Post(playerUUID, delta, "ADMIN", amountMinor));
+        ProviderResult<BalanceSnapshot> result = BalanceManager.setInternalBalance(playerUUID, amountMinor);
+        if (!result.confirmed()) {
+            throw new IllegalStateException(result.diagnostic());
+        }
     }
 
     // ═══════════════════════════════════════════════
