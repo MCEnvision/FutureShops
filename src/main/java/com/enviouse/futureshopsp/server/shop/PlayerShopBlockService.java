@@ -639,7 +639,11 @@ public final class PlayerShopBlockService {
             }
             String custodyHash = deliveryEntitlementHash(listing, qty, custodyQuantity);
             boolean custodyHeld = false;
-            long cost = Math.max(0L, listing.calculatePrice(qty));
+            long cost = listing.calculatePrice(qty);
+            if (cost < 0L) {
+                sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+                return;
+            }
             boolean withdrewFromBuyer = false;
             boolean recordedSale = false;
             Item barterItem = null;
@@ -714,6 +718,10 @@ public final class PlayerShopBlockService {
             if (compoundTrade || barterTrade) {
                 barterItem = ShopTransactionUtil.resolveItem(listing.barterItemId());
                 barterAmount = listing.effectiveBarterTotal(qty);
+                if (barterAmount < 0) {
+                    sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+                    return;
+                }
                 // NBT-strict barter payment: if the listing captured an NBT tag for the barter
                 // item (e.g. an "empty" tank, a specific enchanted chestplate), only stacks
                 // matching that tag exactly count as valid payment. Prevents the exploit where
@@ -941,6 +949,10 @@ public final class PlayerShopBlockService {
                 if (barterItem == null || barterAmount <= 0) {
                     barterItem = ShopTransactionUtil.resolveItem(listing.barterItemId());
                     barterAmount = listing.effectiveBarterTotal(qty);
+                    if (barterAmount < 0) {
+                        sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+                        return;
+                    }
                     if (barterItem == null || barterItem == Items.AIR
                             || ShopTransactionUtil.countItems(buyer.getInventory(), barterItem,
                             listing.barterNbtAware(), listing.barterNbtPatch()) < barterAmount) {
@@ -1250,7 +1262,11 @@ public final class PlayerShopBlockService {
                                            Item saleItem, String paymentMethod) {
         EconomyTransactionCoordinator coordinator = BalanceManager.getCoordinator();
         RequestId transactionId = RequestId.random();
-        long cost = Math.max(0L, listing.calculatePrice(qty));
+        long cost = listing.calculatePrice(qty);
+        if (cost < 0L) {
+            sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+            return;
+        }
         boolean isBundle = !listing.bundleOutputs().isEmpty();
 
         if (isBundle) {
@@ -1320,6 +1336,10 @@ public final class PlayerShopBlockService {
         if (compoundTrade || barterTrade) {
             barterItem = ShopTransactionUtil.resolveItem(listing.barterItemId());
             barterAmount = listing.effectiveBarterTotal(qty);
+            if (barterAmount < 0) {
+                sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+                return;
+            }
             if (barterItem == null || barterItem == Items.AIR
                     || ShopTransactionUtil.countItems(buyer.getInventory(), barterItem,
                             listing.barterNbtAware(), listing.barterNbtPatch()) < barterAmount) {

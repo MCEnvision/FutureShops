@@ -537,16 +537,21 @@ public final class ShopCatalog {
                     if (promoPrice > 0) unit = promoPrice;
                 }
             }
-            return unit <= 0L ? 0L : unit * quantity;
+            return unit <= 0L ? 0L : checkedMultiply(unit, quantity);
         }
 
         String type = config.promoType();
         if ("BUY_X_GET_Y".equals(type) && config.buyX() > 0 && config.buyY() > 0) {
-            int group = config.buyX() + config.buyY();
-            int fullGroups = quantity / group;
-            int remainder = quantity % group;
-            int payable = fullGroups * config.buyX() + Math.min(remainder, config.buyX());
-            return basePrice * payable;
+            try {
+                int group = Math.addExact(config.buyX(), config.buyY());
+                int fullGroups = quantity / group;
+                int remainder = quantity % group;
+                long payable = Math.addExact(Math.multiplyExact((long) fullGroups, config.buyX()),
+                        Math.min(remainder, config.buyX()));
+                return checkedMultiply(basePrice, payable);
+            } catch (ArithmeticException exception) {
+                return 0L;
+            }
         }
 
         long discounted = switch (type) {
@@ -557,7 +562,15 @@ public final class ShopCatalog {
             }
             default -> basePrice;
         };
-        return discounted * quantity;
+        return checkedMultiply(discounted, quantity);
+    }
+
+    private static long checkedMultiply(long left, long right) {
+        try {
+            return Math.multiplyExact(left, right);
+        } catch (ArithmeticException exception) {
+            return 0L;
+        }
     }
 
     public static List<BarterRecipeDef> getBarterRecipesForItem(String shopId, String itemId) {
@@ -684,4 +697,3 @@ public final class ShopCatalog {
         }
     }
 }
-
