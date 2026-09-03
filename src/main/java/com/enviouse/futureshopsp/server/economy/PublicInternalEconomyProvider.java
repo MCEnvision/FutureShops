@@ -99,6 +99,7 @@ final class PublicInternalEconomyProvider implements com.enviouse.futureshopsp.a
             return receipts.find(request.requestId()).map(ProviderResult::confirmed)
                 .orElseGet(() -> mutate(request, request.kind() == MutationKind.DEPOSIT
                         || request.kind() == MutationKind.TRANSFER_CREDIT
+                        || request.kind() == MutationKind.REFUND
                         || request.kind() == MutationKind.COMPENSATION));
     }
 
