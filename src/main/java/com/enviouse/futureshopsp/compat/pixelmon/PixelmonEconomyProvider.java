@@ -168,7 +168,12 @@ public final class PixelmonEconomyProvider implements com.enviouse.futureshopsp.
                 return AccountRead.unavailable(ProviderError.PROVIDER_EXCEPTION,
                         "pixelmon account identity did not match player");
             }
-            return AccountRead.available(account, runtime.balance(account));
+            BigDecimal balance = runtime.balance(account);
+            if (balance == null) {
+                return AccountRead.unavailable(ProviderError.PROVIDER_EXCEPTION,
+                        "pixelmon balance is unavailable");
+            }
+            return AccountRead.available(account, balance);
         } catch (ReflectiveOperationException | RuntimeException exception) {
             return AccountRead.unavailable(ProviderError.PROVIDER_EXCEPTION,
                     "pixelmon economy query failed");

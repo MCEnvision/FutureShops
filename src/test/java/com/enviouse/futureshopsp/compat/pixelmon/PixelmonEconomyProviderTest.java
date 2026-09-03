@@ -120,6 +120,9 @@ class PixelmonEconomyProviderTest {
         account.balance = new BigDecimal("1.5");
         assertEquals(ProviderError.PROVIDER_EXCEPTION, provider.balance(PLAYER).error());
 
+        account.balance = null;
+        assertEquals(ProviderError.PROVIDER_EXCEPTION, provider.balance(PLAYER).error());
+
         BankAccountProxy.setAccount(null);
         assertEquals(ProviderResultStatus.UNAVAILABLE, provider.balance(PLAYER).status());
         assertEquals(ProviderError.PROVIDER_EXCEPTION, provider.balance(PLAYER).error());
