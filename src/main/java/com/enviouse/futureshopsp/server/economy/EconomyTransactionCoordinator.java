@@ -25,18 +25,131 @@ public final class EconomyTransactionCoordinator {
     private final EconomyProvider provider;
     private final EconomyLifecycleController lifecycle;
     private final EconomyTransactionJournal journal;
+    private final EconomyCustodyStore custody;
+    private final EconomyClaimStore claims;
     private final Object lock = new Object();
 
     public EconomyTransactionCoordinator(EconomyProvider provider,
                                          EconomyLifecycleController lifecycle,
                                          EconomyTransactionJournal journal) {
+        this(provider, lifecycle, journal, new InMemoryEconomyCustodyStore(), new InMemoryEconomyClaimStore());
+    }
+
+    public EconomyTransactionCoordinator(EconomyProvider provider,
+                                         EconomyLifecycleController lifecycle,
+                                         EconomyTransactionJournal journal,
+                                         EconomyCustodyStore custody,
+                                         EconomyClaimStore claims) {
         this.provider = Objects.requireNonNull(provider, "provider");
         this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle");
         this.journal = Objects.requireNonNull(journal, "journal");
+        this.custody = Objects.requireNonNull(custody, "custody");
+        this.claims = Objects.requireNonNull(claims, "claims");
     }
 
     public EconomyLifecycleSnapshot lifecycle() {
         return lifecycle.snapshot();
+    }
+
+    public Optional<CustodyRecord> custody(RequestId requestId) {
+        return custody.find(Objects.requireNonNull(requestId, "requestId"));
+    }
+
+    public CustodyRecord holdCustody(RequestId requestId, UUID owner, String itemKey,
+                                     long quantity, String contentHash) {
+        requireReadyMutation();
+        synchronized (lock) {
+            Optional<CustodyRecord> existing = custody.find(requestId);
+            if (existing.isPresent()) {
+                CustodyRecord record = existing.orElseThrow();
+                if (!record.owner().equals(owner) || !record.itemKey().equals(itemKey)
+                        || record.quantity() != quantity || !record.contentHash().equals(contentHash)) {
+                    throw new IllegalStateException("custody request conflicts with existing record");
+                }
+                return record;
+            }
+            return custody.hold(requestId, owner, itemKey, quantity, contentHash);
+        }
+    }
+
+    public CustodyRecord deliverCustody(RequestId requestId) {
+        requireCustodyAccess();
+        synchronized (lock) {
+            CustodyRecord current = custody.find(requestId).orElseThrow(() ->
+                    new IllegalStateException("custody does not exist"));
+            if (current.state() == CustodyState.DELIVERED || current.state() == CustodyState.CLAIMED) {
+                return current;
+            }
+            return custody.transition(requestId, CustodyState.HELD, CustodyState.DELIVERED);
+        }
+    }
+
+    public CustodyRecord claimCustody(RequestId requestId) {
+        requireCustodyAccess();
+        synchronized (lock) {
+            CustodyRecord current = custody.find(requestId).orElseThrow(() ->
+                    new IllegalStateException("custody does not exist"));
+            if (current.state() == CustodyState.CLAIMED) {
+                return current;
+            }
+            return custody.transition(requestId, CustodyState.DELIVERED, CustodyState.CLAIMED);
+        }
+    }
+
+    public CustodyRecord releaseCustody(RequestId requestId) {
+        requireCustodyAccess();
+        synchronized (lock) {
+            CustodyRecord current = custody.find(requestId).orElseThrow(() ->
+                    new IllegalStateException("custody does not exist"));
+            if (current.state() == CustodyState.RELEASED) {
+                return current;
+            }
+            return custody.transition(requestId, CustodyState.HELD, CustodyState.RELEASED);
+        }
+    }
+
+    public Optional<ClaimRecord> claim(RequestId requestId) {
+        return claims.find(Objects.requireNonNull(requestId, "requestId"));
+    }
+
+    public ClaimRecord createClaim(RequestId requestId, UUID claimant, long amountMinorUnits, String description) {
+        requireCustodyAccess();
+        synchronized (lock) {
+            Optional<ClaimRecord> existing = claims.find(requestId);
+            if (existing.isPresent()) {
+                ClaimRecord record = existing.orElseThrow();
+                if (!record.claimant().equals(claimant) || record.amountMinorUnits() != amountMinorUnits
+                        || !record.description().equals(description == null ? "" : description.trim())) {
+                    throw new IllegalStateException("claim request conflicts with existing record");
+                }
+                return record;
+            }
+            return claims.create(requestId, claimant, amountMinorUnits, description);
+        }
+    }
+
+    public ClaimRecord deliverClaim(RequestId requestId) {
+        requireCustodyAccess();
+        synchronized (lock) {
+            ClaimRecord current = claims.find(requestId).orElseThrow(() ->
+                    new IllegalStateException("claim does not exist"));
+            if (current.state() == ClaimState.DELIVERED || current.state() == ClaimState.RESOLVED) {
+                return current;
+            }
+            return claims.transition(requestId, ClaimState.PENDING, ClaimState.DELIVERED);
+        }
+    }
+
+    public ClaimRecord resolveClaim(RequestId requestId) {
+        requireCustodyAccess();
+        synchronized (lock) {
+            ClaimRecord current = claims.find(requestId).orElseThrow(() ->
+                    new IllegalStateException("claim does not exist"));
+            if (current.state() == ClaimState.RESOLVED) {
+                return current;
+            }
+            return claims.transition(requestId, current.state(), ClaimState.RESOLVED);
+        }
     }
 
     public ProviderResult<BalanceSnapshot> balance(UUID playerId) {
@@ -224,6 +337,18 @@ public final class EconomyTransactionCoordinator {
             return copyFailure(precheck);
         }
         return null;
+    }
+
+    private void requireReadyMutation() {
+        if (!lifecycle.admitMutation()) {
+            throw new IllegalStateException("economy mutations are not ready");
+        }
+    }
+
+    private void requireCustodyAccess() {
+        if (lifecycle.snapshot().lifecycle() == ProviderLifecycle.STOPPED) {
+            throw new IllegalStateException("economy custody is stopped");
+        }
     }
 
     private ProviderResult<MutationReceipt> replay(EconomyJournalRecord record) {

@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EconomyTransactionCoordinatorTest {
@@ -113,6 +114,33 @@ class EconomyTransactionCoordinatorTest {
         assertEquals(ProviderLifecycle.DRAINING, lifecycle.snapshot().lifecycle());
         assertTrue(lifecycle.writeCleanMarkerLast(true, true, true, true));
         assertEquals(ProviderLifecycle.STOPPED, lifecycle.snapshot().lifecycle());
+    }
+
+    @Test
+    void custodyAndClaimsAreIdempotentAndConservative() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        InMemoryEconomyCustodyStore custody = new InMemoryEconomyCustodyStore();
+        InMemoryEconomyClaimStore claims = new InMemoryEconomyClaimStore();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(
+                provider, lifecycle, journal, custody, claims);
+        RequestId custodyId = RequestId.random();
+
+        CustodyRecord held = coordinator.holdCustody(custodyId, PLAYER, "minecraft:diamond", 2L, "hash");
+        assertEquals(held, coordinator.holdCustody(custodyId, PLAYER, "minecraft:diamond", 2L, "hash"));
+        assertEquals(CustodyState.DELIVERED, coordinator.deliverCustody(custodyId).state());
+        assertEquals(CustodyState.CLAIMED, coordinator.claimCustody(custodyId).state());
+        assertEquals(CustodyState.CLAIMED, coordinator.claimCustody(custodyId).state());
+        assertThrows(IllegalStateException.class,
+                () -> coordinator.releaseCustody(custodyId));
+
+        RequestId claimId = RequestId.random();
+        ClaimRecord claim = coordinator.createClaim(claimId, PLAYER, 450L, "offline proceeds");
+        assertEquals(claim, coordinator.createClaim(claimId, PLAYER, 450L, "offline proceeds"));
+        assertEquals(ClaimState.DELIVERED, coordinator.deliverClaim(claimId).state());
+        assertEquals(ClaimState.RESOLVED, coordinator.resolveClaim(claimId).state());
+        assertEquals(ClaimState.RESOLVED, coordinator.resolveClaim(claimId).state());
     }
 
     private static EconomyLifecycleController readyLifecycle() {

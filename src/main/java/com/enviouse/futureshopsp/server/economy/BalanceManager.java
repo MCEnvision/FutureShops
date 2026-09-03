@@ -16,6 +16,8 @@ public final class BalanceManager {
     private static EconomyTransactionCoordinator coordinator;
     private static EconomyLifecycleController lifecycleController;
     private static EconomyTransactionJournal journal;
+    private static EconomyCustodyStore custody;
+    private static EconomyClaimStore claims;
 
     private BalanceManager() {
     }
@@ -23,18 +25,25 @@ public final class BalanceManager {
     public static void initialize(MinecraftServer server) {
         EconomyProviderRegistry.freeze();
         ProviderSelectionSnapshot selection = ProviderSelectionManager.resolveAtStartup(Config.economyProviderId);
-        journal = server.overworld() == null ? new InMemoryEconomyTransactionJournal()
-                : EconomyJournalSavedData.get(server);
-        boolean cleanMarkerValid = journal.cleanMarkerValid();
+        boolean ephemeral = server.overworld() == null;
+        journal = ephemeral ? new InMemoryEconomyTransactionJournal() : EconomyJournalSavedData.get(server);
+        custody = ephemeral ? new InMemoryEconomyCustodyStore() : EconomyCustodySavedData.get(server);
+        claims = ephemeral ? new InMemoryEconomyClaimStore() : EconomyClaimSavedData.get(server);
+        boolean cleanMarkerValid = journal.cleanMarkerValid() && custody.cleanMarkerValid() && claims.cleanMarkerValid();
+        boolean integrityValid = journal.integrityValid() && custody.integrityValid() && claims.integrityValid();
+        boolean hasIncompleteRecords = journal.hasIncompleteRecords() || custody.hasIncompleteRecords()
+                || claims.hasIncompleteRecords();
         journal.markUnclean();
+        custody.markUnclean();
+        claims.markUnclean();
         lifecycleController = new EconomyLifecycleController(selection.activeProviderId());
         if (EconomyApi.INTERNAL_PROVIDER_ID.equals(selection.activeProviderId())) {
             EconomyProvider legacy = new InternalEconomyProvider(server);
             com.enviouse.futureshopsp.api.economy.EconomyProvider publicProvider =
                     new PublicInternalEconomyProvider(legacy);
-            lifecycleController.resolve(ProviderLifecycle.READY, "", cleanMarkerValid, journal.integrityValid(),
-                    journal.hasIncompleteRecords());
-            coordinator = new EconomyTransactionCoordinator(publicProvider, lifecycleController, journal);
+            lifecycleController.resolve(ProviderLifecycle.READY, "", cleanMarkerValid, integrityValid,
+                    hasIncompleteRecords);
+            coordinator = new EconomyTransactionCoordinator(publicProvider, lifecycleController, journal, custody, claims);
             provider = new CoordinatedEconomyProvider(publicProvider, coordinator);
             return;
         }
@@ -42,13 +51,13 @@ public final class BalanceManager {
                 selection.activeProviderId(), new EconomyProviderContext(server));
         if (resolution.provider().isPresent() && resolution.lifecycle() == ProviderLifecycle.READY) {
             com.enviouse.futureshopsp.api.economy.EconomyProvider publicProvider = resolution.provider().orElseThrow();
-            lifecycleController.resolve(resolution.lifecycle(), resolution.diagnostic(), cleanMarkerValid, journal.integrityValid(),
-                    journal.hasIncompleteRecords());
-            coordinator = new EconomyTransactionCoordinator(publicProvider, lifecycleController, journal);
+            lifecycleController.resolve(resolution.lifecycle(), resolution.diagnostic(), cleanMarkerValid, integrityValid,
+                    hasIncompleteRecords);
+            coordinator = new EconomyTransactionCoordinator(publicProvider, lifecycleController, journal, custody, claims);
             provider = new ExternalLegacyEconomyProvider(publicProvider, coordinator);
         } else {
-            lifecycleController.resolve(resolution.lifecycle(), resolution.diagnostic(), cleanMarkerValid, journal.integrityValid(),
-                    journal.hasIncompleteRecords());
+            lifecycleController.resolve(resolution.lifecycle(), resolution.diagnostic(), cleanMarkerValid, integrityValid,
+                    hasIncompleteRecords);
             provider = new UnavailableEconomyProvider(selection.activeProviderId(), resolution.lifecycle(),
                     resolution.diagnostic());
         }
@@ -57,17 +66,27 @@ public final class BalanceManager {
     public static void clear() {
         if (lifecycleController != null) {
             lifecycleController.beginDraining();
-            if (journal != null) {
-                journal.flush();
-            }
-            if (lifecycleController.writeCleanMarkerLast(true, true, true, true)) {
-                journal.markCleanMarker();
+            boolean journalFlushed = journal == null || journal.flush();
+            boolean custodyFlushed = custody == null || custody.flush();
+            boolean claimsFlushed = claims == null || claims.flush();
+            if (lifecycleController.writeCleanMarkerLast(journalFlushed, custodyFlushed, claimsFlushed, true)) {
+                if (journal != null) {
+                    journal.markCleanMarker();
+                }
+                if (custody != null) {
+                    custody.markCleanMarker();
+                }
+                if (claims != null) {
+                    claims.markCleanMarker();
+                }
             }
         }
         provider = null;
         coordinator = null;
         lifecycleController = null;
         journal = null;
+        custody = null;
+        claims = null;
     }
 
     public static void beginDraining() {
@@ -102,6 +121,20 @@ public final class BalanceManager {
             throw new IllegalStateException("Economy lifecycle accessed before initialization.");
         }
         return lifecycleController.snapshot();
+    }
+
+    public static EconomyCustodyStore getCustodyStore() {
+        if (custody == null) {
+            throw new IllegalStateException("Economy custody accessed before initialization.");
+        }
+        return custody;
+    }
+
+    public static EconomyClaimStore getClaimStore() {
+        if (claims == null) {
+            throw new IllegalStateException("Economy claims accessed before initialization.");
+        }
+        return claims;
     }
 
     public static TransactionResult transfer(UUID fromPlayerUUID, UUID toPlayerUUID, long amountMinorUnits) {
