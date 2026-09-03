@@ -74,7 +74,7 @@ public final class ShopSellService {
 
         int quantity = packet.quantity();
         if (quantity <= 0 || quantity > ShopTransactionUtil.MAX_SELL_QUANTITY) {
-            return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_ITEM);
+            return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_AMOUNT);
         }
         // The wire line carries a listingId (catalog resolution key), not necessarily a registry id.
         if (packet.listingId() == null || packet.listingId().isBlank()) {

@@ -19,6 +19,7 @@ class ShopSellInputSafetySourceTest {
         assertTrue(parse >= 0);
         assertTrue(source.contains("Invalid SNBT for sell listing"));
         assertTrue(source.contains("ShopResultCode.INVALID_ITEM"));
+        assertTrue(source.contains("ShopResultCode.INVALID_AMOUNT"));
         assertTrue(parse < removal);
     }
 
