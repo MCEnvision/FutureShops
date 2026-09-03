@@ -63,9 +63,6 @@ public class InternalEconomyProvider implements EconomyProvider {
         }
         getData().setBalance(playerUUID, newBalance);
 
-        // Fire BalanceChangeEvent.Post
-        NeoForge.EVENT_BUS.post(new BalanceChangeEvent.Post(playerUUID, -amountMinorUnits, reason, newBalance));
-
         return TransactionResult.ok(newBalance);
     }
 
@@ -99,9 +96,6 @@ public class InternalEconomyProvider implements EconomyProvider {
         }
 
         getData().setBalance(playerUUID, newBalance);
-
-        // Fire BalanceChangeEvent.Post
-        NeoForge.EVENT_BUS.post(new BalanceChangeEvent.Post(playerUUID, amountMinorUnits, reason, newBalance));
 
         return TransactionResult.ok(newBalance);
     }

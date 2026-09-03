@@ -12,6 +12,8 @@ import com.enviouse.futureshopsp.api.economy.ProviderLifecycle;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.api.economy.ProviderResultStatus;
 import com.enviouse.futureshopsp.api.economy.RequestId;
+import com.enviouse.futureshopsp.event.BalanceChangeEvent;
+import net.neoforged.neoforge.common.NeoForge;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -365,6 +367,7 @@ public final class EconomyTransactionCoordinator {
                     ProviderResultStatus.CONFIRMED, "");
             replace(pending, EconomyTransactionState.RESOLVED, Optional.of(receipt),
                     ProviderResultStatus.CONFIRMED, "");
+            publishConfirmedBalanceChange(request, receipt);
             return ProviderResult.confirmed(receipt);
         }
         if (result.status() == ProviderResultStatus.REJECTED) {
@@ -450,6 +453,26 @@ public final class EconomyTransactionCoordinator {
     private boolean supports(EconomyCapability capability) {
         ProviderCapabilities capabilities = provider.capabilities();
         return capabilities != null && capabilities.supports(capability);
+    }
+
+    private static void publishConfirmedBalanceChange(MutationRequest request, MutationReceipt receipt) {
+        if (receipt == null || receipt.resultingBalanceMinorUnits().isEmpty()) {
+            return;
+        }
+        long delta = switch (request.kind()) {
+            case DEPOSIT, TRANSFER_CREDIT, REFUND, COMPENSATION -> request.amountMinorUnits();
+            case WITHDRAW, TRANSFER_DEBIT, FEE -> -request.amountMinorUnits();
+        };
+        String reason = switch (request.kind()) {
+            case DEPOSIT -> "DEPOSIT";
+            case WITHDRAW -> "WITHDRAW";
+            case TRANSFER_DEBIT, TRANSFER_CREDIT -> "TRANSFER";
+            case FEE -> "FEE";
+            case REFUND -> "REFUND";
+            case COMPENSATION -> "COMPENSATION";
+        };
+        NeoForge.EVENT_BUS.post(new BalanceChangeEvent.Post(request.actor(), delta, reason,
+                receipt.resultingBalanceMinorUnits().getAsLong()));
     }
 
     private boolean supportsAllMutationCapabilities() {
