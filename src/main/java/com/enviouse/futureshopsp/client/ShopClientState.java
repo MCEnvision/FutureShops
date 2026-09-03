@@ -49,6 +49,8 @@ public final class ShopClientState {
     // Cart is keyed by listingId (the catalog resolution key), NOT registry itemId — two NBT
     // variants of one base item are distinct cart lines. ownedItemCounts stays keyed by registry
     // itemId (InventorySyncService reports registry-id counts).
+    private static final int MAX_CART_LINES = 256;
+    private static final int MAX_CART_QUANTITY = 2304;
     private static final Map<String, Integer> cart = new LinkedHashMap<>();
     private static final Map<String, Integer> ownedItemCounts = new HashMap<>();
     private static volatile ShopStatus status = null;
@@ -141,21 +143,35 @@ public final class ShopClientState {
     }
 
     public static void addToCart(String listingId, int quantity) {
-        if (quantity <= 0) {
+        if (listingId == null || listingId.isBlank() || quantity <= 0) {
             return;
         }
 
         synchronized (cart) {
-            int newQuantity = cart.getOrDefault(listingId, 0) + quantity;
-            cart.put(listingId, clampCartQuantity(listingId, newQuantity));
+            boolean existing = cart.containsKey(listingId);
+            if (!existing && cart.size() >= MAX_CART_LINES) {
+                return;
+            }
+            int newQuantity = saturatingAddInt(cart.getOrDefault(listingId, 0), quantity);
+            int clamped = clampCartQuantity(listingId, newQuantity);
+            if (clamped <= 0) {
+                cart.remove(listingId);
+            } else {
+                cart.put(listingId, clamped);
+            }
             sanitizeCartLocked();
         }
     }
 
     public static void setCartQuantity(String listingId, int quantity) {
+        if (listingId == null || listingId.isBlank()) {
+            return;
+        }
         synchronized (cart) {
             if (quantity <= 0) {
                 cart.remove(listingId);
+            } else if (!cart.containsKey(listingId) && cart.size() >= MAX_CART_LINES) {
+                return;
             } else {
                 cart.put(listingId, clampCartQuantity(listingId, quantity));
             }
@@ -265,7 +281,11 @@ public final class ShopClientState {
 
     public static int getCartTotalQuantity() {
         synchronized (cart) {
-            return cart.values().stream().mapToInt(Integer::intValue).sum();
+            int total = 0;
+            for (int quantity : cart.values()) {
+                total = saturatingAddInt(total, quantity);
+            }
+            return total;
         }
     }
 
@@ -278,7 +298,7 @@ public final class ShopClientState {
                     continue;
                 }
                 long unitPrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
-                total += unitPrice * entry.getValue();
+                total = saturatingAdd(total, saturatingMultiply(unitPrice, entry.getValue()));
             }
             return total;
         }
@@ -329,11 +349,35 @@ public final class ShopClientState {
             return 0;
         }
 
-        int clamped = Math.max(1, Math.min(2304, quantity));
+        int clamped = Math.max(1, Math.min(MAX_CART_QUANTITY, quantity));
         if (!item.unlimited()) {
             clamped = Math.min(clamped, item.stock());
         }
         return clamped;
+    }
+
+    private static int saturatingAddInt(int left, int right) {
+        try {
+            return Math.addExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return right < 0 ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+        }
+    }
+
+    private static long saturatingAdd(long left, long right) {
+        try {
+            return Math.addExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return left < 0L ? Long.MIN_VALUE : Long.MAX_VALUE;
+        }
+    }
+
+    private static long saturatingMultiply(long left, long right) {
+        try {
+            return Math.multiplyExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return (left < 0L) == (right < 0L) ? Long.MAX_VALUE : Long.MIN_VALUE;
+        }
     }
 
     /** {@code listingId} is the catalog resolution key for this cart line (see {@link CatalogItem}). */
