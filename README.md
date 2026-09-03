@@ -15,7 +15,7 @@ This branch targets the following runtime.
 | Parchment | 2024.11.17 |
 | GeckoLib | 4.8.4 |
 
-Client and server should use the same FutureShops build. This `2.3.0` NeoForge candidate is prepared locally and remains unpublished. Phase 000 API and selection work is integrated, and the current branch is phase 001. The provider API, deterministic registry, restart only selection contract, checksummed transaction journal, durable custody and claims, lifecycle gate, and clean marker handling are present. External adapters, complete route coverage, and recovery validation remain phase work. Back up the complete world and configuration before replacing an older installation. The runtime mod identifier and all resource namespaces remain `futureshops`, while the Java package for this port is `com.enviouse.futureshopsp`.
+Client and server should use the same FutureShops build. This `2.3.0` NeoForge candidate is prepared locally and remains unpublished. Phases 000 and 001 are integrated, and the current branch is phase 002. The provider API, deterministic registry, restart only selection contract, checksummed transaction journal, durable custody and claims, lifecycle gate, clean marker handling, and the exact Pixelmon 9.4.0 query and precheck adapter are present. Pixelmon direct mutations remain refused because its reviewed API has no durable receipts or idempotent retry. Back up the complete world and configuration before replacing an older installation. The runtime mod identifier and all resource namespaces remain `futureshops`, while the Java package for this port is `com.enviouse.futureshopsp`.
 
 ## Installation
 
@@ -25,7 +25,7 @@ Client and server should use the same FutureShops build. This `2.3.0` NeoForge c
 4. Back up the world, player data, and the complete `config/futureshops` directory before upgrading.
 5. Start the game or server once, then review the generated FutureShops configuration and shop catalogs.
 
-The generated `economy.provider` setting defaults to `internal`. Keep it on `internal` until the complete external provider and recovery phases are validated. Provider changes are restart only and do not migrate balances.
+The generated `economy.provider` setting defaults to `internal`. Set it to `pixelmon` only with Pixelmon 9.4.0 installed. Pixelmon balance queries and prechecks are authoritative, but all mutation surfaces remain unavailable until a provider proves durable receipts and idempotent retry. Provider changes are restart only and do not migrate balances. See [Pixelmon economy integration](docs/integrations/pixelmon-economy.md).
 
 ## Main features
 

@@ -3,6 +3,7 @@ package com.enviouse.futureshopsp;
 import com.enviouse.futureshopsp.catalog.ShopCatalog;
 import com.enviouse.futureshopsp.client.shop.ShopBlockGeoRenderer;
 import com.enviouse.futureshopsp.client.shop.ShopBlockItemRenderer;
+import com.enviouse.futureshopsp.compat.pixelmon.PixelmonEconomyProviderRegistration;
 import com.enviouse.futureshopsp.compat.rs2.RefinedStorage2Compat;
 import com.enviouse.futureshopsp.init.ModBlockEntities;
 import com.enviouse.futureshopsp.init.ModBlocks;
@@ -77,6 +78,10 @@ public class Futureshops {
         event.enqueueWork(() -> {
             ExternalStorageRegistry.register(ForgeCapabilityStorageAdapter.INSTANCE);
             RefinedStorage2Compat.init();
+            var pixelmonRegistration = PixelmonEconomyProviderRegistration.register();
+            if ("pixelmon".equals(Config.economyProviderId) && !pixelmonRegistration.accepted()) {
+                LOGGER.warn("Pixelmon economy adapter unavailable, {}", pixelmonRegistration.diagnostic());
+            }
         });
         LOGGER.info("FutureShops common setup complete.");
     }
