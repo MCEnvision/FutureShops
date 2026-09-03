@@ -148,6 +148,8 @@ public final class EconomyJournalSavedData extends SavedData implements EconomyT
             throw new IllegalArgumentException("journal record is incomplete");
         }
         RequestId requestId = new RequestId(entry.getUUID("request"));
+        boolean hasProvider = entry.contains("provider", Tag.TAG_STRING);
+        String providerId = hasProvider ? entry.getString("provider") : "legacy-unbound";
         Optional<UUID> counterparty = entry.hasUUID("counterparty")
                 ? Optional.of(entry.getUUID("counterparty")) : Optional.empty();
         MutationRequest request = new MutationRequest(requestId, entry.getUUID("actor"), counterparty,
@@ -165,10 +167,23 @@ public final class EconomyJournalSavedData extends SavedData implements EconomyT
                     MutationKind.valueOf(entry.getString("receiptKind")), entry.getLong("receiptAmount"),
                     entry.getString("operation"), resulting));
         }
-        if (!entry.getString("checksum").equals(checksum(request, state, receipt, status, diagnostic))) {
+        String expectedChecksum = hasProvider
+                ? checksum(request, state, receipt, status, diagnostic, providerId)
+                : legacyChecksum(request, state, receipt, status, diagnostic);
+        if (!entry.getString("checksum").equals(expectedChecksum)) {
             throw new IllegalArgumentException("journal record checksum mismatch");
         }
-        return new EconomyJournalRecord(request, state, receipt, status, diagnostic);
+        if (receipt.isPresent() && !validReceipt(request, receipt.orElseThrow())) {
+            throw new IllegalArgumentException("journal receipt does not match request");
+        }
+        return new EconomyJournalRecord(request, state, receipt, status, diagnostic, providerId);
+    }
+
+    private static boolean validReceipt(MutationRequest request, MutationReceipt receipt) {
+        return request.requestId().equals(receipt.requestId())
+                && request.kind() == receipt.kind()
+                && request.amountMinorUnits() == receipt.amountMinorUnits()
+                && receipt.externalOperationId() != null && !receipt.externalOperationId().isBlank();
     }
 
     private static CompoundTag writeEntry(EconomyJournalRecord record) {
@@ -182,6 +197,9 @@ public final class EconomyJournalSavedData extends SavedData implements EconomyT
         entry.putString("state", record.state().name());
         entry.putString("status", record.resultStatus().name());
         entry.putString("diagnostic", record.diagnostic());
+        if (!record.providerId().isBlank()) {
+            entry.putString("provider", record.providerId());
+        }
         record.receipt().ifPresent(receipt -> {
             entry.putUUID("receiptRequest", receipt.requestId().value());
             entry.putString("receiptKind", receipt.kind().name());
@@ -192,13 +210,32 @@ public final class EconomyJournalSavedData extends SavedData implements EconomyT
             }
         });
         entry.putString("checksum", checksum(request, record.state(), record.receipt(),
-                record.resultStatus(), record.diagnostic()));
+                record.resultStatus(), record.diagnostic(), record.providerId()));
         return entry;
     }
 
     private static String checksum(MutationRequest request, EconomyTransactionState state,
                                    Optional<MutationReceipt> receipt, ProviderResultStatus status,
-                                   String diagnostic) {
+                                   String diagnostic, String providerId) {
+        StringBuilder canonical = new StringBuilder()
+                .append(request.requestId().value()).append('|')
+                .append(request.actor()).append('|')
+                .append(request.counterparty().map(UUID::toString).orElse("" )).append('|')
+                .append(request.amountMinorUnits()).append('|')
+                .append(request.kind()).append('|').append(state).append('|').append(status).append('|')
+                .append(providerId == null ? "" : providerId).append('|')
+                .append(diagnostic == null ? "" : diagnostic).append('|');
+        receipt.ifPresent(value -> canonical.append(value.requestId().value()).append('|')
+                .append(value.kind()).append('|').append(value.amountMinorUnits()).append('|')
+                .append(value.externalOperationId()).append('|')
+                .append(value.resultingBalanceMinorUnits().isPresent()
+                        ? Long.toString(value.resultingBalanceMinorUnits().getAsLong()) : ""));
+        return digest(canonical.toString());
+    }
+
+    private static String legacyChecksum(MutationRequest request, EconomyTransactionState state,
+                                         Optional<MutationReceipt> receipt, ProviderResultStatus status,
+                                         String diagnostic) {
         StringBuilder canonical = new StringBuilder()
                 .append(request.requestId().value()).append('|')
                 .append(request.actor()).append('|')
@@ -211,6 +248,10 @@ public final class EconomyJournalSavedData extends SavedData implements EconomyT
                 .append(value.externalOperationId()).append('|')
                 .append(value.resultingBalanceMinorUnits().isPresent()
                         ? Long.toString(value.resultingBalanceMinorUnits().getAsLong()) : ""));
+        return digest(canonical.toString());
+    }
+
+    private static String digest(String canonical) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(canonical.toString().getBytes(StandardCharsets.UTF_8));

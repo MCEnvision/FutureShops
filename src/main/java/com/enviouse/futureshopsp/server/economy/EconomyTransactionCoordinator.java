@@ -234,6 +234,10 @@ public final class EconomyTransactionCoordinator {
                 return journalFailure("transaction journal lookup failed");
             }
             if (existing != null) {
+                if (!providerMatches(existing)) {
+                    lifecycle.markAmbiguous("transaction is bound to another provider");
+                    return ProviderResult.recoveryRequired("transaction provider binding requires recovery");
+                }
                 if (!requestMatches(request, existing.request())) {
                     return ProviderResult.rejected(ProviderError.INVALID_REQUEST,
                             "transaction request conflicts with the persisted identity");
@@ -264,7 +268,8 @@ public final class EconomyTransactionCoordinator {
                 return copyFailure(preflight);
             }
             EconomyJournalRecord prepared = new EconomyJournalRecord(request,
-                    EconomyTransactionState.PREPARED, Optional.empty(), ProviderResultStatus.REJECTED, "");
+                    EconomyTransactionState.PREPARED, Optional.empty(), ProviderResultStatus.REJECTED, "",
+                    provider.providerId());
             try {
                 journal.append(prepared);
             } catch (RuntimeException exception) {
@@ -361,6 +366,10 @@ public final class EconomyTransactionCoordinator {
             if (record == null) {
                 return ProviderResult.rejected(ProviderError.RECEIPT_NOT_FOUND, "transaction is not journaled");
             }
+            if (!providerMatches(record)) {
+                lifecycle.markAmbiguous("transaction is bound to another provider");
+                return ProviderResult.recoveryRequired("transaction provider binding requires recovery");
+            }
             if (!record.incomplete()) {
                 return record.receipt().map(ProviderResult::confirmed)
                         .orElseGet(() -> ProviderResult.rejected(ProviderError.DUPLICATE_REQUEST,
@@ -383,7 +392,7 @@ public final class EconomyTransactionCoordinator {
                     replace(record, EconomyTransactionState.EXTERNAL_CONFIRMED, Optional.of(recoveredReceipt),
                             ProviderResultStatus.CONFIRMED, "");
                     replace(new EconomyJournalRecord(record.request(), EconomyTransactionState.EXTERNAL_CONFIRMED,
-                                    Optional.of(recoveredReceipt), ProviderResultStatus.CONFIRMED, ""),
+                                    Optional.of(recoveredReceipt), ProviderResultStatus.CONFIRMED, "", provider.providerId()),
                             EconomyTransactionState.RESOLVED, Optional.of(recoveredReceipt),
                             ProviderResultStatus.CONFIRMED, "");
                 } catch (RuntimeException exception) {
@@ -422,6 +431,10 @@ public final class EconomyTransactionCoordinator {
                 return journalFailure("transaction journal lookup failed");
             }
             if (existing != null) {
+                if (!providerMatches(existing)) {
+                    lifecycle.markAmbiguous("transaction is bound to another provider");
+                    return ProviderResult.recoveryRequired("transaction provider binding requires recovery");
+                }
                 if (!requestMatches(request, existing.request())) {
                     return ProviderResult.rejected(ProviderError.INVALID_REQUEST,
                             "transaction request conflicts with the persisted identity");
@@ -433,7 +446,8 @@ public final class EconomyTransactionCoordinator {
                 return admission;
             }
             EconomyJournalRecord prepared = new EconomyJournalRecord(request,
-                    EconomyTransactionState.PREPARED, Optional.empty(), ProviderResultStatus.REJECTED, "");
+                    EconomyTransactionState.PREPARED, Optional.empty(), ProviderResultStatus.REJECTED, "",
+                    provider.providerId());
             try {
                 journal.append(prepared);
             } catch (RuntimeException exception) {
@@ -445,7 +459,8 @@ public final class EconomyTransactionCoordinator {
 
     private ProviderResult<MutationReceipt> executeAfterPrepared(MutationRequest request, MutationKind expectedKind) {
         EconomyJournalRecord pending = new EconomyJournalRecord(request,
-                EconomyTransactionState.EXTERNAL_PENDING, Optional.empty(), ProviderResultStatus.UNAVAILABLE, "");
+                EconomyTransactionState.EXTERNAL_PENDING, Optional.empty(), ProviderResultStatus.UNAVAILABLE, "",
+                provider.providerId());
         try {
             journal.replace(pending);
         } catch (RuntimeException exception) {
@@ -476,7 +491,7 @@ public final class EconomyTransactionCoordinator {
             }
             try {
                 replace(new EconomyJournalRecord(request, EconomyTransactionState.EXTERNAL_CONFIRMED,
-                                Optional.of(receipt), ProviderResultStatus.CONFIRMED, ""),
+                                Optional.of(receipt), ProviderResultStatus.CONFIRMED, "", provider.providerId()),
                         EconomyTransactionState.RESOLVED, Optional.of(receipt),
                         ProviderResultStatus.CONFIRMED, "");
             } catch (RuntimeException exception) {
@@ -642,7 +657,8 @@ public final class EconomyTransactionCoordinator {
 
     private void replace(EconomyJournalRecord source, EconomyTransactionState state,
                          Optional<MutationReceipt> receipt, ProviderResultStatus status, String diagnostic) {
-        journal.replace(new EconomyJournalRecord(source.request(), state, receipt, status, diagnostic));
+        journal.replace(new EconomyJournalRecord(source.request(), state, receipt, status, diagnostic,
+                source.providerId().isBlank() ? provider.providerId() : source.providerId()));
     }
 
     private static boolean validReceipt(MutationRequest request, MutationReceipt receipt) {
@@ -657,6 +673,10 @@ public final class EconomyTransactionCoordinator {
                 && requested.counterparty().equals(persisted.counterparty())
                 && requested.amountMinorUnits() == persisted.amountMinorUnits()
                 && requested.kind() == persisted.kind();
+    }
+
+    private boolean providerMatches(EconomyJournalRecord record) {
+        return record.providerId().isBlank() || provider.providerId().equals(record.providerId());
     }
 
     private static <T> ProviderResult<T> copyFailure(ProviderResult<?> source) {

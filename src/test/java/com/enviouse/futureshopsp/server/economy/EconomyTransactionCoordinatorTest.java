@@ -73,6 +73,24 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
+    void providerBoundRecordCannotBeReplayedByAnotherProvider() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+        MutationReceipt receipt = provider.receipt(request);
+        journal.append(new EconomyJournalRecord(request, EconomyTransactionState.RESOLVED,
+                Optional.of(receipt), ProviderResultStatus.CONFIRMED, "", "other-provider"));
+
+        var result = coordinator.withdraw(request);
+
+        assertEquals(ProviderResultStatus.RECOVERY_REQUIRED, result.status());
+        assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
+        assertEquals(0, provider.withdrawCalls);
+    }
+
+    @Test
     void missingCapabilityRejectsBeforeJournalOrProviderCall() {
         FixtureProvider provider = new FixtureProvider(new ProviderCapabilities(true, true, true, true, false, false));
         EconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();

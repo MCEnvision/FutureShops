@@ -28,7 +28,7 @@ class EconomyJournalSavedDataTest {
         MutationReceipt receipt = new MutationReceipt(request.requestId(), request.kind(), request.amountMinorUnits(),
                 "external-1", OptionalLong.of(88L));
         data.replace(new EconomyJournalRecord(request, EconomyTransactionState.RESOLVED,
-                Optional.of(receipt), ProviderResultStatus.CONFIRMED, ""));
+                Optional.of(receipt), ProviderResultStatus.CONFIRMED, "", "fixture"));
 
         CompoundTag saved = data.save(new CompoundTag(), null);
         EconomyJournalSavedData loaded = EconomyJournalSavedData.load(saved, null);
@@ -37,6 +37,7 @@ class EconomyJournalSavedDataTest {
         assertEquals(EconomyTransactionState.RESOLVED,
                 loaded.find(request.requestId()).orElseThrow().state());
         assertEquals(receipt, loaded.find(request.requestId()).orElseThrow().receipt().orElseThrow());
+        assertEquals("fixture", loaded.find(request.requestId()).orElseThrow().providerId());
     }
 
     @Test
@@ -68,6 +69,21 @@ class EconomyJournalSavedDataTest {
         saved.getList("records", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(1).putLong("amount", 9L);
 
         EconomyJournalSavedData loaded = EconomyJournalSavedData.load(saved, null);
+
+        assertFalse(loaded.integrityValid());
+        assertTrue(loaded.snapshot().isEmpty());
+    }
+
+    @Test
+    void mismatchedReceiptCannotBeLoadedAsConfirmedEvidence() {
+        EconomyJournalSavedData data = new EconomyJournalSavedData();
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 12L, MutationKind.WITHDRAW);
+        MutationReceipt mismatched = new MutationReceipt(request.requestId(), request.kind(), 13L,
+                "external-mismatch", OptionalLong.empty());
+        data.append(new EconomyJournalRecord(request, EconomyTransactionState.RESOLVED,
+                Optional.of(mismatched), ProviderResultStatus.CONFIRMED, ""));
+
+        EconomyJournalSavedData loaded = EconomyJournalSavedData.load(data.save(new CompoundTag(), null), null);
 
         assertFalse(loaded.integrityValid());
         assertTrue(loaded.snapshot().isEmpty());
