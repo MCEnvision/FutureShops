@@ -556,7 +556,11 @@ public final class PlayerShopBlockService {
         ReentrantLock lock = SHOP_LOCKS.computeIfAbsent(pos.asLong(), ignored -> new ReentrantLock());
         lock.lock();
         try {
-            int qty = Math.max(1, quantity);
+            if (quantity <= 0 || quantity > ShopTransactionUtil.MAX_BUY_QUANTITY) {
+                sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+                return;
+            }
+            int qty = quantity;
             ShopBlockEntity.Listing listing = shop.getListing(listingIndex);
             if (shop.getOwnerUuid() == null || listing == null || listing.itemId().isBlank()) {
                 sendResult(buyer, false, ShopResultCode.UNCONFIGURED);
