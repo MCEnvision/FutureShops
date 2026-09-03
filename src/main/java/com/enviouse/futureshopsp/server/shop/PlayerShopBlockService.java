@@ -4,6 +4,7 @@ import com.enviouse.futureshopsp.block.ShopBlockEntity;
 import com.enviouse.futureshopsp.api.economy.MutationKind;
 import com.enviouse.futureshopsp.api.economy.MutationReceipt;
 import com.enviouse.futureshopsp.api.economy.MutationRequest;
+import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
 import com.enviouse.futureshopsp.api.economy.ProviderError;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.api.economy.RequestId;
@@ -423,10 +424,20 @@ public final class PlayerShopBlockService {
                 RequestId requestId = new RequestId(settlementClaim.requestId());
                 EconomyTransactionCoordinator coordinator = BalanceManager.getCoordinator();
                 String description = "player shop settlement " + pos.asLong();
-                ClaimRecord claim = coordinator.claim(requestId).orElseGet(() ->
-                        coordinator.createClaim(requestId, player.getUUID(), settlementClaim.amountMinor(), description));
                 MutationRequest depositRequest = MutationRequest.forPlayer(requestId, player.getUUID(),
                         settlementClaim.amountMinor(), MutationKind.DEPOSIT);
+                ClaimRecord claim = coordinator.claim(requestId).orElse(null);
+                if (claim == null) {
+                    // Capability and lifecycle refusal must happen before creating a durable
+                    // claim. This keeps unsupported external mutation paths side effect free.
+                    ProviderResult<BalanceSnapshot> admission = coordinator.preflight(depositRequest);
+                    if (!admission.confirmed()) {
+                        sendResult(player, false, mapProviderError(admission));
+                        return;
+                    }
+                    claim = coordinator.createClaim(requestId, player.getUUID(),
+                            settlementClaim.amountMinor(), description);
+                }
                 ProviderResult<?> deposit = coordinator.deposit(depositRequest);
                 if (!deposit.confirmed()) {
                     sendResult(player, false, mapProviderError(deposit));

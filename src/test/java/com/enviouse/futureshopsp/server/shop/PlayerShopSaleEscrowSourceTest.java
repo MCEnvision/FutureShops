@@ -39,6 +39,20 @@ class PlayerShopSaleEscrowSourceTest {
         assertTrue(source.contains("saleEscrow.markRecoveryRequired"));
     }
 
+    @Test
+    void settlementClaimPreflightsBeforeCreatingClaim() throws Exception {
+        String source = Files.readString(projectDirectory().resolve(Path.of(
+                "src", "main", "java", "com", "enviouse", "futureshopsp",
+                "server", "shop", "PlayerShopBlockService.java")));
+
+        int claimLookup = source.indexOf("coordinator.claim(requestId).orElse(null)");
+        int preflight = source.indexOf("coordinator.preflight(depositRequest)");
+        int createClaim = source.indexOf("coordinator.createClaim(requestId");
+        assertTrue(claimLookup >= 0);
+        assertTrue(preflight > claimLookup);
+        assertTrue(createClaim > preflight);
+    }
+
     private static Path projectDirectory() {
         Path candidate = Path.of("").toAbsolutePath();
         while (candidate != null) {
