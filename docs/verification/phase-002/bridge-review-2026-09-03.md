@@ -9,8 +9,16 @@ The available bridge files were inspected outside the repository.
 | `/tmp/PixelmonEconomyBridge-1.1.6.jar` | `409896ee42f4163b616c5ab0964c220fc0a1c910ce8c3e2a0c05c4d78bd21da6` | `c4fb7cda655b5e63d485fef9e44bfa3a2b0d421ebccb458c15cb002942ef4f7f73c2a80b99c6ac41d7d744dff4aab4788f02e3e81ed55a3b5e0fdd77c4369adb` | Bukkit plugin `PixelmonEconomyBridge`, version `1.1.6`, depends on Vault and EverNifeCore |
 | `/tmp/Vault-1.7.3.jar` | `a6b5ed97f43a5cf5bbaf00a7c8cd23c5afc9bd003f849875af8b36e6cf77d01d` | `aa02af3c9770249bda77b91058ce97240d4fd4cba3f07918534127acace297feb05445122b499c2623123dfde49670e9a763221e0f41ef03f51e6880ea8f6647` | Bukkit plugin Vault, version `1.7.3-b131` |
 | `/tmp/FinalEconomy-1.0.9.jar` | `4cc7ba1aab02fffd86d2aa009a51ac4e6ca8590776ce9a13c8a2f45fdf01f529` | `8d5b75a993c0fa6ca5c07a3d796a431f18b18d96239a9bb73dc5de1ab93c405cf52bf5fe40a47b5b9ad720da32666bf426f70b62a5a75a5c176c061502ef8be4` | Bukkit plugin FinalEconomy, version `1.0.9` |
+| `/tmp/futureshops-youer-pixelmon-248.zhVzs4/youer.jar` | `47ff03d9c26e40eac38ff5bbc1108f170d4b1649dfcc74488b696546f5807006` | `5e3022d7bcc23f762c7ac383f8162b3abd615e0453571f02073f2878eeaf6441165637b5b361fb7c6c4bbb3b5a60531a8501836838ae3861fa05cdf85373e7e7` | Youer `1.21.1-d4a204a0`, NeoForge `21.1.248`, CI run `33260344889` |
+| `/tmp/futureshops-youer-pixelmon-248.zhVzs4/plugins/EverNifeCore-2.0.4.4.jar` | `15585a223a76c7bf18b311aa3e07db71ef4a1969837608a9db1d27e99c52f6e3` | `c6de341d973e910322cd3051f1a617bf2878984eee11c8312e5832beed02885fec8e76518221d4efa45a0b3827d00664b658089932cc1516b2b6a92bfa2e75c1` | Bukkit plugin EverNifeCore, version `2.0.4.4` |
 
-The bridge contains `v1_21_R1` classes and can wire Pixelmon to Vault on a hybrid server. It is still a Bukkit plugin stack, not a NeoForge provider API, and its required EverNifeCore artifact was not present in the inspected disposable set.
+The bridge contains `v1_21_R1` classes and can wire Pixelmon to Vault on a hybrid server. It is still a Bukkit plugin stack, not a NeoForge provider API. The exact profile below includes its required EverNifeCore artifact.
+
+## Exact hybrid profile
+
+The disposable profile `/tmp/futureshops-youer-pixelmon-248.zhVzs4` contains the exact FutureShops 2.3.0, Pixelmon 9.4.0, GeckoLib 4.8.4, Youer `1.21.1-d4a204a0`, NeoForge 21.1.248, Vault 1.7.3, FinalEconomy 1.0.9, PixelmonEconomyBridge 1.1.6, and EverNifeCore 2.0.4.4 artifacts above. Its FutureShops configuration selects `pixelmon` and its `eula.txt` remains `eula=false`.
+
+The Java 21 bounded launch reached ModLauncher with NeoForge 21.1.248, discovered the expected mod dependencies, and stopped at the EULA gate in `/tmp/futureshops-youer-pixelmon-248-java21-eula-false-20260903.log`. This proves exact byte assembly, loader discovery, and terms-gated startup only. It does not prove plugin loading, economy mutation, restart, or recovery behavior.
 
 ## API and capability result
 
