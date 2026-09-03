@@ -457,6 +457,9 @@ public final class PlayerShopBlockService {
                             claim = coordinator.createClaim(requestId, player.getUUID(),
                                     settlementClaim.amountMinor(), description);
                         } catch (RuntimeException exception) {
+                            com.mojang.logging.LogUtils.getLogger().error(
+                                    "settlement claim persistence failed for shop {} request {}",
+                                    pos.asLong(), requestId, exception);
                             sendResult(player, false, ShopResultCode.SERVER_ERROR);
                             return;
                         }

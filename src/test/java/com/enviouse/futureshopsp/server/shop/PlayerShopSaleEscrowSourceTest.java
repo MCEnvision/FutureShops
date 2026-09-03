@@ -189,6 +189,20 @@ class PlayerShopSaleEscrowSourceTest {
     }
 
     @Test
+    void claimPersistenceFailureRecordsRecoveryContext() throws Exception {
+        String source = Files.readString(projectDirectory().resolve(Path.of(
+                "src", "main", "java", "com", "enviouse", "futureshopsp", "server", "shop",
+                "PlayerShopBlockService.java")));
+
+        int claimCreation = source.indexOf("coordinator.createClaim(requestId");
+        int claimFailure = source.indexOf("settlement claim persistence failed for shop", claimCreation);
+        assertTrue(claimCreation >= 0);
+        assertTrue(claimFailure > claimCreation);
+        assertTrue(source.indexOf("sendResult(player, false, ShopResultCode.SERVER_ERROR)", claimFailure)
+                > claimFailure);
+    }
+
+    @Test
     void serverShopDeliveryAndSellRestoreNeverDropOrForgetCustody() throws Exception {
         String buySource = Files.readString(projectDirectory().resolve(Path.of(
                 "src", "main", "java", "com", "enviouse", "futureshopsp", "server", "transaction",
