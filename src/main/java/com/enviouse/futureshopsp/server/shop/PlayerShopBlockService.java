@@ -1541,6 +1541,21 @@ public final class PlayerShopBlockService {
             }
         }
 
+        List<ItemStack> delivered = new ArrayList<>();
+        if (isBundle) {
+            for (ShopBlockEntity.BundleEntry entry : listing.bundleOutputs()) {
+                Item bundleItem = ShopTransactionUtil.resolveItem(entry.itemId());
+                int needed = checkedDeliveryCount(entry.count(), qty);
+                delivered.addAll(splitStacks(bundleItem, needed, entry.nbtPatch()));
+            }
+        } else {
+            delivered.addAll(splitStacks(saleItem, deliverCount, listing.nbtAware() ? listing.nbtPatch() : null));
+        }
+        if (!ShopTransactionUtil.canFit(buyer.getInventory(), delivered)) {
+            sendResult(buyer, false, ShopResultCode.INVENTORY_FULL);
+            return;
+        }
+
         // Charge money (sunk — never deposited to owner).
         boolean withdrewFromBuyer = false;
         if ((compoundTrade || !barterTrade) && cost > 0L) {
@@ -1571,21 +1586,6 @@ public final class PlayerShopBlockService {
         }
 
         // Deliver freshly minted sale items.
-        List<ItemStack> delivered = new ArrayList<>();
-        if (isBundle) {
-            for (ShopBlockEntity.BundleEntry entry : listing.bundleOutputs()) {
-                Item bundleItem = ShopTransactionUtil.resolveItem(entry.itemId());
-                int needed = checkedDeliveryCount(entry.count(), qty);
-                delivered.addAll(splitStacks(bundleItem, needed, entry.nbtPatch()));
-            }
-        } else {
-            delivered.addAll(splitStacks(saleItem, deliverCount, listing.nbtAware() ? listing.nbtPatch() : null));
-        }
-
-        if (!ShopTransactionUtil.canFit(buyer.getInventory(), delivered)) {
-            sendResult(buyer, false, ShopResultCode.INVENTORY_FULL);
-            return;
-        }
         if (!ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), delivered)) {
             sendResult(buyer, false, ShopResultCode.RECOVERY_REQUIRED);
             return;

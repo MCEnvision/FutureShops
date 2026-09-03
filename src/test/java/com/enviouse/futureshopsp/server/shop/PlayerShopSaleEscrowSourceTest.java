@@ -42,6 +42,9 @@ class PlayerShopSaleEscrowSourceTest {
         assertTrue(source.contains("sendResult(buyer, false, ShopResultCode.RECOVERY_REQUIRED)"));
         assertTrue(source.contains("if (!ShopTransactionUtil.canFit(buyer.getInventory(), delivered))"));
         assertFalse(source.contains("buyer.drop(stack, false)"));
+        int adminCapacity = source.indexOf("if (!ShopTransactionUtil.canFit(buyer.getInventory(), delivered))");
+        int adminDebit = source.indexOf("admin buyer debit");
+        assertTrue(adminCapacity >= 0 && adminDebit > adminCapacity);
     }
 
     @Test
