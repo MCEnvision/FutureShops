@@ -38,7 +38,7 @@ The lifecycle snapshot reports server readiness and query availability. The coor
 
 The rebuilt GameTest also created live server player fixtures and routed withdrawal and deposit through `BalanceManager` plus transfer through `ShopModAPI`. Each public route refused the Pixelmon mutation, and the test confirmed that no custody record was created. This covers the public player entry points without calling the unsafe Pixelmon boolean mutation methods.
 
-The rebuilt `build/libs/futureshops-2.3.0.jar` from source revision `87ceb41` passed `unzip -tq`. Its SHA 256 is `828100961451f6c17aab94f3408280a88ebf7f10a329281becb692aaf98f22f2`. Its SHA 512 is `5492ec9f6e66e9d4ce396eaad7e4f45d1266c555b18474a4f1d0497f751ac85e1484792834e4d6d0413c7c1e8507b417283512bfab0c90554960f2a6e7ad1781`. The archive contains only FutureShops adapter classes under `com/enviouse/futureshopsp/compat/pixelmon/`; it contains no `com/pixelmonmod`, Bukkit, Spigot, Vault, or test fixture classes. `jdeps` reports only Java, FutureShops, and NeoForge references for the adapter. No Pixelmon, Bukkit, Spigot, or bridge dependency is declared.
+The rebuilt `build/libs/futureshops-2.3.0.jar` from source revision `87ceb41` passed `unzip -tq`. Its SHA 256 is `828100961451f6c17aab94f3408280a88ebf7f10a329281becb692aaf98f22f2`. Its SHA 512 is `5492ec9f6e66e9d4ce396eaad7e4f45d1266c555b18474a4f1d0497f751ac85e1484792834e4d6d0413c7c1e8507b417283512bfab0c90554960f2a6e7ad1781`. The archive contains FutureShops adapter and GameTest classes, but no `com/pixelmonmod`, Bukkit, Spigot, Vault, bridge, or external test fixture classes. `jdeps` reports only Java, FutureShops, and NeoForge references for the adapter. No Pixelmon, Bukkit, Spigot, or bridge dependency is declared.
 
 ## Failure matrix
 
