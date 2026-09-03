@@ -9,7 +9,6 @@ import com.enviouse.futureshopsp.init.ModItems;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
 import com.enviouse.futureshopsp.server.economy.CustodyState;
 import com.enviouse.futureshopsp.server.economy.EconomyRecordChecksum;
-import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import com.enviouse.futureshopsp.server.transaction.ShopTransactionUtil;
 import com.enviouse.futureshopsp.api.economy.MutationKind;
 import com.enviouse.futureshopsp.api.economy.MutationRequest;
@@ -78,10 +77,11 @@ public final class WithdrawCommand {
                     "command.futureshops.economy.internal_only")));
             return 0;
         }
-        EconomyProvider provider = BalanceManager.getProvider();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
+        String currencyName = BalanceManager.getCurrencyName();
         long amountMinorUnits;
         try {
-            amountMinorUnits = EconomyCommandUtil.parseAmountToMinorUnits(rawAmount, provider.getDecimalPlaces());
+            amountMinorUnits = EconomyCommandUtil.parseAmountToMinorUnits(rawAmount, decimalPlaces);
         } catch (IllegalArgumentException ex) {
             player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable("command.futureshops.error.invalid_amount")));
             return 0;
@@ -145,9 +145,9 @@ public final class WithdrawCommand {
             return 0;
         }
 
-        String withdrawnText = EconomyCommandUtil.formatMinorUnits(amountMinorUnits, provider.getDecimalPlaces());
+        String withdrawnText = EconomyCommandUtil.formatMinorUnits(amountMinorUnits, decimalPlaces);
         Component balanceText = EconomyCommandUtil.formatResultingBalance(mutation, player.getUUID(),
-                provider.getDecimalPlaces());
+                decimalPlaces);
         if (multipleBills) {
             StringBuilder detail = new StringBuilder();
             for (BillEntry bill : bills) {
@@ -156,10 +156,10 @@ public final class WithdrawCommand {
             }
             player.sendSystemMessage(EconomyCommandUtil.success(Component.translatable(
                     "command.futureshops.withdraw.success.bills",
-                    withdrawnText, provider.getCurrencyName(), balanceText, detail.toString())));
+                    withdrawnText, currencyName, balanceText, detail.toString())));
         } else {
             player.sendSystemMessage(EconomyCommandUtil.success(Component.translatable(
-                    "command.futureshops.withdraw.success", withdrawnText, provider.getCurrencyName(), balanceText)));
+                    "command.futureshops.withdraw.success", withdrawnText, currencyName, balanceText)));
         }
         return 1;
     }

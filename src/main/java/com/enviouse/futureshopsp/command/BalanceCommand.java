@@ -1,7 +1,6 @@
 package com.enviouse.futureshopsp.command;
 
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
-import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.network.ShopPackets;
@@ -57,20 +56,21 @@ public final class BalanceCommand {
     }
 
     private static void sendBalance(ServerPlayer viewer, ServerPlayer target) {
-        EconomyProvider provider = BalanceManager.getProvider();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
+        String currencyName = BalanceManager.getCurrencyName();
         ProviderResult<BalanceSnapshot> balanceResult = BalanceManager.queryBalance(target.getUUID());
         if (!balanceResult.confirmed()) {
             EconomyCommandUtil.sendProviderError(viewer, balanceResult);
             return;
         }
         long balanceMinorUnits = balanceResult.value().orElseThrow().balanceMinorUnits();
-        String formatted = EconomyCommandUtil.formatMinorUnits(balanceMinorUnits, provider.getDecimalPlaces());
+        String formatted = EconomyCommandUtil.formatMinorUnits(balanceMinorUnits, decimalPlaces);
 
         if (viewer.getUUID().equals(target.getUUID())) {
-            viewer.sendSystemMessage(EconomyCommandUtil.info(Component.translatable("command.futureshops.balance.value", formatted, provider.getCurrencyName())));
+            viewer.sendSystemMessage(EconomyCommandUtil.info(Component.translatable("command.futureshops.balance.value", formatted, currencyName)));
             return;
         }
 
-        viewer.sendSystemMessage(EconomyCommandUtil.info(Component.translatable("command.futureshops.balance.other", target.getName(), formatted, provider.getCurrencyName())));
+        viewer.sendSystemMessage(EconomyCommandUtil.info(Component.translatable("command.futureshops.balance.other", target.getName(), formatted, currencyName)));
     }
 }

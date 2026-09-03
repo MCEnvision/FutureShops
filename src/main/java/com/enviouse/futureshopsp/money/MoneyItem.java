@@ -8,7 +8,6 @@ import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.api.economy.RequestId;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
 import com.enviouse.futureshopsp.server.economy.CustodyState;
-import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -138,13 +137,14 @@ public class MoneyItem extends Item {
             NeoForge.EVENT_BUS.post(
                     new MoneyDepositEvent(serverPlayer.getUUID(), acceptedValue, outcome.accepted()));
 
-            EconomyProvider provider = BalanceManager.getProvider();
-            String depositedText = EconomyCommandUtil.formatMinorUnits(acceptedValue, provider.getDecimalPlaces());
+            int decimalPlaces = BalanceManager.getDecimalPlaces();
+            String currencyName = BalanceManager.getCurrencyName();
+            String depositedText = EconomyCommandUtil.formatMinorUnits(acceptedValue, decimalPlaces);
             Component balanceText = EconomyCommandUtil.formatResultingBalance(mutation, serverPlayer.getUUID(),
-                    provider.getDecimalPlaces());
+                    decimalPlaces);
             serverPlayer.sendSystemMessage(EconomyCommandUtil.success(
                     Component.translatable("command.futureshops.deposit.right_click_success",
-                            outcome.accepted(), depositedText, provider.getCurrencyName(), balanceText)));
+                            outcome.accepted(), depositedText, currencyName, balanceText)));
 
             if (outcome.rejected() > 0) {
                 serverPlayer.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable(

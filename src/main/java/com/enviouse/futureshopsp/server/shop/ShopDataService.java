@@ -7,7 +7,6 @@ import com.enviouse.futureshopsp.event.ShopOpenEvent;
 import com.enviouse.futureshopsp.network.ShopPackets;
 import com.enviouse.futureshopsp.network.packets.S2CShopDataPacket;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
-import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.server.session.ShopSession;
@@ -66,7 +65,8 @@ public final class ShopDataService {
      */
     public static void sendShopData(ServerPlayer player, String requestedShopId, boolean includeNearbyShops, boolean forceOpen) {
         String shopId = resolveShopId(requestedShopId);
-        EconomyProvider provider = BalanceManager.getProvider();
+        String currencyName = BalanceManager.getCurrencyName();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
         ProviderResult<BalanceSnapshot> balanceResult = BalanceManager.queryBalance(player.getUUID());
         long balance = balanceResult.value().map(BalanceSnapshot::balanceMinorUnits).orElse(0L);
         var lifecycle = BalanceManager.getLifecycleSnapshotOrUnresolved();
@@ -83,8 +83,8 @@ public final class ShopDataService {
         ShopPackets.sendToPlayer(player, new S2CShopDataPacket(
                 shopId,
                 balance,
-                provider.getCurrencyName(),
-                provider.getDecimalPlaces(),
+                currencyName,
+                decimalPlaces,
                 adminEnabled ? ShopCatalog.buildCategories(shopId, player.getServer()) : List.of(),
                 adminEnabled ? ShopCatalog.buildItems(shopId, player.getServer()) : List.of(),
                 adminEnabled ? ShopCatalog.buildPromos(shopId) : List.of(),
@@ -130,5 +130,4 @@ public final class ShopDataService {
         }
     }
 }
-
 

@@ -10,7 +10,6 @@ import com.enviouse.futureshopsp.network.packets.S2CBalTopUiPacket;
 import com.enviouse.futureshopsp.network.packets.S2CBalanceUiPacket;
 import com.enviouse.futureshopsp.server.economy.BalanceEntry;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
-import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.server.transaction.TransactionHistorySavedData;
@@ -40,7 +39,8 @@ public final class MarketplaceAnalyticsService {
     }
 
     public static void sendDashboard(ServerPlayer player) {
-        EconomyProvider provider = BalanceManager.getProvider();
+        String currencyName = BalanceManager.getCurrencyName();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
         DashboardSnapshot snapshot = snapshotDashboard(player);
         ProviderResult<BalanceSnapshot> balance = BalanceManager.queryBalance(player.getUUID());
         var lifecycle = BalanceManager.getLifecycleSnapshotOrUnresolved();
@@ -48,8 +48,8 @@ public final class MarketplaceAnalyticsService {
                 player.getUUID(),
                 player.getGameProfile().getName(),
                 balance.value().map(BalanceSnapshot::balanceMinorUnits).orElse(0L),
-                provider.getCurrencyName(),
-                provider.getDecimalPlaces(),
+                currencyName,
+                decimalPlaces,
                 snapshot.totalRevenueMinor(),
                 snapshot.totalPendingMinor(),
                 snapshot.shopCount(),
@@ -69,7 +69,8 @@ public final class MarketplaceAnalyticsService {
      * This lets admins inspect another player's marketplace profile.
      */
     public static void sendDashboardForViewer(ServerPlayer viewer, ServerPlayer target) {
-        EconomyProvider provider = BalanceManager.getProvider();
+        String currencyName = BalanceManager.getCurrencyName();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
         DashboardSnapshot snapshot = snapshotDashboard(target);
         ProviderResult<BalanceSnapshot> balance = BalanceManager.queryBalance(target.getUUID());
         var lifecycle = BalanceManager.getLifecycleSnapshotOrUnresolved();
@@ -77,8 +78,8 @@ public final class MarketplaceAnalyticsService {
                 target.getUUID(),
                 target.getGameProfile().getName(),
                 balance.value().map(BalanceSnapshot::balanceMinorUnits).orElse(0L),
-                provider.getCurrencyName(),
-                provider.getDecimalPlaces(),
+                currencyName,
+                decimalPlaces,
                 snapshot.totalRevenueMinor(),
                 snapshot.totalPendingMinor(),
                 snapshot.shopCount(),
@@ -95,7 +96,8 @@ public final class MarketplaceAnalyticsService {
 
     public static void sendLeaderboard(ServerPlayer player, int page) {
         MinecraftServer server = player.server;
-        EconomyProvider provider = BalanceManager.getProvider();
+        String currencyName = BalanceManager.getCurrencyName();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
         var lifecycle = BalanceManager.getLifecycleSnapshotOrUnresolved();
         boolean rankingAvailable = BalanceManager.isInternalEconomyReady();
         if (page < 1 || page > PageBounds.MAX_PAGE_INDEX) {
@@ -121,8 +123,8 @@ public final class MarketplaceAnalyticsService {
                 safePage,
                 totalPages,
                 topBalances,
-                provider.getCurrencyName(),
-                provider.getDecimalPlaces(),
+                currencyName,
+                decimalPlaces,
                 activityLeader.uuid(),
                 activityLeader.name(),
                 activityLeader.value(),

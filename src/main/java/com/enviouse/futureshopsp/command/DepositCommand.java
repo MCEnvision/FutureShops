@@ -10,7 +10,6 @@ import com.enviouse.futureshopsp.init.ModItems;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
 import com.enviouse.futureshopsp.server.economy.CustodyState;
 import com.enviouse.futureshopsp.server.economy.EconomyRecordChecksum;
-import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import com.enviouse.futureshopsp.api.economy.MutationKind;
 import com.enviouse.futureshopsp.api.economy.MutationRequest;
 import com.enviouse.futureshopsp.api.economy.MutationReceipt;
@@ -59,7 +58,8 @@ public final class DepositCommand {
                     "command.futureshops.economy.internal_only")));
             return 0;
         }
-        EconomyProvider provider = BalanceManager.getProvider();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
+        String currencyName = BalanceManager.getCurrencyName();
         Item coinItem = ModItems.MONEY_ITEM.get();
         SpentMintsSavedData mintData = SpentMintsSavedData.get(player.getServer());
 
@@ -96,7 +96,7 @@ public final class DepositCommand {
         long amountMinorUnits = totalAvailableMinor;
         if (requestedAmount != null) {
             try {
-                long requestedMinorUnits = EconomyCommandUtil.parseAmountToMinorUnits(requestedAmount, provider.getDecimalPlaces());
+                long requestedMinorUnits = EconomyCommandUtil.parseAmountToMinorUnits(requestedAmount, decimalPlaces);
                 if (requestedMinorUnits > totalAvailableMinor) {
                     player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable("command.futureshops.deposit.not_enough_coins")));
                     return 0;
@@ -200,11 +200,11 @@ public final class DepositCommand {
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
                 new MoneyDepositEvent(player.getUUID(), creditedMinor, acceptedTotal));
 
-        String depositedText = EconomyCommandUtil.formatMinorUnits(creditedMinor, provider.getDecimalPlaces());
+        String depositedText = EconomyCommandUtil.formatMinorUnits(creditedMinor, decimalPlaces);
         Component balanceText = EconomyCommandUtil.formatResultingBalance(mutation, player.getUUID(),
-                provider.getDecimalPlaces());
+                decimalPlaces);
         player.sendSystemMessage(EconomyCommandUtil.success(Component.translatable("command.futureshops.deposit.success",
-                depositedText, provider.getCurrencyName(), balanceText)));
+                depositedText, currencyName, balanceText)));
         return 1;
     }
 

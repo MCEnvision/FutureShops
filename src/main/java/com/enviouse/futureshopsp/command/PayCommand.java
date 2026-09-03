@@ -1,7 +1,6 @@
 package com.enviouse.futureshopsp.command;
 
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
-import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import com.enviouse.futureshopsp.server.economy.TransactionResult;
 import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
@@ -33,10 +32,11 @@ public final class PayCommand {
                             return 0;
                         }
 
-                        EconomyProvider provider = BalanceManager.getProvider();
+                        int decimalPlaces = BalanceManager.getDecimalPlaces();
+                        String currencyName = BalanceManager.getCurrencyName();
                         long amountMinorUnits;
                         try {
-                            amountMinorUnits = EconomyCommandUtil.parseAmountToMinorUnits(StringArgumentType.getString(context, "amount"), provider.getDecimalPlaces());
+                            amountMinorUnits = EconomyCommandUtil.parseAmountToMinorUnits(StringArgumentType.getString(context, "amount"), decimalPlaces);
                         } catch (IllegalArgumentException ex) {
                             payer.sendSystemMessage(EconomyCommandUtil.error(Component.translatable("command.futureshops.error.invalid_amount")));
                             return 0;
@@ -48,21 +48,21 @@ public final class PayCommand {
                             return 0;
                         }
 
-                        String amountText = EconomyCommandUtil.formatMinorUnits(amountMinorUnits, provider.getDecimalPlaces());
-                        String payerBalanceText = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
-                        payer.sendSystemMessage(EconomyCommandUtil.success(Component.translatable("command.futureshops.pay.success.sender", amountText, provider.getCurrencyName(), target.getName(), payerBalanceText)));
+                        String amountText = EconomyCommandUtil.formatMinorUnits(amountMinorUnits, decimalPlaces);
+                        String payerBalanceText = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), decimalPlaces);
+                        payer.sendSystemMessage(EconomyCommandUtil.success(Component.translatable("command.futureshops.pay.success.sender", amountText, currencyName, target.getName(), payerBalanceText)));
 
                         ProviderResult<BalanceSnapshot> targetBalance = BalanceManager.queryBalance(target.getUUID());
                         if (targetBalance.confirmed()) {
                             String targetBalanceText = EconomyCommandUtil.formatMinorUnits(
-                                    targetBalance.value().orElseThrow().balanceMinorUnits(), provider.getDecimalPlaces());
+                                    targetBalance.value().orElseThrow().balanceMinorUnits(), decimalPlaces);
                             target.sendSystemMessage(EconomyCommandUtil.success(Component.translatable(
                                     "command.futureshops.pay.success.target", payer.getName(), amountText,
-                                    provider.getCurrencyName(), targetBalanceText)));
+                                    currencyName, targetBalanceText)));
                         } else {
                             target.sendSystemMessage(EconomyCommandUtil.success(Component.translatable(
                                     "command.futureshops.pay.success.target_unavailable", payer.getName(), amountText,
-                                    provider.getCurrencyName())));
+                                    currencyName)));
                         }
                         return 1;
                     }))));

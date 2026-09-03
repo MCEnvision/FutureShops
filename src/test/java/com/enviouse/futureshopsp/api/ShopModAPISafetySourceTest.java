@@ -39,6 +39,27 @@ class ShopModAPISafetySourceTest {
         assertTrue(balanceManager.contains("return mapMutationResult(coordinator().transfer(fromPlayerUUID, toPlayerUUID, amountMinorUnits))"));
     }
 
+    @Test
+    void gameplayConsumersDoNotReadTheLegacyProviderHandle() throws Exception {
+        Path root = projectDirectory();
+        String[] consumers = {
+                "command/WithdrawCommand.java",
+                "command/DepositCommand.java",
+                "command/PayCommand.java",
+                "command/BalanceCommand.java",
+                "command/BalTopCommand.java",
+                "command/ShopAdminCommand.java",
+                "money/MoneyItem.java",
+                "server/shop/MarketplaceAnalyticsService.java",
+                "server/shop/ShopDataService.java"
+        };
+        for (String consumer : consumers) {
+            String source = Files.readString(root.resolve(Path.of(
+                    "src", "main", "java", "com", "enviouse", "futureshopsp", consumer)));
+            assertFalse(source.contains("BalanceManager.getProvider()"), consumer);
+        }
+    }
+
     private static Path projectDirectory() {
         Path candidate = Path.of("").toAbsolutePath();
         while (candidate != null) {

@@ -8,7 +8,6 @@ import com.enviouse.futureshopsp.catalog.ShopCatalog;
 import com.enviouse.futureshopsp.money.MoneyMintRecord;
 import com.enviouse.futureshopsp.money.SpentMintsSavedData;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
-import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import com.enviouse.futureshopsp.server.economy.TransactionResult;
 import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
@@ -860,7 +859,8 @@ public final class ShopAdminCommand {
     }
 
     private static int adminBalSet(CommandSourceStack source, Collection<GameProfile> targets, String amountStr) {
-        EconomyProvider provider = BalanceManager.getProvider();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
+        String currencyName = BalanceManager.getCurrencyName();
         if (!BalanceManager.isInternalEconomyReady()) {
             source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
                     .withStyle(ChatFormatting.RED));
@@ -873,7 +873,7 @@ public final class ShopAdminCommand {
             if (parsed.signum() < 0) {
                 throw new IllegalArgumentException("NEGATIVE");
             }
-            java.math.BigDecimal scaled = parsed.movePointRight(provider.getDecimalPlaces());
+            java.math.BigDecimal scaled = parsed.movePointRight(decimalPlaces);
             if (scaled.stripTrailingZeros().scale() > 0) {
                 throw new IllegalArgumentException("TOO_MANY_DECIMALS");
             }
@@ -885,7 +885,7 @@ public final class ShopAdminCommand {
         }
 
         int successCount = 0;
-        String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, provider.getDecimalPlaces());
+        String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, decimalPlaces);
         final long setAmount = amountMinor;
         for (GameProfile profile : targets) {
             ProviderResult<BalanceSnapshot> result = BalanceManager.setInternalBalance(profile.getId(), setAmount);
@@ -896,7 +896,7 @@ public final class ShopAdminCommand {
             }
             source.sendSuccess(() -> Component.translatable(
                     "command.futureshops.admin.bal.set_success",
-                    profile.getName(), formatted, provider.getCurrencyName())
+                    profile.getName(), formatted, currencyName)
                     .withStyle(ChatFormatting.YELLOW), true);
             successCount++;
         }
@@ -904,7 +904,8 @@ public final class ShopAdminCommand {
     }
 
     private static int adminBalCheck(CommandSourceStack source, Collection<GameProfile> targets) {
-        EconomyProvider provider = BalanceManager.getProvider();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
+        String currencyName = BalanceManager.getCurrencyName();
         int successCount = 0;
         for (GameProfile profile : targets) {
             ProviderResult<BalanceSnapshot> balanceResult = BalanceManager.queryBalance(profile.getId());
@@ -914,10 +915,10 @@ public final class ShopAdminCommand {
                 continue;
             }
             long balance = balanceResult.value().orElseThrow().balanceMinorUnits();
-            String formatted = EconomyCommandUtil.formatMinorUnits(balance, provider.getDecimalPlaces());
+            String formatted = EconomyCommandUtil.formatMinorUnits(balance, decimalPlaces);
             source.sendSuccess(() -> Component.translatable(
                     "command.futureshops.admin.bal.check_line",
-                    profile.getName(), formatted, provider.getCurrencyName())
+                    profile.getName(), formatted, currencyName)
                     .withStyle(ChatFormatting.GRAY), false);
             successCount++;
         }
@@ -925,14 +926,15 @@ public final class ShopAdminCommand {
     }
 
     private static int adminBalReset(CommandSourceStack source, Collection<GameProfile> targets) {
-        EconomyProvider provider = BalanceManager.getProvider();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
+        String currencyName = BalanceManager.getCurrencyName();
         if (!BalanceManager.isInternalEconomyReady()) {
             source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
                     .withStyle(ChatFormatting.RED));
             return 0;
         }
         long startingBalance = com.enviouse.futureshopsp.Config.economyStartingBalanceMinorUnits;
-        String formatted = EconomyCommandUtil.formatMinorUnits(startingBalance, provider.getDecimalPlaces());
+        String formatted = EconomyCommandUtil.formatMinorUnits(startingBalance, decimalPlaces);
 
         int successCount = 0;
         for (GameProfile profile : targets) {
@@ -944,7 +946,7 @@ public final class ShopAdminCommand {
             }
             source.sendSuccess(() -> Component.translatable(
                     "command.futureshops.admin.bal.reset_success",
-                    profile.getName(), formatted, provider.getCurrencyName())
+                    profile.getName(), formatted, currencyName)
                     .withStyle(ChatFormatting.YELLOW), true);
             successCount++;
         }
@@ -979,7 +981,8 @@ public final class ShopAdminCommand {
                     .withStyle(ChatFormatting.GRAY), false);
         } else {
             // Offline player — send a lightweight balance-only view
-            EconomyProvider provider = BalanceManager.getProvider();
+            int decimalPlaces = BalanceManager.getDecimalPlaces();
+            String currencyName = BalanceManager.getCurrencyName();
             ProviderResult<BalanceSnapshot> balanceResult = BalanceManager.queryBalance(targetUuid);
             if (!balanceResult.confirmed()) {
                 source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
@@ -987,12 +990,12 @@ public final class ShopAdminCommand {
                 return 0;
             }
             long balance = balanceResult.value().orElseThrow().balanceMinorUnits();
-            String formatted = EconomyCommandUtil.formatMinorUnits(balance, provider.getDecimalPlaces());
+            String formatted = EconomyCommandUtil.formatMinorUnits(balance, decimalPlaces);
             source.sendSuccess(() -> Component.translatable(
                     "command.futureshops.admin.view.offline_header", targetName)
                     .withStyle(ChatFormatting.GOLD), false);
             source.sendSuccess(() -> Component.translatable(
-                    "command.futureshops.admin.view.offline_balance", formatted, provider.getCurrencyName())
+                    "command.futureshops.admin.view.offline_balance", formatted, currencyName)
                     .withStyle(ChatFormatting.GRAY), false);
             source.sendSuccess(() -> Component.translatable(
                     "command.futureshops.admin.view.offline_uuid", targetUuid)
