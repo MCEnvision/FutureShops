@@ -83,9 +83,16 @@ final class CoordinatedEconomyProvider implements EconomyProvider {
             MutationRequest request = new MutationRequest(RequestId.random(), playerUUID,
                     counterparty == null ? java.util.Optional.empty() : java.util.Optional.of(counterparty),
                     amountMinorUnits, kind);
-            return map(kind == MutationKind.DEPOSIT || kind == MutationKind.TRANSFER_CREDIT
-                    || kind == MutationKind.COMPENSATION
-                    ? coordinator.deposit(request) : coordinator.withdraw(request));
+            ProviderResult<?> result;
+            if (kind == MutationKind.REFUND) {
+                result = coordinator.refund(request);
+            } else if (kind == MutationKind.DEPOSIT || kind == MutationKind.TRANSFER_CREDIT
+                    || kind == MutationKind.COMPENSATION) {
+                result = coordinator.deposit(request);
+            } else {
+                result = coordinator.withdraw(request);
+            }
+            return map(result);
         } catch (IllegalArgumentException exception) {
             return TransactionResult.error(ShopResultCode.INVALID_AMOUNT, 0L);
         }

@@ -311,6 +311,22 @@ class EconomyTransactionCoordinatorTest {
         assertEquals(0, provider.withdrawCalls);
     }
 
+    @Test
+    void refundIsExecutedAsCreditedDeposit() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        EconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.REFUND);
+
+        var result = coordinator.refund(request);
+
+        assertTrue(result.confirmed());
+        assertEquals(1, provider.depositCalls);
+        assertEquals(0, provider.withdrawCalls);
+        assertEquals(125L, provider.balances.get(PLAYER));
+    }
+
     private static EconomyLifecycleController readyLifecycle() {
         EconomyLifecycleController lifecycle = new EconomyLifecycleController(EconomyApi.INTERNAL_PROVIDER_ID);
         lifecycle.resolve(ProviderLifecycle.READY, "", true, true, false);

@@ -188,6 +188,11 @@ public final class EconomyTransactionCoordinator {
         return execute(request, MutationKind.DEPOSIT);
     }
 
+    /** Executes one durable refund leg with its own request identity. */
+    public ProviderResult<MutationReceipt> refund(MutationRequest request) {
+        return execute(request, MutationKind.REFUND);
+    }
+
     /** Executes one durable compensation leg with its own request identity. */
     public ProviderResult<MutationReceipt> compensate(MutationRequest request) {
         return execute(request, MutationKind.COMPENSATION);
@@ -365,7 +370,7 @@ public final class EconomyTransactionCoordinator {
         ProviderResult<MutationReceipt> result;
         try {
             result = expectedKind == MutationKind.DEPOSIT || expectedKind == MutationKind.TRANSFER_CREDIT
-                    || expectedKind == MutationKind.COMPENSATION
+                    || expectedKind == MutationKind.REFUND || expectedKind == MutationKind.COMPENSATION
                     ? provider.deposit(request) : provider.withdraw(request);
         } catch (RuntimeException exception) {
             return ambiguous(pending, "provider mutation failed after pending state");
@@ -412,7 +417,7 @@ public final class EconomyTransactionCoordinator {
                 || !supports(EconomyCapability.RECEIPT_LOOKUP)
                 || !supports(EconomyCapability.IDEMPOTENT_RETRY)
                 || !supports(request.kind() == MutationKind.DEPOSIT || request.kind() == MutationKind.TRANSFER_CREDIT
-                || request.kind() == MutationKind.COMPENSATION
+                || request.kind() == MutationKind.REFUND || request.kind() == MutationKind.COMPENSATION
                 ? EconomyCapability.DEPOSIT : EconomyCapability.WITHDRAW)) {
             return ProviderResult.unavailable(ProviderError.CAPABILITY_MISSING,
                     "provider lacks the capabilities required by this mutation");

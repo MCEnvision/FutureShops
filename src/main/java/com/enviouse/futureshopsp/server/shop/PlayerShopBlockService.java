@@ -1900,10 +1900,15 @@ public final class PlayerShopBlockService {
         try {
             MutationRequest request = new MutationRequest(rootRequest.child(role), actor,
                     counterparty == null ? Optional.empty() : Optional.of(counterparty), amount, kind);
-            ProviderResult<MutationReceipt> result = kind == MutationKind.DEPOSIT
-                    || kind == MutationKind.TRANSFER_CREDIT
-                    || kind == MutationKind.COMPENSATION
-                    ? coordinator.deposit(request) : coordinator.withdraw(request);
+            ProviderResult<MutationReceipt> result;
+            if (kind == MutationKind.REFUND) {
+                result = coordinator.refund(request);
+            } else if (kind == MutationKind.DEPOSIT || kind == MutationKind.TRANSFER_CREDIT
+                    || kind == MutationKind.COMPENSATION) {
+                result = coordinator.deposit(request);
+            } else {
+                result = coordinator.withdraw(request);
+            }
             long balance = result.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
                     ? Optional.of(receipt.resultingBalanceMinorUnits().getAsLong()) : Optional.empty()).orElse(0L);
             return result.confirmed()
