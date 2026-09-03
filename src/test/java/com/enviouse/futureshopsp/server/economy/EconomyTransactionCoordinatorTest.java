@@ -87,6 +87,23 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
+    void journalLookupFailureFreezesBeforeProviderMutation() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        FailingJournal journal = new FailingJournal();
+        journal.failFind = true;
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+
+        var result = coordinator.withdraw(request);
+
+        assertEquals(ProviderResultStatus.RECOVERY_REQUIRED, result.status());
+        assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
+        assertEquals(0, provider.withdrawCalls);
+        assertTrue(journal.snapshot().isEmpty());
+    }
+
+    @Test
     void confirmedOutcomePersistenceFailureFreezesAndRetainsConfirmedRecord() {
         FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
         FailingJournal journal = new FailingJournal();
@@ -556,10 +573,14 @@ class EconomyTransactionCoordinatorTest {
     private static final class FailingJournal implements EconomyTransactionJournal {
         private final InMemoryEconomyTransactionJournal delegate = new InMemoryEconomyTransactionJournal();
         private boolean failAppend;
+        private boolean failFind;
         private EconomyTransactionState failState;
 
         @Override
         public Optional<EconomyJournalRecord> find(RequestId requestId) {
+            if (failFind) {
+                throw new IllegalStateException("find failure");
+            }
             return delegate.find(requestId);
         }
 

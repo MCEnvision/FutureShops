@@ -227,11 +227,21 @@ public final class EconomyTransactionCoordinator {
             return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "invalid custody terminal state");
         }
         synchronized (lock) {
-            EconomyJournalRecord existing = journal.find(request.requestId()).orElse(null);
+            EconomyJournalRecord existing;
+            try {
+                existing = journal.find(request.requestId()).orElse(null);
+            } catch (RuntimeException exception) {
+                return journalFailure("transaction journal lookup failed");
+            }
             if (existing != null) {
                 ProviderResult<MutationReceipt> replayed = replay(existing);
                 if (replayed.confirmed()) {
-                    CustodyRecord custodyRecord = custody.find(request.requestId().child("custody")).orElse(null);
+                    CustodyRecord custodyRecord;
+                    try {
+                        custodyRecord = custody.find(request.requestId().child("custody")).orElse(null);
+                    } catch (RuntimeException exception) {
+                        return journalFailure("custody lookup failed during replay");
+                    }
                     if (custodyRecord == null || !custodyTerminalStateMatches(custodyRecord.state(), terminalState)) {
                         return journalFailure("custody finalization requires recovery");
                     }
@@ -331,7 +341,12 @@ public final class EconomyTransactionCoordinator {
     public ProviderResult<MutationReceipt> recover(RequestId requestId) {
         Objects.requireNonNull(requestId, "requestId");
         synchronized (lock) {
-            EconomyJournalRecord record = journal.find(requestId).orElse(null);
+            EconomyJournalRecord record;
+            try {
+                record = journal.find(requestId).orElse(null);
+            } catch (RuntimeException exception) {
+                return journalFailure("transaction journal lookup failed during recovery");
+            }
             if (record == null) {
                 return ProviderResult.rejected(ProviderError.RECEIPT_NOT_FOUND, "transaction is not journaled");
             }
@@ -389,7 +404,12 @@ public final class EconomyTransactionCoordinator {
             return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "mutation kind does not match route");
         }
         synchronized (lock) {
-            EconomyJournalRecord existing = journal.find(request.requestId()).orElse(null);
+            EconomyJournalRecord existing;
+            try {
+                existing = journal.find(request.requestId()).orElse(null);
+            } catch (RuntimeException exception) {
+                return journalFailure("transaction journal lookup failed");
+            }
             if (existing != null) {
                 return replay(existing);
             }
