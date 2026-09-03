@@ -6,7 +6,7 @@ This packet records the current Phase 002 result for FutureShops 2.3.0 on Minecr
 
 Phase 002 is not closed. Its independent Pixelmon query and refusal work is complete, but exact external runtime authorization and a mutation capable bridge remain unresolved. No pull request, phase integration, tag, release, upload, or issue 66 mutation is authorized by this packet.
 
-GitHub milestone `2.3.0 phase 002 external integrations` is open as milestone `6`. Issue 66 remains untouched while this phase is open, as required by the phase contract.
+GitHub milestone `2.3.0 phase 002 external integrations` is open as milestone `6`. Its description records the exact Pixelmon query and bridge verification scope, with durable external receipts and owner terms authorization as the remaining blockers. Issue 66 remains untouched while this phase is open, as required by the phase contract.
 
 ## Pixelmon result
 
