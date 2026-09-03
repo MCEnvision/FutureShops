@@ -814,6 +814,11 @@ public final class PlayerShopBlockService {
                 sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                 return;
             }
+            if (!ShopTransactionUtil.canFit(buyer.getInventory(), salePreview)) {
+                saleEscrow.markRefunded(saleEscrowRequestId);
+                sendResult(buyer, false, ShopResultCode.INVENTORY_FULL);
+                return;
+            }
             saleEscrowPrepared = true;
 
             if (compoundTrade || barterTrade) {
@@ -1270,13 +1275,10 @@ public final class PlayerShopBlockService {
                 return;
             }
 
-            // Try to insert into inventory; overflow drops on the floor
             if (!ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), extracted)) {
-                for (ItemStack stack : extracted) {
-                    if (!stack.isEmpty()) {
-                        buyer.drop(stack, false);
-                    }
-                }
+                markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
+                sendResult(buyer, false, ShopResultCode.RECOVERY_REQUIRED);
+                return;
             }
             if (custodyHeld) {
                 try {
@@ -1580,10 +1582,13 @@ public final class PlayerShopBlockService {
             delivered.addAll(splitStacks(saleItem, deliverCount, listing.nbtAware() ? listing.nbtPatch() : null));
         }
 
+        if (!ShopTransactionUtil.canFit(buyer.getInventory(), delivered)) {
+            sendResult(buyer, false, ShopResultCode.INVENTORY_FULL);
+            return;
+        }
         if (!ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), delivered)) {
-            for (ItemStack stack : delivered) {
-                if (!stack.isEmpty()) buyer.drop(stack, false);
-            }
+            sendResult(buyer, false, ShopResultCode.RECOVERY_REQUIRED);
+            return;
         }
 
         // History: record the buyer's spend but no owner settlement.

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PlayerShopSaleEscrowSourceTest {
@@ -37,6 +38,10 @@ class PlayerShopSaleEscrowSourceTest {
         assertTrue(source.contains("saleEscrow.markDelivered"));
         assertTrue(source.contains("saleEscrow.markClaimed"));
         assertTrue(source.contains("saleEscrow.markRecoveryRequired"));
+        assertTrue(source.contains("if (!ShopTransactionUtil.canFit(buyer.getInventory(), salePreview))"));
+        assertTrue(source.contains("sendResult(buyer, false, ShopResultCode.RECOVERY_REQUIRED)"));
+        assertTrue(source.contains("if (!ShopTransactionUtil.canFit(buyer.getInventory(), delivered))"));
+        assertFalse(source.contains("buyer.drop(stack, false)"));
     }
 
     @Test
