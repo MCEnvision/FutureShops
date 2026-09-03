@@ -18,7 +18,9 @@ import com.enviouse.futureshopsp.server.shop.PlayerShopBlockService;
 import com.enviouse.futureshopsp.server.shop.PlayerShopSaleEscrowSavedData;
 import com.enviouse.futureshopsp.server.session.ShopSessionManager;
 import com.enviouse.futureshopsp.server.transaction.ShopSellService;
+import com.enviouse.futureshopsp.server.transaction.ShopBuyService;
 import com.enviouse.futureshopsp.network.packets.C2SSellRequestPacket;
+import com.enviouse.futureshopsp.network.packets.C2SBuyRequestPacket;
 import com.enviouse.futureshopsp.catalog.ShopCatalog;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
@@ -216,6 +218,49 @@ public final class EconomyGameTests {
                 "Pixelmon money item refusal must preserve the item stack");
         helper.assertTrue(BalanceManager.getCustodyStore().snapshot().isEmpty(),
                 "Pixelmon money item refusal must not create custody");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void pixelmonCartAndPhysicalCommandRefusal(GameTestHelper helper) {
+        if (!"pixelmon".equals(BalanceManager.getLifecycleSnapshotOrUnresolved().providerId())) {
+            helper.succeed();
+            return;
+        }
+
+        helper.assertTrue(ShopCatalog.getItem("default", "minecraft:diamond").isPresent(),
+                "the disposable server shop must expose the diamond cart listing");
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        int diamondsBefore = player.getInventory().countItem(Items.DIAMOND);
+        int stockBefore = ShopCatalog.getCurrentStock("default", "minecraft:diamond");
+        ShopSessionManager.open(player.getUUID(), "default");
+        try {
+            ShopBuyService.handleBuyRequest(player,
+                    C2SBuyRequestPacket.cart("default",
+                            List.of(new C2SBuyRequestPacket.LineItem("minecraft:diamond", 1))));
+        } finally {
+            ShopSessionManager.close(player.getUUID());
+        }
+        helper.assertTrue(player.getInventory().countItem(Items.DIAMOND) == diamondsBefore,
+                "Pixelmon cart refusal must not deliver an item");
+        helper.assertTrue(ShopCatalog.getCurrentStock("default", "minecraft:diamond") == stockBefore,
+                "Pixelmon cart refusal must not reserve stock");
+        helper.assertTrue(BalanceManager.getCustodyStore().snapshot().isEmpty(),
+                "Pixelmon cart refusal must not create custody");
+
+        ItemStack money = new ItemStack(ModItems.MONEY_ITEM.get(), 1);
+        player.setItemInHand(InteractionHand.MAIN_HAND, money);
+        int moneyBefore = money.getCount();
+        player.getServer().getCommands().performPrefixedCommand(
+                player.createCommandSourceStack(), "withdraw 1");
+        player.getServer().getCommands().performPrefixedCommand(
+                player.createCommandSourceStack(), "deposit");
+        helper.assertTrue(money.getCount() == moneyBefore,
+                "Pixelmon withdraw command must refuse before minting bills");
+        helper.assertTrue(player.getInventory().countItem(ModItems.MONEY_ITEM.get()) == 1,
+                "Pixelmon deposit command must refuse before consuming money");
+        helper.assertTrue(BalanceManager.getCustodyStore().snapshot().isEmpty(),
+                "Pixelmon physical commands must not create custody");
         helper.succeed();
     }
 
