@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ShopClientStateTest {
 
@@ -45,6 +46,17 @@ class ShopClientStateTest {
 
         assertEquals(Long.MAX_VALUE, ShopClientState.getCartTotalMinorUnits());
         assertEquals(2304, ShopClientState.getCartTotalQuantity());
+    }
+
+    @Test
+    void unavailableBalanceNeverSubstitutesZero() {
+        ShopClientState.applyShopData("shop", 12345L, "Coins", 2, List.of(), List.of(), List.of(), List.of(),
+                true, List.of(), true, "internal", "READY", "");
+
+        ShopClientState.setBalanceUnavailable();
+
+        assertFalse(ShopClientState.isBalanceAvailable());
+        assertEquals(12345L, ShopClientState.getCurrentBalanceMinorUnits());
     }
 
     private static CatalogItem item(String listingId, long buyPrice) {
