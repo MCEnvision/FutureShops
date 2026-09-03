@@ -162,6 +162,23 @@ class EconomyTransactionCoordinatorTest {
         assertEquals(ClaimState.RESOLVED, coordinator.resolveClaim(claimId).state());
     }
 
+    @Test
+    void executeWithCustodyRefusesMissingCapabilitiesBeforeHolding() {
+        FixtureProvider provider = new FixtureProvider(new ProviderCapabilities(true, true, true, true, false, false));
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        InMemoryEconomyCustodyStore custody = new InMemoryEconomyCustodyStore();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(
+                provider, lifecycle, journal, custody, new InMemoryEconomyClaimStore());
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+
+        var result = coordinator.executeWithCustody(request, PLAYER, "shop:test", 1L, "hash", CustodyState.CLAIMED);
+
+        assertEquals(ProviderError.CAPABILITY_MISSING, result.error());
+        assertTrue(custody.snapshot().isEmpty());
+        assertTrue(journal.snapshot().isEmpty());
+    }
+
     private static EconomyLifecycleController readyLifecycle() {
         EconomyLifecycleController lifecycle = new EconomyLifecycleController(EconomyApi.INTERNAL_PROVIDER_ID);
         lifecycle.resolve(ProviderLifecycle.READY, "", true, true, false);
