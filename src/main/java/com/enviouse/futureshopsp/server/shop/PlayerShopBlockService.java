@@ -1584,15 +1584,63 @@ public final class PlayerShopBlockService {
             return;
         }
 
-        // Charge money (sunk — never deposited to owner).
-        boolean withdrewFromBuyer = false;
-        if ((compoundTrade || !barterTrade) && cost > 0L) {
-            TransactionResult withdraw = coordinatorMutation(coordinator, transactionId, "admin buyer debit",
-                    buyer.getUUID(), null, cost, MutationKind.WITHDRAW);
-            if (!withdraw.success()) {
-                sendResult(buyer, false, ShopResultCode.INSUFFICIENT_FUNDS);
+        if (buyer.getServer() == null) {
+            sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+            return;
+        }
+
+        PlayerShopSaleEscrowSavedData saleEscrow = PlayerShopSaleEscrowSavedData.get(buyer.getServer());
+        UUID saleEscrowRequestId = transactionId.child("admin sale item escrow").value();
+        long saleQuantity = checkedStackQuantity(delivered);
+        if (saleQuantity <= 0L
+                || !saleEscrow.prepare(saleEscrowRequestId, buyer.getUUID(), pos.asLong(),
+                buyer.level().dimension().location().toString(), listing.itemId(), saleQuantity,
+                delivered, buyer.level().registryAccess())
+                || !saleEscrow.markRemoved(saleEscrowRequestId, delivered, buyer.level().registryAccess())) {
+            sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+            return;
+        }
+
+        PlayerShopBarterEscrowSavedData barterEscrow = null;
+        UUID barterEscrowRequestId = transactionId.child("admin barter item escrow").value();
+        List<ItemStack> paymentPreview = List.of();
+        if (compoundTrade || barterTrade) {
+            paymentPreview = ShopTransactionUtil.snapshotMatchingItems(
+                    buyer.getInventory(), barterItem, barterAmount,
+                    listing.barterNbtAware(), listing.barterNbtPatch());
+            barterEscrow = PlayerShopBarterEscrowSavedData.get(buyer.getServer());
+            if (paymentPreview.isEmpty()
+                    || !barterEscrow.prepare(barterEscrowRequestId, buyer.getUUID(), pos.asLong(),
+                    buyer.level().dimension().location().toString(), listing.itemId(), barterAmount,
+                    paymentPreview, buyer.level().registryAccess())) {
+                markSaleRefunded(saleEscrow, saleEscrowRequestId);
+                sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                 return;
             }
+        }
+
+        // Charge money (sunk — never deposited to owner).
+        boolean withdrewFromBuyer = false;
+        boolean custodyHeld = false;
+        RequestId custodyId = custodyIdFor(transactionId, "admin buyer debit");
+        if ((compoundTrade || !barterTrade) && cost > 0L) {
+            long custodyQuantity = saleQuantity;
+            String custodyItem = "player-shop-admin:" + pos.asLong() + ":" + listing.itemId();
+            String custodyHash = deliveryEntitlementHash(listing, qty, custodyQuantity);
+            ProviderResult<MutationReceipt> debit = coordinatorMutationWithCustody(coordinator, transactionId,
+                    "admin buyer debit", buyer.getUUID(), cost, custodyItem, custodyQuantity, custodyHash);
+            if (!debit.confirmed()) {
+                if (debit.status() == ProviderResultStatus.AMBIGUOUS
+                        || debit.status() == ProviderResultStatus.RECOVERY_REQUIRED) {
+                    markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
+                    sendResult(buyer, false, ShopResultCode.RECOVERY_REQUIRED);
+                } else {
+                    markSaleRefunded(saleEscrow, saleEscrowRequestId);
+                    sendResult(buyer, false, mapProviderResultCode(debit));
+                }
+                return;
+            }
+            custodyHeld = true;
             withdrewFromBuyer = true;
         }
 
@@ -1602,19 +1650,81 @@ public final class PlayerShopBlockService {
                     buyer.getInventory(), barterItem, barterAmount,
                     listing.barterNbtAware(), listing.barterNbtPatch());
             if (paymentStacks.isEmpty()) {
-                if (withdrewFromBuyer) {
-                    coordinatorMutation(coordinator, transactionId, "admin buyer refund",
-                            buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
+                boolean refunded = refundAdminBuyer(coordinator, transactionId, buyer, cost, custodyId, custodyHeld,
+                        withdrewFromBuyer);
+                if (barterEscrow != null && !barterEscrow.markRefunded(barterEscrowRequestId)) {
+                    barterEscrow.markRecoveryRequired(barterEscrowRequestId);
+                    refunded = false;
+                }
+                if (refunded) {
+                    markSaleRefunded(saleEscrow, saleEscrowRequestId);
+                } else {
+                    markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
                 }
                 sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS,
                         "§cTrade cancelled: barter items could not be taken.");
                 return;
             }
-            // Stacks are intentionally discarded — admin shop voids them.
+            if (barterEscrow == null || !barterEscrow.markRemoved(barterEscrowRequestId, paymentStacks,
+                    buyer.level().registryAccess())) {
+                boolean restored = restorePaymentToBuyer(buyer, paymentStacks);
+                boolean refunded = refundAdminBuyer(coordinator, transactionId, buyer, cost, custodyId,
+                        custodyHeld, withdrewFromBuyer);
+                if (barterEscrow != null) {
+                    if (!restored || !barterEscrow.markRefunded(barterEscrowRequestId)) {
+                        barterEscrow.markRecoveryRequired(barterEscrowRequestId);
+                        refunded = false;
+                    }
+                }
+                if (restored && refunded) {
+                    markSaleRefunded(saleEscrow, saleEscrowRequestId);
+                } else {
+                    markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
+                }
+                sendResult(buyer, false, ShopResultCode.RECOVERY_REQUIRED);
+                return;
+            }
+            // Stacks are intentionally voided after their durable escrow is marked removed.
+            if (!barterEscrow.markStored(barterEscrowRequestId)) {
+                barterEscrow.markRecoveryRequired(barterEscrowRequestId);
+                markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
+                sendResult(buyer, false, ShopResultCode.RECOVERY_REQUIRED);
+                return;
+            }
         }
 
         // Deliver freshly minted sale items.
         if (!ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), delivered)) {
+            markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
+            if (barterEscrow != null) {
+                barterEscrow.markRecoveryRequired(barterEscrowRequestId);
+            }
+            if (withdrewFromBuyer) {
+                coordinator.markRecoveryRequired("admin shop delivery requires recovery");
+            }
+            sendResult(buyer, false, ShopResultCode.RECOVERY_REQUIRED);
+            return;
+        }
+
+        if (custodyHeld) {
+            try {
+                coordinator.deliverCustody(custodyId);
+                coordinator.claimCustody(custodyId);
+            } catch (RuntimeException exception) {
+                markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
+                sendResult(buyer, false, ShopResultCode.RECOVERY_REQUIRED);
+                return;
+            }
+        }
+        if (barterEscrow != null && !barterEscrow.markComplete(barterEscrowRequestId)) {
+            barterEscrow.markRecoveryRequired(barterEscrowRequestId);
+            markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
+            sendResult(buyer, false, ShopResultCode.RECOVERY_REQUIRED);
+            return;
+        }
+        if (!saleEscrow.markDelivered(saleEscrowRequestId)
+                || !saleEscrow.markClaimed(saleEscrowRequestId)) {
+            markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
             sendResult(buyer, false, ShopResultCode.RECOVERY_REQUIRED);
             return;
         }
@@ -2211,6 +2321,24 @@ public final class PlayerShopBlockService {
         }
     }
 
+    private static long checkedStackQuantity(List<ItemStack> stacks) {
+        if (stacks == null || stacks.isEmpty()) {
+            return -1L;
+        }
+        try {
+            long total = 0L;
+            for (ItemStack stack : stacks) {
+                if (stack == null || stack.isEmpty()) {
+                    return -1L;
+                }
+                total = Math.addExact(total, stack.getCount());
+            }
+            return total;
+        } catch (ArithmeticException exception) {
+            return -1L;
+        }
+    }
+
     static String deliveryEntitlementHash(ShopBlockEntity.Listing listing, int purchaseQuantity,
                                            long entitlementQuantity) {
         StringBuilder descriptor = new StringBuilder()
@@ -2300,6 +2428,17 @@ public final class PlayerShopBlockService {
             // The lifecycle or an existing terminal transition keeps the recovery record authoritative.
             return false;
         }
+    }
+
+    private static boolean refundAdminBuyer(EconomyTransactionCoordinator coordinator, RequestId transactionId,
+                                            ServerPlayer buyer, long cost, RequestId custodyId,
+                                            boolean custodyHeld, boolean withdrewFromBuyer) {
+        if (!withdrewFromBuyer) {
+            return true;
+        }
+        TransactionResult refund = coordinatorMutation(coordinator, transactionId, "admin buyer refund",
+                buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
+        return refund.success() && releaseCustody(coordinator, custodyId, custodyHeld);
     }
 
     private static ShopResultCode mapProviderResultCode(ProviderResult<?> result) {

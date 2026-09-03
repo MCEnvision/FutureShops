@@ -110,6 +110,35 @@ class PlayerShopSaleEscrowSourceTest {
     }
 
     @Test
+    void adminShopBuySecuresOutputBeforeChargingAndFinalizesCustody() throws Exception {
+        String source = Files.readString(projectDirectory().resolve(Path.of(
+                "src", "main", "java", "com", "enviouse", "futureshopsp", "server", "shop",
+                "PlayerShopBlockService.java")));
+
+        int adminPath = source.indexOf("private static void handleAdminShopBuy");
+        int salePrepare = source.indexOf("saleEscrow.prepare", adminPath);
+        int saleRemoved = source.indexOf("saleEscrow.markRemoved", salePrepare);
+        int debit = source.indexOf("coordinatorMutationWithCustody", saleRemoved);
+        int delivery = source.indexOf("ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), delivered)", debit);
+        int custodyClaim = source.indexOf("coordinator.claimCustody(custodyId)", delivery);
+        int barterRemoved = source.indexOf("barterEscrow.markRemoved", saleRemoved);
+        int barterStored = source.indexOf("barterEscrow.markStored", barterRemoved);
+        int barterComplete = source.indexOf("barterEscrow.markComplete", delivery);
+        int saleClaim = source.indexOf("saleEscrow.markClaimed", custodyClaim);
+        assertTrue(adminPath >= 0);
+        assertTrue(salePrepare > adminPath);
+        assertTrue(saleRemoved > salePrepare);
+        assertTrue(debit > saleRemoved);
+        assertTrue(barterRemoved > saleRemoved);
+        assertTrue(barterStored > barterRemoved);
+        assertTrue(delivery > debit);
+        assertTrue(barterComplete > delivery);
+        assertTrue(custodyClaim > delivery);
+        assertTrue(saleClaim > custodyClaim);
+        assertTrue(source.contains("admin shop delivery requires recovery"));
+    }
+
+    @Test
     void buybackRemovalMismatchCannotSilentlyRefundUnrestoredItems() throws Exception {
         String source = Files.readString(projectDirectory().resolve(Path.of(
                 "src", "main", "java", "com", "enviouse", "futureshopsp", "server", "shop",
