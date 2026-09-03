@@ -122,7 +122,7 @@ public class ItemDetailScreen extends AbstractShopScreen implements ShopScreenMa
                     if (item != null) {
                         long effectivePrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
                         int qty = getQuantity();
-                        String totalStr = ShopUiUtil.formatMinorUnits(effectivePrice * qty);
+                        String totalStr = ShopUiUtil.formatMinorUnits(saturatingMultiply(effectivePrice, qty));
                         confirmationModal = new ConfirmationModal(
                                 I18n.get("gui.futureshops.item_detail.confirm_buy_title"),
                                 java.util.List.of(
@@ -146,7 +146,7 @@ public class ItemDetailScreen extends AbstractShopScreen implements ShopScreenMa
                     CatalogItem item = currentItem();
                     if (item != null) {
                         int qty = getQuantity();
-                        String totalStr = ShopUiUtil.formatMinorUnits(item.sellPrice() * qty);
+                        String totalStr = ShopUiUtil.formatMinorUnits(saturatingMultiply(item.sellPrice(), qty));
                         confirmationModal = new ConfirmationModal(
                                 I18n.get("gui.futureshops.item_detail.confirm_sell_title"),
                                 java.util.List.of(
@@ -253,7 +253,7 @@ public class ItemDetailScreen extends AbstractShopScreen implements ShopScreenMa
 
         // Total cost — currency amber, right below the qty controls
         long effectiveBuyPrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
-        String total = "Total: " + ShopUiUtil.formatMinorUnits(effectiveBuyPrice * getQuantity());
+        String total = "Total: " + ShopUiUtil.formatMinorUnits(saturatingMultiply(effectiveBuyPrice, getQuantity()));
         graphics.drawCenteredString(this.font, total, leftX + PREVIEW_W / 2, panelY + panelH - 26, ShopColors.TEXT_CURRENCY);
 
         // Quantity label — below Total
@@ -340,7 +340,7 @@ public class ItemDetailScreen extends AbstractShopScreen implements ShopScreenMa
                 break;
             }
             int owned = ShopUiUtil.countPlayerInventory(ingredient.itemId());
-            int needed = ingredient.count() * getQuantity();
+            int needed = saturatingMultiplyToInt(ingredient.count(), getQuantity());
             int color = owned >= needed ? ShopColors.SUCCESS : ShopColors.ERROR;
             String label = this.font.plainSubstrByWidth(
                     ShopUiUtil.getItemDisplayName(ingredient.itemId()) + " ×" + needed,
@@ -403,6 +403,22 @@ public class ItemDetailScreen extends AbstractShopScreen implements ShopScreenMa
 
     private int clampQuantity(int quantity) {
         return Math.max(1, Math.min(resolveMaxQuantity(), quantity));
+    }
+
+    private static long saturatingMultiply(long left, long right) {
+        try {
+            return Math.multiplyExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return (left < 0L) == (right < 0L) ? Long.MAX_VALUE : Long.MIN_VALUE;
+        }
+    }
+
+    private static int saturatingMultiplyToInt(int left, int right) {
+        try {
+            return Math.multiplyExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return (left < 0) == (right < 0) ? Integer.MAX_VALUE : Integer.MIN_VALUE;
+        }
     }
 
     @Override

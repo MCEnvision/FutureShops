@@ -1864,7 +1864,7 @@ public class PlayerShopBlockScreen extends AbstractShopScreen implements ShopScr
         PlayerShopListingData listing = PlayerShopClientState.selectedListing();
         if (listing == null) return;
         String itemName = ShopUiUtil.getItemDisplayNameWithNbtAndQty(listing.itemId(), listing.nbtJson(), listing.baseQuantity());
-        long total = listing.effectiveUnitPriceMinor() * quantity;
+        long total = saturatingMultiply(listing.effectiveUnitPriceMinor(), quantity);
         String totalStr = total <= 0
                 ? I18n.get("gui.futureshops.player_shop_block.confirm.free")
                 : ShopUiUtil.formatMinorUnits(total) + " " + ShopClientState.getCurrencyName();
@@ -1882,7 +1882,7 @@ public class PlayerShopBlockScreen extends AbstractShopScreen implements ShopScr
             // Surface the barter cost in the confirmation and use the unified
             //   "Total: §a$X §f+ §9N× item"
             // rendering that cart rows + cart summary bar use end-to-end.
-            int barterAmount = listing.barterItemCount() * quantity;
+            int barterAmount = saturatingMultiplyToInt(listing.barterItemCount(), quantity);
             String barterId = listing.barterItemId();
             boolean hasRealBarterNbt = listing.barterNbtAware()
                     && ShopUiUtil.hasNonDefaultNbt(barterId != null ? barterId : "", listing.barterNbtJson());
@@ -1943,6 +1943,22 @@ public class PlayerShopBlockScreen extends AbstractShopScreen implements ShopScr
 
     private void setQuantity(int quantity) {
         if (quantityBox != null) quantityBox.setValue(Integer.toString(clampQuantity(quantity)));
+    }
+
+    private static long saturatingMultiply(long left, long right) {
+        try {
+            return Math.multiplyExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return (left < 0L) == (right < 0L) ? Long.MAX_VALUE : Long.MIN_VALUE;
+        }
+    }
+
+    private static int saturatingMultiplyToInt(int left, int right) {
+        try {
+            return Math.multiplyExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return (left < 0) == (right < 0) ? Integer.MAX_VALUE : Integer.MIN_VALUE;
+        }
     }
 
     /**
