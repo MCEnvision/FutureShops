@@ -25,6 +25,8 @@ class PlayerShopBarterSafetySourceTest {
         assertTrue(source.contains("return false;\n        }\n        return ShopTransactionUtil.insertIntoInventory"));
         assertTrue(source.contains("barterEscrow.markRecoveryRequired(barterEscrowRequestId)"));
         assertTrue(source.contains("private static boolean rollbackBarterPayment"));
+        assertTrue(source.contains("boolean barterRefunded = !barterEscrowPrepared;"));
+        assertTrue(source.contains("boolean custodyReleased = refund.success()"));
         int restoreStart = source.indexOf("private static boolean restorePaymentToBuyer");
         int restoreEnd = source.indexOf("private static boolean reinsert", restoreStart);
         assertTrue(restoreStart >= 0 && restoreEnd > restoreStart);

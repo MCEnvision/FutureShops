@@ -924,8 +924,10 @@ public final class PlayerShopBlockService {
                         : insertAll(barterStorage.handler(), paymentStacks);
                 if (!insertedOk) {
                     boolean restored = restorePaymentToBuyer(buyer, paymentStacks);
+                    boolean barterRefunded = !barterEscrowPrepared;
                     if (barterEscrowPrepared && restored) {
-                        if (!barterEscrow.markRefunded(barterEscrowRequestId)) {
+                        barterRefunded = barterEscrow.markRefunded(barterEscrowRequestId);
+                        if (!barterRefunded) {
                             barterEscrow.markRecoveryRequired(barterEscrowRequestId);
                             markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
                         }
@@ -935,15 +937,17 @@ public final class PlayerShopBlockService {
                     }
                     TransactionResult refund = coordinatorMutation(coordinator, transactionId,
                             "buyer storage refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
-                    if (refund.success() && restored) {
-                        releaseCustody(coordinator, custodyId, custodyHeld);
+                    boolean custodyReleased = refund.success()
+                            && releaseCustody(coordinator, custodyId, custodyHeld);
+                    if (custodyReleased && restored && barterRefunded) {
                         markSaleRefunded(saleEscrow, saleEscrowRequestId);
                     } else {
                         markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
                     }
                     sendResultWithChat(buyer, false,
-                            restored && refund.success() ? ShopResultCode.STORAGE_FULL : ShopResultCode.RECOVERY_REQUIRED,
-                            restored && refund.success()
+                            restored && refund.success() && barterRefunded && custodyReleased
+                                    ? ShopResultCode.STORAGE_FULL : ShopResultCode.RECOVERY_REQUIRED,
+                            restored && refund.success() && barterRefunded && custodyReleased
                                     ? "§cTrade cancelled: the shop's storage is full."
                                     : "§cTrade requires recovery before it can be completed.");
                     return;
@@ -1137,8 +1141,10 @@ public final class PlayerShopBlockService {
                         : insertAll(barterStorage.handler(), paymentStacks);
                 if (!insertedOk) {
                     boolean restored = restorePaymentToBuyer(buyer, paymentStacks);
+                    boolean barterRefunded = !barterEscrowPrepared;
                     if (barterEscrowPrepared && restored) {
-                        if (!barterEscrow.markRefunded(barterEscrowRequestId)) {
+                        barterRefunded = barterEscrow.markRefunded(barterEscrowRequestId);
+                        if (!barterRefunded) {
                             barterEscrow.markRecoveryRequired(barterEscrowRequestId);
                             markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
                         }
@@ -1146,12 +1152,12 @@ public final class PlayerShopBlockService {
                         barterEscrow.markRecoveryRequired(barterEscrowRequestId);
                         markSaleRecoveryRequired(saleEscrow, saleEscrowRequestId);
                     }
-                    if (restored && barterEscrowPrepared) {
+                    if (restored && barterRefunded) {
                         markSaleRefunded(saleEscrow, saleEscrowRequestId);
                     }
                     sendResultWithChat(buyer, false,
-                            restored && barterEscrowPrepared ? ShopResultCode.STORAGE_FULL : ShopResultCode.RECOVERY_REQUIRED,
-                            restored && barterEscrowPrepared
+                            restored && barterRefunded ? ShopResultCode.STORAGE_FULL : ShopResultCode.RECOVERY_REQUIRED,
+                            restored && barterRefunded
                                     ? "§cTrade cancelled: the shop's storage is full."
                                     : "§cTrade requires recovery before it can be completed.");
                     return;
