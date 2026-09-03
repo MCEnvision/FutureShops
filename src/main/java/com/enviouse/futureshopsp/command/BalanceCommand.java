@@ -2,6 +2,8 @@ package com.enviouse.futureshopsp.command;
 
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
 import com.enviouse.futureshopsp.server.economy.EconomyProvider;
+import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.network.ShopPackets;
 import com.enviouse.futureshopsp.server.shop.MarketplaceAnalyticsService;
 import com.mojang.brigadier.CommandDispatcher;
@@ -56,7 +58,12 @@ public final class BalanceCommand {
 
     private static void sendBalance(ServerPlayer viewer, ServerPlayer target) {
         EconomyProvider provider = BalanceManager.getProvider();
-        long balanceMinorUnits = provider.getBalance(target.getUUID());
+        ProviderResult<BalanceSnapshot> balanceResult = BalanceManager.queryBalance(target.getUUID());
+        if (!balanceResult.confirmed()) {
+            EconomyCommandUtil.sendProviderError(viewer, balanceResult);
+            return;
+        }
+        long balanceMinorUnits = balanceResult.value().orElseThrow().balanceMinorUnits();
         String formatted = EconomyCommandUtil.formatMinorUnits(balanceMinorUnits, provider.getDecimalPlaces());
 
         if (viewer.getUUID().equals(target.getUUID())) {

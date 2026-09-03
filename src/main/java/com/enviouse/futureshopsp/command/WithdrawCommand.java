@@ -68,6 +68,11 @@ public final class WithdrawCommand {
     }
 
     private static int execute(ServerPlayer player, String rawAmount, boolean multipleBills) {
+        if (!BalanceManager.isInternalEconomyReady()) {
+            player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                    "command.futureshops.economy.internal_only")));
+            return 0;
+        }
         EconomyProvider provider = BalanceManager.getProvider();
         long amountMinorUnits;
         try {

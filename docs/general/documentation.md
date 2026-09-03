@@ -38,6 +38,8 @@ The public provider contract requires balance query, precheck, withdraw, deposit
 
 `EconomyJournalSavedData` stores versioned, checksummed request and outcome records under `futureshops_economy_journal`. It stores no external balance field. `EconomyCustodySavedData` stores bounded item identity, owner, quantity, content hash, and `HELD`, `DELIVERED`, `CLAIMED`, or `RELEASED` state under `futureshops_economy_custody`. `EconomyClaimSavedData` stores claimant, exact amount, description, and non expiring `PENDING`, `DELIVERED`, or `RESOLVED` state under `futureshops_economy_claims`.
 
+Physical currency commands and right click deposits check the selected provider and lifecycle before validating or consuming a bill. They are active only for a ready internal provider. Bills remain registered and decodable, but are inert when an external provider or any unsafe lifecycle state is selected.
+
 All new records use explicit schema versions, bounded fields, defensive enum and identifier decoding, and SHA 256 checksums. Unknown newer versions, malformed entries, duplicate identities, or checksum failures are read only recovery blockers. In memory stores are used only by ephemeral unit test servers without a world.
 
 Custody and claims are separate from provider balances. A held item cannot be claimed or released through an invalid transition. A pending claim remains durable while the owner is offline or the lifecycle is frozen. Recovery must use the originating provider and request identity, and it must never guess an external balance or create an automatic refund for an unknown effect.

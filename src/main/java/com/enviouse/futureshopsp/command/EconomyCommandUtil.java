@@ -4,6 +4,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.ChatFormatting;
+import com.enviouse.futureshopsp.api.economy.ProviderError;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
 
 import java.math.BigDecimal;
 import java.util.Locale;
@@ -75,6 +77,20 @@ public final class EconomyCommandUtil {
                     -> "command.futureshops.error.server";
         };
 
+        player.sendSystemMessage(error(Component.translatable(key)));
+    }
+
+    public static void sendProviderError(ServerPlayer player, ProviderResult<?> result) {
+        if (result == null || result.confirmed()) {
+            return;
+        }
+        String key = switch (result.error()) {
+            case INVALID_AMOUNT -> "command.futureshops.error.invalid_amount";
+            case INSUFFICIENT_FUNDS -> "command.futureshops.error.insufficient_funds";
+            case NONE, INVALID_REQUEST, CAPABILITY_MISSING, NOT_READY, INCOMPATIBLE,
+                 PERMISSION_DENIED, DUPLICATE_REQUEST, RECEIPT_NOT_FOUND, PROVIDER_EXCEPTION,
+                 TIMEOUT, UNKNOWN -> "command.futureshops.economy.unavailable";
+        };
         player.sendSystemMessage(error(Component.translatable(key)));
     }
 

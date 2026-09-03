@@ -10,6 +10,8 @@ import com.enviouse.futureshopsp.money.SpentMintsSavedData;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
 import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import com.enviouse.futureshopsp.server.economy.TransactionResult;
+import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.server.session.ShopSessionManager;
 import com.enviouse.futureshopsp.server.shop.AdminShopToggleSavedData;
 import com.enviouse.futureshopsp.server.shop.AdminCategorySavedData;
@@ -857,6 +859,11 @@ public final class ShopAdminCommand {
 
     private static int adminBalSet(CommandSourceStack source, Collection<GameProfile> targets, String amountStr) {
         EconomyProvider provider = BalanceManager.getProvider();
+        if (!BalanceManager.isInternalEconomyReady()) {
+            source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
         long amountMinor;
         try {
             // Allow 0 for set
@@ -885,7 +892,13 @@ public final class ShopAdminCommand {
         String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, provider.getDecimalPlaces());
         final long setAmount = amountMinor;
         for (GameProfile profile : targets) {
-            long oldBalance = provider.getBalance(profile.getId());
+            ProviderResult<BalanceSnapshot> oldBalanceResult = BalanceManager.queryBalance(profile.getId());
+            if (!oldBalanceResult.confirmed()) {
+                source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
+                        .withStyle(ChatFormatting.RED));
+                continue;
+            }
+            long oldBalance = oldBalanceResult.value().orElseThrow().balanceMinorUnits();
             balData.setBalance(profile.getId(), setAmount);
             // Fire BalanceChangeEvent.Post (spec §33) — admin set bypasses Pre since it's non-cancellable admin action
             long delta = setAmount - oldBalance;
@@ -902,19 +915,32 @@ public final class ShopAdminCommand {
 
     private static int adminBalCheck(CommandSourceStack source, Collection<GameProfile> targets) {
         EconomyProvider provider = BalanceManager.getProvider();
+        int successCount = 0;
         for (GameProfile profile : targets) {
-            long balance = provider.getBalance(profile.getId());
+            ProviderResult<BalanceSnapshot> balanceResult = BalanceManager.queryBalance(profile.getId());
+            if (!balanceResult.confirmed()) {
+                source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
+                        .withStyle(ChatFormatting.RED));
+                continue;
+            }
+            long balance = balanceResult.value().orElseThrow().balanceMinorUnits();
             String formatted = EconomyCommandUtil.formatMinorUnits(balance, provider.getDecimalPlaces());
             source.sendSuccess(() -> Component.translatable(
                     "command.futureshops.admin.bal.check_line",
                     profile.getName(), formatted, provider.getCurrencyName())
                     .withStyle(ChatFormatting.GRAY), false);
+            successCount++;
         }
-        return targets.size();
+        return successCount;
     }
 
     private static int adminBalReset(CommandSourceStack source, Collection<GameProfile> targets) {
         EconomyProvider provider = BalanceManager.getProvider();
+        if (!BalanceManager.isInternalEconomyReady()) {
+            source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
         long startingBalance = com.enviouse.futureshopsp.Config.economyStartingBalanceMinorUnits;
         String formatted = EconomyCommandUtil.formatMinorUnits(startingBalance, provider.getDecimalPlaces());
 
@@ -924,7 +950,13 @@ public final class ShopAdminCommand {
                 .computeIfAbsent(new net.minecraft.world.level.saveddata.SavedData.Factory<>(com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::new, com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::load, null), com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData.DATA_NAME);
 
         for (GameProfile profile : targets) {
-            long oldBalance = provider.getBalance(profile.getId());
+            ProviderResult<BalanceSnapshot> oldBalanceResult = BalanceManager.queryBalance(profile.getId());
+            if (!oldBalanceResult.confirmed()) {
+                source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
+                        .withStyle(ChatFormatting.RED));
+                continue;
+            }
+            long oldBalance = oldBalanceResult.value().orElseThrow().balanceMinorUnits();
             balData.setBalance(profile.getId(), startingBalance);
             // Fire BalanceChangeEvent.Post (spec §33) — admin reset
             long delta = startingBalance - oldBalance;
@@ -1374,4 +1406,3 @@ public final class ShopAdminCommand {
         return null;
     }
 }
-

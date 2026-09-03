@@ -1,6 +1,8 @@
 {
   "gui.futureshops.economy.balance_unavailable": "Balance unavailable",
   "gui.futureshops.economy.provider_unavailable": "%s provider is %s",
+  "command.futureshops.economy.internal_only": "Physical currency is available only when the internal economy is ready.",
+  "command.futureshops.economy.unavailable": "Economy balance is unavailable. Try again when the provider is ready.",
   "gui.futureshops.shop.title": "Server Shop",
   "gui.futureshops.shop.search": "Search",
   "gui.futureshops.shop.no_items": "No items found",
@@ -404,6 +406,7 @@
   "command.futureshops.pay.self": "You cannot pay yourself.",
   "command.futureshops.pay.success.sender": "Paid %s %s to %s. Your new balance: %s",
   "command.futureshops.pay.success.target": "%s paid you %s %s. Your new balance: %s",
+  "command.futureshops.pay.success.target_unavailable": "%s paid you %s %s. Your balance is currently unavailable.",
   "command.futureshops.baltop.header": "=== Top Balances (Page %s) ===",
   "command.futureshops.baltop.entry": "#%s %s: %s %s",
   "command.futureshops.baltop.empty": "No balance entries found for page %s.",

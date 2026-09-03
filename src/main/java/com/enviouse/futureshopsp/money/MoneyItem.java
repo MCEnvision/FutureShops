@@ -48,6 +48,12 @@ public class MoneyItem extends Item {
             return InteractionResultHolder.pass(stack);
         }
 
+        if (!BalanceManager.isInternalEconomyReady()) {
+            serverPlayer.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                    "command.futureshops.economy.internal_only")));
+            return InteractionResultHolder.fail(stack);
+        }
+
         MoneyValidationService.ConsumeOutcome outcome =
                 MoneyValidationService.validateAndConsume(serverPlayer.getServer(), stack);
 

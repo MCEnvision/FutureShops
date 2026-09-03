@@ -8,6 +8,8 @@ import com.enviouse.futureshopsp.data.TransactionHistoryEntry;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
 import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import com.enviouse.futureshopsp.server.economy.TransactionResult;
+import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.server.session.ShopSessionManager;
 import com.enviouse.futureshopsp.server.shop.ShopDataService;
 import com.enviouse.futureshopsp.server.shop.StockRefreshScheduler;
@@ -64,6 +66,13 @@ public final class ShopModAPI {
      */
     public static long getBalance(UUID playerUUID) {
         return BalanceManager.getBalance(playerUUID);
+    }
+
+    /**
+     * Queries a balance without converting an unavailable provider into zero.
+     */
+    public static ProviderResult<BalanceSnapshot> queryBalance(UUID playerUUID) {
+        return BalanceManager.queryBalance(playerUUID);
     }
 
     /**
@@ -192,6 +201,9 @@ public final class ShopModAPI {
      * Fires {@link com.enviouse.futureshopsp.event.BalanceChangeEvent.Post} with reason "ADMIN".
      */
     public static void setBalance(MinecraftServer server, UUID playerUUID, long amountMinor) {
+        if (!BalanceManager.isInternalEconomyReady()) {
+            throw new IllegalStateException("Direct balance overrides require the ready internal economy.");
+        }
         var overworld = server.overworld();
         var balData = overworld.getDataStorage()
                 .computeIfAbsent(new net.minecraft.world.level.saveddata.SavedData.Factory<>(com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::new, com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::load, null), com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData.DATA_NAME);
@@ -253,5 +265,3 @@ public final class ShopModAPI {
         return ShopSessionManager.snapshotSessions().size();
     }
 }
-
-

@@ -151,6 +151,12 @@ public final class BalanceManager {
                 : lifecycleController.snapshot();
     }
 
+    public static boolean isInternalEconomyReady() {
+        EconomyLifecycleSnapshot state = getLifecycleSnapshotOrUnresolved();
+        return EconomyApi.INTERNAL_PROVIDER_ID.equals(state.providerId())
+                && state.lifecycle() == ProviderLifecycle.READY;
+    }
+
     public static EconomyCustodyStore getCustodyStore() {
         if (custody == null) {
             throw new IllegalStateException("Economy custody accessed before initialization.");

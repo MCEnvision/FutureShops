@@ -49,6 +49,11 @@ public final class DepositCommand {
     }
 
     private static int deposit(ServerPlayer player, String requestedAmount) {
+        if (!BalanceManager.isInternalEconomyReady()) {
+            player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                    "command.futureshops.economy.internal_only")));
+            return 0;
+        }
         EconomyProvider provider = BalanceManager.getProvider();
         Item coinItem = ModItems.MONEY_ITEM.get();
         SpentMintsSavedData mintData = SpentMintsSavedData.get(player.getServer());

@@ -3,6 +3,8 @@ package com.enviouse.futureshopsp.command;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
 import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import com.enviouse.futureshopsp.server.economy.TransactionResult;
+import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
@@ -50,10 +52,19 @@ public final class PayCommand {
                         String payerBalanceText = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
                         payer.sendSystemMessage(EconomyCommandUtil.success(Component.translatable("command.futureshops.pay.success.sender", amountText, provider.getCurrencyName(), target.getName(), payerBalanceText)));
 
-                        String targetBalanceText = EconomyCommandUtil.formatMinorUnits(provider.getBalance(target.getUUID()), provider.getDecimalPlaces());
-                        target.sendSystemMessage(EconomyCommandUtil.success(Component.translatable("command.futureshops.pay.success.target", payer.getName(), amountText, provider.getCurrencyName(), targetBalanceText)));
+                        ProviderResult<BalanceSnapshot> targetBalance = BalanceManager.queryBalance(target.getUUID());
+                        if (targetBalance.confirmed()) {
+                            String targetBalanceText = EconomyCommandUtil.formatMinorUnits(
+                                    targetBalance.value().orElseThrow().balanceMinorUnits(), provider.getDecimalPlaces());
+                            target.sendSystemMessage(EconomyCommandUtil.success(Component.translatable(
+                                    "command.futureshops.pay.success.target", payer.getName(), amountText,
+                                    provider.getCurrencyName(), targetBalanceText)));
+                        } else {
+                            target.sendSystemMessage(EconomyCommandUtil.success(Component.translatable(
+                                    "command.futureshops.pay.success.target_unavailable", payer.getName(), amountText,
+                                    provider.getCurrencyName())));
+                        }
                         return 1;
                     }))));
     }
 }
-
