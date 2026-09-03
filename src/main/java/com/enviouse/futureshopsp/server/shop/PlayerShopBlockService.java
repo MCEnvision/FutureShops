@@ -582,8 +582,11 @@ public final class PlayerShopBlockService {
             // Check if this is a bundle listing (Item 11)
             boolean isBundle = !listing.bundleOutputs().isEmpty();
 
-            // Item 32: actual items to deliver = baseQuantity * qty
-            int deliverCount = listing.baseQuantity() * qty;
+            int deliverCount = checkedDeliveryCount(listing.baseQuantity(), qty);
+            if (deliverCount <= 0) {
+                sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+                return;
+            }
 
             // ═══ Admin shop short-circuit ═══
             // Infinite stock, money sunk on buys, barter inputs voided. No
@@ -608,7 +611,11 @@ public final class PlayerShopBlockService {
                         sendResult(buyer, false, ShopResultCode.INVALID_ITEM);
                         return;
                     }
-                    int needed = entry.count() * qty;
+                    int needed = checkedDeliveryCount(entry.count(), qty);
+                    if (needed <= 0) {
+                        sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+                        return;
+                    }
                     if (!canExtractNbt(linkedStorage, bundleItem, needed, entry.nbtPatch() != null, entry.nbtPatch())) {
                         sendResult(buyer, false, ShopResultCode.OUT_OF_STOCK);
                         return;
@@ -625,9 +632,12 @@ public final class PlayerShopBlockService {
             RequestId transactionId = RequestId.random();
             RequestId custodyId = null;
             String custodyItem = "player-shop:" + pos.asLong() + ":" + listing.itemId();
-            long custodyQuantity = Math.max(1L, deliverCount);
-            String custodyHash = com.enviouse.futureshopsp.server.economy.EconomyRecordChecksum
-                    .sha256(listing.itemId() + ":" + qty + ":" + deliverCount);
+            long custodyQuantity = deliveryEntitlementQuantity(listing, qty, deliverCount);
+            if (custodyQuantity <= 0L) {
+                sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+                return;
+            }
+            String custodyHash = deliveryEntitlementHash(listing, qty, custodyQuantity);
             boolean custodyHeld = false;
             long cost = Math.max(0L, listing.calculatePrice(qty));
             boolean withdrewFromBuyer = false;
@@ -1035,7 +1045,15 @@ public final class PlayerShopBlockService {
                 extracted = new ArrayList<>();
                 for (ShopBlockEntity.BundleEntry entry : listing.bundleOutputs()) {
                     Item bundleItem = ShopTransactionUtil.resolveItem(entry.itemId());
-                    int needed = entry.count() * qty;
+                    int needed = checkedDeliveryCount(entry.count(), qty);
+                    if (needed <= 0) {
+                        rollbackAll(linkedStorage, barterStorage, buyer, coordinator, transactionId, custodyId, custodyHeld,
+                                withdrewFromBuyer, cost, recordedSale,
+                                shop.getOwnerUuid(), pos, barterItem, barterAmount, insertedPayment, compoundTrade, barterTrade,
+                                listing.barterNbtAware(), listing.barterNbtPatch(), barterEscrow, barterEscrowRequestId);
+                        sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+                        return;
+                    }
                     List<ItemStack> part = extractNbt(linkedStorage, bundleItem, needed, entry.nbtPatch() != null, entry.nbtPatch());
                     if (part.isEmpty()) {
                         // Rollback already-extracted items
@@ -1775,6 +1793,51 @@ public final class PlayerShopBlockService {
 
     private static void sendResult(ServerPlayer player, boolean success, ShopResultCode code) {
         ShopPackets.sendToPlayer(player, new S2CPlayerShopResultPacket(success, code.wire(), ""));
+    }
+
+    static int checkedDeliveryCount(int unitCount, int purchaseQuantity) {
+        if (unitCount <= 0 || purchaseQuantity <= 0) {
+            return -1;
+        }
+        try {
+            return Math.multiplyExact(unitCount, purchaseQuantity);
+        } catch (ArithmeticException exception) {
+            return -1;
+        }
+    }
+
+    static long deliveryEntitlementQuantity(ShopBlockEntity.Listing listing, int purchaseQuantity,
+                                            int singleItemQuantity) {
+        if (listing == null || purchaseQuantity <= 0 || singleItemQuantity <= 0) {
+            return -1L;
+        }
+        if (listing.bundleOutputs().isEmpty()) {
+            return singleItemQuantity;
+        }
+        try {
+            long total = 0L;
+            for (ShopBlockEntity.BundleEntry entry : listing.bundleOutputs()) {
+                total = Math.addExact(total, Math.multiplyExact((long) entry.count(), purchaseQuantity));
+            }
+            return total;
+        } catch (ArithmeticException exception) {
+            return -1L;
+        }
+    }
+
+    static String deliveryEntitlementHash(ShopBlockEntity.Listing listing, int purchaseQuantity,
+                                           long entitlementQuantity) {
+        StringBuilder descriptor = new StringBuilder()
+                .append(listing.itemId()).append('|')
+                .append(purchaseQuantity).append('|')
+                .append(entitlementQuantity).append('|')
+                .append(listing.nbtAware()).append('|')
+                .append(listing.nbtPatch());
+        for (ShopBlockEntity.BundleEntry entry : listing.bundleOutputs()) {
+            descriptor.append('|').append(entry.itemId()).append('|').append(entry.count())
+                    .append('|').append(entry.nbtPatch());
+        }
+        return com.enviouse.futureshopsp.server.economy.EconomyRecordChecksum.sha256(descriptor.toString());
     }
 
     private static ShopResultCode mapProviderError(ProviderResult<?> result) {
