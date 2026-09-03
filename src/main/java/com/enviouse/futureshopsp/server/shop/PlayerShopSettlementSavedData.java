@@ -120,7 +120,28 @@ public final class PlayerShopSettlementSavedData extends SavedData {
         return overworld.getDataStorage().computeIfAbsent(new SavedData.Factory<>(PlayerShopSettlementSavedData::new, PlayerShopSettlementSavedData::load, null), DATA_NAME);
     }
 
-    public synchronized void recordSale(UUID owner, long shopPosLong, long amountMinor, String itemId, int quantity) {
+    public synchronized boolean canRecordSale(UUID owner, long shopPosLong, long amountMinor) {
+        if (amountMinor < 0L) {
+            return false;
+        }
+        ShopSettlement current = settlementsByShopPos.get(shopPosLong);
+        if (current != null && !current.owner().equals(owner)) {
+            return false;
+        }
+        long safeAmount = Math.max(0L, amountMinor);
+        try {
+            Math.addExact(current == null ? 0L : current.pendingMinor(), safeAmount);
+            Math.addExact(current == null ? 0L : current.lifetimeMinor(), safeAmount);
+            return true;
+        } catch (ArithmeticException exception) {
+            return false;
+        }
+    }
+
+    public synchronized boolean recordSale(UUID owner, long shopPosLong, long amountMinor, String itemId, int quantity) {
+        if (!canRecordSale(owner, shopPosLong, amountMinor)) {
+            return false;
+        }
         ShopSettlement current = settlementsByShopPos.get(shopPosLong);
         if (current == null || !current.owner().equals(owner)) {
             current = new ShopSettlement(owner, 0L, 0L, null, 0L);
@@ -135,6 +156,7 @@ public final class PlayerShopSettlementSavedData extends SavedData {
 
         appendRow(owner, new RevenueRow(Instant.now().getEpochSecond(), shopPosLong, amountMinor, "SALE", itemId == null ? "" : itemId, Math.max(0, quantity)));
         setDirty();
+        return true;
     }
 
     public synchronized SettlementClaim beginClaim(UUID owner, long shopPosLong) {

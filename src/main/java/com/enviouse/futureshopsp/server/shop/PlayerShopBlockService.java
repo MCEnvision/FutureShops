@@ -677,6 +677,15 @@ public final class PlayerShopBlockService {
                 // Allow external mods to modify price
                 cost = preEvent.getPriceMinor();
             }
+            if (cost < 0L) {
+                sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+                return;
+            }
+            if (buyer.getServer() != null && !PlayerShopSettlementSavedData.get(buyer.getServer())
+                    .canRecordSale(shop.getOwnerUuid(), pos.asLong(), cost)) {
+                sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                return;
+            }
 
             // ═══ Item 16/17: Pre-validate barter payment insertion (overflow detection) ═══
             // Item 24: Use effective barter count (promo-adjusted, rounds up)

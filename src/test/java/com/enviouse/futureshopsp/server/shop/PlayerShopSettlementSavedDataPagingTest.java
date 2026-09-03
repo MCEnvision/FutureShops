@@ -40,4 +40,14 @@ class PlayerShopSettlementSavedDataPagingTest {
         assertEquals(25L, data.snapshot(owner, 42L, 6).pendingMinor());
         assertFalse(data.completeClaim(owner, 42L, first.requestId(), first.amountMinor()));
     }
+
+    @Test
+    void settlementOverflowIsRejectedBeforeMutation() {
+        UUID owner = UUID.randomUUID();
+        PlayerShopSettlementSavedData data = new PlayerShopSettlementSavedData();
+        assertTrue(data.recordSale(owner, 42L, Long.MAX_VALUE, "minecraft:stone", 1));
+        assertFalse(data.canRecordSale(owner, 42L, 1L));
+        assertFalse(data.recordSale(owner, 42L, 1L, "minecraft:dirt", 1));
+        assertEquals(Long.MAX_VALUE, data.snapshot(owner, 42L, 6).pendingMinor());
+    }
 }
