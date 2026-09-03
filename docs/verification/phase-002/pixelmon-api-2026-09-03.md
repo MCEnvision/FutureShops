@@ -26,6 +26,8 @@ A disposable Java probe compiled successfully against the exact 9.4.0 universal 
 
 The complete public economy surface was also enumerated. `BankAccountManager` only supplies synchronous and asynchronous account lookup. `EconomyEvent.PreTransaction` is cancellable and exposes the transaction type, current balance, and mutable change. `EconomyEvent.PostTransaction` exposes the transaction type and old and new balances. `EconomyEvent.SetBalance` is cancellable. None of these manager or event types carries a FutureShops request UUID, an operation token, a durable receipt, a receipt lookup method, or an idempotent retry method. `BankAccount` mutation methods remain direct boolean `take` and `add` calls, and `setBalance` is a direct void setter.
 
+The exact 9.4.0 Pixelmon consumers confirm the same boundary. `BankTransferCommand`, `GiveMoneyCommand`, and `ShopTransactionPacket` call the direct account methods and do not pass a request identity or retain a durable receipt. Their command and shop paths also use primitive numeric overloads and discard the boolean mutation result. These consumers do not provide a transaction coordinator that FutureShops can safely adopt.
+
 The usable strict capabilities are balance query and precheck. The API does not expose an operation UUID, durable receipt, receipt lookup by request identity, or idempotent retry. A local FutureShops request UUID cannot make a boolean Pixelmon call idempotent. `setBalance`, `take`, and `add` are therefore classified as unsafe for production mutation under the current contract.
 
 ## Mapping
