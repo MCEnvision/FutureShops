@@ -104,6 +104,23 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
+    void capabilityLookupFailureMarksProviderFailedBeforeMutation() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        provider.throwCapabilities = true;
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle,
+                new InMemoryEconomyTransactionJournal());
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+
+        var result = coordinator.withdraw(request);
+
+        assertEquals(ProviderResultStatus.UNAVAILABLE, result.status());
+        assertEquals(ProviderError.CAPABILITY_MISSING, result.error());
+        assertEquals(ProviderLifecycle.FAILED, lifecycle.snapshot().lifecycle());
+        assertEquals(0, provider.withdrawCalls);
+    }
+
+    @Test
     void confirmedOutcomePersistenceFailureFreezesAndRetainsConfirmedRecord() {
         FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
         FailingJournal journal = new FailingJournal();
@@ -443,6 +460,7 @@ class EconomyTransactionCoordinatorTest {
         private boolean rejectFirstDeposit;
         private boolean rejectAllDeposits;
         private boolean lookupValueOnly;
+        private boolean throwCapabilities;
 
         private FixtureProvider(ProviderCapabilities capabilities) {
             this.capabilities = capabilities;
@@ -466,6 +484,9 @@ class EconomyTransactionCoordinatorTest {
 
         @Override
         public ProviderCapabilities capabilities() {
+            if (throwCapabilities) {
+                throw new IllegalStateException("capability failure");
+            }
             return capabilities;
         }
 

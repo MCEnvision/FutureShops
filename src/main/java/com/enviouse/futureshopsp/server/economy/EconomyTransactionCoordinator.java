@@ -584,8 +584,13 @@ public final class EconomyTransactionCoordinator {
     }
 
     private boolean supports(EconomyCapability capability) {
-        ProviderCapabilities capabilities = provider.capabilities();
-        return capabilities != null && capabilities.supports(capability);
+        try {
+            ProviderCapabilities capabilities = provider.capabilities();
+            return capabilities != null && capabilities.supports(capability);
+        } catch (RuntimeException exception) {
+            lifecycle.markFailed("provider capability lookup failed");
+            return false;
+        }
     }
 
     private static void publishConfirmedBalanceChange(MutationRequest request, MutationReceipt receipt) {
