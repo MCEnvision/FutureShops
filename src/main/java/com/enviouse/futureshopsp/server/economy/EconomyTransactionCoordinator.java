@@ -273,8 +273,8 @@ public final class EconomyTransactionCoordinator {
         }
         if (supportsAllMutationCapabilities()) {
             MutationRequest compensation = new MutationRequest(root.child("transfer compensation"), from, Optional.of(to),
-                    amountMinorUnits, MutationKind.COMPENSATION);
-            execute(compensation, MutationKind.COMPENSATION);
+                    amountMinorUnits, MutationKind.DEPOSIT);
+            execute(compensation, MutationKind.DEPOSIT);
         }
         return creditResult;
     }
@@ -465,8 +465,8 @@ public final class EconomyTransactionCoordinator {
             return;
         }
         long delta = switch (request.kind()) {
-            case DEPOSIT, TRANSFER_CREDIT, REFUND, COMPENSATION -> request.amountMinorUnits();
-            case WITHDRAW, TRANSFER_DEBIT, FEE -> -request.amountMinorUnits();
+            case DEPOSIT, TRANSFER_CREDIT, REFUND -> request.amountMinorUnits();
+            case WITHDRAW, TRANSFER_DEBIT, FEE, COMPENSATION -> -request.amountMinorUnits();
         };
         String reason = switch (request.kind()) {
             case DEPOSIT -> "DEPOSIT";

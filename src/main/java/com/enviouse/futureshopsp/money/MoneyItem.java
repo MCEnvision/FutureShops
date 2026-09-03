@@ -100,7 +100,7 @@ public class MoneyItem extends Item {
             if (outcome.accepted() != preview.accepted() || outcome.rejected() != preview.rejected()) {
                 ProviderResult<com.enviouse.futureshopsp.api.economy.MutationReceipt> compensation =
                         BalanceManager.getCoordinator().compensate(
-                                MutationRequest.forPlayer(RequestId.random(), serverPlayer.getUUID(),
+                                MutationRequest.forPlayer(requestId.child("compensation"), serverPlayer.getUUID(),
                                         acceptedValue, MutationKind.COMPENSATION));
                 if (compensation.confirmed()) {
                     mintData.restore(outcome.mintId(), outcome.accepted(), outcome.denominationMinorUnits(),
