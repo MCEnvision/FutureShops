@@ -24,6 +24,7 @@ public final class BalanceManager {
     private static EconomyTransactionJournal journal;
     private static EconomyCustodyStore custody;
     private static EconomyClaimStore claims;
+    private static InternalEconomyReceiptStore receipts;
 
     private BalanceManager() {
     }
@@ -35,18 +36,22 @@ public final class BalanceManager {
         journal = ephemeral ? new InMemoryEconomyTransactionJournal() : EconomyJournalSavedData.get(server);
         custody = ephemeral ? new InMemoryEconomyCustodyStore() : EconomyCustodySavedData.get(server);
         claims = ephemeral ? new InMemoryEconomyClaimStore() : EconomyClaimSavedData.get(server);
+        receipts = ephemeral ? new InMemoryInternalEconomyReceiptStore() : InternalEconomyReceiptSavedData.get(server);
         boolean cleanMarkerValid = journal.cleanMarkerValid() && custody.cleanMarkerValid() && claims.cleanMarkerValid();
-        boolean integrityValid = journal.integrityValid() && custody.integrityValid() && claims.integrityValid();
+        cleanMarkerValid &= receipts.cleanMarkerValid();
+        boolean integrityValid = journal.integrityValid() && custody.integrityValid() && claims.integrityValid()
+                && receipts.integrityValid();
         boolean hasIncompleteRecords = journal.hasIncompleteRecords() || custody.hasIncompleteRecords()
                 || claims.hasIncompleteRecords();
         journal.markUnclean();
         custody.markUnclean();
         claims.markUnclean();
+        receipts.markUnclean();
         lifecycleController = new EconomyLifecycleController(selection.activeProviderId());
         if (EconomyApi.INTERNAL_PROVIDER_ID.equals(selection.activeProviderId())) {
             InternalEconomyProvider legacy = new InternalEconomyProvider(server);
             com.enviouse.futureshopsp.api.economy.EconomyProvider publicProvider =
-                    new PublicInternalEconomyProvider(legacy);
+                    new PublicInternalEconomyProvider(legacy, receipts);
             lifecycleController.resolve(ProviderLifecycle.READY, "", cleanMarkerValid, integrityValid,
                     hasIncompleteRecords);
             coordinator = new EconomyTransactionCoordinator(publicProvider, lifecycleController, journal, custody, claims);
@@ -75,7 +80,9 @@ public final class BalanceManager {
             boolean journalFlushed = journal == null || journal.flush();
             boolean custodyFlushed = custody == null || custody.flush();
             boolean claimsFlushed = claims == null || claims.flush();
-            if (lifecycleController.writeCleanMarkerLast(journalFlushed, custodyFlushed, claimsFlushed, true)) {
+            boolean receiptsFlushed = receipts == null || receipts.flush();
+            if (lifecycleController.writeCleanMarkerLast(journalFlushed && receiptsFlushed,
+                    custodyFlushed, claimsFlushed, true)) {
                 if (journal != null) {
                     journal.markCleanMarker();
                 }
@@ -85,6 +92,9 @@ public final class BalanceManager {
                 if (claims != null) {
                     claims.markCleanMarker();
                 }
+                if (receipts != null) {
+                    receipts.markCleanMarker();
+                }
             }
         }
         provider = null;
@@ -93,6 +103,7 @@ public final class BalanceManager {
         journal = null;
         custody = null;
         claims = null;
+        receipts = null;
     }
 
     public static void beginDraining() {

@@ -13,19 +13,19 @@ import com.enviouse.futureshopsp.api.economy.ProviderReadiness;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.api.economy.RequestId;
 
-import java.util.Map;
 import java.util.OptionalLong;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /** Public API adapter for the existing internal provider. */
 final class PublicInternalEconomyProvider implements com.enviouse.futureshopsp.api.economy.EconomyProvider {
     private final com.enviouse.futureshopsp.server.economy.EconomyProvider oldProvider;
-    private final Map<RequestId, MutationReceipt> receipts = new ConcurrentHashMap<>();
+    private final InternalEconomyReceiptStore receipts;
     private final ProviderCapabilities capabilities = ProviderCapabilities.all();
 
-    PublicInternalEconomyProvider(com.enviouse.futureshopsp.server.economy.EconomyProvider oldProvider) {
+    PublicInternalEconomyProvider(com.enviouse.futureshopsp.server.economy.EconomyProvider oldProvider,
+                                  InternalEconomyReceiptStore receipts) {
         this.oldProvider = oldProvider;
+        this.receipts = receipts;
     }
 
     @Override
@@ -90,23 +90,21 @@ final class PublicInternalEconomyProvider implements com.enviouse.futureshopsp.a
 
     @Override
     public ProviderResult<MutationReceipt> lookup(RequestId requestId) {
-        MutationReceipt receipt = receipts.get(requestId);
-        return receipt == null ? ProviderResult.rejected(ProviderError.RECEIPT_NOT_FOUND, "receipt not found")
-                : ProviderResult.confirmed(receipt);
+        return receipts.find(requestId).map(ProviderResult::confirmed)
+                .orElseGet(() -> ProviderResult.rejected(ProviderError.RECEIPT_NOT_FOUND, "receipt not found"));
     }
 
     @Override
     public ProviderResult<MutationReceipt> retry(MutationRequest request) {
-        MutationReceipt existing = receipts.get(request.requestId());
-        return existing == null ? mutate(request, request.kind() == MutationKind.DEPOSIT
-                || request.kind() == MutationKind.TRANSFER_CREDIT) : ProviderResult.confirmed(existing);
+        return receipts.find(request.requestId()).map(ProviderResult::confirmed)
+                .orElseGet(() -> mutate(request, request.kind() == MutationKind.DEPOSIT
+                        || request.kind() == MutationKind.TRANSFER_CREDIT));
     }
 
     private ProviderResult<MutationReceipt> mutate(MutationRequest request, boolean deposit) {
-        MutationReceipt existing = receipts.get(request.requestId());
-        if (existing != null) {
-            return ProviderResult.confirmed(existing);
-        }
+        ProviderResult<MutationReceipt> existing = receipts.find(request.requestId()).map(ProviderResult::confirmed)
+                .orElse(null);
+        if (existing != null) return existing;
         String reason = switch (request.kind()) {
             case WITHDRAW -> "WITHDRAW";
             case DEPOSIT -> "DEPOSIT";
@@ -124,7 +122,7 @@ final class PublicInternalEconomyProvider implements com.enviouse.futureshopsp.a
         MutationReceipt receipt = new MutationReceipt(request.requestId(), request.kind(),
                 request.amountMinorUnits(), request.requestId().value().toString(),
                 OptionalLong.of(result.resultingBalance()));
-        receipts.put(request.requestId(), receipt);
+        receipts.put(receipt);
         return ProviderResult.confirmed(receipt);
     }
 
