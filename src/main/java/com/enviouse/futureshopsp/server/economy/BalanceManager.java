@@ -32,6 +32,7 @@ public final class BalanceManager {
     private static PlayerShopBarterEscrowSavedData barterEscrow;
     private static PlayerShopSaleEscrowSavedData saleEscrow;
     private static PlayerShopSettlementSavedData settlements;
+    private static boolean internalBalanceIntegrity = true;
 
     private BalanceManager() {
     }
@@ -48,6 +49,8 @@ public final class BalanceManager {
         saleEscrow = ephemeral ? new PlayerShopSaleEscrowSavedData() : PlayerShopSaleEscrowSavedData.get(server);
         settlements = ephemeral ? new PlayerShopSettlementSavedData() : PlayerShopSettlementSavedData.get(server);
         boolean internalSelection = EconomyApi.INTERNAL_PROVIDER_ID.equals(selection.activeProviderId());
+        InternalEconomyProvider internalLegacy = internalSelection ? new InternalEconomyProvider(server) : null;
+        internalBalanceIntegrity = internalLegacy == null || internalLegacy.persistenceIntegrityValid();
         boolean cleanMarkerValid = journal.cleanMarkerValid() && custody.cleanMarkerValid() && claims.cleanMarkerValid()
                 && barterEscrow.cleanMarkerValid() && saleEscrow.cleanMarkerValid() && settlements.cleanMarkerValid();
         if (internalSelection) {
@@ -55,6 +58,7 @@ public final class BalanceManager {
         }
         boolean integrityValid = journal.integrityValid() && custody.integrityValid() && claims.integrityValid()
                 && barterEscrow.integrityValid() && saleEscrow.integrityValid() && settlements.integrityValid()
+                && (!internalSelection || internalBalanceIntegrity)
                 && (!internalSelection || receipts.integrityValid());
         boolean hasIncompleteRecords = journal.hasIncompleteRecords() || custody.hasIncompleteRecords()
                 || claims.hasIncompleteRecords() || barterEscrow.hasIncompleteRecords() || saleEscrow.hasIncompleteRecords();
@@ -69,14 +73,13 @@ public final class BalanceManager {
         }
         lifecycleController = new EconomyLifecycleController(selection.activeProviderId());
         if (EconomyApi.INTERNAL_PROVIDER_ID.equals(selection.activeProviderId())) {
-            InternalEconomyProvider legacy = new InternalEconomyProvider(server);
             com.enviouse.futureshopsp.api.economy.EconomyProvider publicProvider =
-                    new PublicInternalEconomyProvider(legacy, receipts);
+                    new PublicInternalEconomyProvider(internalLegacy, receipts);
             lifecycleController.resolve(ProviderLifecycle.READY, "", cleanMarkerValid, integrityValid,
                     hasIncompleteRecords);
             coordinator = new EconomyTransactionCoordinator(publicProvider, lifecycleController, journal, custody, claims);
             recoverIncompleteJournalRecords();
-            provider = new CoordinatedEconomyProvider(publicProvider, coordinator, legacy);
+            provider = new CoordinatedEconomyProvider(publicProvider, coordinator, internalLegacy);
             return;
         }
         ProviderResolution resolution = EconomyProviderRegistry.resolve(
@@ -149,6 +152,7 @@ public final class BalanceManager {
             barterEscrow = null;
             saleEscrow = null;
             settlements = null;
+            internalBalanceIntegrity = true;
         }
     }
 
@@ -204,6 +208,10 @@ public final class BalanceManager {
     private static boolean persistenceIntegrityValid() {
         if (!journal.integrityValid() || !custody.integrityValid() || !claims.integrityValid()
                 || !barterEscrow.integrityValid() || !saleEscrow.integrityValid() || !settlements.integrityValid()) {
+            return false;
+        }
+        if (EconomyApi.INTERNAL_PROVIDER_ID.equals(lifecycleController.snapshot().providerId())
+                && !internalBalanceIntegrity) {
             return false;
         }
         return !EconomyApi.INTERNAL_PROVIDER_ID.equals(lifecycleController.snapshot().providerId())

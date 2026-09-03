@@ -143,4 +143,8 @@ public class InternalEconomyProvider implements EconomyProvider {
         ServerLevel overworld = server.overworld();
         return overworld.getDataStorage().computeIfAbsent(new SavedData.Factory<>(InternalBalanceSavedData::new, InternalBalanceSavedData::load, null), InternalBalanceSavedData.DATA_NAME);
     }
+
+    boolean persistenceIntegrityValid() {
+        return getData().integrityValid();
+    }
 }
