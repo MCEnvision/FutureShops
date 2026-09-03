@@ -54,9 +54,9 @@ These authorized runs prove full mod and plugin startup and the restart-only con
 
 ### Disposable live provider probe
 
-The exact Pixelmon only profile loaded a disposable runtime probe alongside FutureShops and Pixelmon. It queried UUID `00000000-0000-0000-0000-000000000001`, then submitted a one minor unit withdrawal through the public `EconomyTransactionCoordinator`. The probe jar SHA 256 is `27e439bb4e62b75e5ed33129e9eec271147936ca60cf2566293f05136b4c10da`.
+The exact Pixelmon only profile loaded a disposable runtime probe alongside FutureShops and Pixelmon. It queried UUID `00000000-0000-0000-0000-000000000001`, then submitted a one minor unit preflight and withdrawal through the public `EconomyTransactionCoordinator`. The probe jar SHA 256 is `02c7799a6907b57ad9c4b9ffbb57c04d8641fa9ab9dac316476a90c5f03763d1`.
 
-The bounded command was `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 timeout 120 bash ./run.sh nogui` from `/tmp/futureshops-pixelmon-exact.xIDOL4`. The complete log is `/tmp/futureshops-pixelmon-exact-runtime-probe-typed-refusal-20260903.log`. The server reached `Done (0.955s)` and `FutureShops server starting.` The probe reported a confirmed live Pixelmon query with `balanceMinorUnits=0`, followed by `mutationStatus=UNAVAILABLE`, `mutationError=CAPABILITY_MISSING`, and `mutationDiagnostic=provider lacks the capabilities required by this mutation`.
+The bounded command was `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 timeout 120 bash ./run.sh nogui` from `/tmp/futureshops-pixelmon-exact.xIDOL4`. The complete log is `/tmp/futureshops-pixelmon-exact-runtime-probe-preflight-20260903.log`. The server reached `Done (0.922s)` and `FutureShops server starting.` The probe reported a confirmed live Pixelmon query with `balanceMinorUnits=0`, followed by both preflight and mutation returning `UNAVAILABLE`, `CAPABILITY_MISSING`, and `provider lacks the capabilities required by this mutation`.
 
 The lifecycle snapshot's `acceptsMutations=true` field describes server lifecycle readiness and does not override the provider capability descriptor. The typed coordinator refusal occurred before journal append, custody creation, or Pixelmon `take` or `add` calls. This proves live query and pre effect mutation refusal for a disposable account. It does not claim a successful external debit, player workflow coverage, or restart recovery.
 
