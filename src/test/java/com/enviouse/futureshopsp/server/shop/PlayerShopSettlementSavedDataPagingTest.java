@@ -83,6 +83,33 @@ class PlayerShopSettlementSavedDataPagingTest {
     }
 
     @Test
+    void oversizedPersistedRevenueTextIsReadOnly() {
+        UUID owner = UUID.randomUUID();
+        CompoundTag legacy = new CompoundTag();
+        legacy.putInt("schemaVersion", 1);
+        CompoundTag ownerTag = new CompoundTag();
+        ownerTag.putUUID("owner", owner);
+        ListTag rows = new ListTag();
+        CompoundTag row = new CompoundTag();
+        row.putLong("ts", 1L);
+        row.putLong("shopPos", 42L);
+        row.putLong("amount", 1L);
+        row.putString("type", "x".repeat(65));
+        row.putString("itemId", "minecraft:stone");
+        row.putInt("quantity", 1);
+        rows.add(row);
+        ownerTag.put("rows", rows);
+        ListTag ownerRows = new ListTag();
+        ownerRows.add(ownerTag);
+        legacy.put("ownerRows", ownerRows);
+
+        PlayerShopSettlementSavedData restored = PlayerShopSettlementSavedData.load(legacy, null);
+
+        assertFalse(restored.integrityValid());
+        assertTrue(restored.snapshot(owner, 42L, 6).rows().isEmpty());
+    }
+
+    @Test
     void legacySettlementDataMigratesToChecksummedSchema() {
         UUID owner = UUID.randomUUID();
         CompoundTag legacy = new CompoundTag();

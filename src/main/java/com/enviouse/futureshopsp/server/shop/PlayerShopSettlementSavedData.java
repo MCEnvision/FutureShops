@@ -27,6 +27,8 @@ public final class PlayerShopSettlementSavedData extends SavedData {
     private static final int MAX_SETTLEMENTS = 10_000;
     private static final int MAX_OWNERS = 10_000;
     private static final int MAX_ROWS_PER_OWNER = 40;
+    private static final int MAX_TYPE_LENGTH = 64;
+    private static final int MAX_ITEM_ID_LENGTH = 256;
 
     private final Map<Long, ShopSettlement> settlementsByShopPos = new HashMap<>();
     private final Map<UUID, List<RevenueRow>> rowsByOwner = new HashMap<>();
@@ -102,8 +104,14 @@ public final class PlayerShopSettlementSavedData extends SavedData {
                     data.integrityValid = false;
                     continue;
                 }
+                String type = row.getString("type");
+                String itemId = row.getString("itemId");
+                if (type.length() > MAX_TYPE_LENGTH || itemId.length() > MAX_ITEM_ID_LENGTH) {
+                    data.integrityValid = false;
+                    continue;
+                }
                 rows.add(new RevenueRow(row.getLong("ts"), row.getLong("shopPos"), row.getLong("amount"),
-                        row.getString("type"), row.getString("itemId"), row.getInt("quantity")));
+                        type, itemId, row.getInt("quantity")));
             }
             data.rowsByOwner.put(owner, rows);
         }
