@@ -14,6 +14,8 @@ The available bridge files were inspected outside the repository.
 
 The bridge contains `v1_21_R1` classes and can wire Pixelmon to Vault on a hybrid server. It is still a Bukkit plugin stack, not a NeoForge provider API. The exact profile below includes its required EverNifeCore artifact.
 
+The authoritative [EverNife PixelmonEconomyBridge source](https://github.com/EverNife/PixelmonEconomyBridge) was inspected at commit `3290c81d248ed1241792e4c857b86f98f344bd08`. The repository exposes only tag `1.1.6`; its `v1_21_1` `VaultBankAccount` delegates `take` and `add` directly to Vault and provides no request identity, durable receipt, receipt lookup, or retry operation.
+
 The public EverNife repositories for PixelmonEconomyBridge, FinalEconomy, and EverNifeCore expose no GitHub license metadata and no root license file. Their separately installed artifacts therefore remain license provenance unresolved for this phase. The Youer repository declares a `LICENSE.md`, but its GitHub license metadata is `NOASSERTION`.
 
 ## Exact hybrid profile
