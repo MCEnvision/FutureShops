@@ -30,10 +30,16 @@ The real NeoForge GameTest server passed all eleven economy tests in `/tmp/futur
 
 The rebuilt `build/libs/futureshops-2.3.0.jar` passed `unzip -tq`. Its SHA 256 is `30b02e65ecd2dce47accdfa0bfbbb4e1464c43f25d7774eaab8b0bcecec2b6ba` and its SHA 512 is `1ab37a9ed664ce57d547a699d9d9a16d50d833296e0a3d18725d29232034723546e4e9e878cbb23f967cef334b53287869734f843030df7abcd472c8b03d9896`. The jar contains no Pixelmon, Bukkit, Spigot, Vault, bridge, or test fixture classes. The optional adapter has no forbidden external dependency according to the dependency and `jdeps` scans.
 
+## Exact environment assembly
+
+The disposable profile `/tmp/futureshops-pixelmon-exact.xIDOL4` contains the exact FutureShops, Pixelmon, and GeckoLib jars above plus the NeoForge 21.1.248 server installation. The NeoForge installer SHA 256 is `68eeab77059ba53df1812f1afa5bf530ab2566a3cdcd5f924aa6e71be42e410c`; the installed NeoForge server jar SHA 256 is `1808fab692dc44b2d474295d1cdd9f1fe8a7dceab4f594210873646fafdf1359`. The profile config selects `pixelmon` and keeps `eula=false`.
+
+The bounded command `timeout 60 bash ./run.sh` from that profile exited zero after discovering FutureShops 2.3.0, GeckoLib 4.8.4, Minecraft 1.21.1, NeoForge 21.1.248, and Pixelmon 9.4.0. The server then stopped at the EULA gate as required. The sanitized log is `/tmp/futureshops-pixelmon-exact-eula-false-20260903.log`. No Pixelmon query, mutation, restart, or recovery behavior was claimed from this preacceptance run.
+
 The security review found no exploitable repository defect. The residual risk is the intentionally unsupported direct Pixelmon mutation path and the unproven bridge mutation path. Detailed evidence is in [Pixelmon API evidence](pixelmon-api-2026-09-03.md), [Pixelmon refusal evidence](pixelmon-refusal-2026-09-03.md), [bridge review](bridge-review-2026-09-03.md), and [security review](security-2026-09-03.md).
 
 ## Open gates and next action
 
-The exact official Pixelmon development bundle remains unavailable, although the exact universal artifact and interface injection file now support a disposable compile probe. The exact disposable Pixelmon and hybrid runtime workflows remain unverified under the required owner authorization record. The reviewed bridge lacks the strict mutation and recovery capabilities required for `vault`. These gates keep CORE-REQ-018 open and prevent Phase 002 pull request integration.
+The exact universal artifact, interface injection file, and a public MDK compile path are now available and the exact disposable Pixelmon profile is assembled. Full Pixelmon and hybrid runtime workflows remain unverified under the required owner authorization record. The reviewed bridge lacks the strict mutation and recovery capabilities required for `vault`. These gates keep CORE-REQ-018 open and prevent Phase 002 pull request integration.
 
 The next safe action is to obtain the exact authorized development and runtime inputs, or a separately installed bridge that provides stable request identity, durable receipts, exact integer conversion, and idempotent retry. Reclassify and rerun only the affected capability, crash, recovery, and surface matrices when those inputs exist. Issue 66 remains frozen until Phase 003 validates the final artifact.
