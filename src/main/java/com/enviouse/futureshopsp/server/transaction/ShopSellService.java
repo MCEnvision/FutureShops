@@ -112,7 +112,16 @@ public final class ShopSellService {
             // NBT-aware match: for an NBT-keyed listing (enchanted book, Tacz gun, …) the player must
             // hand over the exact tagged variant; for a bare listing requiredTag stays null so only
             // plain/tag-less stacks match (prevents dumping enchanted/damaged gear as a plain item).
-            net.minecraft.core.component.DataComponentPatch requiredTag = NbtMatchUtil.snbtToPatchMigrating(player.level().registryAccess(), net.minecraft.resources.ResourceLocation.parse(itemId), itemDef.nbtJson());
+            net.minecraft.core.component.DataComponentPatch requiredTag;
+            try {
+                requiredTag = NbtMatchUtil.snbtToPatchMigrating(player.level().registryAccess(),
+                        net.minecraft.resources.ResourceLocation.parse(itemId), itemDef.nbtJson());
+            } catch (RuntimeException exception) {
+                com.mojang.logging.LogUtils.getLogger().warn(
+                        "[FutureShops] Invalid SNBT for sell listing '{}' in shop '{}' — rejecting sell.",
+                        packet.listingId(), shopId, exception);
+                return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_ITEM);
+            }
 
             Inventory inventory = player.getInventory();
             if (ShopTransactionUtil.countItems(inventory, item, true, requiredTag) < quantity) {
