@@ -321,6 +321,48 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
+    void custodyFinalizationFailureAfterProviderConfirmationFreezesRecovery() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        FailingCustodyStore custody = new FailingCustodyStore();
+        custody.failTransition = true;
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(
+                provider, lifecycle, journal, custody, new InMemoryEconomyClaimStore());
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+
+        var result = coordinator.executeWithCustody(request, PLAYER, "shop:test", 1L, "hash",
+                CustodyState.DELIVERED);
+
+        assertEquals(ProviderResultStatus.RECOVERY_REQUIRED, result.status());
+        assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
+        assertEquals(1, provider.withdrawCalls);
+        assertEquals(CustodyState.HELD,
+                custody.find(request.requestId().child("custody")).orElseThrow().state());
+        assertEquals(EconomyTransactionState.RESOLVED,
+                journal.find(request.requestId()).orElseThrow().state());
+    }
+
+    @Test
+    void custodiedReplayRequiresDurableCustodyBeforeReportingSuccess() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+        MutationReceipt receipt = provider.receipt(request);
+        journal.append(new EconomyJournalRecord(request, EconomyTransactionState.RESOLVED,
+                Optional.of(receipt), ProviderResultStatus.CONFIRMED, ""));
+
+        var result = coordinator.executeWithCustody(request, PLAYER, "shop:test", 1L, "hash",
+                CustodyState.CLAIMED);
+
+        assertEquals(ProviderResultStatus.RECOVERY_REQUIRED, result.status());
+        assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
+        assertEquals(0, provider.withdrawCalls);
+    }
+
+    @Test
     void executeWithCustodyPersistsIntentBeforeCustody() {
         List<String> order = new ArrayList<>();
         FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
@@ -649,6 +691,34 @@ class EconomyTransactionCoordinatorTest {
 
         @Override
         public CustodyRecord transition(RequestId requestId, CustodyState expected, CustodyState next) {
+            return delegate.transition(requestId, expected, next);
+        }
+
+        @Override
+        public List<CustodyRecord> snapshot() {
+            return delegate.snapshot();
+        }
+    }
+
+    private static final class FailingCustodyStore implements EconomyCustodyStore {
+        private final InMemoryEconomyCustodyStore delegate = new InMemoryEconomyCustodyStore();
+        private boolean failTransition;
+
+        @Override
+        public Optional<CustodyRecord> find(RequestId requestId) {
+            return delegate.find(requestId);
+        }
+
+        @Override
+        public CustodyRecord hold(RequestId requestId, UUID owner, String itemKey, long quantity, String contentHash) {
+            return delegate.hold(requestId, owner, itemKey, quantity, contentHash);
+        }
+
+        @Override
+        public CustodyRecord transition(RequestId requestId, CustodyState expected, CustodyState next) {
+            if (failTransition) {
+                throw new IllegalStateException("transition failure");
+            }
             return delegate.transition(requestId, expected, next);
         }
 
