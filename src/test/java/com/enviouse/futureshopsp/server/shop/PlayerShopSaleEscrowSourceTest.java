@@ -81,6 +81,26 @@ class PlayerShopSaleEscrowSourceTest {
         assertTrue(complete > sellerCredit);
     }
 
+    @Test
+    void adminBuybackPreflightsAndEscrowsBeforeVoid() throws Exception {
+        String source = Files.readString(projectDirectory().resolve(Path.of(
+                "src", "main", "java", "com", "enviouse", "futureshopsp", "server", "shop",
+                "PlayerShopBlockService.java")));
+
+        int handleSell = source.indexOf("public static void handleSell");
+        int adminPath = source.indexOf("if (shop.isAdminShopMode()) {", handleSell);
+        int admission = source.indexOf("coordinator.preflight(adminCreditRequest)", adminPath);
+        int prepare = source.indexOf("itemEscrow.prepare", adminPath);
+        int remove = source.indexOf("collectAndRemoveItems", adminPath);
+        int credit = source.indexOf("coordinator.deposit(adminCreditRequest)", adminPath);
+        assertTrue(handleSell >= 0);
+        assertTrue(adminPath > handleSell);
+        assertTrue(admission > adminPath);
+        assertTrue(prepare > admission);
+        assertTrue(remove > prepare);
+        assertTrue(credit > remove);
+    }
+
     private static Path projectDirectory() {
         Path candidate = Path.of("").toAbsolutePath();
         while (candidate != null) {

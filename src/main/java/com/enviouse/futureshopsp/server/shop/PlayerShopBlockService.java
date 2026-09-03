@@ -2303,20 +2303,72 @@ public final class PlayerShopBlockService {
             RequestId transactionId = RequestId.random();
 
             if (shop.isAdminShopMode()) {
-                // Void the items, mint the money.
+                MutationRequest adminCreditRequest = new MutationRequest(
+                        transactionId.child("admin seller credit"), seller.getUUID(),
+                        Optional.of(shop.getOwnerUuid()), total, MutationKind.DEPOSIT);
+                ProviderResult<BalanceSnapshot> adminAdmission = coordinator.preflight(adminCreditRequest);
+                if (!adminAdmission.confirmed()) {
+                    sendResult(seller, false, mapProviderResultCode(adminAdmission));
+                    return;
+                }
+                if (seller.getServer() == null) {
+                    sendResult(seller, false, ShopResultCode.SERVER_ERROR);
+                    return;
+                }
+                PlayerShopBarterEscrowSavedData itemEscrow = PlayerShopBarterEscrowSavedData.get(seller.getServer());
+                UUID itemEscrowRequestId = transactionId.child("admin buyback item escrow").value();
+                List<ItemStack> escrowPreview = ShopTransactionUtil.snapshotMatchingItems(
+                        seller.getInventory(), saleItem, needItems, nbtAware, nbtPatch);
+                if (escrowPreview.isEmpty() || !itemEscrow.prepare(itemEscrowRequestId, seller.getUUID(), pos.asLong(),
+                        seller.level().dimension().location().toString(), listing.itemId(), needItems,
+                        escrowPreview, seller.level().registryAccess())) {
+                    sendResult(seller, false, ShopResultCode.MISSING_ITEMS);
+                    return;
+                }
+
+                // Void the items only after the exact stacks are durably escrowed.
                 List<ItemStack> taken = ShopTransactionUtil.collectAndRemoveItems(
                         seller.getInventory(), saleItem, needItems, nbtAware, nbtPatch);
                 if (taken.isEmpty()) {
+                    itemEscrow.markRefunded(itemEscrowRequestId);
                     sendResultWithChat(seller, false, ShopResultCode.MISSING_ITEMS,
                             "§cYou don't have enough of that item.");
                     return;
                 }
-                TransactionResult dep = coordinatorMutation(coordinator, transactionId, "admin seller credit",
-                        seller.getUUID(), shop.getOwnerUuid(), total, MutationKind.DEPOSIT);
-                if (!dep.success()) {
-                    // Roll back: return items to seller.
+                if (!itemEscrow.markRemoved(itemEscrowRequestId, taken, seller.level().registryAccess())) {
                     ShopTransactionUtil.insertIntoInventory(seller.getInventory(), taken);
+                    itemEscrow.markRefunded(itemEscrowRequestId);
                     sendResult(seller, false, ShopResultCode.SERVER_ERROR);
+                    return;
+                }
+                // The admin shop is the terminal sink for the sold stacks.
+                if (!itemEscrow.markStored(itemEscrowRequestId)) {
+                    itemEscrow.markRecoveryRequired(itemEscrowRequestId);
+                    sendResult(seller, false, ShopResultCode.RECOVERY_REQUIRED);
+                    return;
+                }
+                ProviderResult<MutationReceipt> credit = coordinator.deposit(adminCreditRequest);
+                if (!credit.confirmed()) {
+                    if (credit.status() == ProviderResultStatus.AMBIGUOUS
+                            || credit.status() == ProviderResultStatus.RECOVERY_REQUIRED) {
+                        itemEscrow.markRecoveryRequired(itemEscrowRequestId);
+                        sendResult(seller, false, ShopResultCode.RECOVERY_REQUIRED);
+                        return;
+                    }
+                    if (ShopTransactionUtil.canFit(seller.getInventory(), taken)
+                            && ShopTransactionUtil.insertIntoInventory(seller.getInventory(), taken)) {
+                        itemEscrow.markRefunded(itemEscrowRequestId);
+                    } else {
+                        itemEscrow.markRecoveryRequired(itemEscrowRequestId);
+                        sendResult(seller, false, ShopResultCode.RECOVERY_REQUIRED);
+                        return;
+                    }
+                    sendResult(seller, false, mapProviderResultCode(credit));
+                    return;
+                }
+                if (!itemEscrow.markComplete(itemEscrowRequestId)) {
+                    itemEscrow.markRecoveryRequired(itemEscrowRequestId);
+                    sendResult(seller, false, ShopResultCode.RECOVERY_REQUIRED);
                     return;
                 }
                 incrementBuyback(listing, qty);
