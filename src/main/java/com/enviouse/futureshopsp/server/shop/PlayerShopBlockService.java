@@ -425,7 +425,7 @@ public final class PlayerShopBlockService {
                     }
                     PlayerShopSettlementSavedData settlements = PlayerShopSettlementSavedData.get(player.getServer());
                     PlayerShopSettlementSavedData.SettlementClaim settlementClaim =
-                            settlements.beginClaim(player.getUUID(), pos.asLong());
+                            settlements.previewClaim(player.getUUID(), pos.asLong());
                     if (settlementClaim == null || settlementClaim.amountMinor() <= 0L) {
                         sendResult(player, false, ShopResultCode.NOTHING_TO_CLAIM);
                         return;
@@ -444,6 +444,15 @@ public final class PlayerShopBlockService {
                             sendResult(player, false, mapProviderError(admission));
                             return;
                         }
+                    }
+                    PlayerShopSettlementSavedData.SettlementClaim persistedClaim =
+                            settlements.beginClaim(player.getUUID(), pos.asLong());
+                    if (persistedClaim == null || !persistedClaim.equals(settlementClaim)) {
+                        coordinator.markRecoveryRequired("settlement claim identity changed during preflight");
+                        sendResult(player, false, ShopResultCode.CLAIM_FAILED);
+                        return;
+                    }
+                    if (claim == null) {
                         claim = coordinator.createClaim(requestId, player.getUUID(),
                                 settlementClaim.amountMinor(), description);
                     }

@@ -240,7 +240,11 @@ public final class PlayerShopSettlementSavedData extends SavedData {
         return true;
     }
 
-    public synchronized SettlementClaim beginClaim(UUID owner, long shopPosLong) {
+    /**
+     * Returns the deterministic claim identity without persisting it. Callers use this for
+     * capability and lifecycle preflight before changing settlement state.
+     */
+    public synchronized SettlementClaim previewClaim(UUID owner, long shopPosLong) {
         if (owner == null) {
             return null;
         }
@@ -257,11 +261,27 @@ public final class PlayerShopSettlementSavedData extends SavedData {
         if (request == null || amount <= 0L) {
             request = stableClaimRequest(owner, shopPosLong, pending, settlement.lifetimeMinor());
             amount = pending;
-            settlementsByShopPos.put(shopPosLong,
-                    new ShopSettlement(owner, pending, settlement.lifetimeMinor(), request, amount));
-            setDirty();
+        }
+        if (amount > pending) {
+            return null;
         }
         return new SettlementClaim(request, amount);
+    }
+
+    /** Persists the claim identity after the caller has completed provider preflight. */
+    public synchronized SettlementClaim beginClaim(UUID owner, long shopPosLong) {
+        SettlementClaim claim = previewClaim(owner, shopPosLong);
+        if (claim == null) {
+            return null;
+        }
+        ShopSettlement settlement = settlementsByShopPos.get(shopPosLong);
+        if (settlement.claimRequest() == null || settlement.claimAmount() <= 0L) {
+            settlementsByShopPos.put(shopPosLong,
+                    new ShopSettlement(owner, settlement.pendingMinor(), settlement.lifetimeMinor(),
+                            claim.requestId(), claim.amountMinor()));
+            setDirty();
+        }
+        return claim;
     }
 
     private static UUID stableClaimRequest(UUID owner, long shopPosLong, long pendingMinor,

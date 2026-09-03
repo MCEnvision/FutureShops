@@ -54,12 +54,17 @@ class PlayerShopSaleEscrowSourceTest {
                 "server", "shop", "PlayerShopBlockService.java")));
 
         int claimLookup = source.indexOf("coordinator.claim(requestId).orElse(null)");
+        int claimPreview = source.indexOf("settlements.previewClaim");
         int preflight = source.indexOf("coordinator.preflight(depositRequest)");
+        int claimBegin = source.indexOf("settlements.beginClaim", preflight);
         int createClaim = source.indexOf("coordinator.createClaim(requestId");
         int settlementLock = source.indexOf("ReentrantLock settlementLock");
         assertTrue(claimLookup >= 0);
+        assertTrue(claimPreview > settlementLock);
+        assertTrue(preflight > claimPreview);
+        assertTrue(claimBegin > preflight);
         assertTrue(preflight > claimLookup);
-        assertTrue(createClaim > preflight);
+        assertTrue(createClaim > claimBegin);
         assertTrue(settlementLock >= 0);
         assertTrue(source.indexOf("settlementLock.lock()", settlementLock) > settlementLock);
         assertTrue(source.indexOf("settlementLock.unlock()", settlementLock) > settlementLock);

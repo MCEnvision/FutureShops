@@ -46,6 +46,21 @@ class PlayerShopSettlementSavedDataPagingTest {
     }
 
     @Test
+    void previewClaimDoesNotPersistBeforeProviderPreflight() {
+        UUID owner = UUID.randomUUID();
+        PlayerShopSettlementSavedData data = new PlayerShopSettlementSavedData();
+        data.recordSale(owner, 42L, 100L, "minecraft:stone", 1);
+
+        CompoundTag before = data.save(new CompoundTag(), null);
+        PlayerShopSettlementSavedData.SettlementClaim preview = data.previewClaim(owner, 42L);
+        CompoundTag after = data.save(new CompoundTag(), null);
+
+        assertNotNull(preview);
+        assertEquals(before, after);
+        assertEquals(preview, data.beginClaim(owner, 42L));
+    }
+
+    @Test
     void settlementClaimIdentityIsRecoverableFromStablePendingState() {
         UUID owner = UUID.randomUUID();
         PlayerShopSettlementSavedData first = new PlayerShopSettlementSavedData();
