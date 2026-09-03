@@ -64,4 +64,15 @@ class InternalEconomyReceiptSavedDataTest {
         assertFalse(loaded.integrityValid());
         assertTrue(loaded.find(new RequestId(REQUEST_UUID)).isEmpty());
     }
+
+    @Test
+    void currentSchemaMissingReceiptsIsReadOnly() {
+        CompoundTag saved = new CompoundTag();
+        saved.putInt("schemaVersion", 1);
+
+        InternalEconomyReceiptSavedData loaded = InternalEconomyReceiptSavedData.load(saved, null);
+
+        assertFalse(loaded.integrityValid());
+        assertTrue(loaded.find(new RequestId(REQUEST_UUID)).isEmpty());
+    }
 }

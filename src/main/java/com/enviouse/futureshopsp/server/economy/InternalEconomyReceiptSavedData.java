@@ -45,6 +45,10 @@ public final class InternalEconomyReceiptSavedData extends SavedData implements 
             data.cleanMarkerValid = tag.getBoolean("cleanMarker");
         }
         Tag rawEntries = tag.get("receipts");
+        if (version < 0 || (version == CURRENT_VERSION && rawEntries == null)) {
+            data.integrityValid = false;
+            return data;
+        }
         if (rawEntries != null && !(rawEntries instanceof ListTag)) {
             data.integrityValid = false;
             return data;

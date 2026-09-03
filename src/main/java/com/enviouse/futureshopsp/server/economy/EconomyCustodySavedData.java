@@ -43,6 +43,10 @@ public final class EconomyCustodySavedData extends SavedData implements EconomyC
             data.cleanMarkerValid = tag.getBoolean("cleanMarker");
         }
         Tag rawEntries = tag.get("records");
+        if (version < 0 || (version == CURRENT_VERSION && rawEntries == null)) {
+            data.integrityValid = false;
+            return data;
+        }
         if (rawEntries != null && !(rawEntries instanceof ListTag)) {
             data.integrityValid = false;
             return data;

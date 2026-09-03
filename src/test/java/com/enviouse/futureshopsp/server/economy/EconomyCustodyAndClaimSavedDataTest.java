@@ -95,4 +95,18 @@ class EconomyCustodyAndClaimSavedDataTest {
         assertFalse(loaded.integrityValid());
         assertTrue(loaded.snapshot().isEmpty());
     }
+
+    @Test
+    void currentSchemaMissingRecordsIsReadOnly() {
+        CompoundTag saved = new CompoundTag();
+        saved.putInt("schemaVersion", 1);
+
+        EconomyCustodySavedData custody = EconomyCustodySavedData.load(saved, null);
+        EconomyClaimSavedData claims = EconomyClaimSavedData.load(saved, null);
+
+        assertFalse(custody.integrityValid());
+        assertFalse(claims.integrityValid());
+        assertTrue(custody.snapshot().isEmpty());
+        assertTrue(claims.snapshot().isEmpty());
+    }
 }

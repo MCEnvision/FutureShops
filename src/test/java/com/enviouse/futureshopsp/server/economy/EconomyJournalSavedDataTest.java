@@ -112,6 +112,17 @@ class EconomyJournalSavedDataTest {
     }
 
     @Test
+    void currentSchemaMissingRecordsIsReadOnlyAndNeverInterpretedAsEmptySuccess() {
+        CompoundTag saved = new CompoundTag();
+        saved.putInt("schemaVersion", 1);
+
+        EconomyJournalSavedData loaded = EconomyJournalSavedData.load(saved, null);
+
+        assertFalse(loaded.integrityValid());
+        assertTrue(loaded.snapshot().isEmpty());
+    }
+
+    @Test
     void oversizedJournalIsReadOnlyAndNeverLoaded() {
         CompoundTag saved = new CompoundTag();
         net.minecraft.nbt.ListTag entries = new net.minecraft.nbt.ListTag();
