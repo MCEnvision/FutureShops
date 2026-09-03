@@ -296,6 +296,21 @@ class EconomyTransactionCoordinatorTest {
         assertEquals(125L, provider.balances.get(PLAYER));
     }
 
+    @Test
+    void compensationRequiresDepositCapabilityRatherThanWithdrawCapability() {
+        FixtureProvider provider = new FixtureProvider(new ProviderCapabilities(true, true, false, true, true, true));
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        EconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.COMPENSATION);
+
+        var result = coordinator.compensate(request);
+
+        assertTrue(result.confirmed());
+        assertEquals(1, provider.depositCalls);
+        assertEquals(0, provider.withdrawCalls);
+    }
+
     private static EconomyLifecycleController readyLifecycle() {
         EconomyLifecycleController lifecycle = new EconomyLifecycleController(EconomyApi.INTERNAL_PROVIDER_ID);
         lifecycle.resolve(ProviderLifecycle.READY, "", true, true, false);

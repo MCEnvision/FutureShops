@@ -412,6 +412,7 @@ public final class EconomyTransactionCoordinator {
                 || !supports(EconomyCapability.RECEIPT_LOOKUP)
                 || !supports(EconomyCapability.IDEMPOTENT_RETRY)
                 || !supports(request.kind() == MutationKind.DEPOSIT || request.kind() == MutationKind.TRANSFER_CREDIT
+                || request.kind() == MutationKind.COMPENSATION
                 ? EconomyCapability.DEPOSIT : EconomyCapability.WITHDRAW)) {
             return ProviderResult.unavailable(ProviderError.CAPABILITY_MISSING,
                     "provider lacks the capabilities required by this mutation");

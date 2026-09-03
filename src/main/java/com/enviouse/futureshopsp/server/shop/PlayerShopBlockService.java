@@ -1902,6 +1902,7 @@ public final class PlayerShopBlockService {
                     counterparty == null ? Optional.empty() : Optional.of(counterparty), amount, kind);
             ProviderResult<MutationReceipt> result = kind == MutationKind.DEPOSIT
                     || kind == MutationKind.TRANSFER_CREDIT
+                    || kind == MutationKind.COMPENSATION
                     ? coordinator.deposit(request) : coordinator.withdraw(request);
             long balance = result.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
                     ? Optional.of(receipt.resultingBalanceMinorUnits().getAsLong()) : Optional.empty()).orElse(0L);

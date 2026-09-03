@@ -84,6 +84,7 @@ final class CoordinatedEconomyProvider implements EconomyProvider {
                     counterparty == null ? java.util.Optional.empty() : java.util.Optional.of(counterparty),
                     amountMinorUnits, kind);
             return map(kind == MutationKind.DEPOSIT || kind == MutationKind.TRANSFER_CREDIT
+                    || kind == MutationKind.COMPENSATION
                     ? coordinator.deposit(request) : coordinator.withdraw(request));
         } catch (IllegalArgumentException exception) {
             return TransactionResult.error(ShopResultCode.INVALID_AMOUNT, 0L);
