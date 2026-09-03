@@ -410,57 +410,63 @@ public final class PlayerShopBlockService {
                 return;
             }
             case "CLAIM_SETTLEMENT" -> {
-                if (player.getServer() == null) {
-                    sendResult(player, false, ShopResultCode.SERVER_ERROR);
-                    return;
-                }
-                PlayerShopSettlementSavedData settlements = PlayerShopSettlementSavedData.get(player.getServer());
-                PlayerShopSettlementSavedData.SettlementClaim settlementClaim =
-                        settlements.beginClaim(player.getUUID(), pos.asLong());
-                if (settlementClaim == null || settlementClaim.amountMinor() <= 0L) {
-                    sendResult(player, false, ShopResultCode.NOTHING_TO_CLAIM);
-                    return;
-                }
-                RequestId requestId = new RequestId(settlementClaim.requestId());
-                EconomyTransactionCoordinator coordinator = BalanceManager.getCoordinator();
-                String description = "player shop settlement " + pos.asLong();
-                MutationRequest depositRequest = MutationRequest.forPlayer(requestId, player.getUUID(),
-                        settlementClaim.amountMinor(), MutationKind.DEPOSIT);
-                ClaimRecord claim = coordinator.claim(requestId).orElse(null);
-                if (claim == null) {
-                    // Capability and lifecycle refusal must happen before creating a durable
-                    // claim. This keeps unsupported external mutation paths side effect free.
-                    ProviderResult<BalanceSnapshot> admission = coordinator.preflight(depositRequest);
-                    if (!admission.confirmed()) {
-                        sendResult(player, false, mapProviderError(admission));
+                ReentrantLock settlementLock = SHOP_LOCKS.computeIfAbsent(pos.asLong(), ignored -> new ReentrantLock());
+                settlementLock.lock();
+                try {
+                    if (player.getServer() == null) {
+                        sendResult(player, false, ShopResultCode.SERVER_ERROR);
                         return;
                     }
-                    claim = coordinator.createClaim(requestId, player.getUUID(),
-                            settlementClaim.amountMinor(), description);
+                    PlayerShopSettlementSavedData settlements = PlayerShopSettlementSavedData.get(player.getServer());
+                    PlayerShopSettlementSavedData.SettlementClaim settlementClaim =
+                            settlements.beginClaim(player.getUUID(), pos.asLong());
+                    if (settlementClaim == null || settlementClaim.amountMinor() <= 0L) {
+                        sendResult(player, false, ShopResultCode.NOTHING_TO_CLAIM);
+                        return;
+                    }
+                    RequestId requestId = new RequestId(settlementClaim.requestId());
+                    EconomyTransactionCoordinator coordinator = BalanceManager.getCoordinator();
+                    String description = "player shop settlement " + pos.asLong();
+                    MutationRequest depositRequest = MutationRequest.forPlayer(requestId, player.getUUID(),
+                            settlementClaim.amountMinor(), MutationKind.DEPOSIT);
+                    ClaimRecord claim = coordinator.claim(requestId).orElse(null);
+                    if (claim == null) {
+                        // Capability and lifecycle refusal must happen before creating a durable
+                        // claim. This keeps unsupported external mutation paths side effect free.
+                        ProviderResult<BalanceSnapshot> admission = coordinator.preflight(depositRequest);
+                        if (!admission.confirmed()) {
+                            sendResult(player, false, mapProviderError(admission));
+                            return;
+                        }
+                        claim = coordinator.createClaim(requestId, player.getUUID(),
+                                settlementClaim.amountMinor(), description);
+                    }
+                    ProviderResult<?> deposit = coordinator.deposit(depositRequest);
+                    if (!deposit.confirmed()) {
+                        sendResult(player, false, mapProviderError(deposit));
+                        return;
+                    }
+                    if (claim.state() != ClaimState.RESOLVED) {
+                        coordinator.deliverClaim(requestId);
+                        coordinator.resolveClaim(requestId);
+                    }
+                    if (!settlements.completeClaim(player.getUUID(), pos.asLong(), settlementClaim.requestId(),
+                            settlementClaim.amountMinor())) {
+                        sendResult(player, false, ShopResultCode.SERVER_ERROR);
+                        return;
+                    }
+                    // Record claim funds in transaction history
+                    TransactionHistoryService.record(
+                            player,
+                            shop.getShopId(),
+                            "CART_CLAIM",
+                            "",
+                            0,
+                            settlementClaim.amountMinor(),
+                            "SETTLEMENT_CLAIM");
+                } finally {
+                    settlementLock.unlock();
                 }
-                ProviderResult<?> deposit = coordinator.deposit(depositRequest);
-                if (!deposit.confirmed()) {
-                    sendResult(player, false, mapProviderError(deposit));
-                    return;
-                }
-                if (claim.state() != ClaimState.RESOLVED) {
-                    coordinator.deliverClaim(requestId);
-                    coordinator.resolveClaim(requestId);
-                }
-                if (!settlements.completeClaim(player.getUUID(), pos.asLong(), settlementClaim.requestId(),
-                        settlementClaim.amountMinor())) {
-                    sendResult(player, false, ShopResultCode.SERVER_ERROR);
-                    return;
-                }
-                // Record claim funds in transaction history
-                TransactionHistoryService.record(
-                        player,
-                        shop.getShopId(),
-                        "CART_CLAIM",
-                        "",
-                        0,
-                        settlementClaim.amountMinor(),
-                        "SETTLEMENT_CLAIM");
             }
             default -> {
                 return;

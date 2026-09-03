@@ -48,9 +48,13 @@ class PlayerShopSaleEscrowSourceTest {
         int claimLookup = source.indexOf("coordinator.claim(requestId).orElse(null)");
         int preflight = source.indexOf("coordinator.preflight(depositRequest)");
         int createClaim = source.indexOf("coordinator.createClaim(requestId");
+        int settlementLock = source.indexOf("ReentrantLock settlementLock");
         assertTrue(claimLookup >= 0);
         assertTrue(preflight > claimLookup);
         assertTrue(createClaim > preflight);
+        assertTrue(settlementLock >= 0);
+        assertTrue(source.indexOf("settlementLock.lock()", settlementLock) > settlementLock);
+        assertTrue(source.indexOf("settlementLock.unlock()", settlementLock) > settlementLock);
     }
 
     private static Path projectDirectory() {
