@@ -2563,6 +2563,10 @@ public final class PlayerShopBlockService {
                         "§cThe shop has reached its buy-back cap for this item.");
                 return;
             }
+            if (!canRecordBuyback(listing, qty)) {
+                sendResult(seller, false, ShopResultCode.INVALID_AMOUNT);
+                return;
+            }
 
             String shopIdForEvent = "player_shop:" + pos.asLong();
             if (com.enviouse.futureshopsp.Config.eventsTransactionEnabled) {
@@ -2817,11 +2821,23 @@ public final class PlayerShopBlockService {
     }
 
     private static void incrementBuyback(ShopBlockEntity.Listing listing, int qty) {
-        int newCount = listing.buybackBought() + qty;
+        int newCount = Math.addExact(listing.buybackBought(), qty);
         if (listing.buybackCap() > 0) {
             newCount = Math.min(newCount, listing.buybackCap());
         }
         listing.setBuybackBought(newCount);
+    }
+
+    private static boolean canRecordBuyback(ShopBlockEntity.Listing listing, int qty) {
+        if (listing == null || qty <= 0) {
+            return false;
+        }
+        try {
+            int newCount = Math.addExact(listing.buybackBought(), qty);
+            return listing.buybackCap() <= 0 || newCount <= listing.buybackCap();
+        } catch (ArithmeticException exception) {
+            return false;
+        }
     }
 
     private static boolean rollbackInsertedItems(LinkedStorage storage, ServerPlayer seller,

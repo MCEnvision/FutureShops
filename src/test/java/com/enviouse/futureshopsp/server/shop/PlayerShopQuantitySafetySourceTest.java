@@ -26,6 +26,22 @@ class PlayerShopQuantitySafetySourceTest {
         assertFalse(source.contains("baseQty * qty"));
     }
 
+    @Test
+    void buybackCounterOverflowIsRejectedBeforeAnyValueLeg() throws Exception {
+        String source = Files.readString(projectDirectory().resolve(Path.of(
+                "src", "main", "java", "com", "enviouse", "futureshopsp", "server", "shop",
+                "PlayerShopBlockService.java")));
+
+        int sellHandler = source.indexOf("public static void handleSell");
+        int capCheck = source.indexOf("if (!canRecordBuyback(listing, qty))", sellHandler);
+        int firstProviderPreflight = source.indexOf("coordinator.preflight", sellHandler);
+        assertTrue(sellHandler >= 0);
+        assertTrue(capCheck > sellHandler);
+        assertTrue(firstProviderPreflight > capCheck);
+        assertTrue(source.contains("Math.addExact(listing.buybackBought(), qty)"));
+        assertFalse(source.contains("listing.buybackBought() + qty"));
+    }
+
     private static Path projectDirectory() {
         Path candidate = Path.of("").toAbsolutePath();
         while (candidate != null) {
