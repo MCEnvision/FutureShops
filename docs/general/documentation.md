@@ -85,6 +85,8 @@ Back up the complete world, `config/futureshops`, the FutureShops jar, and every
 
 Do not downgrade a world after new economy schemas have been written unless migration compatibility has been proven on a disposable copy. Keep backup hashes and sanitized logs with the verification packet. Never include credentials, private player data, or raw provider logs in repository evidence.
 
+The complete operator procedure, hash commands, restore sequence, provider selection rollback, and evidence record are in the [backup and restore runbook](../operations/backup-restore.md). A backup contains recovery evidence only. It never authorizes a guessed external refund, balance restoration, or replay against a different provider.
+
 ## Verification
 
 Run focused economy tests, then `bash ./gradlew test --no-daemon`, `bash ./gradlew build --no-daemon`, and the applicable data, GameTest, dedicated server, client, multiplayer, reconnect, restart, and jar inspection checks from the active phase plan. Review `git diff --check` and the complete diff before committing. Build output, run directories, logs, downloaded external jars, and CodeGraph state are generated or disposable and must remain untracked.

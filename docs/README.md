@@ -12,6 +12,10 @@ FutureShops documentation is organized by topic. The phase verification packet r
 
 * [Economy provider API](api/economy-provider.md)
 
+## Operations
+
+* [Backup and restore runbook](operations/backup-restore.md)
+
 ## Verification
 
 * [Phase 000 API and selection verification](verification/phase-000/api-selection-2026-09-02.md)
