@@ -54,10 +54,23 @@ public final class EconomyJournalSavedData extends SavedData implements EconomyT
             data.integrityValid = false;
             return data;
         }
+        Map<RequestId, EconomyJournalRecord> loaded = new LinkedHashMap<>();
         for (Tag raw : entries) {
-            if (!(raw instanceof CompoundTag entry) || !data.readEntry(entry)) {
+            if (!(raw instanceof CompoundTag entry)) {
+                data.integrityValid = false;
+                continue;
+            }
+            try {
+                EconomyJournalRecord record = readEntry(entry);
+                if (loaded.put(record.request().requestId(), record) != null) {
+                    data.integrityValid = false;
+                }
+            } catch (RuntimeException exception) {
                 data.integrityValid = false;
             }
+        }
+        if (data.integrityValid) {
+            data.records.putAll(loaded);
         }
         return data;
     }
@@ -127,40 +140,35 @@ public final class EconomyJournalSavedData extends SavedData implements EconomyT
         setDirty();
     }
 
-    private boolean readEntry(CompoundTag entry) {
-        try {
-            if (!entry.hasUUID("request") || !entry.hasUUID("actor")
-                    || !entry.contains("amount", Tag.TAG_LONG) || !entry.contains("kind", Tag.TAG_STRING)
-                    || !entry.contains("state", Tag.TAG_STRING) || !entry.contains("status", Tag.TAG_STRING)
-                    || !entry.contains("checksum", Tag.TAG_STRING)) {
-                return false;
-            }
-            RequestId requestId = new RequestId(entry.getUUID("request"));
-            Optional<UUID> counterparty = entry.hasUUID("counterparty")
-                    ? Optional.of(entry.getUUID("counterparty")) : Optional.empty();
-            MutationRequest request = new MutationRequest(requestId, entry.getUUID("actor"), counterparty,
-                    entry.getLong("amount"), MutationKind.valueOf(entry.getString("kind")));
-            EconomyTransactionState state = EconomyTransactionState.valueOf(entry.getString("state"));
-            ProviderResultStatus status = ProviderResultStatus.valueOf(entry.getString("status"));
-            String diagnostic = entry.getString("diagnostic");
-            Optional<MutationReceipt> receipt = Optional.empty();
-            if (entry.hasUUID("receiptRequest") && entry.contains("receiptAmount", Tag.TAG_LONG)
-                    && entry.contains("receiptKind", Tag.TAG_STRING)
-                    && entry.contains("operation", Tag.TAG_STRING)) {
-                OptionalLong resulting = entry.contains("resultingBalance", Tag.TAG_LONG)
-                        ? OptionalLong.of(entry.getLong("resultingBalance")) : OptionalLong.empty();
-                receipt = Optional.of(new MutationReceipt(new RequestId(entry.getUUID("receiptRequest")),
-                        MutationKind.valueOf(entry.getString("receiptKind")), entry.getLong("receiptAmount"),
-                        entry.getString("operation"), resulting));
-            }
-            if (!entry.getString("checksum").equals(checksum(request, state, receipt, status, diagnostic))) {
-                return false;
-            }
-            records.put(requestId, new EconomyJournalRecord(request, state, receipt, status, diagnostic));
-            return true;
-        } catch (RuntimeException exception) {
-            return false;
+    private static EconomyJournalRecord readEntry(CompoundTag entry) {
+        if (!entry.hasUUID("request") || !entry.hasUUID("actor")
+                || !entry.contains("amount", Tag.TAG_LONG) || !entry.contains("kind", Tag.TAG_STRING)
+                || !entry.contains("state", Tag.TAG_STRING) || !entry.contains("status", Tag.TAG_STRING)
+                || !entry.contains("checksum", Tag.TAG_STRING)) {
+            throw new IllegalArgumentException("journal record is incomplete");
         }
+        RequestId requestId = new RequestId(entry.getUUID("request"));
+        Optional<UUID> counterparty = entry.hasUUID("counterparty")
+                ? Optional.of(entry.getUUID("counterparty")) : Optional.empty();
+        MutationRequest request = new MutationRequest(requestId, entry.getUUID("actor"), counterparty,
+                entry.getLong("amount"), MutationKind.valueOf(entry.getString("kind")));
+        EconomyTransactionState state = EconomyTransactionState.valueOf(entry.getString("state"));
+        ProviderResultStatus status = ProviderResultStatus.valueOf(entry.getString("status"));
+        String diagnostic = entry.getString("diagnostic");
+        Optional<MutationReceipt> receipt = Optional.empty();
+        if (entry.hasUUID("receiptRequest") && entry.contains("receiptAmount", Tag.TAG_LONG)
+                && entry.contains("receiptKind", Tag.TAG_STRING)
+                && entry.contains("operation", Tag.TAG_STRING)) {
+            OptionalLong resulting = entry.contains("resultingBalance", Tag.TAG_LONG)
+                    ? OptionalLong.of(entry.getLong("resultingBalance")) : OptionalLong.empty();
+            receipt = Optional.of(new MutationReceipt(new RequestId(entry.getUUID("receiptRequest")),
+                    MutationKind.valueOf(entry.getString("receiptKind")), entry.getLong("receiptAmount"),
+                    entry.getString("operation"), resulting));
+        }
+        if (!entry.getString("checksum").equals(checksum(request, state, receipt, status, diagnostic))) {
+            throw new IllegalArgumentException("journal record checksum mismatch");
+        }
+        return new EconomyJournalRecord(request, state, receipt, status, diagnostic);
     }
 
     private static CompoundTag writeEntry(EconomyJournalRecord record) {

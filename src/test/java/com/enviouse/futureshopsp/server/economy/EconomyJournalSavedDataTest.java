@@ -55,6 +55,25 @@ class EconomyJournalSavedDataTest {
     }
 
     @Test
+    void oneMalformedRecordPreventsPartialJournalRecovery() {
+        EconomyJournalSavedData data = new EconomyJournalSavedData();
+        MutationRequest first = MutationRequest.forPlayer(RequestId.random(), PLAYER, 12L, MutationKind.WITHDRAW);
+        MutationRequest second = MutationRequest.forPlayer(RequestId.random(), PLAYER, 8L, MutationKind.DEPOSIT);
+        data.append(new EconomyJournalRecord(first, EconomyTransactionState.RESOLVED,
+                Optional.empty(), ProviderResultStatus.REJECTED, "rejected"));
+        data.append(new EconomyJournalRecord(second, EconomyTransactionState.EXTERNAL_PENDING,
+                Optional.empty(), ProviderResultStatus.UNAVAILABLE, "pending"));
+
+        CompoundTag saved = data.save(new CompoundTag(), null);
+        saved.getList("records", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(1).putLong("amount", 9L);
+
+        EconomyJournalSavedData loaded = EconomyJournalSavedData.load(saved, null);
+
+        assertFalse(loaded.integrityValid());
+        assertTrue(loaded.snapshot().isEmpty());
+    }
+
+    @Test
     void newerSchemaIsReadOnlyAndNeverInterpretedAsCompleted() {
         CompoundTag saved = new CompoundTag();
         saved.putInt("schemaVersion", 99);

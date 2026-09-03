@@ -182,6 +182,10 @@ public final class BalanceManager {
         if (coordinator == null || journal == null) {
             return;
         }
+        if (!persistenceIntegrityValid()) {
+            lifecycleController.markAmbiguous("economy persistence integrity requires operator recovery");
+            return;
+        }
         for (EconomyJournalRecord record : journal.snapshot()) {
             if (!record.incomplete()) {
                 continue;
@@ -195,6 +199,15 @@ public final class BalanceManager {
             return;
         }
         lifecycleController.markRecovered();
+    }
+
+    private static boolean persistenceIntegrityValid() {
+        if (!journal.integrityValid() || !custody.integrityValid() || !claims.integrityValid()
+                || !barterEscrow.integrityValid() || !saleEscrow.integrityValid() || !settlements.integrityValid()) {
+            return false;
+        }
+        return !EconomyApi.INTERNAL_PROVIDER_ID.equals(lifecycleController.snapshot().providerId())
+                || receipts == null || receipts.integrityValid();
     }
 
     static boolean freezeIfUnresolvedItemState(EconomyLifecycleController lifecycle,

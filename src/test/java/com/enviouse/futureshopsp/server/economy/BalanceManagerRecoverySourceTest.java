@@ -77,6 +77,9 @@ class BalanceManagerRecoverySourceTest {
 
         assertTrue(source.contains("recoverIncompleteJournalRecords();\n            provider = new CoordinatedEconomyProvider"));
         assertTrue(source.contains("recoverIncompleteJournalRecords();\n            provider = new ExternalLegacyEconomyProvider"));
+        assertTrue(source.contains("if (!persistenceIntegrityValid())"));
+        assertTrue(source.contains("economy persistence integrity requires operator recovery"));
+        assertTrue(source.contains("private static boolean persistenceIntegrityValid()"));
         assertTrue(source.contains("for (EconomyJournalRecord record : journal.snapshot())"));
         assertTrue(source.contains("coordinator.recover(record.request().requestId())"));
         assertTrue(source.contains("ProviderLifecycle.FROZEN"));
