@@ -229,6 +229,24 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
+    void mismatchedProviderReceiptFreezesWithoutPublishingSuccess() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        provider.malformedReceipt = true;
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+
+        var result = coordinator.withdraw(request);
+
+        assertEquals(ProviderResultStatus.AMBIGUOUS, result.status());
+        assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
+        assertEquals(EconomyTransactionState.UNCERTAIN,
+                journal.find(request.requestId()).orElseThrow().state());
+        assertEquals(100L, provider.balances.get(PLAYER));
+    }
+
+    @Test
     void recoveryUsesDurableLookupBeforeRetry() {
         FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
         EconomyLifecycleController lifecycle = readyLifecycle();
@@ -602,6 +620,7 @@ class EconomyTransactionCoordinatorTest {
         private boolean lookupValueOnly;
         private boolean throwCapabilities;
         private boolean throwMutation;
+        private boolean malformedReceipt;
 
         private FixtureProvider(ProviderCapabilities capabilities) {
             this.capabilities = capabilities;
@@ -656,6 +675,10 @@ class EconomyTransactionCoordinatorTest {
             withdrawCalls++;
             if (throwMutation) {
                 throw new IllegalStateException("fixture mutation failure");
+            }
+            if (malformedReceipt) {
+                return ProviderResult.confirmed(new MutationReceipt(RequestId.random(), request.kind(),
+                        request.amountMinorUnits(), "malformed", OptionalLong.empty()));
             }
             if (ambiguous) {
                 return ProviderResult.ambiguous("fixture ambiguity");
