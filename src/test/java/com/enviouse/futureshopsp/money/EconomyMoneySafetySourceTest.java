@@ -39,6 +39,9 @@ class EconomyMoneySafetySourceTest {
         assertTrue(source.contains("ProviderResult<BalanceSnapshot> balanceResult = BalanceManager.queryBalance(targetUuid)"));
         assertTrue(source.contains("if (!balanceResult.confirmed())"));
         assertTrue(!source.contains("long balance = provider.getBalance(targetUuid)"));
+        assertTrue(source.contains("Math.addExact(activeValue"));
+        assertTrue(source.contains("Math.multiplyExact(mint.denomination(), (long) mint.remainingCount())"));
+        assertTrue(source.contains("command.futureshops.admin.coinaudit.overflow"));
     }
 
     private static String read(String relativePath) throws Exception {

@@ -186,7 +186,12 @@ public final class ShopModAPI {
             ItemStack stack = player.getInventory().getItem(i);
             MoneyValidationResult result = MoneyValidationService.validate(stack);
             if (result.valid()) {
-                total += result.denominationMinorUnits() * stack.getCount();
+                try {
+                    total = Math.addExact(total,
+                            Math.multiplyExact(result.denominationMinorUnits(), (long) stack.getCount()));
+                } catch (ArithmeticException exception) {
+                    throw new IllegalStateException("physical coin value exceeds the supported range", exception);
+                }
             }
         }
         return total;

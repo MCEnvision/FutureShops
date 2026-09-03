@@ -1202,10 +1202,20 @@ public final class ShopAdminCommand {
         // 4. Aggregate stats
         long activeCount   = playerMints.stream().filter(r -> !r.consumed()).count();
         long consumedCount = playerMints.stream().filter(MoneyMintRecord::consumed).count();
-        long activeValue   = playerMints.stream()
-                .filter(r -> !r.consumed())
-                .mapToLong(r -> r.denomination() * r.remainingCount())
-                .sum();
+        long activeValue = 0L;
+        try {
+            for (MoneyMintRecord mint : playerMints) {
+                if (!mint.consumed()) {
+                    activeValue = Math.addExact(activeValue,
+                            Math.multiplyExact(mint.denomination(), (long) mint.remainingCount()));
+                }
+            }
+        } catch (ArithmeticException exception) {
+            src.sendFailure(Component.translatable("command.futureshops.admin.coinaudit.overflow")
+                    .withStyle(net.minecraft.ChatFormatting.RED));
+            return 0;
+        }
+        final long finalActiveValue = activeValue;
 
         // 5. Send output
         src.sendSuccess(() -> Component.translatable(
@@ -1216,7 +1226,7 @@ public final class ShopAdminCommand {
                 playerMints.size(), activeCount, consumedCount)
                 .withStyle(net.minecraft.ChatFormatting.GRAY), false);
         src.sendSuccess(() -> Component.translatable(
-                "command.futureshops.admin.coinaudit.active_value", activeValue, targetUUID)
+                "command.futureshops.admin.coinaudit.active_value", finalActiveValue, targetUUID)
                 .withStyle(net.minecraft.ChatFormatting.GREEN), false);
 
         if (playerMints.isEmpty()) {

@@ -569,6 +569,7 @@
   "command.futureshops.admin.coinaudit.header": "═══ Coin Audit: %s ═══",
   "command.futureshops.admin.coinaudit.counts": "Mints total: %s  |  Active: %s  |  Consumed: %s",
   "command.futureshops.admin.coinaudit.active_value": "Active value: %s minor units  (UUID: %s)",
+  "command.futureshops.admin.coinaudit.overflow": "Active coin value exceeds the supported range.",
   "command.futureshops.admin.coinaudit.no_mints": "No coin mints on record for this player.",
   "command.futureshops.admin.coinaudit.recent_header": "─── Recent mints (newest first, max 15) ───",
   "command.futureshops.admin.coinaudit.row": "[%s] id=%s  denom=%s×%s  minted=%s%s",
