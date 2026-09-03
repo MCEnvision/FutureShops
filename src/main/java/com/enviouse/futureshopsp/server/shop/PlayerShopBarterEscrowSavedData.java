@@ -129,7 +129,7 @@ public final class PlayerShopBarterEscrowSavedData extends SavedData {
         if (requestId == null || buyer == null || quantity <= 0 || stacks == null
                 || stacks.isEmpty() || stacks.size() > MAX_STACKS_PER_RECORD
                 || itemId == null || itemId.isBlank() || itemId.length() > MAX_ITEM_ID_LENGTH
-                || dimension != null && dimension.length() > MAX_DIMENSION_LENGTH
+                || dimension == null || dimension.length() > MAX_DIMENSION_LENGTH
                 || records.containsKey(requestId)
                 || records.size() >= MAX_RECORDS) {
             return false;
@@ -151,7 +151,7 @@ public final class PlayerShopBarterEscrowSavedData extends SavedData {
             return false;
         }
         EscrowRecord record = new EscrowRecord(requestId, buyer, shopPos,
-                dimension == null ? "" : dimension, itemId, quantity, encoded, State.PREPARED);
+                dimension, itemId, quantity, encoded, State.PREPARED);
         records.put(requestId, record);
         setDirty();
         return true;

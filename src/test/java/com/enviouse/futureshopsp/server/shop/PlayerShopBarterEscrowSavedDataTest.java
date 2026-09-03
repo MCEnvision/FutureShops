@@ -144,6 +144,8 @@ class PlayerShopBarterEscrowSavedDataTest {
 
         assertFalse(data.prepare(UUID.fromString("00000000-0000-0000-0000-000000000307"), BUYER, 47L,
                 "d".repeat(129), "minecraft:diamond", 1, stacks, provider));
+        assertFalse(data.prepare(UUID.fromString("00000000-0000-0000-0000-00000000030c"), BUYER, 48L,
+                null, "minecraft:diamond", 1, stacks, provider));
         assertFalse(data.prepare(UUID.fromString("00000000-0000-0000-0000-000000000308"), BUYER, 48L,
                 "minecraft:overworld", "i".repeat(257), 1, stacks, provider));
         assertTrue(data.snapshot().isEmpty());
