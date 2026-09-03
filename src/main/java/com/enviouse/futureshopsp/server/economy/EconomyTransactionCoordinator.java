@@ -342,7 +342,7 @@ public final class EconomyTransactionCoordinator {
                 MutationKind.TRANSFER_CREDIT);
         ProviderResult<MutationReceipt> creditResult = execute(credit, MutationKind.TRANSFER_CREDIT);
         if (creditResult.confirmed()) {
-            return creditResult;
+            return debitResult;
         }
         MutationRequest compensation = new MutationRequest(root.child("transfer compensation"), from, Optional.of(to),
                 amountMinorUnits, MutationKind.COMPENSATION);

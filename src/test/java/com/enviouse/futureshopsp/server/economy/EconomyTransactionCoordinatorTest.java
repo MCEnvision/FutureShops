@@ -525,6 +525,20 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
+    void successfulTransferReturnsTheDebitLegBalance() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, readyLifecycle(), journal);
+
+        var result = coordinator.transfer(PLAYER, TARGET, 25L);
+
+        assertTrue(result.confirmed());
+        assertEquals(75L, result.receipt().orElseThrow().resultingBalanceMinorUnits().orElseThrow());
+        assertEquals(75L, provider.balances.get(PLAYER));
+        assertEquals(25L, provider.balances.getOrDefault(TARGET, 0L));
+    }
+
+    @Test
     void transferRefusesBeforeDebitWhenDepositCapabilityIsMissing() {
         FixtureProvider provider = new FixtureProvider(new ProviderCapabilities(true, true, true, false, true, true));
         EconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();

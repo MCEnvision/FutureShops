@@ -52,6 +52,31 @@ public final class EconomyGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 100)
+    public static void publicMutationRoutesUseDurableCoordinator(GameTestHelper helper) {
+        UUID payer = UUID.fromString("00000000-0000-0000-0000-000000000238");
+        UUID recipient = UUID.fromString("00000000-0000-0000-0000-000000000239");
+        helper.assertTrue(BalanceManager.setInternalBalance(payer, 1_000L).confirmed(),
+                "the fixture payer balance must be initialized");
+        helper.assertTrue(BalanceManager.setInternalBalance(recipient, 0L).confirmed(),
+                "the fixture recipient balance must be initialized");
+
+        var withdrawal = BalanceManager.withdraw(payer, 250L);
+        helper.assertTrue(withdrawal.success() && withdrawal.resultingBalance() == 750L,
+                "public withdrawals must use the durable coordinator balance");
+
+        var deposit = BalanceManager.deposit(recipient, 250L);
+        helper.assertTrue(deposit.success() && deposit.resultingBalance() == 250L,
+                "public deposits must use the durable coordinator balance");
+
+        var transfer = BalanceManager.transfer(payer, recipient, 100L);
+        helper.assertTrue(transfer.success() && transfer.resultingBalance() == 650L,
+                "public transfers must persist both coordinator legs");
+        helper.assertTrue(BalanceManager.queryBalance(recipient).value().orElseThrow().balanceMinorUnits() == 350L,
+                "the recipient balance must include the confirmed transfer credit");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
     public static void playerShopSaleEscrowLifecycle(GameTestHelper helper) {
         PlayerShopSaleEscrowSavedData escrow = new PlayerShopSaleEscrowSavedData();
         UUID buyer = UUID.fromString("00000000-0000-0000-0000-000000000232");
