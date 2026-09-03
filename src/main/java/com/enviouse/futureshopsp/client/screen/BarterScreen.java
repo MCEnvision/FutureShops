@@ -86,7 +86,7 @@ public class BarterScreen extends AbstractShopScreen implements ShopScreenMarker
         addRenderableWidget(qtyBox);
         addRenderableWidget(Button.builder(Component.literal("+"), button -> {
                     if (hasShiftDown()) setMultiplier(resolveMaxMultiplier());
-                    else setMultiplier(multiplier + 1);
+                    else setMultiplier(saturatingIncrement(multiplier));
                 })
                 .tooltip(Tooltip.create(Component.translatable("gui.futureshops.barter.tooltip.shift_max")))
                 .bounds(qtyX + 52, bottomY, 16, 16)
@@ -185,7 +185,7 @@ public class BarterScreen extends AbstractShopScreen implements ShopScreenMarker
 
         // ═══ Receive summary — on its own line above the bottom button row ═══
         int bottomY = guiTop + guiH - 24;
-        int totalOutput = recipe.outputCount() * multiplier;
+        int totalOutput = saturatingMultiplyToInt(recipe.outputCount(), multiplier);
         String totalText = "Receive " + totalOutput + "x "
                 + this.font.plainSubstrByWidth(ShopUiUtil.getItemDisplayName(targetItemId), Math.max(60, guiW - 40));
         graphics.drawCenteredString(this.font, totalText, guiLeft + guiW / 2, bottomY - 12, ShopColors.TEXT_SECONDARY);
@@ -247,7 +247,7 @@ public class BarterScreen extends AbstractShopScreen implements ShopScreenMarker
         String name = this.font.plainSubstrByWidth(ShopUiUtil.getItemDisplayName(targetItemId), w - 16);
         graphics.drawCenteredString(this.font, name, x + w / 2, y + h - 26, ShopColors.TEXT_STRONG);
 
-        int totalOutput = recipe.outputCount() * multiplier;
+        int totalOutput = saturatingMultiplyToInt(recipe.outputCount(), multiplier);
         graphics.drawCenteredString(this.font, "§a×" + totalOutput, x + w / 2, y + h - 14, ShopColors.STATUS_SUCCESS);
     }
 
@@ -266,7 +266,7 @@ public class BarterScreen extends AbstractShopScreen implements ShopScreenMarker
             int ry = rowY + i * rowH;
             if (ry + rowH > y + h - 4) break;
 
-            int needed = ingredient.count() * multiplier;
+            int needed = saturatingMultiplyToInt(ingredient.count(), multiplier);
             int owned = ShopUiUtil.countPlayerInventory(ingredient.itemId());
             boolean canPay = owned >= needed;
 
@@ -297,7 +297,8 @@ public class BarterScreen extends AbstractShopScreen implements ShopScreenMarker
 
     private boolean canAfford(CatalogBarterRecipe recipe, int tradeMultiplier) {
         return recipe.ingredients().stream()
-                .allMatch(ingredient -> ShopUiUtil.countPlayerInventory(ingredient.itemId()) >= ingredient.count() * tradeMultiplier);
+                .allMatch(ingredient -> ShopUiUtil.countPlayerInventory(ingredient.itemId())
+                        >= saturatingMultiplyToInt(ingredient.count(), tradeMultiplier));
     }
 
     private void sendConfirm() {
@@ -314,10 +315,10 @@ public class BarterScreen extends AbstractShopScreen implements ShopScreenMarker
         if (recipes.isEmpty() || selectedIndex >= recipes.size()) return;
         CatalogBarterRecipe recipe = recipes.get(selectedIndex);
         java.util.List<ConfirmationModal.SummaryLine> lines = new java.util.ArrayList<>();
-        int totalOutput = recipe.outputCount() * multiplier;
+        int totalOutput = saturatingMultiplyToInt(recipe.outputCount(), multiplier);
         lines.add(ConfirmationModal.SummaryLine.item(targetItemId, "Receive: " + ShopUiUtil.getItemDisplayName(targetItemId) + " ×" + totalOutput));
         for (CatalogBarterIngredient ingredient : recipe.ingredients()) {
-            int needed = ingredient.count() * multiplier;
+            int needed = saturatingMultiplyToInt(ingredient.count(), multiplier);
             lines.add(ConfirmationModal.SummaryLine.item(ingredient.itemId(), "Give: " + ShopUiUtil.getItemDisplayName(ingredient.itemId()) + " ×" + needed));
         }
         confirmationModal = new ConfirmationModal(
@@ -339,6 +340,18 @@ public class BarterScreen extends AbstractShopScreen implements ShopScreenMarker
             } else {
                 confirmationModal.setFailed(message);
             }
+        }
+    }
+
+    private static int saturatingIncrement(int value) {
+        return value == Integer.MAX_VALUE ? Integer.MAX_VALUE : value + 1;
+    }
+
+    private static int saturatingMultiplyToInt(int left, int right) {
+        try {
+            return Math.multiplyExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return (left < 0) == (right < 0) ? Integer.MAX_VALUE : Integer.MIN_VALUE;
         }
     }
 

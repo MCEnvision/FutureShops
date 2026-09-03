@@ -1,6 +1,7 @@
 package com.enviouse.futureshopsp.server.economy;
 
 import com.enviouse.futureshopsp.Config;
+import com.enviouse.futureshopsp.api.economy.EconomyAmounts;
 import com.enviouse.futureshopsp.event.BalanceChangeEvent;
 import com.enviouse.futureshopsp.server.shop.ShopResultCode;
 import com.enviouse.futureshopsp.server.util.PageBounds;
@@ -54,11 +55,13 @@ public class InternalEconomyProvider implements EconomyProvider {
             return TransactionResult.error(ShopResultCode.CANCELLED_BY_EVENT, currentBalance);
         }
 
-        long newBalance = currentBalance - amountMinorUnits;
+        long newBalance;
+        try {
+            newBalance = EconomyAmounts.subtractExact(currentBalance, amountMinorUnits);
+        } catch (ArithmeticException exception) {
+            return TransactionResult.error(ShopResultCode.SERVER_ERROR, currentBalance);
+        }
         getData().setBalance(playerUUID, newBalance);
-
-        // Fire BalanceChangeEvent.Post
-        NeoForge.EVENT_BUS.post(new BalanceChangeEvent.Post(playerUUID, -amountMinorUnits, reason, newBalance));
 
         return TransactionResult.ok(newBalance);
     }
@@ -75,7 +78,12 @@ public class InternalEconomyProvider implements EconomyProvider {
         }
 
         long currentBalance = getBalance(playerUUID);
-        long newBalance = currentBalance + amountMinorUnits;
+        long newBalance;
+        try {
+            newBalance = EconomyAmounts.addExact(currentBalance, amountMinorUnits);
+        } catch (ArithmeticException exception) {
+            return TransactionResult.error(ShopResultCode.MAX_BALANCE_EXCEEDED, currentBalance);
+        }
         if (newBalance > Config.economyMaxBalanceMinorUnits) {
             return TransactionResult.error(ShopResultCode.MAX_BALANCE_EXCEEDED, currentBalance);
         }
@@ -88,9 +96,6 @@ public class InternalEconomyProvider implements EconomyProvider {
         }
 
         getData().setBalance(playerUUID, newBalance);
-
-        // Fire BalanceChangeEvent.Post
-        NeoForge.EVENT_BUS.post(new BalanceChangeEvent.Post(playerUUID, amountMinorUnits, reason, newBalance));
 
         return TransactionResult.ok(newBalance);
     }
@@ -137,5 +142,9 @@ public class InternalEconomyProvider implements EconomyProvider {
     private InternalBalanceSavedData getData() {
         ServerLevel overworld = server.overworld();
         return overworld.getDataStorage().computeIfAbsent(new SavedData.Factory<>(InternalBalanceSavedData::new, InternalBalanceSavedData::load, null), InternalBalanceSavedData.DATA_NAME);
+    }
+
+    boolean persistenceIntegrityValid() {
+        return getData().integrityValid();
     }
 }

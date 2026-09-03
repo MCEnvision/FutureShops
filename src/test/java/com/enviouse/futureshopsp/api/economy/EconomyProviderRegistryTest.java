@@ -84,6 +84,71 @@ class EconomyProviderRegistryTest {
                 unresolvedResolution(server).lifecycle());
     }
 
+    @Test
+    void containsProviderIdentityFailures(MinecraftServer server) {
+        EconomyProvider delegate = provider("identityfailure");
+        EconomyProviderRegistry.register("identityfailure", 1, context -> new EconomyProvider() {
+            @Override
+            public String providerId() {
+                throw new IllegalStateException("identity failure");
+            }
+
+            @Override
+            public int compatibilityVersion() {
+                return delegate.compatibilityVersion();
+            }
+
+            @Override
+            public CurrencyMetadata currency() {
+                return delegate.currency();
+            }
+
+            @Override
+            public ProviderCapabilities capabilities() {
+                return delegate.capabilities();
+            }
+
+            @Override
+            public ProviderReadiness readiness() {
+                return delegate.readiness();
+            }
+
+            @Override
+            public ProviderResult<BalanceSnapshot> balance(UUID playerId) {
+                return delegate.balance(playerId);
+            }
+
+            @Override
+            public ProviderResult<BalanceSnapshot> precheck(MutationRequest request) {
+                return delegate.precheck(request);
+            }
+
+            @Override
+            public ProviderResult<MutationReceipt> withdraw(MutationRequest request) {
+                return delegate.withdraw(request);
+            }
+
+            @Override
+            public ProviderResult<MutationReceipt> deposit(MutationRequest request) {
+                return delegate.deposit(request);
+            }
+
+            @Override
+            public ProviderResult<MutationReceipt> lookup(RequestId requestId) {
+                return delegate.lookup(requestId);
+            }
+
+            @Override
+            public ProviderResult<MutationReceipt> retry(MutationRequest request) {
+                return delegate.retry(request);
+            }
+        });
+        EconomyProviderRegistry.freeze();
+
+        assertEquals(ProviderLifecycle.FAILED,
+                EconomyProviderRegistry.resolve("identityfailure", new EconomyProviderContext(server)).lifecycle());
+    }
+
     private static ProviderResolution unresolvedResolution(MinecraftServer server) {
         EconomyProviderRegistry.resetForTests();
         return EconomyProviderRegistry.resolve("alpha", new EconomyProviderContext(server));

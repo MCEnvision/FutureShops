@@ -33,6 +33,8 @@ The server configuration key is `economy.provider`. An absent value selects `int
 
 Balances and amounts use signed `long` integer minor units. `MutationRequest` requires a positive amount, a server supplied `RequestId`, an actor UUID, an optional counterparty, and a `MutationKind`. Providers must preserve the request identity across their durable operation and receipt records. A locally generated UUID does not make an external operation idempotent unless the external system binds that identity to lookup and replay behavior.
 
+`EconomyAmounts` provides checked addition, subtraction, multiplication, sign validation, and exact decimal parsing. Lossy precision and overflow are rejected before a provider call.
+
 `CurrencyMetadata` validates singular and plural display names and a decimal precision from zero through six. The selected provider owns this metadata for the server lifecycle.
 
 ## Results and recovery
@@ -44,5 +46,19 @@ Balances and amounts use signed `long` integer minor units. `MutationRequest` re
 ## Lifecycle
 
 The provider readiness snapshot exposes `UNRESOLVED`, `READY`, `DRAINING`, `MISSING`, `INCOMPATIBLE`, `FAILED`, `RECOVERING`, `FROZEN`, and `STOPPED`. FutureShops admits monetary operations only when the selected provider is ready and the operation's required capabilities are proven. Registration and selection are frozen before monetary readiness. Unclean startup and unknown outcomes require recovery, and unknown outcomes freeze external mutation until an operator resolves them with evidence.
+
+## Server coordinator
+
+`EconomyTransactionCoordinator` is the server side boundary used by the legacy provider view. It checks lifecycle and capabilities before calling a provider, writes `PREPARED` and `EXTERNAL_PENDING` journal records before a mutation, validates the returned receipt, and records `EXTERNAL_CONFIRMED` and `RESOLVED` only for a matching confirmed result. A duplicate request returns the recorded result without a second provider call. An ambiguous or exception result becomes `UNCERTAIN` and freezes the lifecycle. Recovery performs durable receipt lookup before any retry.
+
+Multi step server shop paths use `executeWithCustody`. It runs the same preflight and mutation pipeline while holding a checksummed delivery entitlement first. A confirmed online buy can advance that entitlement to `DELIVERED` and then `CLAIMED`; a sell can retain it as `HELD` until stock settlement and release it only after the credit is confirmed. Rejected outcomes release custody. Ambiguous outcomes retain custody and freeze the lifecycle for evidence based recovery.
+
+The journal is stored as versioned `futureshops_economy_journal` SavedData with checksums, request identity, mutation state, provider result status, diagnostic, and optional receipt. It contains no external balance field. The clean marker is written only after the lifecycle enters `DRAINING` and the journal, custody, claims, and checkpoint flush gate succeeds. Missing or invalid startup state enters `RECOVERING`.
+
+Item custody and offline proceeds use separate versioned SavedData indexes. `futureshops_economy_custody` stores a bounded item identity, owner, quantity, content hash, and the monotonic `HELD`, `DELIVERED`, `CLAIMED`, or `RELEASED` state. `futureshops_economy_claims` stores the claimant, exact amount, bounded description, and the non expiring `PENDING`, `DELIVERED`, or `RESOLVED` state. `futureshops_player_shop_barter_escrow` stores exact serialized player shop payment or buyback item stacks and advances them through `PREPARED`, `REMOVED`, `STORED`, and `COMPLETE`, or ends in `REFUNDED` or `RECOVERY_REQUIRED`. `futureshops_player_shop_sale_escrow` stores exact serialized sale output stacks and advances them through `PREPARED`, `REMOVED`, `DELIVERED`, and `CLAIMED`, or ends in `REFUNDED` or `RECOVERY_REQUIRED`. Every record has a checksum and a clean marker. Invalid or newer records fail closed and are not interpreted as completed value movement. Repeated hold, delivery, claim, and resolution calls return the existing terminal record when the immutable request fields match.
+
+`BalanceManager` loads the journal, custody, claims, barter escrow, sale escrow, and settlement indexes before provider readiness, marks them unclean before admission, and includes their integrity and incomplete record state in lifecycle resolution. Shutdown drains the coordinator, flushes all indexes, and writes each clean marker only after the complete flush gate passes. Internal fixtures use in memory implementations only when no world exists, such as unit test servers.
+
+Existing internal provider calls are routed through this boundary. The internal adapter supplies the same typed receipt and retry contract, while unresolved external selections stay unavailable. Concrete Pixelmon and Vault adapters remain Phase 002 work and must use this contract rather than the legacy provider interface directly.
 
 The registry, server selection, transaction journal, custody, claims, and surface routing are implemented in their owning phase. This document describes the stable public contract and must be kept aligned with the API source and compatibility tests.

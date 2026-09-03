@@ -87,7 +87,7 @@ public class PlayerShopBarterScreen extends AbstractShopScreen implements ShopSc
         addRenderableWidget(qtyBox);
         addRenderableWidget(Button.builder(Component.literal("+"), button -> {
                     if (hasShiftDown()) setQuantity(resolveMaxQuantity());
-                    else setQuantity(quantity + 1);
+                    else setQuantity(saturatingIncrement(quantity));
                 })
                 .tooltip(Tooltip.create(Component.translatable("gui.futureshops.player_shop_barter.tooltip.shift_max")))
                 .bounds(qtyX + 52, bottomY, 16, 16)
@@ -158,7 +158,7 @@ public class PlayerShopBarterScreen extends AbstractShopScreen implements ShopSc
 
         // Confirm button active state
         String barterId = listing.barterItemId();
-        int needed = listing.barterItemCount() * quantity;
+        int needed = saturatingMultiplyToInt(listing.barterItemCount(), quantity);
         int owned = (barterId != null && !barterId.isBlank())
                 ? ShopUiUtil.countPlayerInventoryNbt(barterId, listing.barterNbtJson(), listing.barterNbtAware())
                 : 0;
@@ -230,7 +230,7 @@ public class PlayerShopBarterScreen extends AbstractShopScreen implements ShopSc
             return;
         }
 
-        int needed = listing.barterItemCount() * quantity;
+        int needed = saturatingMultiplyToInt(listing.barterItemCount(), quantity);
         int owned = ShopUiUtil.countPlayerInventoryNbt(barterId, listing.barterNbtJson(), listing.barterNbtAware());
         boolean canPay = owned >= needed;
 
@@ -271,7 +271,7 @@ public class PlayerShopBarterScreen extends AbstractShopScreen implements ShopSc
 
         // LGB#1: Show base barter rate (strikethrough) when promo discounts it
         if (hasBaseDiscount) {
-            String baseNeeded = "§7§m×" + (listing.baseBarterItemCount() * quantity);
+            String baseNeeded = "§7§m×" + saturatingMultiplyToInt(listing.baseBarterItemCount(), quantity);
             graphics.drawCenteredString(this.font, baseNeeded, x + w / 2, stackY, ShopColors.TEXT_FAINT);
             stackY += 14;
         }
@@ -309,7 +309,7 @@ public class PlayerShopBarterScreen extends AbstractShopScreen implements ShopSc
         if (listing == null) return;
         String receiveName = ShopUiUtil.getItemDisplayNameWithNbtAndQty(listing.itemId(), listing.nbtJson(), listing.baseQuantity());
         String barterId = listing.barterItemId();
-        int needed = listing.barterItemCount() * quantity;
+        int needed = saturatingMultiplyToInt(listing.barterItemCount(), quantity);
         boolean hasRealBarterNbt = listing.barterNbtAware()
                 && ShopUiUtil.hasNonDefaultNbt(barterId != null ? barterId : "", listing.barterNbtJson());
         String giveName;
@@ -338,7 +338,7 @@ public class PlayerShopBarterScreen extends AbstractShopScreen implements ShopSc
 
         String totalText;
         if (compound) {
-            long money = Math.max(0L, listing.effectiveUnitPriceMinor()) * quantity;
+            long money = saturatingMultiply(Math.max(0L, listing.effectiveUnitPriceMinor()), quantity);
             String moneyStr = money <= 0 ? "Free"
                     : ShopUiUtil.formatMinorUnits(money) + " " + com.enviouse.futureshopsp.client.ShopClientState.getCurrencyName();
             // Unified compound total format — "Total: §a$X §f+ §9N× item" — matches cart row
@@ -387,6 +387,26 @@ public class PlayerShopBarterScreen extends AbstractShopScreen implements ShopSc
         }
         int affordable = ShopUiUtil.countPlayerInventoryNbt(barterId, listing.barterNbtJson(), listing.barterNbtAware()) / barterCost;
         return Math.min(stock, affordable);
+    }
+
+    private static int saturatingIncrement(int value) {
+        return value == Integer.MAX_VALUE ? Integer.MAX_VALUE : value + 1;
+    }
+
+    private static int saturatingMultiplyToInt(int left, int right) {
+        try {
+            return Math.multiplyExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return (left < 0) == (right < 0) ? Integer.MAX_VALUE : Integer.MIN_VALUE;
+        }
+    }
+
+    private static long saturatingMultiply(long left, long right) {
+        try {
+            return Math.multiplyExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return (left < 0L) == (right < 0L) ? Long.MAX_VALUE : Long.MIN_VALUE;
+        }
     }
 
     @Override

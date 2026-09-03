@@ -22,9 +22,15 @@ public record S2CBuyResponsePacket(
         ShopResultCode errorCode,
         long resultingBalanceMinorUnits,
         int totalQuantity,
-        long totalMinorUnits) implements CustomPacketPayload {
+        long totalMinorUnits,
+        boolean balanceAvailable) implements CustomPacketPayload {
     public static final Type<S2CBuyResponsePacket> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(Futureshops.MODID, "s2cbuyresponsepacket"));
     public static final StreamCodec<RegistryFriendlyByteBuf, S2CBuyResponsePacket> STREAM_CODEC = StreamCodec.ofMember(S2CBuyResponsePacket::encode, S2CBuyResponsePacket::decode);
+
+    public S2CBuyResponsePacket(boolean success, boolean cartCheckout, String shopId, ShopResultCode errorCode,
+                                long resultingBalanceMinorUnits, int totalQuantity, long totalMinorUnits) {
+        this(success, cartCheckout, shopId, errorCode, resultingBalanceMinorUnits, totalQuantity, totalMinorUnits, true);
+    }
 
     @Override
     public Type<S2CBuyResponsePacket> type() {
@@ -41,6 +47,7 @@ public record S2CBuyResponsePacket(
         buffer.writeLong(packet.resultingBalanceMinorUnits);
         buffer.writeVarInt(packet.totalQuantity);
         buffer.writeLong(packet.totalMinorUnits);
+        buffer.writeBoolean(packet.balanceAvailable);
     }
 
     public static S2CBuyResponsePacket decode(FriendlyByteBuf buffer) {
@@ -57,12 +64,12 @@ public record S2CBuyResponsePacket(
         long bal = buffer.readLong();
         int totalQty = buffer.readVarInt();
         long totalMu = buffer.readLong();
-        return new S2CBuyResponsePacket(success, cartCheckout, shopId, code, bal, totalQty, totalMu);
+        boolean balanceAvailable = buffer.readBoolean();
+        return new S2CBuyResponsePacket(success, cartCheckout, shopId, code, bal, totalQty, totalMu, balanceAvailable);
     }
 
     public static void handle(S2CBuyResponsePacket packet, IPayloadContext context) {
         context.enqueueWork(() -> ShopClientPacketHandler.handleBuyResponse(packet));
     }
 }
-
 

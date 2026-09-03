@@ -11,6 +11,9 @@ import java.util.*;
  */
 public final class PlayerShopCartState {
 
+    private static final int MAX_ENTRIES = 256;
+    private static final int MAX_QUANTITY = 2304;
+
     /**
      * A single cart entry: which shop, which listing, and how many units.
      * LGB#2/#3/#4: Includes trade mode and barter info for proper cart display.
@@ -21,11 +24,11 @@ public final class PlayerShopCartState {
                             String tradeMode, String barterItemId, int barterItemCount, String nbtJson,
                             String chosenPayment, boolean nbtAware) {
         public long totalPrice() {
-            return unitPriceMinor * quantity;
+            return saturatingMultiply(unitPriceMinor, quantity);
         }
 
-        public int totalItems() {
-            return baseQuantity * quantity;
+        public long totalItems() {
+            return saturatingMultiply(baseQuantity, quantity);
         }
     }
 
@@ -41,7 +44,7 @@ public final class PlayerShopCartState {
                                  String itemId, String shopName, long unitPriceMinor, int baseQuantity,
                                  String tradeMode, String barterItemId, int barterItemCount, String nbtJson,
                                  boolean nbtAware) {
-        if (quantity <= 0) return;
+        if (quantity <= 0 || quantity > MAX_QUANTITY) return;
         // Reject blank / air listings outright so they can't enter the cart or the
         // transaction history. Modded bundles sometimes expose a primary item as "air"
         // (e.g. Create's metal-block variants) — add-to-cart should no-op in that case.
@@ -61,13 +64,19 @@ public final class PlayerShopCartState {
         synchronized (entries) {
             for (CartEntry entry : entries) {
                 if (entry.shopPos().equals(shopPos) && entry.listingIndex() == listingIndex) {
-                    int newQty = entry.quantity() + quantity;
+                    int newQty;
+                    try {
+                        newQty = Math.min(MAX_QUANTITY, Math.addExact(entry.quantity(), quantity));
+                    } catch (ArithmeticException ignored) {
+                        return;
+                    }
                     entries.set(entries.indexOf(entry),
                             new CartEntry(shopPos, listingIndex, newQty, itemId, shopName, unitPriceMinor, baseQuantity,
                                     tradeMode, barterItemId, barterItemCount, nbtJson, entry.chosenPayment(), nbtAware));
                     return;
                 }
             }
+            if (entries.size() >= MAX_ENTRIES) return;
             entries.add(new CartEntry(shopPos, listingIndex, quantity, itemId, shopName, unitPriceMinor, baseQuantity,
                     tradeMode, barterItemId, barterItemCount, nbtJson, defaultPayment, nbtAware));
         }
@@ -83,7 +92,7 @@ public final class PlayerShopCartState {
                 entries.remove(cartIndex);
             } else {
                 CartEntry old = entries.get(cartIndex);
-                entries.set(cartIndex, new CartEntry(old.shopPos(), old.listingIndex(), quantity,
+                entries.set(cartIndex, new CartEntry(old.shopPos(), old.listingIndex(), Math.min(MAX_QUANTITY, quantity),
                         old.itemId(), old.shopName(), old.unitPriceMinor(), old.baseQuantity(),
                         old.tradeMode(), old.barterItemId(), old.barterItemCount(), old.nbtJson(), old.chosenPayment(), old.nbtAware()));
             }
@@ -150,13 +159,25 @@ public final class PlayerShopCartState {
 
     public static int totalQuantity() {
         synchronized (entries) {
-            return entries.stream().mapToInt(CartEntry::quantity).sum();
+            int total = 0;
+            for (CartEntry entry : entries) {
+                try {
+                    total = Math.addExact(total, entry.quantity());
+                } catch (ArithmeticException ignored) {
+                    return Integer.MAX_VALUE;
+                }
+            }
+            return total;
         }
     }
 
     public static long totalPrice() {
         synchronized (entries) {
-            return entries.stream().mapToLong(CartEntry::totalPrice).sum();
+            long total = 0L;
+            for (CartEntry entry : entries) {
+                total = saturatingAdd(total, entry.totalPrice());
+            }
+            return total;
         }
     }
 
@@ -186,12 +207,12 @@ public final class PlayerShopCartState {
 
                 if ("MONEY_AND_BARTER".equals(mode)) {
                     // Compound: always money + barter
-                    money += e.totalPrice();
+                    money = saturatingAdd(money, e.totalPrice());
                     addBarter(barter, e);
                 } else if (paysBarter) {
                     addBarter(barter, e);
                 } else {
-                    money += e.totalPrice();
+                    money = saturatingAdd(money, e.totalPrice());
                 }
             }
             return new CartSummary(count, money, barter);
@@ -200,8 +221,36 @@ public final class PlayerShopCartState {
 
     private static void addBarter(java.util.Map<String, Integer> map, CartEntry e) {
         if (e.barterItemId() == null || e.barterItemId().isBlank()) return;
-        int total = e.barterItemCount() * e.quantity();
-        map.merge(e.barterItemId(), total, Integer::sum);
+        int total;
+        try {
+            total = Math.multiplyExact(e.barterItemCount(), e.quantity());
+        } catch (ArithmeticException ignored) {
+            total = Integer.MAX_VALUE;
+        }
+        map.merge(e.barterItemId(), total, PlayerShopCartState::saturatingAdd);
+    }
+
+    private static long saturatingMultiply(long left, long right) {
+        try {
+            return Math.multiplyExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return (left < 0L) == (right < 0L) ? Long.MAX_VALUE : Long.MIN_VALUE;
+        }
+    }
+
+    private static long saturatingAdd(long left, long right) {
+        try {
+            return Math.addExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return left < 0L ? Long.MIN_VALUE : Long.MAX_VALUE;
+        }
+    }
+
+    private static int saturatingAdd(int left, int right) {
+        try {
+            return Math.addExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return left < 0 ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+        }
     }
 }
-

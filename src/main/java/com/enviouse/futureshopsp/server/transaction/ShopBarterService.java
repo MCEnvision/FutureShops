@@ -119,7 +119,14 @@ public final class ShopBarterService {
 
             Map<String, Integer> mergedIngredientCounts = new LinkedHashMap<>();
             for (BarterIngredientDef ingredient : recipe.ingredients()) {
-                mergedIngredientCounts.merge(ingredient.itemId(), ingredient.count(), Integer::sum);
+                if (ingredient.count() <= 0) {
+                    return BarterResult.error(shopId, ShopResultCode.INVALID_RECIPE);
+                }
+                try {
+                    mergedIngredientCounts.merge(ingredient.itemId(), ingredient.count(), Math::addExact);
+                } catch (ArithmeticException ex) {
+                    return BarterResult.error(shopId, ShopResultCode.SERVER_ERROR);
+                }
             }
 
             List<IngredientConsumption> required = new ArrayList<>();
@@ -168,25 +175,26 @@ public final class ShopBarterService {
                 return BarterResult.error(shopId, ShopResultCode.CANCELLED_BY_EVENT);
             }
 
+            List<ItemStack> inventorySnapshot = ShopTransactionUtil.snapshotInventorySlots(inventory);
             for (IngredientConsumption ingredient : required) {
                 if (!ShopTransactionUtil.removeItems(inventory, ingredient.item(), ingredient.count(), false, null)) {
-                    return BarterResult.error(shopId, ShopResultCode.MISSING_INGREDIENTS);
+                    boolean restored = restoreInventory(player, inventorySnapshot);
+                    return BarterResult.error(shopId,
+                            restored ? ShopResultCode.MISSING_INGREDIENTS : ShopResultCode.SERVER_ERROR);
                 }
             }
 
             if (!ShopCatalog.reserveStock(shopId, targetKey, outputQuantity)) {
-                for (IngredientConsumption ingredient : required) {
-                    ShopTransactionUtil.insertIntoInventory(inventory, List.of(new ItemStack(ingredient.item(), ingredient.count())));
-                }
-                return BarterResult.error(shopId, ShopResultCode.OUT_OF_STOCK);
+                boolean restored = restoreInventory(player, inventorySnapshot);
+                return BarterResult.error(shopId,
+                        restored ? ShopResultCode.OUT_OF_STOCK : ShopResultCode.SERVER_ERROR);
             }
 
             if (!ShopTransactionUtil.insertIntoInventory(inventory, rewards)) {
                 ShopCatalog.restoreStock(shopId, targetKey, outputQuantity);
-                for (IngredientConsumption ingredient : required) {
-                    ShopTransactionUtil.insertIntoInventory(inventory, List.of(new ItemStack(ingredient.item(), ingredient.count())));
-                }
-                return BarterResult.error(shopId, ShopResultCode.INVENTORY_FULL);
+                boolean restored = restoreInventory(player, inventorySnapshot);
+                return BarterResult.error(shopId,
+                        restored ? ShopResultCode.INVENTORY_FULL : ShopResultCode.SERVER_ERROR);
             }
 
             inventory.setChanged();
@@ -195,6 +203,15 @@ public final class ShopBarterService {
         } finally {
             lock.unlock();
         }
+    }
+
+    private static boolean restoreInventory(ServerPlayer player, List<ItemStack> snapshot) {
+        boolean restored = ShopTransactionUtil.restoreInventorySlots(player.getInventory(), snapshot);
+        if (restored) {
+            player.getInventory().setChanged();
+            player.inventoryMenu.broadcastChanges();
+        }
+        return restored;
     }
 
     private record IngredientConsumption(Item item, int count) {
@@ -212,6 +229,5 @@ public final class ShopBarterService {
         }
     }
 }
-
 
 

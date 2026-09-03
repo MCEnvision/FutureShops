@@ -8,6 +8,8 @@ import com.enviouse.futureshopsp.data.TransactionHistoryEntry;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
 import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import com.enviouse.futureshopsp.server.economy.TransactionResult;
+import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.server.session.ShopSessionManager;
 import com.enviouse.futureshopsp.server.shop.ShopDataService;
 import com.enviouse.futureshopsp.server.shop.StockRefreshScheduler;
@@ -63,21 +65,32 @@ public final class ShopModAPI {
      * Returns the balance of the given player in minor currency units.
      */
     public static long getBalance(UUID playerUUID) {
-        return BalanceManager.getBalance(playerUUID);
+        ProviderResult<BalanceSnapshot> result = BalanceManager.queryBalance(playerUUID);
+        if (result.confirmed()) {
+            return result.value().orElseThrow().balanceMinorUnits();
+        }
+        throw new IllegalStateException(result.diagnostic());
+    }
+
+    /**
+     * Queries a balance without converting an unavailable provider into zero.
+     */
+    public static ProviderResult<BalanceSnapshot> queryBalance(UUID playerUUID) {
+        return BalanceManager.queryBalance(playerUUID);
     }
 
     /**
      * Withdraws currency from a player's balance.
      */
     public static TransactionResult withdraw(UUID playerUUID, long amountMinor) {
-        return BalanceManager.getProvider().withdraw(playerUUID, amountMinor);
+        return BalanceManager.withdraw(playerUUID, amountMinor);
     }
 
     /**
      * Deposits currency into a player's balance.
      */
     public static TransactionResult deposit(UUID playerUUID, long amountMinor) {
-        return BalanceManager.getProvider().deposit(playerUUID, amountMinor);
+        return BalanceManager.deposit(playerUUID, amountMinor);
     }
 
     /**
@@ -177,7 +190,12 @@ public final class ShopModAPI {
             ItemStack stack = player.getInventory().getItem(i);
             MoneyValidationResult result = MoneyValidationService.validate(stack);
             if (result.valid()) {
-                total += result.denominationMinorUnits() * stack.getCount();
+                try {
+                    total = Math.addExact(total,
+                            Math.multiplyExact(result.denominationMinorUnits(), (long) stack.getCount()));
+                } catch (ArithmeticException exception) {
+                    throw new IllegalStateException("physical coin value exceeds the supported range", exception);
+                }
             }
         }
         return total;
@@ -188,18 +206,17 @@ public final class ShopModAPI {
     // ═══════════════════════════════════════════════
 
     /**
-     * Sets a player's balance directly (admin override). Bypasses max_balance checks.
-     * Fires {@link com.enviouse.futureshopsp.event.BalanceChangeEvent.Post} with reason "ADMIN".
+     * Sets a player's internal balance through the durable economy coordinator.
+     * This operation is available only while the internal provider is ready.
      */
     public static void setBalance(MinecraftServer server, UUID playerUUID, long amountMinor) {
-        var overworld = server.overworld();
-        var balData = overworld.getDataStorage()
-                .computeIfAbsent(new net.minecraft.world.level.saveddata.SavedData.Factory<>(com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::new, com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::load, null), com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData.DATA_NAME);
-        long oldBalance = BalanceManager.getBalance(playerUUID);
-        balData.setBalance(playerUUID, amountMinor);
-        long delta = amountMinor - oldBalance;
-        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
-                new com.enviouse.futureshopsp.event.BalanceChangeEvent.Post(playerUUID, delta, "ADMIN", amountMinor));
+        if (server == null) {
+            throw new IllegalArgumentException("server is required");
+        }
+        ProviderResult<BalanceSnapshot> result = BalanceManager.setInternalBalance(playerUUID, amountMinor);
+        if (!result.confirmed()) {
+            throw new IllegalStateException(result.diagnostic());
+        }
     }
 
     // ═══════════════════════════════════════════════
@@ -253,5 +270,3 @@ public final class ShopModAPI {
         return ShopSessionManager.snapshotSessions().size();
     }
 }
-
-

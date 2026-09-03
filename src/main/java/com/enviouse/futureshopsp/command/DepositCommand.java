@@ -1,6 +1,5 @@
 package com.enviouse.futureshopsp.command;
 
-import com.enviouse.futureshopsp.money.MoneyNbtKeys;
 import com.enviouse.futureshopsp.money.MoneyValidationResult;
 import com.enviouse.futureshopsp.money.CoinData;
 import com.enviouse.futureshopsp.money.ModDataComponents;
@@ -9,13 +8,18 @@ import com.enviouse.futureshopsp.money.SpentMintsSavedData;
 import com.enviouse.futureshopsp.event.MoneyDepositEvent;
 import com.enviouse.futureshopsp.init.ModItems;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
-import com.enviouse.futureshopsp.server.economy.EconomyProvider;
-import com.enviouse.futureshopsp.server.economy.TransactionResult;
+import com.enviouse.futureshopsp.server.economy.CustodyState;
+import com.enviouse.futureshopsp.server.economy.EconomyRecordChecksum;
+import com.enviouse.futureshopsp.api.economy.MutationKind;
+import com.enviouse.futureshopsp.api.economy.MutationRequest;
+import com.enviouse.futureshopsp.api.economy.MutationReceipt;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
+import com.enviouse.futureshopsp.api.economy.ProviderResultStatus;
+import com.enviouse.futureshopsp.api.economy.RequestId;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
@@ -49,7 +53,13 @@ public final class DepositCommand {
     }
 
     private static int deposit(ServerPlayer player, String requestedAmount) {
-        EconomyProvider provider = BalanceManager.getProvider();
+        if (!BalanceManager.isInternalEconomyReady()) {
+            player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                    "command.futureshops.economy.internal_only")));
+            return 0;
+        }
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
+        String currencyName = BalanceManager.getCurrencyName();
         Item coinItem = ModItems.MONEY_ITEM.get();
         SpentMintsSavedData mintData = SpentMintsSavedData.get(player.getServer());
 
@@ -70,12 +80,23 @@ public final class DepositCommand {
             return 0;
         }
 
-        long totalAvailableMinor = planned.stream().mapToLong(p -> p.denomination * p.available).sum();
+        long totalAvailableMinor;
+        try {
+            totalAvailableMinor = 0L;
+            for (PlannedStack plannedStack : planned) {
+                totalAvailableMinor = Math.addExact(totalAvailableMinor,
+                        Math.multiplyExact(plannedStack.denomination, plannedStack.available));
+            }
+        } catch (ArithmeticException exception) {
+            player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                    "command.futureshops.error.invalid_amount")));
+            return 0;
+        }
 
         long amountMinorUnits = totalAvailableMinor;
         if (requestedAmount != null) {
             try {
-                long requestedMinorUnits = EconomyCommandUtil.parseAmountToMinorUnits(requestedAmount, provider.getDecimalPlaces());
+                long requestedMinorUnits = EconomyCommandUtil.parseAmountToMinorUnits(requestedAmount, decimalPlaces);
                 if (requestedMinorUnits > totalAvailableMinor) {
                     player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable("command.futureshops.deposit.not_enough_coins")));
                     return 0;
@@ -87,17 +108,91 @@ public final class DepositCommand {
             }
         }
 
-        // Phase 3: Consume mint ledger + shrink stacks greedily (largest denomination first).
-        int acceptedTotal = consumeCoinsForAmount(mintData, planned, amountMinorUnits);
-
-        // Phase 4: Credit balance with actually-consumed value.
-        long creditedMinor = 0L;
-        for (PlannedStack p : planned) {
-            creditedMinor += p.denomination * p.taken;
+        long plannedMinor;
+        try {
+            plannedMinor = estimateConsumedValue(planned, amountMinorUnits);
+        } catch (ArithmeticException exception) {
+            player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                    "command.futureshops.error.invalid_amount")));
+            return 0;
         }
-        TransactionResult result = provider.deposit(player.getUUID(), creditedMinor);
-        if (!result.success()) {
-            EconomyCommandUtil.sendProviderError(player, result.errorCode());
+        if (plannedMinor <= 0L) {
+            player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable(
+                    "command.futureshops.deposit.no_coins")));
+            return 0;
+        }
+
+        RequestId requestId = RequestId.random();
+        MutationRequest request = MutationRequest.forPlayer(requestId, player.getUUID(), plannedMinor,
+                MutationKind.DEPOSIT);
+        RequestId custodyId = requestId.child("custody");
+        try {
+            BalanceManager.getCoordinator().holdCustody(custodyId, player.getUUID(), "physical-money-deposit",
+                    estimateConsumedCount(planned, amountMinorUnits), custodyHash(planned));
+        } catch (RuntimeException exception) {
+            player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                    "command.futureshops.economy.recovery_required")));
+            return 0;
+        }
+
+        // Consume mint ledger + shrink stacks greedily after durable custody is held.
+        int acceptedTotal;
+        try {
+            acceptedTotal = consumeCoinsForAmount(mintData, planned, amountMinorUnits);
+        } catch (ArithmeticException exception) {
+            restoreConsumedCoins(mintData, planned);
+            try {
+                BalanceManager.getCoordinator().releaseCustody(custodyId);
+            } catch (RuntimeException releaseException) {
+                BalanceManager.getCoordinator().markRecoveryRequired("deposit arithmetic custody release requires recovery");
+            }
+            player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                    "command.futureshops.economy.recovery_required")));
+            return 0;
+        }
+        long creditedMinor = consumedValue(planned);
+        if (creditedMinor != plannedMinor) {
+            restoreConsumedCoins(mintData, planned);
+            try {
+                BalanceManager.getCoordinator().releaseCustody(custodyId);
+            } catch (RuntimeException exception) {
+                BalanceManager.getCoordinator().markRecoveryRequired("deposit custody release requires recovery");
+                player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                        "command.futureshops.economy.recovery_required")));
+                return 0;
+            }
+            player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                    "command.futureshops.economy.recovery_required")));
+            return 0;
+        }
+
+        ProviderResult<MutationReceipt> mutation = BalanceManager.getCoordinator().deposit(request);
+        if (!mutation.confirmed()) {
+            if (mutation.status() != ProviderResultStatus.AMBIGUOUS
+                    && mutation.status() != ProviderResultStatus.RECOVERY_REQUIRED) {
+                restoreConsumedCoins(mintData, planned);
+                try {
+                    BalanceManager.getCoordinator().releaseCustody(custodyId);
+                } catch (RuntimeException exception) {
+                    BalanceManager.getCoordinator().markRecoveryRequired("deposit custody release requires recovery");
+                    player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                            "command.futureshops.economy.recovery_required")));
+                }
+            } else {
+                BalanceManager.getCoordinator().markRecoveryRequired("deposit mutation requires recovery");
+                player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                        "command.futureshops.economy.recovery_required")));
+            }
+            EconomyCommandUtil.sendProviderError(player, mutation);
+            return 0;
+        }
+        try {
+            BalanceManager.getCoordinator().deliverCustody(custodyId);
+            BalanceManager.getCoordinator().claimCustody(custodyId);
+        } catch (RuntimeException exception) {
+            BalanceManager.getCoordinator().markRecoveryRequired("deposit custody finalization requires recovery");
+            player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                    "command.futureshops.economy.recovery_required")));
             return 0;
         }
 
@@ -105,10 +200,11 @@ public final class DepositCommand {
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
                 new MoneyDepositEvent(player.getUUID(), creditedMinor, acceptedTotal));
 
-        String depositedText = EconomyCommandUtil.formatMinorUnits(creditedMinor, provider.getDecimalPlaces());
-        String balanceText = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
+        String depositedText = EconomyCommandUtil.formatMinorUnits(creditedMinor, decimalPlaces);
+        Component balanceText = EconomyCommandUtil.formatResultingBalance(mutation, player.getUUID(),
+                decimalPlaces);
         player.sendSystemMessage(EconomyCommandUtil.success(Component.translatable("command.futureshops.deposit.success",
-                depositedText, provider.getCurrencyName(), balanceText)));
+                depositedText, currencyName, balanceText)));
         return 1;
     }
 
@@ -170,9 +266,10 @@ public final class DepositCommand {
             if (remaining <= 0L) break;
             if (p.available <= 0) continue;
 
-            long coinsNeeded = (remaining + p.denomination - 1L) / p.denomination;
+            long coinsNeeded = remaining / p.denomination
+                    + (remaining % p.denomination == 0L ? 0L : 1L);
             int toTake = (int) Math.min(coinsNeeded, p.available);
-            long valueRemoved = p.denomination * toTake;
+            long valueRemoved = Math.multiplyExact(p.denomination, toTake);
             if (valueRemoved > remaining && toTake > 1) {
                 toTake = (int) (remaining / p.denomination);
                 valueRemoved = p.denomination * toTake;
@@ -185,10 +282,77 @@ public final class DepositCommand {
             }
             p.stack.shrink(r.accepted());
             p.taken += r.accepted();
-            remaining -= p.denomination * r.accepted();
-            totalAccepted += r.accepted();
+            remaining = Math.subtractExact(remaining,
+                    Math.multiplyExact(p.denomination, r.accepted()));
+            totalAccepted = Math.addExact(totalAccepted, r.accepted());
         }
         return totalAccepted;
+    }
+
+    private static long estimateConsumedValue(List<PlannedStack> planned, long targetMinor) {
+        long remaining = targetMinor;
+        long total = 0L;
+        for (PlannedStack p : planned) {
+            if (remaining <= 0L) break;
+            long coinsNeeded = remaining / p.denomination
+                    + (remaining % p.denomination == 0L ? 0L : 1L);
+            int toTake = (int) Math.min(coinsNeeded, p.available);
+            long valueRemoved = Math.multiplyExact(p.denomination, toTake);
+            if (valueRemoved > remaining && toTake > 1) {
+                toTake = (int) (remaining / p.denomination);
+                valueRemoved = Math.multiplyExact(p.denomination, toTake);
+            }
+            if (toTake <= 0) continue;
+            total = Math.addExact(total, valueRemoved);
+            remaining -= valueRemoved;
+        }
+        return total;
+    }
+
+    private static long consumedValue(List<PlannedStack> planned) {
+        long total = 0L;
+        for (PlannedStack p : planned) {
+            total = Math.addExact(total, Math.multiplyExact(p.denomination, p.taken));
+        }
+        return total;
+    }
+
+    private static long estimateConsumedCount(List<PlannedStack> planned, long targetMinor) {
+        long remaining = targetMinor;
+        long total = 0L;
+        for (PlannedStack p : planned) {
+            if (remaining <= 0L) break;
+            long coinsNeeded = remaining / p.denomination
+                    + (remaining % p.denomination == 0L ? 0L : 1L);
+            int toTake = (int) Math.min(coinsNeeded, p.available);
+            long valueRemoved = Math.multiplyExact(p.denomination, toTake);
+            if (valueRemoved > remaining && toTake > 1) {
+                toTake = (int) (remaining / p.denomination);
+                valueRemoved = Math.multiplyExact(p.denomination, toTake);
+            }
+            if (toTake <= 0) continue;
+            total = Math.addExact(total, toTake);
+            remaining -= valueRemoved;
+        }
+        return total;
+    }
+
+    private static void restoreConsumedCoins(SpentMintsSavedData mintData, List<PlannedStack> planned) {
+        for (PlannedStack p : planned) {
+            if (p.taken <= 0) continue;
+            mintData.restore(p.mintId, p.taken, p.denomination, p.authorizedCount);
+            p.stack.grow(p.taken);
+            p.taken = 0;
+        }
+    }
+
+    private static String custodyHash(List<PlannedStack> planned) {
+        StringBuilder canonical = new StringBuilder("physical-money-deposit|");
+        for (PlannedStack p : planned) {
+            canonical.append(p.mintId).append('|').append(p.denomination).append('|')
+                    .append(p.available).append(';');
+        }
+        return EconomyRecordChecksum.sha256(canonical.toString());
     }
 
     private static List<ItemStack> allCoinContainers(ServerPlayer player) {

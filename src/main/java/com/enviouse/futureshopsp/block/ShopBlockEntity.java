@@ -648,7 +648,11 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
          * Item 24: Calculates total barter items needed for a quantity, applying promo.
          */
         public int effectiveBarterTotal(int quantity) {
-            return effectiveBarterItemCount() * quantity;
+            try {
+                return Math.multiplyExact(effectiveBarterItemCount(), quantity);
+            } catch (ArithmeticException exception) {
+                return -1;
+            }
         }
 
         public Promo promo() { return promo; }
@@ -678,7 +682,13 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
         }
 
         public long calculatePrice(int quantity) {
-            return promo.active() ? promo.calculateTotal(moneyPriceMinor, quantity) : moneyPriceMinor * quantity;
+            if (quantity <= 0) return 0L;
+            if (promo.active()) return promo.calculateTotal(moneyPriceMinor, quantity);
+            try {
+                return Math.multiplyExact(moneyPriceMinor, quantity);
+            } catch (ArithmeticException exception) {
+                return -1L;
+            }
         }
 
         // ── Buyback / direction accessors ───────────────────────────────────
@@ -697,7 +707,13 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
             return buybackCap == 0 ? Integer.MAX_VALUE : Math.max(0, buybackCap - buybackBought);
         }
         public long effectiveBuybackUnitPriceMinor() { return buybackPriceMinor; }
-        public long calculateBuybackTotal(int qty) { return effectiveBuybackUnitPriceMinor() * Math.max(0, qty); }
+        public long calculateBuybackTotal(int qty) {
+            try {
+                return Math.multiplyExact(effectiveBuybackUnitPriceMinor(), Math.max(0, qty));
+            } catch (ArithmeticException exception) {
+                return -1L;
+            }
+        }
 
         private CompoundTag save(HolderLookup.Provider registries) {
             CompoundTag tag = new CompoundTag();
@@ -812,9 +828,17 @@ public class ShopBlockEntity extends BlockEntity implements GeoBlockEntity {
                 int fullGroups = quantity / groupSize;
                 int remainder = quantity % groupSize;
                 int payable = fullGroups * buyX + Math.min(remainder, buyX);
-                return basePrice * payable;
+                try {
+                    return Math.multiplyExact(basePrice, payable);
+                } catch (ArithmeticException exception) {
+                    return -1L;
+                }
             }
-            return applyUnitPrice(basePrice) * quantity;
+            try {
+                return Math.multiplyExact(applyUnitPrice(basePrice), quantity);
+            } catch (ArithmeticException exception) {
+                return -1L;
+            }
         }
         public void configure(String promoType, double promoValue, int buyX, int buyY, long startEpochSeconds, long endEpochSeconds, boolean flash) {
             this.promoType = promoType == null ? "" : promoType;

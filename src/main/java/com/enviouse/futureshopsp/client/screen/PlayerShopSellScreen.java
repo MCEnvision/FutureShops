@@ -73,7 +73,7 @@ public class PlayerShopSellScreen extends AbstractShopScreen implements ShopScre
         addRenderableWidget(qtyBox);
         addRenderableWidget(Button.builder(Component.literal("+"), button -> {
                     if (hasShiftDown()) setQuantity(resolveMaxQuantity());
-                    else setQuantity(quantity + 1);
+                    else setQuantity(saturatingIncrement(quantity));
                 })
                 .bounds(qtyX + 56, bottomY, 16, 16).build());
         addRenderableWidget(Button.builder(Component.translatable("gui.futureshops.player_shop_block.sell.max"), button -> setQuantity(resolveMaxQuantity()))
@@ -128,7 +128,7 @@ public class PlayerShopSellScreen extends AbstractShopScreen implements ShopScre
                 guiLeft + guiW / 2, previewY + 88, ShopColors.TEXT_SECONDARY);
 
         // Total
-        long total = listing.buybackPriceMinor() * (long) quantity;
+        long total = saturatingMultiply(listing.buybackPriceMinor(), quantity);
         String totalStr = ShopUiUtil.formatMinorUnits(total);
         graphics.drawCenteredString(this.font,
                 Component.translatable("gui.futureshops.player_shop_block.sell.total", totalStr),
@@ -160,6 +160,18 @@ public class PlayerShopSellScreen extends AbstractShopScreen implements ShopScre
                 PlayerShopClientState.selectedListingIndex(),
                 quantity));
         onClose();
+    }
+
+    private static int saturatingIncrement(int value) {
+        return value == Integer.MAX_VALUE ? Integer.MAX_VALUE : value + 1;
+    }
+
+    private static long saturatingMultiply(long left, long right) {
+        try {
+            return Math.multiplyExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return (left < 0L) == (right < 0L) ? Long.MAX_VALUE : Long.MIN_VALUE;
+        }
     }
 
     @Override

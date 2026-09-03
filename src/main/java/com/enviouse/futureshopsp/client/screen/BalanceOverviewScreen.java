@@ -11,6 +11,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.client.resources.language.I18n;
 
 import java.util.List;
 import java.util.UUID;
@@ -29,6 +30,10 @@ public class BalanceOverviewScreen extends AbstractShopScreen implements ShopScr
     private final int lowSupplyCount;
     private final List<OwnedShopSummary> shopSummaries;
     private final List<String> alerts;
+    private final boolean balanceAvailable;
+    private final String providerId;
+    private final String providerLifecycle;
+    private final String providerDiagnostic;
 
     private int guiLeft;
     private int guiTop;
@@ -42,6 +47,15 @@ public class BalanceOverviewScreen extends AbstractShopScreen implements ShopScr
     public BalanceOverviewScreen(UUID playerUuid, String playerName, long balanceMinorUnits, String currencyName, int currencyDecimals,
                                  long totalRevenueMinor, long pendingSettlementMinor, int shopCount, int listingCount,
                                  int totalStock, int lowSupplyCount, List<OwnedShopSummary> shopSummaries, List<String> alerts) {
+        this(playerUuid, playerName, balanceMinorUnits, currencyName, currencyDecimals, totalRevenueMinor,
+                pendingSettlementMinor, shopCount, listingCount, totalStock, lowSupplyCount, shopSummaries, alerts,
+                true, "internal", "READY", "");
+    }
+
+    public BalanceOverviewScreen(UUID playerUuid, String playerName, long balanceMinorUnits, String currencyName, int currencyDecimals,
+                                 long totalRevenueMinor, long pendingSettlementMinor, int shopCount, int listingCount,
+                                 int totalStock, int lowSupplyCount, List<OwnedShopSummary> shopSummaries, List<String> alerts,
+                                 boolean balanceAvailable, String providerId, String providerLifecycle, String providerDiagnostic) {
         super(Component.translatable("gui.futureshops.balance.title"));
         this.playerUuid = playerUuid;
         this.playerName = playerName;
@@ -56,6 +70,10 @@ public class BalanceOverviewScreen extends AbstractShopScreen implements ShopScr
         this.lowSupplyCount = lowSupplyCount;
         this.shopSummaries = List.copyOf(shopSummaries);
         this.alerts = List.copyOf(alerts);
+        this.balanceAvailable = balanceAvailable;
+        this.providerId = providerId == null || providerId.isBlank() ? "unknown" : providerId;
+        this.providerLifecycle = providerLifecycle == null || providerLifecycle.isBlank() ? "UNRESOLVED" : providerLifecycle;
+        this.providerDiagnostic = providerDiagnostic == null ? "" : providerDiagnostic;
     }
 
     @Override
@@ -105,8 +123,15 @@ public class BalanceOverviewScreen extends AbstractShopScreen implements ShopScr
         graphics.drawString(this.font, this.title, guiLeft + 68, guiTop + 18, ShopColors.TEXT_STRONG, false);
         ShopUiUtil.renderScrollingString(graphics, this.font, playerName,
                 guiLeft + 68, guiTop + 32, 132, ShopColors.TEXT_MUTED);
-        String balanceText = formatMinorUnits(balanceMinorUnits) + " " + currencyName;
+        String balanceText = (balanceAvailable ? formatMinorUnits(balanceMinorUnits)
+                : I18n.get("gui.futureshops.economy.balance_unavailable")) + " " + currencyName;
         graphics.drawString(this.font, balanceText, guiLeft + guiW - this.font.width(balanceText) - 18, guiTop + 24, ShopColors.TEXT_CURRENCY, false);
+        if (!balanceAvailable || !"READY".equalsIgnoreCase(providerLifecycle)) {
+            String status = !balanceAvailable
+                    ? I18n.get("gui.futureshops.economy.balance_unavailable")
+                    : I18n.get("gui.futureshops.economy.provider_unavailable", providerId, providerLifecycle);
+            graphics.drawString(this.font, status, guiLeft + 68, guiTop + 46, ShopColors.ERROR, false);
+        }
         boolean warn = lowSupplyCount > 0;
         ShopUiUtil.renderPill(graphics, this.font, guiLeft + guiW - 112, guiTop + 44,
                 warn ? lowSupplyCount + " low stock" : "Supply stable",

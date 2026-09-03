@@ -22,3 +22,9 @@ run
 
 # Old 1.20.1/Forge source — kept on disk for reference, NOT part of the port history
 SourceCodeOld/
+
+# Local verification state
+.codegraph/
+.jqwik-database
+logs/
+run-data/

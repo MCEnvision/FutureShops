@@ -139,6 +139,22 @@ public final class MoneyValidationService {
                 validation.mintId(), r.errorCode());
     }
 
+    /** Plans a deposit without changing the item stack or mint ledger. */
+    public static ConsumeOutcome preview(MinecraftServer server, ItemStack stack) {
+        MoneyValidationResult validation = validate(stack);
+        if (!validation.valid()) {
+            return ConsumeOutcome.reject(stack.getCount(), validation.errorCode());
+        }
+        SpentMintsSavedData mintData = SpentMintsSavedData.get(server);
+        int accepted = Math.min(stack.getCount(), mintData.remainingCount(validation.mintId()));
+        int rejected = stack.getCount() - accepted;
+        if (accepted <= 0) {
+            return ConsumeOutcome.reject(stack.getCount(), "ALREADY_CONSUMED");
+        }
+        return new ConsumeOutcome(accepted, rejected, validation.denominationMinorUnits(),
+                validation.mintId(), rejected > 0 ? "EXCESS" : "");
+    }
+
     public record ConsumeOutcome(int accepted, int rejected, long denominationMinorUnits,
                                  String mintId, String errorCode) {
         public boolean success() {
@@ -146,7 +162,7 @@ public final class MoneyValidationService {
         }
 
         public long acceptedValueMinor() {
-            return denominationMinorUnits * (long) accepted;
+            return Math.multiplyExact(denominationMinorUnits, (long) accepted);
         }
 
         public static ConsumeOutcome reject(int count, String errorCode) {

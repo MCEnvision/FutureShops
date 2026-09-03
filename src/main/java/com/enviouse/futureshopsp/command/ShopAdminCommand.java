@@ -8,8 +8,9 @@ import com.enviouse.futureshopsp.catalog.ShopCatalog;
 import com.enviouse.futureshopsp.money.MoneyMintRecord;
 import com.enviouse.futureshopsp.money.SpentMintsSavedData;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
-import com.enviouse.futureshopsp.server.economy.EconomyProvider;
 import com.enviouse.futureshopsp.server.economy.TransactionResult;
+import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.server.session.ShopSessionManager;
 import com.enviouse.futureshopsp.server.shop.AdminShopToggleSavedData;
 import com.enviouse.futureshopsp.server.shop.AdminCategorySavedData;
@@ -792,10 +793,11 @@ public final class ShopAdminCommand {
     // -------------------------------------------------------------------------
 
     private static int adminBalAdd(CommandSourceStack source, Collection<GameProfile> targets, String amountStr) {
-        EconomyProvider provider = BalanceManager.getProvider();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
+        String currencyName = BalanceManager.getCurrencyName();
         long amountMinor;
         try {
-            amountMinor = EconomyCommandUtil.parseAmountToMinorUnits(amountStr, provider.getDecimalPlaces());
+            amountMinor = EconomyCommandUtil.parseAmountToMinorUnits(amountStr, decimalPlaces);
         } catch (IllegalArgumentException e) {
             source.sendFailure(Component.translatable("command.futureshops.admin.bal.invalid_amount", amountStr)
                     .withStyle(ChatFormatting.RED));
@@ -805,13 +807,13 @@ public final class ShopAdminCommand {
         int successCount = 0;
         for (GameProfile profile : targets) {
             UUID uuid = profile.getId();
-            TransactionResult result = provider.deposit(uuid, amountMinor, "ADMIN");
-            String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, provider.getDecimalPlaces());
+            TransactionResult result = BalanceManager.deposit(uuid, amountMinor);
+            String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, decimalPlaces);
             if (result.success()) {
-                String newBal = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
+                String newBal = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), decimalPlaces);
                 source.sendSuccess(() -> Component.translatable(
                         "command.futureshops.admin.bal.add_success",
-                        formatted, provider.getCurrencyName(), profile.getName(), newBal)
+                        formatted, currencyName, profile.getName(), newBal)
                         .withStyle(ChatFormatting.GREEN), true);
                 successCount++;
             } else {
@@ -824,10 +826,11 @@ public final class ShopAdminCommand {
     }
 
     private static int adminBalRemove(CommandSourceStack source, Collection<GameProfile> targets, String amountStr) {
-        EconomyProvider provider = BalanceManager.getProvider();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
+        String currencyName = BalanceManager.getCurrencyName();
         long amountMinor;
         try {
-            amountMinor = EconomyCommandUtil.parseAmountToMinorUnits(amountStr, provider.getDecimalPlaces());
+            amountMinor = EconomyCommandUtil.parseAmountToMinorUnits(amountStr, decimalPlaces);
         } catch (IllegalArgumentException e) {
             source.sendFailure(Component.translatable("command.futureshops.admin.bal.invalid_amount", amountStr)
                     .withStyle(ChatFormatting.RED));
@@ -837,13 +840,13 @@ public final class ShopAdminCommand {
         int successCount = 0;
         for (GameProfile profile : targets) {
             UUID uuid = profile.getId();
-            TransactionResult result = provider.withdraw(uuid, amountMinor, "ADMIN");
-            String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, provider.getDecimalPlaces());
+            TransactionResult result = BalanceManager.withdraw(uuid, amountMinor);
+            String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, decimalPlaces);
             if (result.success()) {
-                String newBal = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
+                String newBal = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), decimalPlaces);
                 source.sendSuccess(() -> Component.translatable(
                         "command.futureshops.admin.bal.remove_success",
-                        formatted, provider.getCurrencyName(), profile.getName(), newBal)
+                        formatted, currencyName, profile.getName(), newBal)
                         .withStyle(ChatFormatting.YELLOW), true);
                 successCount++;
             } else {
@@ -856,7 +859,13 @@ public final class ShopAdminCommand {
     }
 
     private static int adminBalSet(CommandSourceStack source, Collection<GameProfile> targets, String amountStr) {
-        EconomyProvider provider = BalanceManager.getProvider();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
+        String currencyName = BalanceManager.getCurrencyName();
+        if (!BalanceManager.isInternalEconomyReady()) {
+            source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
         long amountMinor;
         try {
             // Allow 0 for set
@@ -864,7 +873,7 @@ public final class ShopAdminCommand {
             if (parsed.signum() < 0) {
                 throw new IllegalArgumentException("NEGATIVE");
             }
-            java.math.BigDecimal scaled = parsed.movePointRight(provider.getDecimalPlaces());
+            java.math.BigDecimal scaled = parsed.movePointRight(decimalPlaces);
             if (scaled.stripTrailingZeros().scale() > 0) {
                 throw new IllegalArgumentException("TOO_MANY_DECIMALS");
             }
@@ -875,25 +884,19 @@ public final class ShopAdminCommand {
             return 0;
         }
 
-        // Direct set via the saved data — bypasses max_balance checks (admin override)
-        MinecraftServer server = source.getServer();
-        net.minecraft.server.level.ServerLevel overworld = server.overworld();
-        com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData balData = overworld.getDataStorage()
-                .computeIfAbsent(new net.minecraft.world.level.saveddata.SavedData.Factory<>(com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::new, com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::load, null), com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData.DATA_NAME);
-
         int successCount = 0;
-        String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, provider.getDecimalPlaces());
+        String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, decimalPlaces);
         final long setAmount = amountMinor;
         for (GameProfile profile : targets) {
-            long oldBalance = provider.getBalance(profile.getId());
-            balData.setBalance(profile.getId(), setAmount);
-            // Fire BalanceChangeEvent.Post (spec §33) — admin set bypasses Pre since it's non-cancellable admin action
-            long delta = setAmount - oldBalance;
-            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
-                    new com.enviouse.futureshopsp.event.BalanceChangeEvent.Post(profile.getId(), delta, "ADMIN", setAmount));
+            ProviderResult<BalanceSnapshot> result = BalanceManager.setInternalBalance(profile.getId(), setAmount);
+            if (!result.confirmed()) {
+                source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
+                        .withStyle(ChatFormatting.RED));
+                continue;
+            }
             source.sendSuccess(() -> Component.translatable(
                     "command.futureshops.admin.bal.set_success",
-                    profile.getName(), formatted, provider.getCurrencyName())
+                    profile.getName(), formatted, currencyName)
                     .withStyle(ChatFormatting.YELLOW), true);
             successCount++;
         }
@@ -901,41 +904,53 @@ public final class ShopAdminCommand {
     }
 
     private static int adminBalCheck(CommandSourceStack source, Collection<GameProfile> targets) {
-        EconomyProvider provider = BalanceManager.getProvider();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
+        String currencyName = BalanceManager.getCurrencyName();
+        int successCount = 0;
         for (GameProfile profile : targets) {
-            long balance = provider.getBalance(profile.getId());
-            String formatted = EconomyCommandUtil.formatMinorUnits(balance, provider.getDecimalPlaces());
+            ProviderResult<BalanceSnapshot> balanceResult = BalanceManager.queryBalance(profile.getId());
+            if (!balanceResult.confirmed()) {
+                source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
+                        .withStyle(ChatFormatting.RED));
+                continue;
+            }
+            long balance = balanceResult.value().orElseThrow().balanceMinorUnits();
+            String formatted = EconomyCommandUtil.formatMinorUnits(balance, decimalPlaces);
             source.sendSuccess(() -> Component.translatable(
                     "command.futureshops.admin.bal.check_line",
-                    profile.getName(), formatted, provider.getCurrencyName())
+                    profile.getName(), formatted, currencyName)
                     .withStyle(ChatFormatting.GRAY), false);
+            successCount++;
         }
-        return targets.size();
+        return successCount;
     }
 
     private static int adminBalReset(CommandSourceStack source, Collection<GameProfile> targets) {
-        EconomyProvider provider = BalanceManager.getProvider();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
+        String currencyName = BalanceManager.getCurrencyName();
+        if (!BalanceManager.isInternalEconomyReady()) {
+            source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
         long startingBalance = com.enviouse.futureshopsp.Config.economyStartingBalanceMinorUnits;
-        String formatted = EconomyCommandUtil.formatMinorUnits(startingBalance, provider.getDecimalPlaces());
+        String formatted = EconomyCommandUtil.formatMinorUnits(startingBalance, decimalPlaces);
 
-        MinecraftServer server = source.getServer();
-        net.minecraft.server.level.ServerLevel overworld = server.overworld();
-        com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData balData = overworld.getDataStorage()
-                .computeIfAbsent(new net.minecraft.world.level.saveddata.SavedData.Factory<>(com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::new, com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData::load, null), com.enviouse.futureshopsp.server.economy.InternalBalanceSavedData.DATA_NAME);
-
+        int successCount = 0;
         for (GameProfile profile : targets) {
-            long oldBalance = provider.getBalance(profile.getId());
-            balData.setBalance(profile.getId(), startingBalance);
-            // Fire BalanceChangeEvent.Post (spec §33) — admin reset
-            long delta = startingBalance - oldBalance;
-            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
-                    new com.enviouse.futureshopsp.event.BalanceChangeEvent.Post(profile.getId(), delta, "ADMIN", startingBalance));
+            ProviderResult<BalanceSnapshot> result = BalanceManager.setInternalBalance(profile.getId(), startingBalance);
+            if (!result.confirmed()) {
+                source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
+                        .withStyle(ChatFormatting.RED));
+                continue;
+            }
             source.sendSuccess(() -> Component.translatable(
                     "command.futureshops.admin.bal.reset_success",
-                    profile.getName(), formatted, provider.getCurrencyName())
+                    profile.getName(), formatted, currencyName)
                     .withStyle(ChatFormatting.YELLOW), true);
+            successCount++;
         }
-        return targets.size();
+        return successCount;
     }
 
     // -------------------------------------------------------------------------
@@ -966,14 +981,21 @@ public final class ShopAdminCommand {
                     .withStyle(ChatFormatting.GRAY), false);
         } else {
             // Offline player — send a lightweight balance-only view
-            EconomyProvider provider = BalanceManager.getProvider();
-            long balance = provider.getBalance(targetUuid);
-            String formatted = EconomyCommandUtil.formatMinorUnits(balance, provider.getDecimalPlaces());
+            int decimalPlaces = BalanceManager.getDecimalPlaces();
+            String currencyName = BalanceManager.getCurrencyName();
+            ProviderResult<BalanceSnapshot> balanceResult = BalanceManager.queryBalance(targetUuid);
+            if (!balanceResult.confirmed()) {
+                source.sendFailure(Component.translatable("command.futureshops.economy.unavailable")
+                        .withStyle(ChatFormatting.RED));
+                return 0;
+            }
+            long balance = balanceResult.value().orElseThrow().balanceMinorUnits();
+            String formatted = EconomyCommandUtil.formatMinorUnits(balance, decimalPlaces);
             source.sendSuccess(() -> Component.translatable(
                     "command.futureshops.admin.view.offline_header", targetName)
                     .withStyle(ChatFormatting.GOLD), false);
             source.sendSuccess(() -> Component.translatable(
-                    "command.futureshops.admin.view.offline_balance", formatted, provider.getCurrencyName())
+                    "command.futureshops.admin.view.offline_balance", formatted, currencyName)
                     .withStyle(ChatFormatting.GRAY), false);
             source.sendSuccess(() -> Component.translatable(
                     "command.futureshops.admin.view.offline_uuid", targetUuid)
@@ -1185,10 +1207,20 @@ public final class ShopAdminCommand {
         // 4. Aggregate stats
         long activeCount   = playerMints.stream().filter(r -> !r.consumed()).count();
         long consumedCount = playerMints.stream().filter(MoneyMintRecord::consumed).count();
-        long activeValue   = playerMints.stream()
-                .filter(r -> !r.consumed())
-                .mapToLong(r -> r.denomination() * r.remainingCount())
-                .sum();
+        long activeValue = 0L;
+        try {
+            for (MoneyMintRecord mint : playerMints) {
+                if (!mint.consumed()) {
+                    activeValue = Math.addExact(activeValue,
+                            Math.multiplyExact(mint.denomination(), (long) mint.remainingCount()));
+                }
+            }
+        } catch (ArithmeticException exception) {
+            src.sendFailure(Component.translatable("command.futureshops.admin.coinaudit.overflow")
+                    .withStyle(net.minecraft.ChatFormatting.RED));
+            return 0;
+        }
+        final long finalActiveValue = activeValue;
 
         // 5. Send output
         src.sendSuccess(() -> Component.translatable(
@@ -1199,7 +1231,7 @@ public final class ShopAdminCommand {
                 playerMints.size(), activeCount, consumedCount)
                 .withStyle(net.minecraft.ChatFormatting.GRAY), false);
         src.sendSuccess(() -> Component.translatable(
-                "command.futureshops.admin.coinaudit.active_value", activeValue, targetUUID)
+                "command.futureshops.admin.coinaudit.active_value", finalActiveValue, targetUUID)
                 .withStyle(net.minecraft.ChatFormatting.GREEN), false);
 
         if (playerMints.isEmpty()) {
@@ -1374,4 +1406,3 @@ public final class ShopAdminCommand {
         return null;
     }
 }
-

@@ -4,14 +4,36 @@ import com.enviouse.futureshopsp.Config;
 import com.enviouse.futureshopsp.api.economy.EconomyApi;
 import com.enviouse.futureshopsp.api.economy.EconomyProviderContext;
 import com.enviouse.futureshopsp.api.economy.EconomyProviderRegistry;
+import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
+import com.enviouse.futureshopsp.api.economy.MutationKind;
+import com.enviouse.futureshopsp.api.economy.MutationRequest;
+import com.enviouse.futureshopsp.api.economy.ProviderError;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.api.economy.ProviderResolution;
+import com.enviouse.futureshopsp.api.economy.ProviderLifecycle;
+import com.enviouse.futureshopsp.api.economy.RequestId;
+import com.enviouse.futureshopsp.server.shop.PlayerShopBarterEscrowSavedData;
+import com.enviouse.futureshopsp.server.shop.PlayerShopSaleEscrowSavedData;
+import com.enviouse.futureshopsp.server.shop.PlayerShopSettlementSavedData;
+import com.enviouse.futureshopsp.server.shop.ShopResultCode;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
 
 public final class BalanceManager {
     private static EconomyProvider provider;
+    private static EconomyTransactionCoordinator coordinator;
+    private static EconomyLifecycleController lifecycleController;
+    private static EconomyTransactionJournal journal;
+    private static EconomyCustodyStore custody;
+    private static EconomyClaimStore claims;
+    private static InternalEconomyReceiptStore receipts;
+    private static PlayerShopBarterEscrowSavedData barterEscrow;
+    private static PlayerShopSaleEscrowSavedData saleEscrow;
+    private static PlayerShopSettlementSavedData settlements;
+    private static boolean internalBalanceIntegrity = true;
 
     private BalanceManager() {
     }
@@ -19,25 +41,292 @@ public final class BalanceManager {
     public static void initialize(MinecraftServer server) {
         EconomyProviderRegistry.freeze();
         ProviderSelectionSnapshot selection = ProviderSelectionManager.resolveAtStartup(Config.economyProviderId);
+        boolean ephemeral = server.overworld() == null;
+        journal = ephemeral ? new InMemoryEconomyTransactionJournal() : EconomyJournalSavedData.get(server);
+        custody = ephemeral ? new InMemoryEconomyCustodyStore() : EconomyCustodySavedData.get(server);
+        claims = ephemeral ? new InMemoryEconomyClaimStore() : EconomyClaimSavedData.get(server);
+        receipts = ephemeral ? new InMemoryInternalEconomyReceiptStore() : InternalEconomyReceiptSavedData.get(server);
+        barterEscrow = ephemeral ? new PlayerShopBarterEscrowSavedData() : PlayerShopBarterEscrowSavedData.get(server);
+        saleEscrow = ephemeral ? new PlayerShopSaleEscrowSavedData() : PlayerShopSaleEscrowSavedData.get(server);
+        settlements = ephemeral ? new PlayerShopSettlementSavedData() : PlayerShopSettlementSavedData.get(server);
+        boolean internalSelection = EconomyApi.INTERNAL_PROVIDER_ID.equals(selection.activeProviderId());
+        InternalEconomyProvider internalLegacy = internalSelection ? new InternalEconomyProvider(server) : null;
+        internalBalanceIntegrity = internalLegacy == null || internalLegacy.persistenceIntegrityValid();
+        boolean cleanMarkerValid = journal.cleanMarkerValid() && custody.cleanMarkerValid() && claims.cleanMarkerValid()
+                && barterEscrow.cleanMarkerValid() && saleEscrow.cleanMarkerValid() && settlements.cleanMarkerValid();
+        if (internalSelection) {
+            cleanMarkerValid &= receipts.cleanMarkerValid();
+        }
+        boolean integrityValid = journal.integrityValid() && custody.integrityValid() && claims.integrityValid()
+                && barterEscrow.integrityValid() && saleEscrow.integrityValid() && settlements.integrityValid()
+                && (!internalSelection || internalBalanceIntegrity)
+                && (!internalSelection || receipts.integrityValid());
+        boolean hasIncompleteRecords = journal.hasIncompleteRecords() || custody.hasIncompleteRecords()
+                || claims.hasIncompleteRecords() || barterEscrow.hasIncompleteRecords() || saleEscrow.hasIncompleteRecords();
+        journal.markUnclean();
+        custody.markUnclean();
+        claims.markUnclean();
+        barterEscrow.markUnclean();
+        saleEscrow.markUnclean();
+        settlements.markUnclean();
+        if (internalSelection) {
+            receipts.markUnclean();
+        }
+        lifecycleController = new EconomyLifecycleController(selection.activeProviderId());
         if (EconomyApi.INTERNAL_PROVIDER_ID.equals(selection.activeProviderId())) {
-            provider = new InternalEconomyProvider(server);
+            com.enviouse.futureshopsp.api.economy.EconomyProvider publicProvider =
+                    new PublicInternalEconomyProvider(internalLegacy, receipts);
+            lifecycleController.resolve(ProviderLifecycle.READY, "", cleanMarkerValid, integrityValid,
+                    hasIncompleteRecords);
+            coordinator = new EconomyTransactionCoordinator(publicProvider, lifecycleController, journal, custody, claims);
+            recoverIncompleteJournalRecords();
+            provider = new CoordinatedEconomyProvider(publicProvider, coordinator, internalLegacy);
             return;
         }
         ProviderResolution resolution = EconomyProviderRegistry.resolve(
                 selection.activeProviderId(), new EconomyProviderContext(server));
-        provider = new UnavailableEconomyProvider(selection.activeProviderId(), resolution.lifecycle(),
-                resolution.diagnostic());
+        if (resolution.provider().isPresent() && resolution.lifecycle() == ProviderLifecycle.READY) {
+            com.enviouse.futureshopsp.api.economy.EconomyProvider publicProvider = resolution.provider().orElseThrow();
+            lifecycleController.resolve(resolution.lifecycle(), resolution.diagnostic(), cleanMarkerValid, integrityValid,
+                    hasIncompleteRecords);
+            coordinator = new EconomyTransactionCoordinator(publicProvider, lifecycleController, journal, custody, claims);
+            recoverIncompleteJournalRecords();
+            provider = new ExternalLegacyEconomyProvider(publicProvider, coordinator);
+        } else {
+            lifecycleController.resolve(resolution.lifecycle(), resolution.diagnostic(), cleanMarkerValid, integrityValid,
+                    hasIncompleteRecords);
+            provider = new UnavailableEconomyProvider(selection.activeProviderId(), resolution.lifecycle(),
+                    resolution.diagnostic());
+        }
     }
 
     public static void clear() {
-        provider = null;
+        try {
+            EconomyLifecycleController controller = lifecycleController;
+            if (controller == null) {
+                return;
+            }
+            if (controller.snapshot().lifecycle() == ProviderLifecycle.READY) {
+                controller.beginDraining();
+            }
+            boolean journalFlushed = flushSafely("transaction journal", () -> journal == null || journal.flush());
+            boolean custodyFlushed = flushSafely("economy custody", () -> custody == null || custody.flush());
+            boolean claimsFlushed = flushSafely("economy claims", () -> claims == null || claims.flush());
+            boolean barterEscrowFlushed = flushSafely("player shop barter escrow",
+                    () -> barterEscrow == null || barterEscrow.flush());
+            boolean saleEscrowFlushed = flushSafely("player shop sale escrow",
+                    () -> saleEscrow == null || saleEscrow.flush());
+            boolean settlementsFlushed = flushSafely("player shop settlements",
+                    () -> settlements == null || settlements.flush());
+            boolean receiptsFlushed = flushSafely("internal economy receipts",
+                    () -> receipts == null || receipts.flush());
+            boolean markerWritten;
+            try {
+                markerWritten = controller.writeCleanMarkerLast(journalFlushed && receiptsFlushed,
+                        custodyFlushed, claimsFlushed,
+                        barterEscrowFlushed && saleEscrowFlushed && settlementsFlushed);
+            } catch (RuntimeException exception) {
+                com.mojang.logging.LogUtils.getLogger().error("economy clean marker write failed", exception);
+                markerWritten = false;
+            }
+            if (markerWritten) {
+                markCleanMarkerSafely("transaction journal", journal == null ? null : journal::markCleanMarker);
+                markCleanMarkerSafely("economy custody", custody == null ? null : custody::markCleanMarker);
+                markCleanMarkerSafely("economy claims", claims == null ? null : claims::markCleanMarker);
+                markCleanMarkerSafely("player shop barter escrow",
+                        barterEscrow == null ? null : barterEscrow::markCleanMarker);
+                markCleanMarkerSafely("player shop sale escrow",
+                        saleEscrow == null ? null : saleEscrow::markCleanMarker);
+                markCleanMarkerSafely("player shop settlements",
+                        settlements == null ? null : settlements::markCleanMarker);
+                markCleanMarkerSafely("internal economy receipts",
+                        receipts == null ? null : receipts::markCleanMarker);
+            }
+        } finally {
+            provider = null;
+            coordinator = null;
+            lifecycleController = null;
+            journal = null;
+            custody = null;
+            claims = null;
+            receipts = null;
+            barterEscrow = null;
+            saleEscrow = null;
+            settlements = null;
+            internalBalanceIntegrity = true;
+        }
+    }
+
+    private static boolean flushSafely(String name, BooleanSupplier flush) {
+        try {
+            return flush.getAsBoolean();
+        } catch (RuntimeException exception) {
+            com.mojang.logging.LogUtils.getLogger().error("economy {} flush failed", name, exception);
+            return false;
+        }
+    }
+
+    private static void markCleanMarkerSafely(String name, Runnable marker) {
+        if (marker == null) {
+            return;
+        }
+        try {
+            marker.run();
+        } catch (RuntimeException exception) {
+            com.mojang.logging.LogUtils.getLogger().error("economy {} clean marker failed", name, exception);
+        }
+    }
+
+    public static void beginDraining() {
+        if (lifecycleController != null) {
+            lifecycleController.beginDraining();
+        }
+    }
+
+    private static void recoverIncompleteJournalRecords() {
+        if (coordinator == null || journal == null) {
+            return;
+        }
+        if (!persistenceIntegrityValid()) {
+            lifecycleController.markAmbiguous("economy persistence integrity requires operator recovery");
+            return;
+        }
+        for (EconomyJournalRecord record : journal.snapshot()) {
+            if (!record.incomplete()) {
+                continue;
+            }
+            coordinator.recover(record.request().requestId());
+            if (lifecycleController.snapshot().lifecycle() == ProviderLifecycle.FROZEN) {
+                return;
+            }
+        }
+        if (freezeIfUnresolvedItemState(lifecycleController, custody, claims, barterEscrow, saleEscrow)) {
+            return;
+        }
+        lifecycleController.markRecovered();
+    }
+
+    private static boolean persistenceIntegrityValid() {
+        if (!journal.integrityValid() || !custody.integrityValid() || !claims.integrityValid()
+                || !barterEscrow.integrityValid() || !saleEscrow.integrityValid() || !settlements.integrityValid()) {
+            return false;
+        }
+        if (EconomyApi.INTERNAL_PROVIDER_ID.equals(lifecycleController.snapshot().providerId())
+                && !internalBalanceIntegrity) {
+            return false;
+        }
+        return !EconomyApi.INTERNAL_PROVIDER_ID.equals(lifecycleController.snapshot().providerId())
+                || receipts == null || receipts.integrityValid();
+    }
+
+    static boolean freezeIfUnresolvedItemState(EconomyLifecycleController lifecycle,
+                                               EconomyCustodyStore custody,
+                                               EconomyClaimStore claims,
+                                               PlayerShopBarterEscrowSavedData barterEscrow) {
+        return freezeIfUnresolvedItemState(lifecycle, custody, claims, barterEscrow, null);
+    }
+
+    static boolean freezeIfUnresolvedItemState(EconomyLifecycleController lifecycle,
+                                               EconomyCustodyStore custody,
+                                               EconomyClaimStore claims,
+                                               PlayerShopBarterEscrowSavedData barterEscrow,
+                                               PlayerShopSaleEscrowSavedData saleEscrow) {
+        if (custody != null && custody.hasIncompleteRecords()) {
+            lifecycle.markAmbiguous("item custody requires operator recovery");
+            return true;
+        }
+        if (claims != null && claims.hasIncompleteRecords()) {
+            lifecycle.markAmbiguous("economy claims require operator recovery");
+            return true;
+        }
+        if (barterEscrow != null && barterEscrow.hasIncompleteRecords()) {
+            lifecycle.markAmbiguous("player shop barter escrow requires operator recovery");
+            return true;
+        }
+        if (saleEscrow != null && saleEscrow.hasIncompleteRecords()) {
+            lifecycle.markAmbiguous("player shop sale escrow requires operator recovery");
+            return true;
+        }
+        return false;
     }
 
     public static long getBalance(UUID playerUUID) {
-        if (provider == null) {
-            throw new IllegalStateException("BalanceManager accessed before initialization.");
+        ProviderResult<BalanceSnapshot> result = queryBalance(playerUUID);
+        if (result.confirmed()) {
+            return result.value().orElseThrow().balanceMinorUnits();
         }
-        return provider.getBalance(playerUUID);
+        EconomyLifecycleSnapshot state = getLifecycleSnapshotOrUnresolved();
+        throw new EconomyUnavailableException(state.providerId(), state.lifecycle().name(), result.diagnostic());
+    }
+
+    /** Returns a typed balance result without exposing an unavailable state as zero. */
+    public static ProviderResult<BalanceSnapshot> queryBalance(UUID playerUUID) {
+        if (playerUUID == null) {
+            return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "player id is required");
+        }
+        if (coordinator != null) {
+            return coordinator.balance(playerUUID);
+        }
+        EconomyLifecycleSnapshot state = lifecycleController == null
+                ? EconomyLifecycleSnapshot.of("unknown", ProviderLifecycle.UNRESOLVED, "economy is not initialized")
+                : lifecycleController.snapshot();
+        if (state.lifecycle() == ProviderLifecycle.RECOVERING || state.lifecycle() == ProviderLifecycle.FROZEN) {
+            return ProviderResult.recoveryRequired(state.diagnostic());
+        }
+        return ProviderResult.unavailable(ProviderError.NOT_READY,
+                state.diagnostic().isBlank() ? "economy provider is not ready" : state.diagnostic());
+    }
+
+    /** Adjusts a ready internal balance through the durable coordinator. */
+    public static ProviderResult<BalanceSnapshot> setInternalBalance(UUID playerUUID, long targetMinorUnits) {
+        if (playerUUID == null) {
+            return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "player id is required");
+        }
+        if (targetMinorUnits < 0L) {
+            return ProviderResult.rejected(ProviderError.INVALID_AMOUNT, "target balance must not be negative");
+        }
+        if (!isInternalEconomyReady()) {
+            EconomyLifecycleSnapshot state = getLifecycleSnapshotOrUnresolved();
+            if (state.lifecycle() == ProviderLifecycle.RECOVERING || state.lifecycle() == ProviderLifecycle.FROZEN) {
+                return ProviderResult.recoveryRequired(state.diagnostic());
+            }
+            return ProviderResult.unavailable(ProviderError.NOT_READY,
+                    state.diagnostic().isBlank() ? "internal economy is not ready" : state.diagnostic());
+        }
+
+        ProviderResult<BalanceSnapshot> current = queryBalance(playerUUID);
+        if (!current.confirmed()) {
+            return current;
+        }
+        long delta;
+        try {
+            delta = Math.subtractExact(targetMinorUnits, current.value().orElseThrow().balanceMinorUnits());
+        } catch (ArithmeticException exception) {
+            return ProviderResult.rejected(ProviderError.INVALID_AMOUNT, "target balance is outside the supported range");
+        }
+        if (delta == 0L) {
+            return current;
+        }
+
+        long amount;
+        try {
+            amount = delta > 0L ? delta : Math.negateExact(delta);
+        } catch (ArithmeticException exception) {
+            return ProviderResult.rejected(ProviderError.INVALID_AMOUNT,
+                    "target balance delta is outside the supported range");
+        }
+        MutationKind kind = delta > 0L ? MutationKind.DEPOSIT : MutationKind.WITHDRAW;
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), playerUUID, amount, kind);
+        ProviderResult<com.enviouse.futureshopsp.api.economy.MutationReceipt> mutation =
+                kind == MutationKind.DEPOSIT ? coordinator.deposit(request) : coordinator.withdraw(request);
+        if (!mutation.confirmed()) {
+            return new ProviderResult<>(mutation.status(), mutation.error(), java.util.Optional.empty(),
+                    java.util.Optional.empty(), mutation.diagnostic());
+        }
+        long resultingBalance = mutation.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
+                ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong())
+                : java.util.Optional.empty()).orElse(targetMinorUnits);
+        return ProviderResult.confirmed(new BalanceSnapshot(playerUUID, resultingBalance));
     }
 
     public static EconomyProvider getProvider() {
@@ -47,11 +336,113 @@ public final class BalanceManager {
         return provider;
     }
 
+    public static String getCurrencyName() {
+        return getProvider().getCurrencyName();
+    }
+
+    public static int getDecimalPlaces() {
+        return getProvider().getDecimalPlaces();
+    }
+
+    public static EconomyTransactionCoordinator getCoordinator() {
+        if (coordinator == null) {
+            throw new IllegalStateException("Economy coordinator accessed before initialization.");
+        }
+        return coordinator;
+    }
+
+    public static EconomyLifecycleSnapshot getLifecycleSnapshot() {
+        if (lifecycleController == null) {
+            throw new IllegalStateException("Economy lifecycle accessed before initialization.");
+        }
+        return lifecycleController.snapshot();
+    }
+
+    /** Returns lifecycle state for presentation paths that may run during startup or shutdown. */
+    public static EconomyLifecycleSnapshot getLifecycleSnapshotOrUnresolved() {
+        return lifecycleController == null
+                ? EconomyLifecycleSnapshot.of("unknown", ProviderLifecycle.UNRESOLVED, "economy is not initialized")
+                : lifecycleController.snapshot();
+    }
+
+    public static boolean isInternalEconomyReady() {
+        EconomyLifecycleSnapshot state = getLifecycleSnapshotOrUnresolved();
+        return EconomyApi.INTERNAL_PROVIDER_ID.equals(state.providerId())
+                && state.lifecycle() == ProviderLifecycle.READY;
+    }
+
+    public static EconomyCustodyStore getCustodyStore() {
+        if (custody == null) {
+            throw new IllegalStateException("Economy custody accessed before initialization.");
+        }
+        return custody;
+    }
+
+    public static EconomyClaimStore getClaimStore() {
+        if (claims == null) {
+            throw new IllegalStateException("Economy claims accessed before initialization.");
+        }
+        return claims;
+    }
+
+    public static PlayerShopSaleEscrowSavedData getSaleEscrow() {
+        if (saleEscrow == null) {
+            throw new IllegalStateException("player shop sale escrow accessed before initialization.");
+        }
+        return saleEscrow;
+    }
+
+    /** Executes one player debit through the durable coordinator. */
+    public static TransactionResult withdraw(UUID playerUUID, long amountMinorUnits) {
+        try {
+            MutationRequest request = MutationRequest.forPlayer(RequestId.random(), playerUUID,
+                    amountMinorUnits, MutationKind.WITHDRAW);
+            return mapMutationResult(coordinator().withdraw(request));
+        } catch (IllegalArgumentException exception) {
+            return TransactionResult.error(ShopResultCode.INVALID_AMOUNT, 0L);
+        }
+    }
+
+    /** Executes one player credit through the durable coordinator. */
+    public static TransactionResult deposit(UUID playerUUID, long amountMinorUnits) {
+        try {
+            MutationRequest request = MutationRequest.forPlayer(RequestId.random(), playerUUID,
+                    amountMinorUnits, MutationKind.DEPOSIT);
+            return mapMutationResult(coordinator().deposit(request));
+        } catch (IllegalArgumentException exception) {
+            return TransactionResult.error(ShopResultCode.INVALID_AMOUNT, 0L);
+        }
+    }
+
     public static TransactionResult transfer(UUID fromPlayerUUID, UUID toPlayerUUID, long amountMinorUnits) {
-        return getProvider().transfer(fromPlayerUUID, toPlayerUUID, amountMinorUnits);
+        return mapMutationResult(coordinator().transfer(fromPlayerUUID, toPlayerUUID, amountMinorUnits));
     }
 
     public static List<BalanceEntry> getTopBalances(int page, int pageSize) {
         return getProvider().getTopBalances(page, pageSize);
+    }
+
+    private static EconomyTransactionCoordinator coordinator() {
+        return getCoordinator();
+    }
+
+    private static TransactionResult mapMutationResult(ProviderResult<?> result) {
+        long resultingBalance = result.receipt()
+                .flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
+                        ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong())
+                        : java.util.Optional.empty())
+                .orElse(0L);
+        if (result.confirmed()) {
+            return TransactionResult.ok(resultingBalance);
+        }
+        return TransactionResult.error(mapProviderError(result.error()), resultingBalance);
+    }
+
+    private static ShopResultCode mapProviderError(ProviderError error) {
+        return switch (error) {
+            case INSUFFICIENT_FUNDS -> ShopResultCode.INSUFFICIENT_FUNDS;
+            case INVALID_AMOUNT, INVALID_REQUEST -> ShopResultCode.INVALID_AMOUNT;
+            default -> ShopResultCode.SERVER_ERROR;
+        };
     }
 }

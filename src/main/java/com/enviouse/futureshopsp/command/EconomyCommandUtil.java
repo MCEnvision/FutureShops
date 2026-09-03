@@ -4,9 +4,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.ChatFormatting;
+import com.enviouse.futureshopsp.server.economy.BalanceManager;
+import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
+import com.enviouse.futureshopsp.api.economy.ProviderError;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
 
 import java.math.BigDecimal;
-import java.util.Locale;
+import java.util.UUID;
 
 public final class EconomyCommandUtil {
     private EconomyCommandUtil() {
@@ -34,13 +38,25 @@ public final class EconomyCommandUtil {
         if (decimals <= 0) {
             return Long.toString(value);
         }
+        return BigDecimal.valueOf(value, decimals).toPlainString();
+    }
 
-        long absValue = Math.abs(value);
-        long scale = (long) Math.pow(10.0D, decimals);
-        long whole = absValue / scale;
-        long fractional = absValue % scale;
-        String sign = value < 0L ? "-" : "";
-        return String.format(Locale.ROOT, "%s%d.%0" + decimals + "d", sign, whole, fractional);
+    /**
+     * Formats a confirmed post mutation balance without treating an unavailable query as zero.
+     */
+    public static Component formatResultingBalance(ProviderResult<?> mutation, UUID playerUUID, int decimals) {
+        if (mutation != null && mutation.receipt().isPresent()) {
+            var receipt = mutation.receipt().orElseThrow();
+            if (receipt.resultingBalanceMinorUnits().isPresent()) {
+                return Component.literal(formatMinorUnits(receipt.resultingBalanceMinorUnits().getAsLong(), decimals));
+            }
+        }
+        ProviderResult<BalanceSnapshot> balance = BalanceManager.queryBalance(playerUUID);
+        if (balance.confirmed()) {
+            return Component.literal(formatMinorUnits(
+                    balance.value().orElseThrow().balanceMinorUnits(), decimals));
+        }
+        return Component.translatable("gui.futureshops.economy.balance_unavailable");
     }
 
     /**
@@ -71,10 +87,24 @@ public final class EconomyCommandUtil {
                  MISSING_INGREDIENTS, MISSING_ITEMS, INVALID_RECIPE, ROLLBACK,
                  NOTHING_TO_CLAIM, CLAIM_FAILED, PROMO_FAILED, NO_CLIPBOARD, INVALID_REQUEST,
                  SERVER_ERROR, CANCELLED_BY_EVENT, COOLDOWN, SHOP_CLOSED,
-                 SHOP_OUT_OF_MONEY, BUYBACK_CAP_REACHED
+                 SHOP_OUT_OF_MONEY, BUYBACK_CAP_REACHED, RECOVERY_REQUIRED
                     -> "command.futureshops.error.server";
         };
 
+        player.sendSystemMessage(error(Component.translatable(key)));
+    }
+
+    public static void sendProviderError(ServerPlayer player, ProviderResult<?> result) {
+        if (result == null || result.confirmed()) {
+            return;
+        }
+        String key = switch (result.error()) {
+            case INVALID_AMOUNT -> "command.futureshops.error.invalid_amount";
+            case INSUFFICIENT_FUNDS -> "command.futureshops.error.insufficient_funds";
+            case NONE, INVALID_REQUEST, CAPABILITY_MISSING, NOT_READY, INCOMPATIBLE,
+                 PERMISSION_DENIED, DUPLICATE_REQUEST, RECEIPT_NOT_FOUND, PROVIDER_EXCEPTION,
+                 TIMEOUT, UNKNOWN -> "command.futureshops.economy.unavailable";
+        };
         player.sendSystemMessage(error(Component.translatable(key)));
     }
 

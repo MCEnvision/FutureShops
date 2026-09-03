@@ -19,29 +19,75 @@ import java.util.UUID;
 public final class PlayerShopRegistrySavedData extends SavedData {
     private static final String DATA_NAME = "futureshops_player_shop_registry";
     private static final int CURRENT_VERSION = 1;
+    private static final int MAX_OWNERS = 10_000;
+    private static final int MAX_SHOPS_PER_OWNER = 1_000;
+    private static final int MAX_DIMENSION_LENGTH = 256;
 
     private final Map<UUID, List<ShopRef>> shopsByOwner = new HashMap<>();
+    private boolean integrityValid = true;
 
     public static PlayerShopRegistrySavedData load(CompoundTag tag, HolderLookup.Provider provider) {
         PlayerShopRegistrySavedData data = new PlayerShopRegistrySavedData();
         int version = SavedDataMigrations.readVersion(tag);
+        if (version > CURRENT_VERSION) {
+            data.integrityValid = false;
+            return data;
+        }
         SavedDataMigrations.needsMigration(DATA_NAME, version, CURRENT_VERSION);
-        ListTag owners = tag.getList("owners", Tag.TAG_COMPOUND);
+        Tag rawOwners = tag.get("owners");
+        if (rawOwners != null && !(rawOwners instanceof ListTag)) {
+            data.integrityValid = false;
+            return data;
+        }
+        ListTag owners = rawOwners instanceof ListTag list ? list : new ListTag();
+        if (owners.size() > MAX_OWNERS) {
+            data.integrityValid = false;
+            return data;
+        }
         for (Tag ownerTag : owners) {
-            CompoundTag ownerCompound = (CompoundTag) ownerTag;
-            if (!ownerCompound.hasUUID("owner")) {
+            if (!(ownerTag instanceof CompoundTag ownerCompound) || !ownerCompound.hasUUID("owner")) {
+                data.integrityValid = false;
                 continue;
             }
             UUID owner = ownerCompound.getUUID("owner");
+            Tag rawShops = ownerCompound.get("shops");
+            if (data.shopsByOwner.containsKey(owner) || (rawShops != null && !(rawShops instanceof ListTag))) {
+                data.integrityValid = false;
+                continue;
+            }
             List<ShopRef> refs = new ArrayList<>();
-            ListTag shops = ownerCompound.getList("shops", Tag.TAG_COMPOUND);
+            ListTag shops = rawShops instanceof ListTag list ? list : new ListTag();
+            if (shops.size() > MAX_SHOPS_PER_OWNER) {
+                data.integrityValid = false;
+                continue;
+            }
             for (Tag shopTag : shops) {
-                CompoundTag shopCompound = (CompoundTag) shopTag;
-                refs.add(new ShopRef(
-                        ResourceLocation.parse(shopCompound.getString("dimension")),
-                        shopCompound.getLong("pos")));
+                if (!(shopTag instanceof CompoundTag shopCompound)
+                        || !shopCompound.contains("dimension", Tag.TAG_STRING)
+                        || !shopCompound.contains("pos", Tag.TAG_LONG)) {
+                    data.integrityValid = false;
+                    continue;
+                }
+                try {
+                    String dimension = shopCompound.getString("dimension");
+                    if (dimension.isBlank() || dimension.length() > MAX_DIMENSION_LENGTH) {
+                        data.integrityValid = false;
+                        continue;
+                    }
+                    ShopRef ref = new ShopRef(ResourceLocation.parse(dimension), shopCompound.getLong("pos"));
+                    if (refs.contains(ref)) {
+                        data.integrityValid = false;
+                        continue;
+                    }
+                    refs.add(ref);
+                } catch (RuntimeException exception) {
+                    data.integrityValid = false;
+                }
             }
             data.shopsByOwner.put(owner, refs);
+        }
+        if (!data.integrityValid) {
+            data.shopsByOwner.clear();
         }
         return data;
     }
@@ -73,7 +119,16 @@ public final class PlayerShopRegistrySavedData extends SavedData {
     }
 
     public synchronized void register(UUID owner, ResourceLocation dimension, long posLong) {
+        if (owner == null || dimension == null) {
+            return;
+        }
+        if (!shopsByOwner.containsKey(owner) && shopsByOwner.size() >= MAX_OWNERS) {
+            return;
+        }
         List<ShopRef> refs = shopsByOwner.computeIfAbsent(owner, ignored -> new ArrayList<>());
+        if (refs.size() >= MAX_SHOPS_PER_OWNER && !refs.contains(new ShopRef(dimension, posLong))) {
+            return;
+        }
         ShopRef ref = new ShopRef(dimension, posLong);
         if (!refs.contains(ref)) {
             refs.add(ref);
@@ -82,6 +137,9 @@ public final class PlayerShopRegistrySavedData extends SavedData {
     }
 
     public synchronized void remove(ResourceLocation dimension, long posLong) {
+        if (dimension == null) {
+            return;
+        }
         boolean changed = false;
         for (List<ShopRef> refs : shopsByOwner.values()) {
             changed |= refs.removeIf(ref -> ref.posLong() == posLong && ref.dimension().equals(dimension));
@@ -117,10 +175,13 @@ public final class PlayerShopRegistrySavedData extends SavedData {
         return result;
     }
 
+    public synchronized boolean integrityValid() {
+        return integrityValid;
+    }
+
     public record ShopRef(ResourceLocation dimension, long posLong) {
     }
 
     public record ShopRecord(UUID owner, String dimension) {
     }
 }
-

@@ -110,6 +110,7 @@ public class Futureshops {
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
+        BalanceManager.beginDraining();
         ShopSessionManager.closeAllAndForceClose(event.getServer(), "SERVER_STOPPING");
         BalanceManager.clear();
         DynamicPricingEngine.reset();

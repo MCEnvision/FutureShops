@@ -67,6 +67,7 @@ public enum ShopResultCode {
     ROLLBACK,
     NOTHING_TO_CLAIM,
     CLAIM_FAILED,
+    RECOVERY_REQUIRED,
     PROMO_FAILED,
     NO_CLIPBOARD,
 
@@ -88,4 +89,3 @@ public enum ShopResultCode {
         return "gui.futureshops.player_shop.result." + name().toLowerCase(java.util.Locale.ROOT);
     }
 }
-

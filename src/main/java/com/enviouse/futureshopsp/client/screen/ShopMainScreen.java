@@ -512,7 +512,7 @@ public class ShopMainScreen extends AbstractShopScreen implements ShopScreenMark
         graphics.fill(x, y, x + w, y + 1, ShopColors.ACCENT_CURRENCY);
 
         // Balance with coin icon (gold accent)
-        String balance = "§6⛃ §a" + ShopUiUtil.formatMinorUnits(ShopClientState.getCurrentBalanceMinorUnits());
+        String balance = "§6⛃ §a" + ShopUiUtil.formatCurrentBalance();
         graphics.drawString(this.font, balance, x + 10, y + 9, ShopColors.TEXT_CURRENCY, false);
 
         // Item count & cart info — truncated
@@ -556,7 +556,7 @@ public class ShopMainScreen extends AbstractShopScreen implements ShopScreenMark
             String playerName = this.font.plainSubstrByWidth(mc.player.getGameProfile().getName(), profileW - profileH - 12);
             graphics.drawString(this.font, playerName, profileX + profileH + 2, profileY + 3, ShopColors.TEXT_STRONG, false);
             // Balance
-            String bal = "§a" + ShopUiUtil.formatMinorUnits(ShopClientState.getCurrentBalanceMinorUnits());
+            String bal = "§a" + ShopUiUtil.formatCurrentBalance();
             String clippedBal = this.font.plainSubstrByWidth(bal, profileW - profileH - 12);
             graphics.drawString(this.font, clippedBal, profileX + profileH + 2, profileY + 14, ShopColors.TEXT_CURRENCY, false);
         }

@@ -65,7 +65,11 @@ public final class ShopClientPacketHandler {
                     packet.promos(),
                     packet.barterRecipes(),
                     packet.adminShopEnabled(),
-                    packet.nearbyShops());
+                    packet.nearbyShops(),
+                    packet.balanceAvailable(),
+                    packet.providerId(),
+                    packet.providerLifecycle(),
+                    packet.providerDiagnostic());
             ShopPackets.sendToServer(new com.enviouse.futureshopsp.network.packets.C2SInventorySyncPacket(packet.shopId()));
             if (shopScreenOpen) {
                 // Update in-place — preserves nearbyMode, scroll, tabs.
@@ -101,7 +105,11 @@ public final class ShopClientPacketHandler {
                 packet.totalStock(),
                 packet.lowSupplyCount(),
                 packet.shopSummaries(),
-                packet.alerts())));
+                packet.alerts(),
+                packet.balanceAvailable(),
+                packet.providerId(),
+                packet.providerLifecycle(),
+                packet.providerDiagnostic())));
     }
 
     public static void handleBalTopUi(S2CBalTopUiPacket packet) {
@@ -121,7 +129,11 @@ public final class ShopClientPacketHandler {
                         packet.popularItemId(),
                         packet.popularItemTrades(),
                         packet.popularItemQuantity(),
-                        packet.franchises());
+                        packet.franchises(),
+                        packet.rankingAvailable(),
+                        packet.providerId(),
+                        packet.providerLifecycle(),
+                        packet.providerDiagnostic());
                 return;
             }
             mc.setScreen(new BalTopOverviewScreen(
@@ -139,7 +151,11 @@ public final class ShopClientPacketHandler {
                     packet.popularItemId(),
                     packet.popularItemTrades(),
                     packet.popularItemQuantity(),
-                    packet.franchises()));
+                    packet.franchises(),
+                    packet.rankingAvailable(),
+                    packet.providerId(),
+                    packet.providerLifecycle(),
+                    packet.providerDiagnostic()));
         });
     }
 
@@ -225,7 +241,11 @@ public final class ShopClientPacketHandler {
     public static void handleBuyResponse(S2CBuyResponsePacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
-            ShopClientState.setCurrentBalanceMinorUnits(packet.resultingBalanceMinorUnits());
+            if (packet.balanceAvailable()) {
+                ShopClientState.setCurrentBalanceMinorUnits(packet.resultingBalanceMinorUnits());
+            } else {
+                ShopClientState.setBalanceUnavailable();
+            }
             ShopClientState.setStatus(buildBuyMessage(packet), packet.success());
 
             if (packet.success() && packet.cartCheckout()) {
@@ -244,7 +264,11 @@ public final class ShopClientPacketHandler {
     public static void handleSellResponse(S2CSellResponsePacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
-            ShopClientState.setCurrentBalanceMinorUnits(packet.resultingBalanceMinorUnits());
+            if (packet.balanceAvailable()) {
+                ShopClientState.setCurrentBalanceMinorUnits(packet.resultingBalanceMinorUnits());
+            } else {
+                ShopClientState.setBalanceUnavailable();
+            }
             ShopClientState.setStatus(buildSellMessage(packet), packet.success());
 
             // Update ConfirmationModal if ItemDetailScreen is open
@@ -380,7 +404,7 @@ public final class ShopClientPacketHandler {
                  NO_LINK, BAD_LINK_TARGET, RS_NOT_CONTROLLER, STORAGE_FULL,
                  MISSING_BARTER_ITEMS, ROLLBACK, NOTHING_TO_CLAIM, CLAIM_FAILED,
                  PROMO_FAILED, NO_CLIPBOARD, INVALID_REQUEST, INVALID_TARGET, SERVER_ERROR,
-                 CANCELLED_BY_EVENT, SHOP_OUT_OF_MONEY, BUYBACK_CAP_REACHED
+                 CANCELLED_BY_EVENT, SHOP_OUT_OF_MONEY, BUYBACK_CAP_REACHED, RECOVERY_REQUIRED
                     -> "command.futureshops.error.server";
         };
     }

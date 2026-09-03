@@ -111,11 +111,17 @@ public final class EconomyProviderRegistry {
                     java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty(),
                     "provider factory failed");
         }
-        if (provider == null || !providerId.equals(provider.providerId())
-                || provider.compatibilityVersion() != EconomyApi.COMPATIBILITY_VERSION) {
-            return new ProviderResolution(providerId, ProviderLifecycle.INCOMPATIBLE,
+        try {
+            if (provider == null || !providerId.equals(provider.providerId())
+                    || provider.compatibilityVersion() != EconomyApi.COMPATIBILITY_VERSION) {
+                return new ProviderResolution(providerId, ProviderLifecycle.INCOMPATIBLE,
+                        java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty(),
+                        "provider identity or compatibility version does not match registration");
+            }
+        } catch (RuntimeException exception) {
+            return new ProviderResolution(providerId, ProviderLifecycle.FAILED,
                     java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty(),
-                    "provider identity or compatibility version does not match registration");
+                    "provider identity validation failed");
         }
 
         CurrencyMetadata currency;
