@@ -24,6 +24,8 @@ The official [Pixelmon downloads page](https://pixelmonmod.com/downloads.php) li
 
 A disposable Java probe compiled successfully against the exact 9.4.0 universal artifact. It exercised the reviewed `BankAccount` type, UUID identity check, exact `BigDecimal` amount construction, balance null guard, and `hasBalance` call. The probe source and classes remain outside the repository at `/tmp/pixelmon-api-probe`.
 
+The complete public economy surface was also enumerated. `BankAccountManager` only supplies synchronous and asynchronous account lookup. `EconomyEvent.PreTransaction` is cancellable and exposes the transaction type, current balance, and mutable change. `EconomyEvent.PostTransaction` exposes the transaction type and old and new balances. `EconomyEvent.SetBalance` is cancellable. None of these manager or event types carries a FutureShops request UUID, an operation token, a durable receipt, a receipt lookup method, or an idempotent retry method. `BankAccount` mutation methods remain direct boolean `take` and `add` calls, and `setBalance` is a direct void setter.
+
 The usable strict capabilities are balance query and precheck. The API does not expose an operation UUID, durable receipt, receipt lookup by request identity, or idempotent retry. A local FutureShops request UUID cannot make a boolean Pixelmon call idempotent. `setBalance`, `take`, and `add` are therefore classified as unsafe for production mutation under the current contract.
 
 ## Mapping
@@ -33,6 +35,7 @@ The usable strict capabilities are balance query and precheck. The API does not 
 | `hasImplementation` and account lookup | `ProviderReadiness` and typed availability |
 | `getIdentifier` and `getBalance` | `BALANCE_QUERY`, exact integer `BalanceSnapshot` |
 | `hasBalance` | `PRECHECK`, only for debit kinds |
+| `PreTransaction`, `PostTransaction`, and `SetBalance` events | Observability and cancellation only, no durable operation identity |
 | `take` | Refused, `WITHDRAW` false |
 | `add` | Refused, `DEPOSIT` false |
 | no receipt API | `RECEIPT_LOOKUP` false |

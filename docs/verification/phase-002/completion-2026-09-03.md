@@ -2,7 +2,7 @@
 
 ## Scope and source identity
 
-This packet records the current Phase 002 result for FutureShops 2.3.0 on Minecraft 1.21.1 and NeoForge 21.1.248. The implementation evidence is bound to source revision `e63c91bdb991766bb4666350ea3c9ea850e41eb6` on `envy/phase-002-pixelmon-vault`. That revision is four commits ahead of the integrated `1.21.1` revision `b591413cc88590dd70caca3e23aad5ee5e6f8406` and was clean and pushed when the implementation evidence was generated.
+This packet records the current Phase 002 result for FutureShops 2.3.0 on Minecraft 1.21.1 and NeoForge 21.1.248. The implementation source baseline is revision `e63c91bdb991766bb4666350ea3c9ea850e41eb6` on `envy/phase-002-pixelmon-vault`. The current evidence packet revision is `5e24a67`, eight commits ahead of the integrated `1.21.1` revision `b591413cc88590dd70caca3e23aad5ee5e6f8406`.
 
 Phase 002 is not closed. Its independent Pixelmon query and refusal work is complete, but exact external runtime authorization and a mutation capable bridge remain unresolved. No pull request, phase integration, tag, release, upload, or issue 66 mutation is authorized by this packet.
 
@@ -12,7 +12,7 @@ The exact reviewed runtime is `/tmp/Pixelmon-1.21.1-9.4.0-universal.jar` with SH
 
 The official downloads page links a public MDK, but its current main revision is configured for Pixelmon 9.3.1 and NeoForge 21.1.170 rather than the exact 9.4.0 target. The exact 9.4.0 interface injection file was downloaded separately with SHA 256 `79bc83342ba0a3ee170c2883dbe30910adcb13fb6c73743ab70180ea30f9e666`. A disposable Java probe compiled against the exact universal artifact and exercised the reviewed `BankAccount` query and precheck surface. This narrows the development input gap but does not replace the exact authorized runtime environment.
 
-The exact `BankAccount` surface supports UUID lookup, integer compatible `BigDecimal` balance reads, and `hasBalance`. Its `add` and `take` methods are boolean mutations. The reviewed classes expose no durable request identity, receipt lookup, idempotent retry, or outcome journal. The adapter therefore declares balance query and precheck only. All mutation required operations return typed capability refusal before transaction intent, custody, inventory, claims, analytics, events, or Pixelmon mutation.
+The exact `BankAccount` surface supports UUID lookup, integer compatible `BigDecimal` balance reads, and `hasBalance`. Its `add` and `take` methods are boolean mutations. `BankAccountManager` only supplies synchronous and asynchronous lookup. The public `PreTransaction`, `PostTransaction`, and `SetBalance` events provide cancellation and balance observations, but no operation UUID, receipt, lookup, or retry handle. The reviewed classes expose no durable request identity, receipt lookup, idempotent retry, or outcome journal. The adapter therefore declares balance query and precheck only. All mutation required operations return typed capability refusal before transaction intent, custody, inventory, claims, analytics, events, or Pixelmon mutation.
 
 `PixelmonEconomyProviderTest` proves exact conversion, missing and unavailable accounts, implementation readiness, insufficient funds, malformed values, and mutation refusal. The fixture records zero `BankAccount.add` and `BankAccount.take` calls. Coordinator coverage proves an empty journal and custody store when the capability gate refuses the request.
 
