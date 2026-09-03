@@ -2,9 +2,9 @@
 
 ## Scope and source identity
 
-This packet records the current Phase 002 result for FutureShops 2.3.0 on Minecraft 1.21.1 and NeoForge 21.1.248. The implementation source baseline is revision `e63c91bdb991766bb4666350ea3c9ea850e41eb6` on `envy/phase-002-pixelmon-vault`. The current evidence packet revision is `1fa19cb`, twenty three commits ahead of the integrated `1.21.1` revision `b591413cc88590dd70caca3e23aad5ee5e6f8406`.
+This packet records the current Phase 002 result for FutureShops 2.3.0 on Minecraft 1.21.1 and NeoForge 21.1.248. The implementation source baseline is revision `e63c91bdb991766bb4666350ea3c9ea850e41eb6` on `envy/phase-002-pixelmon-vault`. The current evidence packet revision is `e517d7d`, twenty nine commits ahead of the integrated `1.21.1` revision `b591413cc88590dd70caca3e23aad5ee5e6f8406`.
 
-Phase 002 is not closed. Its independent Pixelmon query and refusal work is complete, but exact external runtime authorization and a mutation capable bridge remain unresolved. No pull request, phase integration, tag, release, upload, or issue 66 mutation is authorized by this packet.
+Phase 002 is not closed. Its independent Pixelmon query and refusal work is complete, but a mutation capable bridge, full player workflow coverage, and complete recovery matrices remain unresolved. No pull request, phase integration, tag, release, upload, or issue 66 mutation is authorized by this packet.
 
 GitHub milestone `2.3.0 phase 002 external integrations` is open as milestone `6`. Its description records the exact Pixelmon query and bridge verification scope, with durable external receipts, player workflow coverage, and recovery evidence as the remaining blockers. Issue 66 remains untouched while this phase is open, as required by the phase contract.
 
@@ -50,7 +50,7 @@ The exact hybrid command was `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 timeo
 
 The exact Pixelmon only command was `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 timeout 120 bash ./run.sh nogui` from `/tmp/futureshops-pixelmon-exact.xIDOL4`. The run exited with the expected bounded timeout after the server reached `Done (5.574s)` and FutureShops logged `FutureShops server starting.` with the exact FutureShops `2.3.0`, Pixelmon `9.4.0`, GeckoLib `4.8.4`, Minecraft `1.21.1`, and NeoForge `21.1.248` artifacts. The run log is `/tmp/futureshops-pixelmon-exact-eula-true-20260903.log`.
 
-These authorized runs prove full mod and plugin startup and the restart-only configuration path. They do not prove a player account query or permit a mutation claim. Pixelmon mutation remains refused, and the reviewed bridge remains ineligible for `vault` mutations because it lacks durable request receipts and idempotent retry.
+These authorized runs prove full mod and plugin startup and the restart-only configuration path. They do not prove a real player account query or permit a mutation claim. The disposable probe below exercises one isolated account query without mutation. Pixelmon mutation remains refused, and the reviewed bridge remains ineligible for `vault` mutations because it lacks durable request receipts and idempotent retry.
 
 ### Disposable live provider probe
 
@@ -64,6 +64,6 @@ The security review found no exploitable repository defect. The residual risk is
 
 ## Open gates and next action
 
-The exact universal artifact, interface injection file, public MDK compile path, and exact disposable Pixelmon and hybrid profiles are now available. Owner authorization for full disposable startup is satisfied, and both exact profiles reached FutureShops server startup with `eula=true`. Player account query, mutation refusal through a live player workflow, and complete restart and recovery matrices remain unexercised in these no-player bounded runs. The reviewed bridge lacks the strict mutation and recovery capabilities required for `vault`. These gates keep CORE-REQ-018 open and prevent Phase 002 pull request integration.
+The exact universal artifact, interface injection file, public MDK compile path, and exact disposable Pixelmon and hybrid profiles are now available. Owner authorization for full disposable startup is satisfied, and both exact profiles reached FutureShops server startup with `eula=true`. A disposable live account query and coordinator refusal are now proven. Real player workflow coverage, mutation refusal through those workflows, and complete restart and recovery matrices remain unexercised. The reviewed bridge lacks the strict mutation and recovery capabilities required for `vault`. These gates keep CORE-REQ-018 open and prevent Phase 002 pull request integration.
 
 The next safe action is to run the authorized player query and refusal workflows, complete the affected crash and recovery matrices, or obtain a separately installed bridge that provides stable request identity, durable receipts, exact integer conversion, and idempotent retry. Reclassify and rerun only the affected capability, crash, recovery, and surface matrices when those inputs exist. Issue 66 remains frozen until Phase 003 validates the final artifact.

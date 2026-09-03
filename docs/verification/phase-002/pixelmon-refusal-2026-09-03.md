@@ -22,7 +22,7 @@ The owner authorized `eula=true` for disposable validation. The exact hybrid pro
 
 The exact Pixelmon only profile was rerun on port `25567` with `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 timeout 120 bash ./run.sh nogui`. It reached `Done (5.574s)` and `FutureShops server starting.` with the exact FutureShops `2.3.0`, Pixelmon `9.4.0`, GeckoLib `4.8.4`, Minecraft `1.21.1`, and NeoForge `21.1.248` stack. The run log is `/tmp/futureshops-pixelmon-exact-eula-true-20260903.log`.
 
-The reruns prove full startup and optional class loading under owner authorized terms. They do not invoke a player account or a money mutation. The Pixelmon provider therefore remains query and precheck capable with deterministic mutation refusal, and no live mutation or recovery claim is added.
+The reruns prove full startup and optional class loading under owner authorized terms. They do not invoke a real player account or a money mutation. The disposable probe below exercises one isolated account query and still makes no money mutation or recovery claim. The Pixelmon provider therefore remains query and precheck capable with deterministic mutation refusal.
 
 ### Disposable live provider probe
 
@@ -53,4 +53,4 @@ The rebuilt `build/libs/futureshops-2.3.0.jar` passed `unzip -tq`. Its SHA 256 i
 
 ## Remaining gates
 
-The exact external artifact legal terms and full mutation recovery runtime remain unavailable under the current authorization. The product therefore makes no direct Pixelmon mutation claim. Phase 003 owns final artifact validation and the later issue 66 update.
+Bridge legal provenance, real player workflow coverage, and full mutation recovery runtime remain unavailable. The product therefore makes no direct Pixelmon mutation claim. Phase 003 owns final artifact validation and the later issue 66 update.
