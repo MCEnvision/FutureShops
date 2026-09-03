@@ -623,6 +623,12 @@ public final class PlayerShopBlockService {
 
             EconomyTransactionCoordinator coordinator = BalanceManager.getCoordinator();
             RequestId transactionId = RequestId.random();
+            RequestId custodyId = transactionId.child("custody");
+            String custodyItem = "player-shop:" + pos.asLong() + ":" + listing.itemId();
+            long custodyQuantity = Math.max(1L, deliverCount);
+            String custodyHash = com.enviouse.futureshopsp.server.economy.EconomyRecordChecksum
+                    .sha256(listing.itemId() + ":" + qty + ":" + deliverCount);
+            boolean custodyHeld = false;
             long cost = Math.max(0L, listing.calculatePrice(qty));
             boolean withdrewFromBuyer = false;
             boolean recordedSale = false;
@@ -735,12 +741,14 @@ public final class PlayerShopBlockService {
             if (compoundTrade) {
                 // LGB#8: Skip money withdrawal if cost is 0 (100% discount)
                 if (cost > 0L) {
-                    TransactionResult moneyCheck = coordinatorMutation(coordinator, transactionId,
-                            "buyer compound debit", buyer.getUUID(), null, cost, MutationKind.WITHDRAW);
-                    if (!moneyCheck.success()) {
-                        sendResultWithChat(buyer, false, ShopResultCode.INSUFFICIENT_FUNDS, "§cTrade cancelled: insufficient balance for compound trade.");
+                    ProviderResult<MutationReceipt> debit = coordinatorMutationWithCustody(coordinator,
+                            transactionId, "buyer compound debit", buyer.getUUID(), cost,
+                            custodyItem, custodyQuantity, custodyHash);
+                    if (!debit.confirmed()) {
+                        sendResultWithChat(buyer, false, mapProviderResultCode(debit), "§cTrade cancelled: the economy provider could not confirm this payment.");
                         return;
                     }
+                    custodyHeld = true;
                     withdrewFromBuyer = true;
                 }
 
@@ -753,8 +761,11 @@ public final class PlayerShopBlockService {
                     net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(barterPre);
                     if (barterPre.isCanceled()) {
                         if (withdrewFromBuyer) {
-                            coordinatorMutation(coordinator, transactionId, "buyer compound refund",
-                                    buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
+                            TransactionResult refund = coordinatorMutation(coordinator, transactionId,
+                                    "buyer compound refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
+                            if (refund.success()) {
+                                releaseCustody(coordinator, custodyId, custodyHeld);
+                            }
                         }
                         sendResult(buyer, false, ShopResultCode.CANCELLED_BY_EVENT);
                         return;
@@ -768,8 +779,11 @@ public final class PlayerShopBlockService {
                         buyer.getInventory(), barterItem, barterAmount,
                         listing.barterNbtAware(), listing.barterNbtPatch());
                 if (paymentStacks.isEmpty()) {
-                    coordinatorMutation(coordinator, transactionId, "buyer payment refund",
-                            buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
+                    TransactionResult refund = coordinatorMutation(coordinator, transactionId,
+                            "buyer payment refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
+                    if (refund.success()) {
+                        releaseCustody(coordinator, custodyId, custodyHeld);
+                    }
                     sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, "§cTrade cancelled: barter items could not be taken.");
                     return;
                 }
@@ -779,14 +793,30 @@ public final class PlayerShopBlockService {
                         : insertAll(barterStorage.handler(), paymentStacks);
                 if (!insertedOk) {
                     ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), paymentStacks);
-                    coordinatorMutation(coordinator, transactionId, "buyer storage refund",
-                            buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
+                    TransactionResult refund = coordinatorMutation(coordinator, transactionId,
+                            "buyer storage refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
+                    if (refund.success()) {
+                        releaseCustody(coordinator, custodyId, custodyHeld);
+                    }
                     sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, "§cTrade cancelled: the shop's storage is full.");
                     return;
                 }
                 insertedPayment = paymentStacks;
                 if (buyer.getServer() != null) {
-                    PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), cost, listing.itemId(), qty);
+                    boolean recorded = PlayerShopSettlementSavedData.get(buyer.getServer())
+                            .recordSale(shop.getOwnerUuid(), pos.asLong(), cost, listing.itemId(), qty);
+                    if (!recorded) {
+                        TransactionResult refund = coordinatorMutation(coordinator, transactionId,
+                                "buyer settlement overflow refund", buyer.getUUID(), null, cost,
+                                MutationKind.DEPOSIT);
+                        if (refund.success()) {
+                            releaseCustody(coordinator, custodyId, custodyHeld);
+                            rollbackBarterPayment(barterStorage.handler(), buyer, barterItem, barterAmount,
+                                    insertedPayment, listing.barterNbtAware(), listing.barterNbtPatch());
+                        }
+                        sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                        return;
+                    }
                     recordedSale = true;
                 }
             } else if (!barterTrade) {
@@ -794,28 +824,50 @@ public final class PlayerShopBlockService {
                 if (cost <= 0L) {
                     // Free item — no withdrawal needed
                     if (buyer.getServer() != null) {
-                        PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), 0L, listing.itemId(), qty);
-                        recordedSale = true;
-                    }
-                } else {
-                    TransactionResult withdraw = coordinatorMutation(coordinator, transactionId,
-                            "buyer debit", buyer.getUUID(), null, cost, MutationKind.WITHDRAW);
-                    if (!withdraw.success()) {
-                        if (listing.tradeMode() == ShopBlockEntity.TradeMode.BOTH) {
-                            barterTrade = true;
-                        } else {
-                            sendResult(buyer, false, ShopResultCode.INSUFFICIENT_FUNDS);
-                            return;
-                        }
-                    } else {
-                        withdrewFromBuyer = true;
-                        if (buyer.getServer() == null) {
-                            coordinatorMutation(coordinator, transactionId, "buyer server refund",
-                                    buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
+                        boolean recorded = PlayerShopSettlementSavedData.get(buyer.getServer())
+                                .recordSale(shop.getOwnerUuid(), pos.asLong(), 0L, listing.itemId(), qty);
+                        if (!recorded) {
                             sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                             return;
                         }
-                        PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), cost, listing.itemId(), qty);
+                        recordedSale = true;
+                    }
+                } else {
+                    ProviderResult<MutationReceipt> debit = coordinatorMutationWithCustody(coordinator,
+                            transactionId, "buyer debit", buyer.getUUID(), cost,
+                            custodyItem, custodyQuantity, custodyHash);
+                    if (!debit.confirmed()) {
+                        if (listing.tradeMode() == ShopBlockEntity.TradeMode.BOTH
+                                && debit.error() == ProviderError.INSUFFICIENT_FUNDS) {
+                            barterTrade = true;
+                        } else {
+                            sendResult(buyer, false, mapProviderResultCode(debit));
+                            return;
+                        }
+                    } else {
+                        custodyHeld = true;
+                        withdrewFromBuyer = true;
+                        if (buyer.getServer() == null) {
+                            TransactionResult refund = coordinatorMutation(coordinator, transactionId,
+                                    "buyer server refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
+                            if (refund.success()) {
+                                releaseCustody(coordinator, custodyId, custodyHeld);
+                            }
+                            sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                            return;
+                        }
+                        boolean recorded = PlayerShopSettlementSavedData.get(buyer.getServer())
+                                .recordSale(shop.getOwnerUuid(), pos.asLong(), cost, listing.itemId(), qty);
+                        if (!recorded) {
+                            TransactionResult refund = coordinatorMutation(coordinator, transactionId,
+                                    "buyer settlement overflow refund", buyer.getUUID(), null, cost,
+                                    MutationKind.DEPOSIT);
+                            if (refund.success()) {
+                                releaseCustody(coordinator, custodyId, custodyHeld);
+                            }
+                            sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                            return;
+                        }
                         recordedSale = true;
                     }
                 }
@@ -883,7 +935,8 @@ public final class PlayerShopBlockService {
                                 reinsert(linkedStorage, ex);
                             }
                         }
-                        rollbackAll(linkedStorage, buyer, coordinator, transactionId, withdrewFromBuyer, cost, recordedSale,
+                        rollbackAll(linkedStorage, buyer, coordinator, transactionId, custodyId, custodyHeld,
+                                withdrewFromBuyer, cost, recordedSale,
                                 shop.getOwnerUuid(), pos, barterItem, barterAmount, insertedPayment, compoundTrade, barterTrade,
                                 listing.barterNbtAware(), listing.barterNbtPatch());
                         sendResult(buyer, false, ShopResultCode.ROLLBACK);
@@ -896,7 +949,8 @@ public final class PlayerShopBlockService {
             }
 
             if (extracted.isEmpty()) {
-                rollbackAll(linkedStorage, buyer, coordinator, transactionId, withdrewFromBuyer, cost, recordedSale,
+                rollbackAll(linkedStorage, buyer, coordinator, transactionId, custodyId, custodyHeld,
+                        withdrewFromBuyer, cost, recordedSale,
                         shop.getOwnerUuid(), pos, barterItem, barterAmount, insertedPayment, compoundTrade, barterTrade,
                         listing.barterNbtAware(), listing.barterNbtPatch());
                 sendResult(buyer, false, ShopResultCode.ROLLBACK);
@@ -909,6 +963,15 @@ public final class PlayerShopBlockService {
                     if (!stack.isEmpty()) {
                         buyer.drop(stack, false);
                     }
+                }
+            }
+            if (custodyHeld) {
+                try {
+                    coordinator.deliverCustody(custodyId);
+                    coordinator.claimCustody(custodyId);
+                } catch (RuntimeException exception) {
+                    sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                    return;
                 }
             }
 
@@ -1299,6 +1362,7 @@ public final class PlayerShopBlockService {
      */
     private static void rollbackAll(LinkedStorage linkedStorage, ServerPlayer buyer,
                                     EconomyTransactionCoordinator coordinator, RequestId transactionId,
+                                    RequestId custodyId, boolean custodyHeld,
                                     boolean withdrewFromBuyer, long cost, boolean recordedSale,
                                     UUID ownerUuid, BlockPos pos,
                                     Item barterItem, int barterAmount, List<ItemStack> insertedPayment,
@@ -1309,8 +1373,11 @@ public final class PlayerShopBlockService {
                 PlayerShopSettlementSavedData.get(buyer.getServer()).rollbackPending(ownerUuid, pos.asLong(), cost);
             }
             if (withdrewFromBuyer) {
-                coordinatorMutation(coordinator, transactionId, "buyer rollback",
+                TransactionResult refund = coordinatorMutation(coordinator, transactionId, "buyer rollback",
                         buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
+                if (refund.success()) {
+                    releaseCustody(coordinator, custodyId, custodyHeld);
+                }
             }
         }
         if (compoundTrade || barterTrade) {
@@ -1594,6 +1661,34 @@ public final class PlayerShopBlockService {
                     : TransactionResult.error(mapProviderResultCode(result), balance);
         } catch (RuntimeException exception) {
             return TransactionResult.error(ShopResultCode.SERVER_ERROR, 0L);
+        }
+    }
+
+    private static ProviderResult<MutationReceipt> coordinatorMutationWithCustody(
+            EconomyTransactionCoordinator coordinator, RequestId rootRequest, String role,
+            UUID actor, long amount, String itemKey, long quantity, String contentHash) {
+        if (amount <= 0L) {
+            return ProviderResult.rejected(ProviderError.INVALID_AMOUNT, "amount must be positive");
+        }
+        try {
+            MutationRequest request = MutationRequest.forPlayer(rootRequest.child(role), actor, amount,
+                    MutationKind.WITHDRAW);
+            return coordinator.executeWithCustody(request, actor, itemKey, quantity, contentHash,
+                    com.enviouse.futureshopsp.server.economy.CustodyState.HELD);
+        } catch (RuntimeException exception) {
+            return ProviderResult.unavailable(ProviderError.UNKNOWN, "custodied mutation could not be prepared");
+        }
+    }
+
+    private static void releaseCustody(EconomyTransactionCoordinator coordinator, RequestId custodyId,
+                                       boolean custodyHeld) {
+        if (!custodyHeld) {
+            return;
+        }
+        try {
+            coordinator.releaseCustody(custodyId);
+        } catch (RuntimeException ignored) {
+            // The lifecycle or an existing terminal transition keeps the recovery record authoritative.
         }
     }
 
