@@ -28,6 +28,8 @@ The bridge is a Bukkit plugin. Its v1_21_R1 implementation delegates to Vault do
 
 The complete unit suite passed with `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash ./gradlew test --no-daemon`. The complete build passed with `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash ./gradlew build --no-daemon`.
 
+The same test and build commands were revalidated at evidence revision `d798018`; both completed successfully with all tasks up to date.
+
 The real NeoForge GameTest server passed all eleven economy tests in `/tmp/futureshops-phase002-gametest-20260903-v2.log`. The bounded standard dedicated server reached common setup and server start in `/tmp/futureshops-phase002-server-20260903-v3.log`. The bounded Xvfb client reached common setup in `/tmp/futureshops-phase002-client-20260903-v3.log`. Their timeout exits were expected bounded smoke termination, not startup failures.
 
 The rebuilt `build/libs/futureshops-2.3.0.jar` passed `unzip -tq`. Its SHA 256 is `30b02e65ecd2dce47accdfa0bfbbb4e1464c43f25d7774eaab8b0bcecec2b6ba` and its SHA 512 is `1ab37a9ed664ce57d547a699d9d9a16d50d833296e0a3d18725d29232034723546e4e9e878cbb23f967cef334b53287869734f843030df7abcd472c8b03d9896`. The jar contains no Pixelmon, Bukkit, Spigot, Vault, bridge, or test fixture classes. The optional adapter has no forbidden external dependency according to the dependency and `jdeps` scans.
