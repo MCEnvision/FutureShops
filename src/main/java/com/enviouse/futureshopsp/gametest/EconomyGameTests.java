@@ -4,6 +4,7 @@ import com.enviouse.futureshopsp.Futureshops;
 import com.enviouse.futureshopsp.api.economy.ProviderLifecycle;
 import com.enviouse.futureshopsp.init.ModItems;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
+import com.enviouse.futureshopsp.server.shop.PlayerShopBarterEscrowSavedData;
 import com.enviouse.futureshopsp.server.shop.PlayerShopSaleEscrowSavedData;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -95,6 +96,36 @@ public final class EconomyGameTests {
         helper.assertTrue(recovered.find(request).orElseThrow().state()
                         == PlayerShopSaleEscrowSavedData.State.RECOVERY_REQUIRED,
                 "interrupted sale escrow must not be retried as prepared work");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void playerShopBarterEscrowUncleanRestartPreservesRecoveryState(GameTestHelper helper) {
+        PlayerShopBarterEscrowSavedData escrow = new PlayerShopBarterEscrowSavedData();
+        UUID buyer = UUID.fromString("00000000-0000-0000-0000-000000000236");
+        UUID request = UUID.fromString("00000000-0000-0000-0000-000000000237");
+        ItemStack payment = new ItemStack(Items.EMERALD, 3);
+        var registryAccess = helper.getLevel().registryAccess();
+
+        helper.assertTrue(escrow.prepare(request, buyer, 9L, "minecraft:overworld",
+                        "minecraft:emerald", 3, List.of(payment), registryAccess),
+                "barter escrow must persist the exact payment before removal");
+        helper.assertTrue(escrow.markRemoved(request, List.of(payment), registryAccess),
+                "barter escrow must verify the removed payment");
+        helper.assertTrue(escrow.markStored(request),
+                "barter escrow must record stored custody before the dependent leg");
+        escrow.markUnclean();
+
+        PlayerShopBarterEscrowSavedData recovered = PlayerShopBarterEscrowSavedData.load(
+                escrow.save(new CompoundTag(), registryAccess), registryAccess);
+        helper.assertTrue(recovered.integrityValid(), "unclean barter escrow must retain valid checksums");
+        helper.assertTrue(!recovered.cleanMarkerValid(), "unclean barter save must require recovery");
+        helper.assertTrue(recovered.hasIncompleteRecords(), "stored barter custody must remain pending");
+        helper.assertTrue(recovered.markRecoveryRequired(request),
+                "recovery must classify the interrupted barter escrow explicitly");
+        helper.assertTrue(recovered.find(request).state()
+                        == PlayerShopBarterEscrowSavedData.State.RECOVERY_REQUIRED,
+                "interrupted barter escrow must not be retried as stored work");
         helper.succeed();
     }
 }
