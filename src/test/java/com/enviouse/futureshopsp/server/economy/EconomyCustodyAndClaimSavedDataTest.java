@@ -47,6 +47,17 @@ class EconomyCustodyAndClaimSavedDataTest {
     }
 
     @Test
+    void custodyWrongRecordsTagTypeIsReadOnly() {
+        CompoundTag saved = new CompoundTag();
+        saved.putString("records", "not a list");
+
+        EconomyCustodySavedData loaded = EconomyCustodySavedData.load(saved, null);
+
+        assertFalse(loaded.integrityValid());
+        assertTrue(loaded.snapshot().isEmpty());
+    }
+
+    @Test
     void claimRoundTripAndPendingStateRemainDurable() {
         RequestId requestId = RequestId.random();
         EconomyClaimSavedData data = new EconomyClaimSavedData();
@@ -70,6 +81,17 @@ class EconomyCustodyAndClaimSavedDataTest {
         tampered.getList("records", 10).getCompound(0).putString("description", "changed");
 
         EconomyClaimSavedData loaded = EconomyClaimSavedData.load(tampered, null);
+        assertFalse(loaded.integrityValid());
+        assertTrue(loaded.snapshot().isEmpty());
+    }
+
+    @Test
+    void claimWrongRecordsTagTypeIsReadOnly() {
+        CompoundTag saved = new CompoundTag();
+        saved.putString("records", "not a list");
+
+        EconomyClaimSavedData loaded = EconomyClaimSavedData.load(saved, null);
+
         assertFalse(loaded.integrityValid());
         assertTrue(loaded.snapshot().isEmpty());
     }

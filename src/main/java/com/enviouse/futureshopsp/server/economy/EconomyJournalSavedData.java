@@ -49,7 +49,12 @@ public final class EconomyJournalSavedData extends SavedData implements EconomyT
         if (tag.contains("cleanMarker", Tag.TAG_BYTE)) {
             data.cleanMarkerValid = tag.getBoolean("cleanMarker");
         }
-        ListTag entries = tag.getList("records", Tag.TAG_COMPOUND);
+        Tag rawEntries = tag.get("records");
+        if (rawEntries != null && !(rawEntries instanceof ListTag)) {
+            data.integrityValid = false;
+            return data;
+        }
+        ListTag entries = rawEntries instanceof ListTag list ? list : new ListTag();
         if (entries.size() > MAX_RECORDS) {
             data.integrityValid = false;
             return data;

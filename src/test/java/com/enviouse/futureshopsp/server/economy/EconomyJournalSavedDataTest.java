@@ -101,6 +101,17 @@ class EconomyJournalSavedDataTest {
     }
 
     @Test
+    void wrongRecordsTagTypeIsReadOnlyAndNeverInterpretedAsEmptySuccess() {
+        CompoundTag saved = new CompoundTag();
+        saved.putString("records", "not a list");
+
+        EconomyJournalSavedData loaded = EconomyJournalSavedData.load(saved, null);
+
+        assertFalse(loaded.integrityValid());
+        assertTrue(loaded.snapshot().isEmpty());
+    }
+
+    @Test
     void oversizedJournalIsReadOnlyAndNeverLoaded() {
         CompoundTag saved = new CompoundTag();
         net.minecraft.nbt.ListTag entries = new net.minecraft.nbt.ListTag();
