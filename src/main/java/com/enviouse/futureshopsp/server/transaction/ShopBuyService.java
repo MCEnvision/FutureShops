@@ -39,6 +39,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * Server-authoritative buy transaction engine for detail purchases and cart checkout.
  */
 public final class ShopBuyService {
+    private static final int MAX_CART_LINES = 256;
+
     private ShopBuyService() {
     }
 
@@ -285,10 +287,15 @@ public final class ShopBuyService {
 
     // package-private for unit testing (multi-variant merge-by-listingId)
     static Map<String, Integer> mergeLines(List<C2SBuyRequestPacket.LineItem> lineItems) {
+        if (lineItems == null || lineItems.size() > MAX_CART_LINES) {
+            return Map.of();
+        }
         Map<String, Integer> merged = new LinkedHashMap<>();
         for (C2SBuyRequestPacket.LineItem lineItem : lineItems) {
-            if (lineItem == null || lineItem.listingId() == null || lineItem.listingId().isBlank()) {
-                continue;
+            if (lineItem == null || lineItem.listingId() == null || lineItem.listingId().isBlank()
+                    || lineItem.listingId().length() > 128 || lineItem.quantity() <= 0
+                    || lineItem.quantity() > ShopTransactionUtil.MAX_BUY_QUANTITY) {
+                return Map.of();
             }
             // Merge by listingId: two listings sharing a registry itemId but distinct listingIds
             // must NOT collapse — that is the whole point of multi-variant NBT listings.
