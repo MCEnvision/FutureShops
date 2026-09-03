@@ -55,6 +55,24 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
+    void duplicateRequestWithChangedPayloadIsRejectedBeforeReplay() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, readyLifecycle(), journal);
+        RequestId requestId = RequestId.random();
+        MutationRequest original = MutationRequest.forPlayer(requestId, PLAYER, 25L, MutationKind.WITHDRAW);
+        MutationRequest conflicting = new MutationRequest(requestId, TARGET, Optional.of(PLAYER), 30L,
+                MutationKind.WITHDRAW);
+
+        assertTrue(coordinator.withdraw(original).confirmed());
+        var result = coordinator.withdraw(conflicting);
+
+        assertEquals(ProviderResultStatus.REJECTED, result.status());
+        assertEquals(ProviderError.INVALID_REQUEST, result.error());
+        assertEquals(1, provider.withdrawCalls);
+    }
+
+    @Test
     void missingCapabilityRejectsBeforeJournalOrProviderCall() {
         FixtureProvider provider = new FixtureProvider(new ProviderCapabilities(true, true, true, true, false, false));
         EconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
@@ -360,6 +378,27 @@ class EconomyTransactionCoordinatorTest {
         assertEquals(ProviderResultStatus.RECOVERY_REQUIRED, result.status());
         assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
         assertEquals(0, provider.withdrawCalls);
+    }
+
+    @Test
+    void custodiedReplayWithChangedCustodyPayloadIsRejectedWithoutFreezing() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        EconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyCustodyStore custody = new InMemoryEconomyCustodyStore();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(
+                provider, lifecycle, journal, custody, new InMemoryEconomyClaimStore());
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+
+        assertTrue(coordinator.executeWithCustody(request, PLAYER, "minecraft:diamond", 1L, "hash",
+                CustodyState.HELD).confirmed());
+        var result = coordinator.executeWithCustody(request, PLAYER, "minecraft:gold", 1L, "hash",
+                CustodyState.HELD);
+
+        assertEquals(ProviderResultStatus.REJECTED, result.status());
+        assertEquals(ProviderError.INVALID_REQUEST, result.error());
+        assertEquals(ProviderLifecycle.READY, lifecycle.snapshot().lifecycle());
+        assertEquals(1, provider.withdrawCalls);
     }
 
     @Test

@@ -234,6 +234,10 @@ public final class EconomyTransactionCoordinator {
                 return journalFailure("transaction journal lookup failed");
             }
             if (existing != null) {
+                if (!requestMatches(request, existing.request())) {
+                    return ProviderResult.rejected(ProviderError.INVALID_REQUEST,
+                            "transaction request conflicts with the persisted identity");
+                }
                 ProviderResult<MutationReceipt> replayed = replay(existing);
                 if (replayed.confirmed()) {
                     CustodyRecord custodyRecord;
@@ -242,7 +246,14 @@ public final class EconomyTransactionCoordinator {
                     } catch (RuntimeException exception) {
                         return journalFailure("custody lookup failed during replay");
                     }
-                    if (custodyRecord == null || !custodyTerminalStateMatches(custodyRecord.state(), terminalState)) {
+                    if (custodyRecord == null) {
+                        return journalFailure("custody finalization requires recovery");
+                    }
+                    if (!custodyMatches(custodyRecord, owner, itemKey, quantity, contentHash)) {
+                        return ProviderResult.rejected(ProviderError.INVALID_REQUEST,
+                                "custody request conflicts with the persisted identity");
+                    }
+                    if (!custodyTerminalStateMatches(custodyRecord.state(), terminalState)) {
                         return journalFailure("custody finalization requires recovery");
                     }
                 }
@@ -411,6 +422,10 @@ public final class EconomyTransactionCoordinator {
                 return journalFailure("transaction journal lookup failed");
             }
             if (existing != null) {
+                if (!requestMatches(request, existing.request())) {
+                    return ProviderResult.rejected(ProviderError.INVALID_REQUEST,
+                            "transaction request conflicts with the persisted identity");
+                }
                 return replay(existing);
             }
             ProviderResult<MutationReceipt> admission = admit(request);
@@ -558,6 +573,12 @@ public final class EconomyTransactionCoordinator {
         };
     }
 
+    private static boolean custodyMatches(CustodyRecord record, UUID owner, String itemKey,
+                                          long quantity, String contentHash) {
+        return record.owner().equals(owner) && record.itemKey().equals(itemKey)
+                && record.quantity() == quantity && record.contentHash().equals(contentHash);
+    }
+
     private ProviderResult<MutationReceipt> ambiguous(EconomyJournalRecord pending, String diagnostic) {
         return markUncertainOrFreeze(pending, diagnostic, true);
     }
@@ -628,6 +649,14 @@ public final class EconomyTransactionCoordinator {
         return receipt != null && request.requestId().equals(receipt.requestId())
                 && request.kind() == receipt.kind() && request.amountMinorUnits() == receipt.amountMinorUnits()
                 && receipt.externalOperationId() != null && !receipt.externalOperationId().isBlank();
+    }
+
+    private static boolean requestMatches(MutationRequest requested, MutationRequest persisted) {
+        return requested.requestId().equals(persisted.requestId())
+                && requested.actor().equals(persisted.actor())
+                && requested.counterparty().equals(persisted.counterparty())
+                && requested.amountMinorUnits() == persisted.amountMinorUnits()
+                && requested.kind() == persisted.kind();
     }
 
     private static <T> ProviderResult<T> copyFailure(ProviderResult<?> source) {
