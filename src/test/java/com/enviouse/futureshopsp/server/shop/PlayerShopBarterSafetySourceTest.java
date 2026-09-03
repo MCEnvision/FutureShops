@@ -24,6 +24,11 @@ class PlayerShopBarterSafetySourceTest {
         assertTrue(source.contains("custodyId = custodyIdFor(transactionId, \"buyer compound debit\")"));
         assertTrue(source.contains("custodyId = custodyIdFor(transactionId, \"buyer debit\")"));
         assertTrue(source.contains("return rootRequest.child(role).child(\"custody\")"));
+        assertTrue(source.contains("PlayerShopBarterEscrowSavedData.get(buyer.getServer())"));
+        assertTrue(source.contains("barterEscrow.markRemoved(barterEscrowRequestId"));
+        assertTrue(source.contains("barterEscrow.markStored(barterEscrowRequestId)"));
+        assertTrue(source.contains("barterEscrow.markComplete(barterEscrowRequestId)"));
+        assertTrue(source.contains("snapshotMatchingItems"));
         assertFalse(source.contains("rollbackBarterPayment(linkedStorage.handler(),"));
         assertFalse(source.contains("ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), paymentStacks)"));
     }

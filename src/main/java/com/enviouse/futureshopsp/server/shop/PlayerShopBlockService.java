@@ -635,6 +635,10 @@ public final class PlayerShopBlockService {
             Item barterItem = null;
             int barterAmount = 0;
             List<ItemStack> insertedPayment = List.of();
+            PlayerShopBarterEscrowSavedData barterEscrow = null;
+            UUID barterEscrowRequestId = transactionId.child("barter item escrow").value();
+            boolean barterEscrowPrepared = false;
+            List<ItemStack> escrowPreview = List.of();
 
             boolean barterTrade;
             boolean compoundTrade = listing.tradeMode() == ShopBlockEntity.TradeMode.MONEY_AND_BARTER;
@@ -726,7 +730,13 @@ public final class PlayerShopBlockService {
                 // ShopTransactionUtil.collectAndRemoveItems so the owner receives exactly
                 // what the buyer paid with — enchanted chestplate in, enchanted chestplate
                 // out, rather than a freshly-minted plain one.
-                List<ItemStack> previewPayment = splitStacks(barterItem, barterAmount, barterNbtPatch);
+                List<ItemStack> previewPayment = ShopTransactionUtil.snapshotMatchingItems(
+                        buyer.getInventory(), barterItem, barterAmount, listing.barterNbtAware(), listing.barterNbtPatch());
+                escrowPreview = previewPayment;
+                if (previewPayment.isEmpty()) {
+                    sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, "§cTrade cancelled: barter items could not be reserved.");
+                    return;
+                }
                 boolean canInsertPayment = barterStorage.hasAdapter()
                         ? barterStorage.adapter().canInsert(barterStorage.blockEntity(), previewPayment)
                         : canInsertAll(barterStorage.handler(), previewPayment);
@@ -735,6 +745,18 @@ public final class PlayerShopBlockService {
                     sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, "§cTrade cancelled: the shop's storage is full and cannot accept your barter items.");
                     return;
                 }
+            }
+
+            if (compoundTrade || barterTrade) {
+                if (buyer.getServer() == null || escrowPreview.isEmpty()
+                        || !((barterEscrow = PlayerShopBarterEscrowSavedData.get(buyer.getServer())).prepare(
+                        barterEscrowRequestId, buyer.getUUID(), pos.asLong(),
+                        buyer.level().dimension().location().toString(), listing.itemId(), barterAmount,
+                        escrowPreview, buyer.level().registryAccess()))) {
+                    sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                    return;
+                }
+                barterEscrowPrepared = true;
             }
 
             // ═══ MONEY_AND_BARTER compound path ═══
@@ -746,6 +768,9 @@ public final class PlayerShopBlockService {
                             transactionId, "buyer compound debit", buyer.getUUID(), cost,
                             custodyItem, custodyQuantity, custodyHash);
                     if (!debit.confirmed()) {
+                        if (barterEscrowPrepared) {
+                            barterEscrow.markRefunded(barterEscrowRequestId);
+                        }
                         sendResultWithChat(buyer, false, mapProviderResultCode(debit), "§cTrade cancelled: the economy provider could not confirm this payment.");
                         return;
                     }
@@ -761,6 +786,9 @@ public final class PlayerShopBlockService {
                             List.of(new com.enviouse.futureshopsp.event.BarterTradeEvent.IngredientEntry(listing.barterItemId(), barterAmount)));
                     net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(barterPre);
                     if (barterPre.isCanceled()) {
+                        if (barterEscrowPrepared) {
+                            barterEscrow.markRefunded(barterEscrowRequestId);
+                        }
                         if (withdrewFromBuyer) {
                             TransactionResult refund = coordinatorMutation(coordinator, transactionId,
                                     "buyer compound refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
@@ -780,6 +808,9 @@ public final class PlayerShopBlockService {
                         buyer.getInventory(), barterItem, barterAmount,
                         listing.barterNbtAware(), listing.barterNbtPatch());
                 if (paymentStacks.isEmpty()) {
+                    if (barterEscrowPrepared) {
+                        barterEscrow.markRefunded(barterEscrowRequestId);
+                    }
                     TransactionResult refund = coordinatorMutation(coordinator, transactionId,
                             "buyer payment refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
                     if (refund.success()) {
@@ -788,12 +819,27 @@ public final class PlayerShopBlockService {
                     sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, "§cTrade cancelled: barter items could not be taken.");
                     return;
                 }
+                if (barterEscrowPrepared && !barterEscrow.markRemoved(barterEscrowRequestId, paymentStacks,
+                        buyer.level().registryAccess())) {
+                    restorePaymentToBuyer(buyer, paymentStacks);
+                    barterEscrow.markRefunded(barterEscrowRequestId);
+                    TransactionResult refund = coordinatorMutation(coordinator, transactionId,
+                            "buyer escrow mismatch refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
+                    if (refund.success()) {
+                        releaseCustody(coordinator, custodyId, custodyHeld);
+                    }
+                    sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                    return;
+                }
                 // Item 31: Insert barter payment into barter-specific storage
                 boolean insertedOk = barterStorage.hasAdapter()
                         ? barterStorage.adapter().insert(barterStorage.blockEntity(), paymentStacks)
                         : insertAll(barterStorage.handler(), paymentStacks);
                 if (!insertedOk) {
                     restorePaymentToBuyer(buyer, paymentStacks);
+                    if (barterEscrowPrepared) {
+                        barterEscrow.markRefunded(barterEscrowRequestId);
+                    }
                     TransactionResult refund = coordinatorMutation(coordinator, transactionId,
                             "buyer storage refund", buyer.getUUID(), null, cost, MutationKind.DEPOSIT);
                     if (refund.success()) {
@@ -803,6 +849,11 @@ public final class PlayerShopBlockService {
                     return;
                 }
                 insertedPayment = paymentStacks;
+                if (barterEscrowPrepared && !barterEscrow.markStored(barterEscrowRequestId)) {
+                    barterEscrow.markRecoveryRequired(barterEscrowRequestId);
+                    sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                    return;
+                }
                 if (buyer.getServer() != null) {
                     boolean recorded = PlayerShopSettlementSavedData.get(buyer.getServer())
                             .recordSale(shop.getOwnerUuid(), pos.asLong(), cost, listing.itemId(), qty);
@@ -813,7 +864,8 @@ public final class PlayerShopBlockService {
                         if (refund.success()) {
                             releaseCustody(coordinator, custodyId, custodyHeld);
                             rollbackBarterPayment(barterStorage, buyer, barterItem, barterAmount,
-                                    insertedPayment, listing.barterNbtAware(), listing.barterNbtPatch());
+                                    insertedPayment, listing.barterNbtAware(), listing.barterNbtPatch(),
+                                    barterEscrow, barterEscrowRequestId);
                         }
                         sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                         return;
@@ -876,7 +928,17 @@ public final class PlayerShopBlockService {
             }
 
             if (barterTrade) {
-                // barterItem and barterAmount already set above from pre-validation
+                if (barterItem == null || barterAmount <= 0) {
+                    barterItem = ShopTransactionUtil.resolveItem(listing.barterItemId());
+                    barterAmount = listing.effectiveBarterTotal(qty);
+                    if (barterItem == null || barterItem == Items.AIR
+                            || ShopTransactionUtil.countItems(buyer.getInventory(), barterItem,
+                            listing.barterNbtAware(), listing.barterNbtPatch()) < barterAmount) {
+                        sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS,
+                                "§cTrade cancelled: you don't have enough barter items.");
+                        return;
+                    }
+                }
                 // Item 31: Use barterStorage for barter payment insertion
                 if (barterStorage == null) {
                     barterStorage = resolveBarterStorage(buyer.level(), shop, pos);
@@ -884,6 +946,23 @@ public final class PlayerShopBlockService {
                 if (barterStorage == null) {
                     sendResultWithChat(buyer, false, ShopResultCode.NO_LINK, "§cTrade cancelled: barter storage is not linked.");
                     return;
+                }
+                if (!barterEscrowPrepared) {
+                    escrowPreview = ShopTransactionUtil.snapshotMatchingItems(
+                            buyer.getInventory(), barterItem, barterAmount,
+                            listing.barterNbtAware(), listing.barterNbtPatch());
+                    boolean canInsertPayment = barterStorage.hasAdapter()
+                            ? barterStorage.adapter().canInsert(barterStorage.blockEntity(), escrowPreview)
+                            : canInsertAll(barterStorage.handler(), escrowPreview);
+                    if (escrowPreview.isEmpty() || !canInsertPayment || buyer.getServer() == null
+                            || !((barterEscrow = PlayerShopBarterEscrowSavedData.get(buyer.getServer())).prepare(
+                            barterEscrowRequestId, buyer.getUUID(), pos.asLong(),
+                            buyer.level().dimension().location().toString(), listing.itemId(), barterAmount,
+                            escrowPreview, buyer.level().registryAccess()))) {
+                        sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                        return;
+                    }
+                    barterEscrowPrepared = true;
                 }
 
                 // Fire BarterTradeEvent.Pre (spec §33) for pure barter
@@ -894,6 +973,9 @@ public final class PlayerShopBlockService {
                             List.of(new com.enviouse.futureshopsp.event.BarterTradeEvent.IngredientEntry(listing.barterItemId(), barterAmount)));
                     net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(barterPre);
                     if (barterPre.isCanceled()) {
+                        if (barterEscrowPrepared) {
+                            barterEscrow.markRefunded(barterEscrowRequestId);
+                        }
                         sendResult(buyer, false, ShopResultCode.CANCELLED_BY_EVENT);
                         return;
                     }
@@ -904,7 +986,17 @@ public final class PlayerShopBlockService {
                         buyer.getInventory(), barterItem, barterAmount,
                         listing.barterNbtAware(), listing.barterNbtPatch());
                 if (paymentStacks.isEmpty()) {
+                    if (barterEscrowPrepared) {
+                        barterEscrow.markRefunded(barterEscrowRequestId);
+                    }
                     sendResultWithChat(buyer, false, ShopResultCode.MISSING_BARTER_ITEMS, "§cTrade cancelled: barter items could not be taken.");
+                    return;
+                }
+                if (barterEscrowPrepared && !barterEscrow.markRemoved(barterEscrowRequestId, paymentStacks,
+                        buyer.level().registryAccess())) {
+                    restorePaymentToBuyer(buyer, paymentStacks);
+                    barterEscrow.markRefunded(barterEscrowRequestId);
+                    sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                     return;
                 }
                 boolean insertedOk = barterStorage.hasAdapter()
@@ -912,16 +1004,24 @@ public final class PlayerShopBlockService {
                         : insertAll(barterStorage.handler(), paymentStacks);
                 if (!insertedOk) {
                     restorePaymentToBuyer(buyer, paymentStacks);
+                    if (barterEscrowPrepared) {
+                        barterEscrow.markRefunded(barterEscrowRequestId);
+                    }
                     sendResultWithChat(buyer, false, ShopResultCode.STORAGE_FULL, "§cTrade cancelled: the shop's storage is full.");
                     return;
                 }
                 insertedPayment = paymentStacks;
+                if (barterEscrowPrepared && !barterEscrow.markStored(barterEscrowRequestId)) {
+                    barterEscrow.markRecoveryRequired(barterEscrowRequestId);
+                    sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                    return;
+                }
                 if (buyer.getServer() != null) {
                     boolean recorded = PlayerShopSettlementSavedData.get(buyer.getServer())
                             .recordSale(shop.getOwnerUuid(), pos.asLong(), 0L, listing.itemId(), qty);
                     if (!recorded) {
                         rollbackBarterPayment(barterStorage, buyer, barterItem, barterAmount, insertedPayment,
-                                listing.barterNbtAware(), listing.barterNbtPatch());
+                                listing.barterNbtAware(), listing.barterNbtPatch(), barterEscrow, barterEscrowRequestId);
                         sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                         return;
                     }
@@ -947,7 +1047,7 @@ public final class PlayerShopBlockService {
                         rollbackAll(linkedStorage, barterStorage, buyer, coordinator, transactionId, custodyId, custodyHeld,
                                 withdrewFromBuyer, cost, recordedSale,
                                 shop.getOwnerUuid(), pos, barterItem, barterAmount, insertedPayment, compoundTrade, barterTrade,
-                                listing.barterNbtAware(), listing.barterNbtPatch());
+                                listing.barterNbtAware(), listing.barterNbtPatch(), barterEscrow, barterEscrowRequestId);
                         sendResult(buyer, false, ShopResultCode.ROLLBACK);
                         return;
                     }
@@ -961,7 +1061,7 @@ public final class PlayerShopBlockService {
                 rollbackAll(linkedStorage, barterStorage, buyer, coordinator, transactionId, custodyId, custodyHeld,
                         withdrewFromBuyer, cost, recordedSale,
                         shop.getOwnerUuid(), pos, barterItem, barterAmount, insertedPayment, compoundTrade, barterTrade,
-                        listing.barterNbtAware(), listing.barterNbtPatch());
+                        listing.barterNbtAware(), listing.barterNbtPatch(), barterEscrow, barterEscrowRequestId);
                 sendResult(buyer, false, ShopResultCode.ROLLBACK);
                 return;
             }
@@ -982,6 +1082,11 @@ public final class PlayerShopBlockService {
                     sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
                     return;
                 }
+            }
+            if (barterEscrowPrepared && !barterEscrow.markComplete(barterEscrowRequestId)) {
+                barterEscrow.markRecoveryRequired(barterEscrowRequestId);
+                sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                return;
             }
 
             if (buyer.getServer() != null) {
@@ -1376,7 +1481,8 @@ public final class PlayerShopBlockService {
                                     UUID ownerUuid, BlockPos pos,
                                     Item barterItem, int barterAmount, List<ItemStack> insertedPayment,
                                     boolean compoundTrade, boolean barterTrade,
-                                    boolean barterNbtAware,  DataComponentPatch barterNbtPatch) {
+                                    boolean barterNbtAware, DataComponentPatch barterNbtPatch,
+                                    PlayerShopBarterEscrowSavedData barterEscrow, UUID barterEscrowRequestId) {
         if (compoundTrade || !barterTrade) {
             if (recordedSale && buyer.getServer() != null) {
                 PlayerShopSettlementSavedData.get(buyer.getServer()).rollbackPending(ownerUuid, pos.asLong(), cost);
@@ -1390,19 +1496,24 @@ public final class PlayerShopBlockService {
             }
         }
         if (compoundTrade || barterTrade) {
-            rollbackBarterPayment(barterStorage, buyer, barterItem, barterAmount, insertedPayment, barterNbtAware, barterNbtPatch);
+            rollbackBarterPayment(barterStorage, buyer, barterItem, barterAmount, insertedPayment, barterNbtAware,
+                    barterNbtPatch, barterEscrow, barterEscrowRequestId);
         }
     }
 
     private static void rollbackBarterPayment(LinkedStorage storage, ServerPlayer buyer, Item barterItem, int barterAmount,
                                               List<ItemStack> insertedPayment,
-                                              boolean nbtAware,  DataComponentPatch nbtPatch) {
+                                              boolean nbtAware, DataComponentPatch nbtPatch,
+                                              PlayerShopBarterEscrowSavedData barterEscrow, UUID barterEscrowRequestId) {
         if (storage == null || barterItem == null || insertedPayment.isEmpty()) {
             return;
         }
         List<ItemStack> recovered = extractNbt(storage, barterItem, barterAmount, nbtAware, nbtPatch);
         if (!recovered.isEmpty()) {
             restorePaymentToBuyer(buyer, recovered);
+            if (barterEscrow != null && barterEscrowRequestId != null) {
+                barterEscrow.markRefunded(barterEscrowRequestId);
+            }
         }
     }
 
@@ -1606,7 +1717,16 @@ public final class PlayerShopBlockService {
                 result.add(real);
             }
         }
-        return remaining <= 0 ? result : List.of();
+        if (remaining <= 0) {
+            return result;
+        }
+        for (ItemStack stack : result) {
+            ItemStack pending = stack.copy();
+            for (int i = 0; i < handler.getSlots() && !pending.isEmpty(); i++) {
+                pending = handler.insertItem(i, pending, false);
+            }
+        }
+        return List.of();
     }
 
     private static boolean canInsertAll(IItemHandler handler, List<ItemStack> stacks) {

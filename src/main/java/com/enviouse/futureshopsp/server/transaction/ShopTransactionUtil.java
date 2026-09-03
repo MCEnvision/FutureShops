@@ -97,6 +97,37 @@ public final class ShopTransactionUtil {
         return total;
     }
 
+    public static List<ItemStack> snapshotMatchingItems(Inventory inventory, Item target, int quantity,
+                                                         boolean nbtAware, DataComponentPatch requiredTag) {
+        if (quantity <= 0 || countItems(inventory, target, nbtAware, requiredTag) < quantity) {
+            return List.of();
+        }
+        List<ItemStack> result = new ArrayList<>();
+        int remaining = quantity;
+        remaining = snapshotFromSlots(inventory.items, target, remaining, nbtAware, requiredTag, result);
+        snapshotFromSlots(inventory.offhand, target, remaining, nbtAware, requiredTag, result);
+        return result;
+    }
+
+    private static int snapshotFromSlots(NonNullList<ItemStack> slots, Item target, int remaining,
+                                          boolean nbtAware, DataComponentPatch requiredTag,
+                                          List<ItemStack> result) {
+        for (ItemStack stack : slots) {
+            if (remaining <= 0) {
+                break;
+            }
+            if (!NbtMatchUtil.matches(stack, target, nbtAware, requiredTag)) {
+                continue;
+            }
+            int copied = Math.min(stack.getCount(), remaining);
+            ItemStack copy = stack.copy();
+            copy.setCount(copied);
+            result.add(copy);
+            remaining -= copied;
+        }
+        return remaining;
+    }
+
     public static boolean removeItems(Inventory inventory, Item target, int quantity) {
         return removeItems(inventory, target, quantity, false, null);
     }
@@ -247,4 +278,3 @@ public final class ShopTransactionUtil {
         }
     }
 }
-

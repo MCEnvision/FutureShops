@@ -12,6 +12,7 @@ import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.api.economy.ProviderResolution;
 import com.enviouse.futureshopsp.api.economy.ProviderLifecycle;
 import com.enviouse.futureshopsp.api.economy.RequestId;
+import com.enviouse.futureshopsp.server.shop.PlayerShopBarterEscrowSavedData;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.List;
@@ -25,6 +26,7 @@ public final class BalanceManager {
     private static EconomyCustodyStore custody;
     private static EconomyClaimStore claims;
     private static InternalEconomyReceiptStore receipts;
+    private static PlayerShopBarterEscrowSavedData barterEscrow;
 
     private BalanceManager() {
     }
@@ -37,18 +39,22 @@ public final class BalanceManager {
         custody = ephemeral ? new InMemoryEconomyCustodyStore() : EconomyCustodySavedData.get(server);
         claims = ephemeral ? new InMemoryEconomyClaimStore() : EconomyClaimSavedData.get(server);
         receipts = ephemeral ? new InMemoryInternalEconomyReceiptStore() : InternalEconomyReceiptSavedData.get(server);
+        barterEscrow = ephemeral ? new PlayerShopBarterEscrowSavedData() : PlayerShopBarterEscrowSavedData.get(server);
         boolean internalSelection = EconomyApi.INTERNAL_PROVIDER_ID.equals(selection.activeProviderId());
-        boolean cleanMarkerValid = journal.cleanMarkerValid() && custody.cleanMarkerValid() && claims.cleanMarkerValid();
+        boolean cleanMarkerValid = journal.cleanMarkerValid() && custody.cleanMarkerValid() && claims.cleanMarkerValid()
+                && barterEscrow.cleanMarkerValid();
         if (internalSelection) {
             cleanMarkerValid &= receipts.cleanMarkerValid();
         }
         boolean integrityValid = journal.integrityValid() && custody.integrityValid() && claims.integrityValid()
+                && barterEscrow.integrityValid()
                 && (!internalSelection || receipts.integrityValid());
         boolean hasIncompleteRecords = journal.hasIncompleteRecords() || custody.hasIncompleteRecords()
-                || claims.hasIncompleteRecords();
+                || claims.hasIncompleteRecords() || barterEscrow.hasIncompleteRecords();
         journal.markUnclean();
         custody.markUnclean();
         claims.markUnclean();
+        barterEscrow.markUnclean();
         if (internalSelection) {
             receipts.markUnclean();
         }
@@ -87,9 +93,10 @@ public final class BalanceManager {
             boolean journalFlushed = journal == null || journal.flush();
             boolean custodyFlushed = custody == null || custody.flush();
             boolean claimsFlushed = claims == null || claims.flush();
+            boolean barterEscrowFlushed = barterEscrow == null || barterEscrow.flush();
             boolean receiptsFlushed = receipts == null || receipts.flush();
             if (lifecycleController.writeCleanMarkerLast(journalFlushed && receiptsFlushed,
-                    custodyFlushed, claimsFlushed, true)) {
+                    custodyFlushed, claimsFlushed, barterEscrowFlushed)) {
                 if (journal != null) {
                     journal.markCleanMarker();
                 }
@@ -98,6 +105,9 @@ public final class BalanceManager {
                 }
                 if (claims != null) {
                     claims.markCleanMarker();
+                }
+                if (barterEscrow != null) {
+                    barterEscrow.markCleanMarker();
                 }
                 if (receipts != null) {
                     receipts.markCleanMarker();
@@ -111,6 +121,7 @@ public final class BalanceManager {
         custody = null;
         claims = null;
         receipts = null;
+        barterEscrow = null;
     }
 
     public static void beginDraining() {
@@ -132,6 +143,10 @@ public final class BalanceManager {
                 return;
             }
         }
+        if (barterEscrow != null && barterEscrow.hasIncompleteRecords()) {
+            return;
+        }
+        lifecycleController.markRecovered();
     }
 
     public static long getBalance(UUID playerUUID) {
