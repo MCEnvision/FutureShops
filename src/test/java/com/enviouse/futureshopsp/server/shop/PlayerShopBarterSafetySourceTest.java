@@ -1,0 +1,35 @@
+package com.enviouse.futureshopsp.server.shop;
+
+import org.junit.jupiter.api.Test;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class PlayerShopBarterSafetySourceTest {
+    @Test
+    void pureBarterChecksSettlementAndRollsPaymentBackFromBarterStorage() throws Exception {
+        String source = Files.readString(projectDirectory().resolve(Path.of(
+                "src", "main", "java", "com", "enviouse", "futureshopsp",
+                "server", "shop", "PlayerShopBlockService.java")));
+
+        assertTrue(source.contains("boolean recorded = PlayerShopSettlementSavedData.get(buyer.getServer())"));
+        assertTrue(source.contains("if (!recorded) {\n                        rollbackBarterPayment(barterStorage"));
+        assertTrue(source.contains("private static void rollbackAll(LinkedStorage linkedStorage, LinkedStorage barterStorage"));
+        assertTrue(source.contains("rollbackBarterPayment(barterStorage, buyer, barterItem, barterAmount"));
+        assertFalse(source.contains("rollbackBarterPayment(linkedStorage.handler(),"));
+    }
+
+    private static Path projectDirectory() {
+        Path candidate = Path.of("").toAbsolutePath();
+        while (candidate != null) {
+            if (Files.isDirectory(candidate.resolve(Path.of("src", "main", "java")))) {
+                return candidate;
+            }
+            candidate = candidate.getParent();
+        }
+        throw new IllegalStateException("FutureShops source directory is unavailable");
+    }
+}

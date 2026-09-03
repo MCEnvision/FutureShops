@@ -811,7 +811,7 @@ public final class PlayerShopBlockService {
                                 MutationKind.DEPOSIT);
                         if (refund.success()) {
                             releaseCustody(coordinator, custodyId, custodyHeld);
-                            rollbackBarterPayment(barterStorage.handler(), buyer, barterItem, barterAmount,
+                            rollbackBarterPayment(barterStorage, buyer, barterItem, barterAmount,
                                     insertedPayment, listing.barterNbtAware(), listing.barterNbtPatch());
                         }
                         sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
@@ -915,7 +915,14 @@ public final class PlayerShopBlockService {
                 }
                 insertedPayment = paymentStacks;
                 if (buyer.getServer() != null) {
-                    PlayerShopSettlementSavedData.get(buyer.getServer()).recordSale(shop.getOwnerUuid(), pos.asLong(), 0L, listing.itemId(), qty);
+                    boolean recorded = PlayerShopSettlementSavedData.get(buyer.getServer())
+                            .recordSale(shop.getOwnerUuid(), pos.asLong(), 0L, listing.itemId(), qty);
+                    if (!recorded) {
+                        rollbackBarterPayment(barterStorage, buyer, barterItem, barterAmount, insertedPayment,
+                                listing.barterNbtAware(), listing.barterNbtPatch());
+                        sendResult(buyer, false, ShopResultCode.SERVER_ERROR);
+                        return;
+                    }
                     recordedSale = true;
                 }
             }
@@ -935,7 +942,7 @@ public final class PlayerShopBlockService {
                                 reinsert(linkedStorage, ex);
                             }
                         }
-                        rollbackAll(linkedStorage, buyer, coordinator, transactionId, custodyId, custodyHeld,
+                        rollbackAll(linkedStorage, barterStorage, buyer, coordinator, transactionId, custodyId, custodyHeld,
                                 withdrewFromBuyer, cost, recordedSale,
                                 shop.getOwnerUuid(), pos, barterItem, barterAmount, insertedPayment, compoundTrade, barterTrade,
                                 listing.barterNbtAware(), listing.barterNbtPatch());
@@ -949,7 +956,7 @@ public final class PlayerShopBlockService {
             }
 
             if (extracted.isEmpty()) {
-                rollbackAll(linkedStorage, buyer, coordinator, transactionId, custodyId, custodyHeld,
+                rollbackAll(linkedStorage, barterStorage, buyer, coordinator, transactionId, custodyId, custodyHeld,
                         withdrewFromBuyer, cost, recordedSale,
                         shop.getOwnerUuid(), pos, barterItem, barterAmount, insertedPayment, compoundTrade, barterTrade,
                         listing.barterNbtAware(), listing.barterNbtPatch());
@@ -1360,7 +1367,7 @@ public final class PlayerShopBlockService {
     /**
      * Unified rollback for buy() failures after payment was taken.
      */
-    private static void rollbackAll(LinkedStorage linkedStorage, ServerPlayer buyer,
+    private static void rollbackAll(LinkedStorage linkedStorage, LinkedStorage barterStorage, ServerPlayer buyer,
                                     EconomyTransactionCoordinator coordinator, RequestId transactionId,
                                     RequestId custodyId, boolean custodyHeld,
                                     boolean withdrewFromBuyer, long cost, boolean recordedSale,
@@ -1381,19 +1388,23 @@ public final class PlayerShopBlockService {
             }
         }
         if (compoundTrade || barterTrade) {
-            rollbackBarterPayment(linkedStorage.handler(), buyer, barterItem, barterAmount, insertedPayment, barterNbtAware, barterNbtPatch);
+            rollbackBarterPayment(barterStorage, buyer, barterItem, barterAmount, insertedPayment, barterNbtAware, barterNbtPatch);
         }
     }
 
-    private static void rollbackBarterPayment(IItemHandler handler, ServerPlayer buyer, Item barterItem, int barterAmount,
+    private static void rollbackBarterPayment(LinkedStorage storage, ServerPlayer buyer, Item barterItem, int barterAmount,
                                               List<ItemStack> insertedPayment,
                                               boolean nbtAware,  DataComponentPatch nbtPatch) {
-        if (barterItem == null || insertedPayment.isEmpty()) {
+        if (storage == null || barterItem == null || insertedPayment.isEmpty()) {
             return;
         }
-        int recovered = extractAmount(handler, barterItem, barterAmount, nbtAware, nbtPatch);
-        if (recovered > 0) {
-            ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), splitStacks(barterItem, recovered, nbtPatch));
+        List<ItemStack> recovered = extractNbt(storage, barterItem, barterAmount, nbtAware, nbtPatch);
+        if (!recovered.isEmpty() && !ShopTransactionUtil.insertIntoInventory(buyer.getInventory(), recovered)) {
+            for (ItemStack stack : recovered) {
+                if (!stack.isEmpty()) {
+                    buyer.drop(stack, false);
+                }
+            }
         }
     }
 
