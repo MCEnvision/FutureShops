@@ -116,7 +116,7 @@ public final class DepositCommand {
         RequestId custodyId = requestId.child("custody");
         try {
             BalanceManager.getCoordinator().holdCustody(custodyId, player.getUUID(), "physical-money-deposit",
-                    planned.size(), custodyHash(planned));
+                    estimateConsumedCount(planned, amountMinorUnits), custodyHash(planned));
         } catch (RuntimeException exception) {
             player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
                     "command.futureshops.economy.recovery_required")));
@@ -272,6 +272,26 @@ public final class DepositCommand {
         long total = 0L;
         for (PlannedStack p : planned) {
             total = Math.addExact(total, Math.multiplyExact(p.denomination, p.taken));
+        }
+        return total;
+    }
+
+    private static long estimateConsumedCount(List<PlannedStack> planned, long targetMinor) {
+        long remaining = targetMinor;
+        long total = 0L;
+        for (PlannedStack p : planned) {
+            if (remaining <= 0L) break;
+            long coinsNeeded = remaining / p.denomination
+                    + (remaining % p.denomination == 0L ? 0L : 1L);
+            int toTake = (int) Math.min(coinsNeeded, p.available);
+            long valueRemoved = Math.multiplyExact(p.denomination, toTake);
+            if (valueRemoved > remaining && toTake > 1) {
+                toTake = (int) (remaining / p.denomination);
+                valueRemoved = Math.multiplyExact(p.denomination, toTake);
+            }
+            if (toTake <= 0) continue;
+            total = Math.addExact(total, toTake);
+            remaining -= valueRemoved;
         }
         return total;
     }
