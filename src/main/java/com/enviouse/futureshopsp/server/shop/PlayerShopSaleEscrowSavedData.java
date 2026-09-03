@@ -57,28 +57,40 @@ public final class PlayerShopSaleEscrowSavedData extends SavedData {
         if (tag.contains("cleanMarker", Tag.TAG_BYTE)) {
             data.cleanMarkerValid = tag.getBoolean("cleanMarker");
         }
-        ListTag entries = tag.getList("records", Tag.TAG_COMPOUND);
+        Tag recordsTag = tag.get("records");
+        if (recordsTag != null && !(recordsTag instanceof ListTag)) {
+            data.integrityValid = false;
+            return data;
+        }
+        ListTag entries = recordsTag instanceof ListTag list ? list : new ListTag();
         if (entries.size() > MAX_RECORDS) {
             data.integrityValid = false;
             return data;
         }
+        List<EscrowRecord> staged = new ArrayList<>(entries.size());
         for (Tag raw : entries) {
             if (!(raw instanceof CompoundTag entry)) {
                 data.integrityValid = false;
-                continue;
+                return data;
             }
             try {
                 EscrowRecord record = readEntry(entry);
                 if (!entry.getString("checksum").equals(checksum(record))) {
                     data.integrityValid = false;
-                    continue;
+                    return data;
                 }
-                if (data.records.put(record.requestId(), record) != null) {
-                    data.integrityValid = false;
-                }
+                staged.add(record);
             } catch (RuntimeException exception) {
                 data.integrityValid = false;
+                return data;
             }
+        }
+        for (EscrowRecord record : staged) {
+            if (data.records.put(record.requestId(), record) != null) {
+                    data.integrityValid = false;
+                    data.records.clear();
+                    return data;
+                }
         }
         return data;
     }
@@ -262,15 +274,19 @@ public final class PlayerShopSaleEscrowSavedData extends SavedData {
 
     private static List<CompoundTag> encodeStacks(List<ItemStack> stacks, HolderLookup.Provider provider) {
         List<CompoundTag> encoded = new ArrayList<>();
-        for (ItemStack stack : stacks) {
-            if (stack == null || stack.isEmpty()) {
-                return List.of();
+        try {
+            for (ItemStack stack : stacks) {
+                if (stack == null || stack.isEmpty()) {
+                    return List.of();
+                }
+                Tag saved = stack.save(provider);
+                if (!(saved instanceof CompoundTag compound)) {
+                    return List.of();
+                }
+                encoded.add(compound.copy());
             }
-            Tag saved = stack.save(provider);
-            if (!(saved instanceof CompoundTag compound)) {
-                return List.of();
-            }
-            encoded.add(compound.copy());
+        } catch (RuntimeException exception) {
+            return List.of();
         }
         return List.copyOf(encoded);
     }
@@ -292,8 +308,9 @@ public final class PlayerShopSaleEscrowSavedData extends SavedData {
                 || itemId.length() > MAX_ITEM_ID_LENGTH) {
             throw new IllegalArgumentException("sale escrow identity is invalid");
         }
-        ListTag stackList = entry.getList("stacks", Tag.TAG_COMPOUND);
-        if (stackList.isEmpty() || stackList.size() > MAX_STACKS_PER_RECORD
+        Tag rawStacks = entry.get("stacks");
+        if (!(rawStacks instanceof ListTag stackList)
+                || stackList.isEmpty() || stackList.size() > MAX_STACKS_PER_RECORD
                 || stackList.toString().length() > MAX_SERIALIZED_CHARS) {
             throw new IllegalArgumentException("sale escrow stack list is invalid");
         }

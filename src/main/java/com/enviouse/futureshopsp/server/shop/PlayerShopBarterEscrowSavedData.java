@@ -59,28 +59,40 @@ public final class PlayerShopBarterEscrowSavedData extends SavedData {
         if (tag.contains("cleanMarker", Tag.TAG_BYTE)) {
             data.cleanMarkerValid = tag.getBoolean("cleanMarker");
         }
-        ListTag entries = tag.getList("records", Tag.TAG_COMPOUND);
+        Tag recordsTag = tag.get("records");
+        if (recordsTag != null && !(recordsTag instanceof ListTag)) {
+            data.integrityValid = false;
+            return data;
+        }
+        ListTag entries = recordsTag instanceof ListTag list ? list : new ListTag();
         if (entries.size() > MAX_RECORDS) {
             data.integrityValid = false;
             return data;
         }
+        List<EscrowRecord> staged = new ArrayList<>(entries.size());
         for (Tag raw : entries) {
             if (!(raw instanceof CompoundTag entry)) {
                 data.integrityValid = false;
-                continue;
+                return data;
             }
             try {
                 EscrowRecord record = readEntry(entry);
                 if (!entry.getString("checksum").equals(checksum(record))) {
                     data.integrityValid = false;
-                    continue;
+                    return data;
                 }
-                if (data.records.put(record.requestId(), record) != null) {
-                    data.integrityValid = false;
-                }
+                staged.add(record);
             } catch (RuntimeException exception) {
                 data.integrityValid = false;
+                return data;
             }
+        }
+        for (EscrowRecord record : staged) {
+            if (data.records.put(record.requestId(), record) != null) {
+                    data.integrityValid = false;
+                    data.records.clear();
+                    return data;
+                }
         }
         return data;
     }
@@ -229,13 +241,23 @@ public final class PlayerShopBarterEscrowSavedData extends SavedData {
             return false;
         }
         List<CompoundTag> encoded = new ArrayList<>();
-        for (ItemStack stack : stacks) {
-            if (stack == null || stack.isEmpty()) {
-                return false;
+        try {
+            for (ItemStack stack : stacks) {
+                if (stack == null || stack.isEmpty()) {
+                    return false;
+                }
+                Tag saved = stack.save(provider);
+                if (!(saved instanceof CompoundTag compound)) {
+                    return false;
+                }
+                encoded.add(compound.copy());
             }
-            encoded.add((CompoundTag) stack.save(provider));
+        } catch (RuntimeException exception) {
+            return false;
         }
-        if (!encoded.equals(current.stacks())) {
+        if (encoded.size() > MAX_STACKS_PER_RECORD
+                || encoded.toString().length() > MAX_SERIALIZED_CHARS
+                || !encoded.equals(current.stacks())) {
             return false;
         }
         records.put(requestId, current.withState(next));
@@ -264,8 +286,9 @@ public final class PlayerShopBarterEscrowSavedData extends SavedData {
                 || !entry.contains("checksum", Tag.TAG_STRING)) {
             throw new IllegalArgumentException("barter escrow record is incomplete");
         }
-        ListTag stackList = entry.getList("stacks", Tag.TAG_COMPOUND);
-        if (stackList.isEmpty() || stackList.size() > MAX_STACKS_PER_RECORD) {
+        Tag rawStacks = entry.get("stacks");
+        if (!(rawStacks instanceof ListTag stackList)
+                || stackList.isEmpty() || stackList.size() > MAX_STACKS_PER_RECORD) {
             throw new IllegalArgumentException("barter escrow stack list is invalid");
         }
         String dimension = entry.getString("dimension");
@@ -284,8 +307,12 @@ public final class PlayerShopBarterEscrowSavedData extends SavedData {
         if (stacks.toString().length() > MAX_SERIALIZED_CHARS) {
             throw new IllegalArgumentException("barter escrow stacks are too large");
         }
+        int quantity = entry.getInt("quantity");
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("barter escrow quantity is invalid");
+        }
         return new EscrowRecord(entry.getUUID("request"), entry.getUUID("buyer"), entry.getLong("shopPos"),
-                dimension, itemId, entry.getInt("quantity"),
+                dimension, itemId, quantity,
                 stacks, State.valueOf(entry.getString("state")));
     }
 

@@ -64,6 +64,37 @@ class PlayerShopSaleEscrowSavedDataTest {
     }
 
     @Test
+    void malformedRecordDoesNotPartiallyReconstructEscrow(MinecraftServer server) {
+        HolderLookup.Provider provider = server.registryAccess();
+        PlayerShopSaleEscrowSavedData data = new PlayerShopSaleEscrowSavedData();
+        assertTrue(data.prepare(UUID.fromString("00000000-0000-0000-0000-00000000040a"), BUYER, 430L,
+                "minecraft:overworld", "minecraft:diamond", 1,
+                List.of(new ItemStack(Items.DIAMOND)), provider));
+        assertTrue(data.prepare(UUID.fromString("00000000-0000-0000-0000-00000000040b"), BUYER, 431L,
+                "minecraft:overworld", "minecraft:diamond", 1,
+                List.of(new ItemStack(Items.DIAMOND)), provider));
+
+        CompoundTag saved = data.save(new CompoundTag(), provider);
+        ListTag records = saved.getList("records", 10);
+        ((CompoundTag) records.get(1)).putString("checksum", "tampered");
+
+        PlayerShopSaleEscrowSavedData recovered = PlayerShopSaleEscrowSavedData.load(saved, provider);
+        assertFalse(recovered.integrityValid());
+        assertTrue(recovered.snapshot().isEmpty());
+    }
+
+    @Test
+    void wrongRecordsTagTypeBlocksRecovery(MinecraftServer server) {
+        HolderLookup.Provider provider = server.registryAccess();
+        CompoundTag saved = new CompoundTag();
+        saved.putString("records", "not a list");
+
+        PlayerShopSaleEscrowSavedData recovered = PlayerShopSaleEscrowSavedData.load(saved, provider);
+        assertFalse(recovered.integrityValid());
+        assertTrue(recovered.snapshot().isEmpty());
+    }
+
+    @Test
     void mismatchedRemovedContentsStayPreparedAndCanBeFrozen(MinecraftServer server) {
         HolderLookup.Provider provider = server.registryAccess();
         UUID request = UUID.fromString("00000000-0000-0000-0000-000000000404");
