@@ -130,6 +130,70 @@ public final class EconomyGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 100)
+    public static void playerShopSaleEscrowRemovedUncleanRestartPreservesRecoveryState(GameTestHelper helper) {
+        PlayerShopSaleEscrowSavedData escrow = new PlayerShopSaleEscrowSavedData();
+        UUID buyer = UUID.fromString("00000000-0000-0000-0000-000000000244");
+        UUID request = UUID.fromString("00000000-0000-0000-0000-000000000245");
+        ItemStack reward = new ItemStack(Items.DIAMOND, 2);
+        var registryAccess = helper.getLevel().registryAccess();
+
+        helper.assertTrue(escrow.prepare(request, buyer, 10L, "minecraft:overworld",
+                        "minecraft:diamond", 2L, List.of(reward), registryAccess),
+                "sale escrow must persist intent before item removal");
+        helper.assertTrue(escrow.markRemoved(request, List.of(reward), registryAccess),
+                "sale escrow must persist the exact removed reward");
+        escrow.markUnclean();
+
+        PlayerShopSaleEscrowSavedData recovered = PlayerShopSaleEscrowSavedData.load(
+                escrow.save(new CompoundTag(), registryAccess), registryAccess);
+        helper.assertTrue(recovered.integrityValid(), "removed sale escrow must retain valid checksums");
+        helper.assertTrue(!recovered.cleanMarkerValid(), "removed sale save must require recovery");
+        helper.assertTrue(recovered.find(request).orElseThrow().state()
+                        == PlayerShopSaleEscrowSavedData.State.REMOVED,
+                "removed sale escrow must preserve its exact interrupted state");
+        helper.assertTrue(recovered.decodeStacks(request, registryAccess).orElseThrow().get(0).getCount() == 2,
+                "removed sale escrow must preserve the exact reward stack");
+        helper.assertTrue(recovered.markRecoveryRequired(request),
+                "removed sale escrow must be frozen before any retry");
+        helper.assertTrue(recovered.find(request).orElseThrow().state()
+                        == PlayerShopSaleEscrowSavedData.State.RECOVERY_REQUIRED,
+                "removed sale escrow must not be retried as delivered work");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void playerShopSaleEscrowDeliveredUncleanRestartPreservesRecoveryState(GameTestHelper helper) {
+        PlayerShopSaleEscrowSavedData escrow = new PlayerShopSaleEscrowSavedData();
+        UUID buyer = UUID.fromString("00000000-0000-0000-0000-000000000246");
+        UUID request = UUID.fromString("00000000-0000-0000-0000-000000000247");
+        ItemStack reward = new ItemStack(Items.DIAMOND, 1);
+        var registryAccess = helper.getLevel().registryAccess();
+
+        helper.assertTrue(escrow.prepare(request, buyer, 11L, "minecraft:overworld",
+                        "minecraft:diamond", 1L, List.of(reward), registryAccess),
+                "sale escrow must persist intent before item removal");
+        helper.assertTrue(escrow.markRemoved(request, List.of(reward), registryAccess),
+                "sale escrow must persist the exact removed reward");
+        helper.assertTrue(escrow.markDelivered(request),
+                "sale escrow must persist delivery before claim completion");
+        escrow.markUnclean();
+
+        PlayerShopSaleEscrowSavedData recovered = PlayerShopSaleEscrowSavedData.load(
+                escrow.save(new CompoundTag(), registryAccess), registryAccess);
+        helper.assertTrue(recovered.integrityValid(), "delivered sale escrow must retain valid checksums");
+        helper.assertTrue(!recovered.cleanMarkerValid(), "delivered sale save must require recovery");
+        helper.assertTrue(recovered.find(request).orElseThrow().state()
+                        == PlayerShopSaleEscrowSavedData.State.DELIVERED,
+                "delivered sale escrow must preserve its exact interrupted state");
+        helper.assertTrue(recovered.markRecoveryRequired(request),
+                "delivered sale escrow must be frozen before claim replay");
+        helper.assertTrue(recovered.find(request).orElseThrow().state()
+                        == PlayerShopSaleEscrowSavedData.State.RECOVERY_REQUIRED,
+                "delivered sale escrow must not be retried as a new delivery");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
     public static void playerShopBarterEscrowUncleanRestartPreservesRecoveryState(GameTestHelper helper) {
         PlayerShopBarterEscrowSavedData escrow = new PlayerShopBarterEscrowSavedData();
         UUID buyer = UUID.fromString("00000000-0000-0000-0000-000000000236");
@@ -160,6 +224,35 @@ public final class EconomyGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 100)
+    public static void playerShopBarterEscrowRemovedUncleanRestartPreservesRecoveryState(GameTestHelper helper) {
+        PlayerShopBarterEscrowSavedData escrow = new PlayerShopBarterEscrowSavedData();
+        UUID buyer = UUID.fromString("00000000-0000-0000-0000-000000000248");
+        UUID request = UUID.fromString("00000000-0000-0000-0000-000000000249");
+        ItemStack payment = new ItemStack(Items.EMERALD, 2);
+        var registryAccess = helper.getLevel().registryAccess();
+
+        helper.assertTrue(escrow.prepare(request, buyer, 12L, "minecraft:overworld",
+                        "minecraft:emerald", 2, List.of(payment), registryAccess),
+                "barter escrow must persist intent before payment removal");
+        helper.assertTrue(escrow.markRemoved(request, List.of(payment), registryAccess),
+                "barter escrow must persist the exact removed payment");
+        escrow.markUnclean();
+
+        PlayerShopBarterEscrowSavedData recovered = PlayerShopBarterEscrowSavedData.load(
+                escrow.save(new CompoundTag(), registryAccess), registryAccess);
+        helper.assertTrue(recovered.integrityValid(), "removed barter escrow must retain valid checksums");
+        helper.assertTrue(!recovered.cleanMarkerValid(), "removed barter save must require recovery");
+        helper.assertTrue(recovered.find(request).state() == PlayerShopBarterEscrowSavedData.State.REMOVED,
+                "removed barter escrow must preserve its exact interrupted state");
+        helper.assertTrue(recovered.markRecoveryRequired(request),
+                "removed barter escrow must be frozen before any retry");
+        helper.assertTrue(recovered.find(request).state()
+                        == PlayerShopBarterEscrowSavedData.State.RECOVERY_REQUIRED,
+                "removed barter escrow must not be retried as stored work");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
     public static void offlineClaimUncleanRestartPreservesRecoveryState(GameTestHelper helper) {
         EconomyClaimSavedData claims = new EconomyClaimSavedData();
         UUID claimant = UUID.fromString("00000000-0000-0000-0000-000000000240");
@@ -183,7 +276,7 @@ public final class EconomyGameTests {
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void reconnectReplayPreservesStableRequestIdentity(GameTestHelper helper) {
         UUID player = UUID.fromString("00000000-0000-0000-0000-000000000242");
-        RequestId request = new RequestId(UUID.fromString("00000000-0000-0000-0000-000000000243"));
+        RequestId request = new RequestId(UUID.randomUUID());
         helper.assertTrue(BalanceManager.setInternalBalance(player, 500L).confirmed(),
                 "the reconnect fixture balance must be initialized");
 
