@@ -71,4 +71,30 @@ public final class EconomyGameTests {
         helper.assertTrue(!restored.hasIncompleteRecords(), "completed sale escrow must not remain pending");
         helper.succeed();
     }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void playerShopSaleEscrowUncleanRestartPreservesRecoveryState(GameTestHelper helper) {
+        PlayerShopSaleEscrowSavedData escrow = new PlayerShopSaleEscrowSavedData();
+        UUID buyer = UUID.fromString("00000000-0000-0000-0000-000000000234");
+        UUID request = UUID.fromString("00000000-0000-0000-0000-000000000235");
+        ItemStack reward = new ItemStack(Items.DIAMOND, 1);
+        var registryAccess = helper.getLevel().registryAccess();
+
+        helper.assertTrue(escrow.prepare(request, buyer, 8L, "minecraft:overworld",
+                        "minecraft:diamond", 1L, List.of(reward), registryAccess),
+                "sale escrow must persist intent before an admitted effect");
+        escrow.markUnclean();
+
+        PlayerShopSaleEscrowSavedData recovered = PlayerShopSaleEscrowSavedData.load(
+                escrow.save(new CompoundTag(), registryAccess), registryAccess);
+        helper.assertTrue(recovered.integrityValid(), "unclean sale escrow must retain valid checksums");
+        helper.assertTrue(!recovered.cleanMarkerValid(), "unclean save must require recovery");
+        helper.assertTrue(recovered.hasIncompleteRecords(), "unresolved sale custody must remain pending");
+        helper.assertTrue(recovered.markRecoveryRequired(request),
+                "recovery must classify the interrupted sale escrow explicitly");
+        helper.assertTrue(recovered.find(request).orElseThrow().state()
+                        == PlayerShopSaleEscrowSavedData.State.RECOVERY_REQUIRED,
+                "interrupted sale escrow must not be retried as prepared work");
+        helper.succeed();
+    }
 }
