@@ -107,9 +107,17 @@ final class PublicInternalEconomyProvider implements com.enviouse.futureshopsp.a
         if (existing != null) {
             return ProviderResult.confirmed(existing);
         }
+        String reason = switch (request.kind()) {
+            case WITHDRAW -> "WITHDRAW";
+            case DEPOSIT -> "DEPOSIT";
+            case TRANSFER_DEBIT, TRANSFER_CREDIT -> "TRANSFER";
+            case FEE -> "FEE";
+            case REFUND -> "REFUND";
+            case COMPENSATION -> "COMPENSATION";
+        };
         TransactionResult result = deposit
-                ? oldProvider.deposit(request.actor(), request.amountMinorUnits())
-                : oldProvider.withdraw(request.actor(), request.amountMinorUnits());
+                ? oldProvider.deposit(request.actor(), request.amountMinorUnits(), reason)
+                : oldProvider.withdraw(request.actor(), request.amountMinorUnits(), reason);
         if (!result.success()) {
             return ProviderResult.rejected(mapError(result), result.errorCode().name());
         }
