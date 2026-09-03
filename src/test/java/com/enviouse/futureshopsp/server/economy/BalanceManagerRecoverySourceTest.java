@@ -27,7 +27,18 @@ class BalanceManagerRecoverySourceTest {
         InMemoryEconomyCustodyStore custody = new InMemoryEconomyCustodyStore();
         custody.hold(RequestId.random(), UUID.randomUUID(), "player-shop:test", 1L, "hash");
 
-        assertTrue(BalanceManager.freezeIfUnresolvedItemState(lifecycle, custody, null));
+        assertTrue(BalanceManager.freezeIfUnresolvedItemState(lifecycle, custody, null, null));
+        assertTrue(lifecycle.snapshot().lifecycle() == ProviderLifecycle.FROZEN);
+    }
+
+    @Test
+    void incompleteClaimsFreezeAfterJournalRecovery() {
+        EconomyLifecycleController lifecycle = new EconomyLifecycleController(EconomyApi.INTERNAL_PROVIDER_ID);
+        lifecycle.resolve(ProviderLifecycle.READY, "", true, true, false);
+        InMemoryEconomyClaimStore claims = new InMemoryEconomyClaimStore();
+        claims.create(RequestId.random(), UUID.randomUUID(), 25L, "player shop settlement");
+
+        assertTrue(BalanceManager.freezeIfUnresolvedItemState(lifecycle, null, claims, null));
         assertTrue(lifecycle.snapshot().lifecycle() == ProviderLifecycle.FROZEN);
     }
 
@@ -40,7 +51,7 @@ class BalanceManagerRecoverySourceTest {
         EconomyLifecycleController lifecycle = new EconomyLifecycleController(EconomyApi.INTERNAL_PROVIDER_ID);
         lifecycle.resolve(ProviderLifecycle.READY, "", true, true, false);
 
-        assertTrue(BalanceManager.freezeIfUnresolvedItemState(lifecycle, null, escrow));
+        assertTrue(BalanceManager.freezeIfUnresolvedItemState(lifecycle, null, null, escrow));
         assertTrue(lifecycle.snapshot().lifecycle() == ProviderLifecycle.FROZEN);
     }
 
@@ -56,10 +67,12 @@ class BalanceManagerRecoverySourceTest {
         assertTrue(source.contains("coordinator.recover(record.request().requestId())"));
         assertTrue(source.contains("ProviderLifecycle.FROZEN"));
         assertTrue(source.contains("custody.hasIncompleteRecords()"));
-        assertTrue(source.contains("freezeIfUnresolvedItemState(lifecycleController, custody, barterEscrow)"));
+        assertTrue(source.contains("freezeIfUnresolvedItemState(lifecycleController, custody, claims, barterEscrow)"));
         assertTrue(source.contains("lifecycle.markAmbiguous(\"item custody requires operator recovery\")"));
         assertTrue(source.contains("barterEscrow.hasIncompleteRecords()"));
         assertTrue(source.contains("lifecycle.markAmbiguous(\"player shop barter escrow requires operator recovery\")"));
+        assertTrue(source.contains("claims.hasIncompleteRecords()"));
+        assertTrue(source.contains("lifecycle.markAmbiguous(\"economy claims require operator recovery\")"));
     }
 
     private static Path projectDirectory() {

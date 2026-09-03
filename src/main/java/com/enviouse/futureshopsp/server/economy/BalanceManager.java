@@ -154,7 +154,7 @@ public final class BalanceManager {
                 return;
             }
         }
-        if (freezeIfUnresolvedItemState(lifecycleController, custody, barterEscrow)) {
+        if (freezeIfUnresolvedItemState(lifecycleController, custody, claims, barterEscrow)) {
             return;
         }
         lifecycleController.markRecovered();
@@ -162,9 +162,14 @@ public final class BalanceManager {
 
     static boolean freezeIfUnresolvedItemState(EconomyLifecycleController lifecycle,
                                                EconomyCustodyStore custody,
+                                               EconomyClaimStore claims,
                                                PlayerShopBarterEscrowSavedData barterEscrow) {
         if (custody != null && custody.hasIncompleteRecords()) {
             lifecycle.markAmbiguous("item custody requires operator recovery");
+            return true;
+        }
+        if (claims != null && claims.hasIncompleteRecords()) {
+            lifecycle.markAmbiguous("economy claims require operator recovery");
             return true;
         }
         if (barterEscrow != null && barterEscrow.hasIncompleteRecords()) {
