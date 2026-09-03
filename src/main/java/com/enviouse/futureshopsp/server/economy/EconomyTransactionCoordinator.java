@@ -309,6 +309,7 @@ public final class EconomyTransactionCoordinator {
                         ProviderResultStatus.CONFIRMED, "");
                 replace(record, EconomyTransactionState.RESOLVED, lookup.receipt(),
                         ProviderResultStatus.CONFIRMED, "");
+                publishConfirmedBalanceChange(record.request(), lookup.receipt().orElse(null));
                 lifecycle.markRecovered();
                 return lookup;
             }
