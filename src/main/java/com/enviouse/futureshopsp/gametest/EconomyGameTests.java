@@ -1,9 +1,12 @@
 package com.enviouse.futureshopsp.gametest;
 
 import com.enviouse.futureshopsp.Futureshops;
+import com.enviouse.futureshopsp.api.economy.RequestId;
 import com.enviouse.futureshopsp.api.economy.ProviderLifecycle;
 import com.enviouse.futureshopsp.init.ModItems;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
+import com.enviouse.futureshopsp.server.economy.ClaimState;
+import com.enviouse.futureshopsp.server.economy.EconomyClaimSavedData;
 import com.enviouse.futureshopsp.server.shop.PlayerShopBarterEscrowSavedData;
 import com.enviouse.futureshopsp.server.shop.PlayerShopSaleEscrowSavedData;
 import net.minecraft.gametest.framework.GameTest;
@@ -151,6 +154,27 @@ public final class EconomyGameTests {
         helper.assertTrue(recovered.find(request).state()
                         == PlayerShopBarterEscrowSavedData.State.RECOVERY_REQUIRED,
                 "interrupted barter escrow must not be retried as stored work");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void offlineClaimUncleanRestartPreservesRecoveryState(GameTestHelper helper) {
+        EconomyClaimSavedData claims = new EconomyClaimSavedData();
+        UUID claimant = UUID.fromString("00000000-0000-0000-0000-000000000240");
+        RequestId request = new RequestId(UUID.fromString("00000000-0000-0000-0000-000000000241"));
+        var registryAccess = helper.getLevel().registryAccess();
+
+        helper.assertTrue(claims.create(request, claimant, 45L, "offline proceeds").state() == ClaimState.PENDING,
+                "offline proceeds must begin as a pending durable claim");
+        claims.markUnclean();
+
+        EconomyClaimSavedData recovered = EconomyClaimSavedData.load(
+                claims.save(new CompoundTag(), registryAccess), registryAccess);
+        helper.assertTrue(recovered.integrityValid(), "unclean claims must retain valid checksums");
+        helper.assertTrue(!recovered.cleanMarkerValid(), "unclean claims must require recovery");
+        helper.assertTrue(recovered.hasIncompleteRecords(), "pending proceeds must remain recoverable");
+        helper.assertTrue(recovered.find(request).orElseThrow().state() == ClaimState.PENDING,
+                "recovery must preserve the original claim identity and pending state");
         helper.succeed();
     }
 }
