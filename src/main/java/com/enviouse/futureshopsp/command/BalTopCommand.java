@@ -46,6 +46,10 @@ public final class BalTopCommand {
             source.sendFailure(EconomyCommandUtil.error(Component.translatable("command.futureshops.player_only")));
             return 0;
         }
+        if (!BalanceManager.isInternalEconomyReady()) {
+            source.sendFailure(EconomyCommandUtil.error(Component.translatable("command.futureshops.economy.unavailable")));
+            return 0;
+        }
 
         EconomyProvider provider = BalanceManager.getProvider();
         int safePage = PageBounds.normalizePage(page);

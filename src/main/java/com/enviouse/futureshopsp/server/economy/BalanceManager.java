@@ -41,13 +41,13 @@ public final class BalanceManager {
         claims.markUnclean();
         lifecycleController = new EconomyLifecycleController(selection.activeProviderId());
         if (EconomyApi.INTERNAL_PROVIDER_ID.equals(selection.activeProviderId())) {
-            EconomyProvider legacy = new InternalEconomyProvider(server);
+            InternalEconomyProvider legacy = new InternalEconomyProvider(server);
             com.enviouse.futureshopsp.api.economy.EconomyProvider publicProvider =
                     new PublicInternalEconomyProvider(legacy);
             lifecycleController.resolve(ProviderLifecycle.READY, "", cleanMarkerValid, integrityValid,
                     hasIncompleteRecords);
             coordinator = new EconomyTransactionCoordinator(publicProvider, lifecycleController, journal, custody, claims);
-            provider = new CoordinatedEconomyProvider(publicProvider, coordinator);
+            provider = new CoordinatedEconomyProvider(publicProvider, coordinator, legacy);
             return;
         }
         ProviderResolution resolution = EconomyProviderRegistry.resolve(

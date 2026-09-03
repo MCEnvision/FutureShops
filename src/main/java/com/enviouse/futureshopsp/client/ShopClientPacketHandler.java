@@ -129,7 +129,11 @@ public final class ShopClientPacketHandler {
                         packet.popularItemId(),
                         packet.popularItemTrades(),
                         packet.popularItemQuantity(),
-                        packet.franchises());
+                        packet.franchises(),
+                        packet.balanceAvailable(),
+                        packet.providerId(),
+                        packet.providerLifecycle(),
+                        packet.providerDiagnostic());
                 return;
             }
             mc.setScreen(new BalTopOverviewScreen(
@@ -147,7 +151,11 @@ public final class ShopClientPacketHandler {
                     packet.popularItemId(),
                     packet.popularItemTrades(),
                     packet.popularItemQuantity(),
-                    packet.franchises()));
+                    packet.franchises(),
+                    packet.balanceAvailable(),
+                    packet.providerId(),
+                    packet.providerLifecycle(),
+                    packet.providerDiagnostic()));
         });
     }
 

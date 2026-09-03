@@ -29,9 +29,23 @@ public record S2CBalTopUiPacket(
         String popularItemId,
         int popularItemTrades,
         long popularItemQuantity,
-        List<FranchiseLeaderboardEntry> franchises) implements CustomPacketPayload {
+        List<FranchiseLeaderboardEntry> franchises,
+        boolean balanceAvailable,
+        String providerId,
+        String providerLifecycle,
+        String providerDiagnostic) implements CustomPacketPayload {
     public static final Type<S2CBalTopUiPacket> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(Futureshops.MODID, "s2cbaltopuipacket"));
     public static final StreamCodec<RegistryFriendlyByteBuf, S2CBalTopUiPacket> STREAM_CODEC = StreamCodec.ofMember(S2CBalTopUiPacket::encode, S2CBalTopUiPacket::decode);
+
+    public S2CBalTopUiPacket(int page, int totalPages, List<BalanceTopEntry> entries, String currencyName,
+                             int currencyDecimals, UUID activityLeaderUuid, String activityLeaderName,
+                             int activityLeaderCount, UUID topSellerUuid, String topSellerName, int topSellerCount,
+                             String popularItemId, int popularItemTrades, long popularItemQuantity,
+                             List<FranchiseLeaderboardEntry> franchises) {
+        this(page, totalPages, entries, currencyName, currencyDecimals, activityLeaderUuid, activityLeaderName,
+                activityLeaderCount, topSellerUuid, topSellerName, topSellerCount, popularItemId, popularItemTrades,
+                popularItemQuantity, franchises, true, "internal", "READY", "");
+    }
 
     @Override
     public Type<S2CBalTopUiPacket> type() {
@@ -54,6 +68,10 @@ public record S2CBalTopUiPacket(
         buffer.writeVarInt(packet.popularItemTrades());
         buffer.writeLong(packet.popularItemQuantity());
         buffer.writeCollection(packet.franchises(), FranchiseLeaderboardEntry::encode);
+        buffer.writeBoolean(packet.balanceAvailable());
+        buffer.writeUtf(packet.providerId(), 64);
+        buffer.writeUtf(packet.providerLifecycle(), 32);
+        buffer.writeUtf(packet.providerDiagnostic(), 256);
     }
 
     public static S2CBalTopUiPacket decode(FriendlyByteBuf buffer) {
@@ -72,11 +90,14 @@ public record S2CBalTopUiPacket(
                 buffer.readUtf(),
                 buffer.readVarInt(),
                 buffer.readLong(),
-                buffer.readList(FranchiseLeaderboardEntry::decode));
+                buffer.readList(FranchiseLeaderboardEntry::decode),
+                buffer.readBoolean(),
+                buffer.readUtf(64),
+                buffer.readUtf(32),
+                buffer.readUtf(256));
     }
 
     public static void handle(S2CBalTopUiPacket packet, IPayloadContext context) {
         context.enqueueWork(() -> ShopClientPacketHandler.handleBalTopUi(packet));
     }
 }
-

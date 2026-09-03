@@ -15,11 +15,14 @@ import java.util.UUID;
 final class CoordinatedEconomyProvider implements EconomyProvider {
     private final com.enviouse.futureshopsp.api.economy.EconomyProvider publicProvider;
     private final EconomyTransactionCoordinator coordinator;
+    private final InternalEconomyProvider rankingProvider;
 
     CoordinatedEconomyProvider(com.enviouse.futureshopsp.api.economy.EconomyProvider publicProvider,
-                               EconomyTransactionCoordinator coordinator) {
+                               EconomyTransactionCoordinator coordinator,
+                               InternalEconomyProvider rankingProvider) {
         this.publicProvider = publicProvider;
         this.coordinator = coordinator;
+        this.rankingProvider = rankingProvider;
     }
 
     @Override
@@ -61,7 +64,7 @@ final class CoordinatedEconomyProvider implements EconomyProvider {
 
     @Override
     public List<BalanceEntry> getTopBalances(int page, int pageSize) {
-        return List.of();
+        return rankingProvider.getTopBalances(page, pageSize);
     }
 
     @Override
