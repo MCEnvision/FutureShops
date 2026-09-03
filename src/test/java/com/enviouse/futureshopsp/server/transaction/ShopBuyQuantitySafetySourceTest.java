@@ -31,6 +31,17 @@ class ShopBuyQuantitySafetySourceTest {
                 < source.indexOf("coordinator.executeWithCustody(debitRequest"));
     }
 
+    @Test
+    void malformedCatalogNbtIsRejectedBeforeRewardsAreBuilt() throws Exception {
+        String source = Files.readString(projectDirectory().resolve(Path.of(
+                "src", "main", "java", "com", "enviouse", "futureshopsp",
+                "server", "transaction", "ShopBuyService.java")));
+
+        assertTrue(source.contains("return BuyResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_ITEM);"));
+        assertTrue(source.contains("Invalid catalog SNBT"));
+        assertTrue(!source.contains("delivering bare item"));
+    }
+
     private static Path projectDirectory() {
         Path candidate = Path.of("").toAbsolutePath();
         while (candidate != null) {

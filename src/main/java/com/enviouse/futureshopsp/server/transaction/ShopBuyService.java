@@ -163,11 +163,12 @@ public final class ShopBuyService {
                     try {
                         net.minecraft.core.component.DataComponentPatch tag = NbtMatchUtil.snbtToPatchMigrating(player.level().registryAccess(), net.minecraft.resources.ResourceLocation.parse(itemId), nbt);
                         if (!tag.isEmpty()) rewardStack.applyComponents(tag);
-                    } catch (Exception ignored) {
-                        // Invalid SNBT — log once and deliver the bare item rather than fail the buy.
+                    } catch (Exception exception) {
+                        // Invalid catalog SNBT must fail closed so a malformed listing cannot deliver a different item variant.
                         com.mojang.logging.LogUtils.getLogger().warn(
-                                "[FutureShops] Invalid SNBT for catalog item '{}' (listing '{}') in shop '{}' — delivering bare item.",
-                                itemId, listingId, shopId);
+                                "[FutureShops] Invalid SNBT for catalog item '{}' (listing '{}') in shop '{}' — rejecting buy.",
+                                itemId, listingId, shopId, exception);
+                        return BuyResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_ITEM);
                     }
                 }
                 rewards.add(rewardStack.copy());
