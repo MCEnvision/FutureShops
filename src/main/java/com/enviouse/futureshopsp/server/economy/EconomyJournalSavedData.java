@@ -28,6 +28,7 @@ import java.util.UUID;
 public final class EconomyJournalSavedData extends SavedData implements EconomyTransactionJournal {
     public static final String DATA_NAME = "futureshops_economy_journal";
     private static final int CURRENT_VERSION = 1;
+    private static final int MAX_RECORDS = 10_000;
     private final Map<RequestId, EconomyJournalRecord> records = new LinkedHashMap<>();
     private boolean integrityValid = true;
     private boolean cleanMarkerValid = true;
@@ -49,6 +50,10 @@ public final class EconomyJournalSavedData extends SavedData implements EconomyT
             data.cleanMarkerValid = tag.getBoolean("cleanMarker");
         }
         ListTag entries = tag.getList("records", Tag.TAG_COMPOUND);
+        if (entries.size() > MAX_RECORDS) {
+            data.integrityValid = false;
+            return data;
+        }
         for (Tag raw : entries) {
             if (!(raw instanceof CompoundTag entry) || !data.readEntry(entry)) {
                 data.integrityValid = false;
@@ -78,6 +83,9 @@ public final class EconomyJournalSavedData extends SavedData implements EconomyT
     public synchronized void append(EconomyJournalRecord record) {
         if (records.containsKey(record.request().requestId())) {
             throw new IllegalStateException("transaction request already exists");
+        }
+        if (records.size() >= MAX_RECORDS) {
+            throw new IllegalStateException("transaction journal record limit reached");
         }
         records.put(record.request().requestId(), record);
         setDirty();

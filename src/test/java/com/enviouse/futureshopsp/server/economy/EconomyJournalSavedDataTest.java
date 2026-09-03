@@ -66,6 +66,21 @@ class EconomyJournalSavedDataTest {
     }
 
     @Test
+    void oversizedJournalIsReadOnlyAndNeverLoaded() {
+        CompoundTag saved = new CompoundTag();
+        net.minecraft.nbt.ListTag entries = new net.minecraft.nbt.ListTag();
+        for (int index = 0; index < 10_001; index++) {
+            entries.add(new CompoundTag());
+        }
+        saved.put("records", entries);
+
+        EconomyJournalSavedData loaded = EconomyJournalSavedData.load(saved, null);
+
+        assertFalse(loaded.integrityValid());
+        assertTrue(loaded.snapshot().isEmpty());
+    }
+
+    @Test
     void cleanMarkerIsWrittenOnlyAfterTheJournalIsFlushed() {
         EconomyJournalSavedData data = new EconomyJournalSavedData();
         data.markUnclean();
