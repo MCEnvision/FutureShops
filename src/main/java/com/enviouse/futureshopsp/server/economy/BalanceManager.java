@@ -15,6 +15,7 @@ import com.enviouse.futureshopsp.api.economy.RequestId;
 import com.enviouse.futureshopsp.server.shop.PlayerShopBarterEscrowSavedData;
 import com.enviouse.futureshopsp.server.shop.PlayerShopSaleEscrowSavedData;
 import com.enviouse.futureshopsp.server.shop.PlayerShopSettlementSavedData;
+import com.enviouse.futureshopsp.server.shop.ShopResultCode;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.List;
@@ -250,10 +251,12 @@ public final class BalanceManager {
     }
 
     public static long getBalance(UUID playerUUID) {
-        if (provider == null) {
-            throw new IllegalStateException("BalanceManager accessed before initialization.");
+        ProviderResult<BalanceSnapshot> result = queryBalance(playerUUID);
+        if (result.confirmed()) {
+            return result.value().orElseThrow().balanceMinorUnits();
         }
-        return provider.getBalance(playerUUID);
+        EconomyLifecycleSnapshot state = getLifecycleSnapshotOrUnresolved();
+        throw new EconomyUnavailableException(state.providerId(), state.lifecycle().name(), result.diagnostic());
     }
 
     /** Returns a typed balance result without exposing an unavailable state as zero. */
@@ -333,6 +336,14 @@ public final class BalanceManager {
         return provider;
     }
 
+    public static String getCurrencyName() {
+        return getProvider().getCurrencyName();
+    }
+
+    public static int getDecimalPlaces() {
+        return getProvider().getDecimalPlaces();
+    }
+
     public static EconomyTransactionCoordinator getCoordinator() {
         if (coordinator == null) {
             throw new IllegalStateException("Economy coordinator accessed before initialization.");
@@ -381,11 +392,57 @@ public final class BalanceManager {
         return saleEscrow;
     }
 
+    /** Executes one player debit through the durable coordinator. */
+    public static TransactionResult withdraw(UUID playerUUID, long amountMinorUnits) {
+        try {
+            MutationRequest request = MutationRequest.forPlayer(RequestId.random(), playerUUID,
+                    amountMinorUnits, MutationKind.WITHDRAW);
+            return mapMutationResult(coordinator().withdraw(request));
+        } catch (IllegalArgumentException exception) {
+            return TransactionResult.error(ShopResultCode.INVALID_AMOUNT, 0L);
+        }
+    }
+
+    /** Executes one player credit through the durable coordinator. */
+    public static TransactionResult deposit(UUID playerUUID, long amountMinorUnits) {
+        try {
+            MutationRequest request = MutationRequest.forPlayer(RequestId.random(), playerUUID,
+                    amountMinorUnits, MutationKind.DEPOSIT);
+            return mapMutationResult(coordinator().deposit(request));
+        } catch (IllegalArgumentException exception) {
+            return TransactionResult.error(ShopResultCode.INVALID_AMOUNT, 0L);
+        }
+    }
+
     public static TransactionResult transfer(UUID fromPlayerUUID, UUID toPlayerUUID, long amountMinorUnits) {
-        return getProvider().transfer(fromPlayerUUID, toPlayerUUID, amountMinorUnits);
+        return mapMutationResult(coordinator().transfer(fromPlayerUUID, toPlayerUUID, amountMinorUnits));
     }
 
     public static List<BalanceEntry> getTopBalances(int page, int pageSize) {
         return getProvider().getTopBalances(page, pageSize);
+    }
+
+    private static EconomyTransactionCoordinator coordinator() {
+        return getCoordinator();
+    }
+
+    private static TransactionResult mapMutationResult(ProviderResult<?> result) {
+        long resultingBalance = result.receipt()
+                .flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
+                        ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong())
+                        : java.util.Optional.empty())
+                .orElse(0L);
+        if (result.confirmed()) {
+            return TransactionResult.ok(resultingBalance);
+        }
+        return TransactionResult.error(mapProviderError(result.error()), resultingBalance);
+    }
+
+    private static ShopResultCode mapProviderError(ProviderError error) {
+        return switch (error) {
+            case INSUFFICIENT_FUNDS -> ShopResultCode.INSUFFICIENT_FUNDS;
+            case INVALID_AMOUNT, INVALID_REQUEST -> ShopResultCode.INVALID_AMOUNT;
+            default -> ShopResultCode.SERVER_ERROR;
+        };
     }
 }

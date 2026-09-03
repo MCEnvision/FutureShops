@@ -794,10 +794,11 @@ public final class ShopAdminCommand {
     // -------------------------------------------------------------------------
 
     private static int adminBalAdd(CommandSourceStack source, Collection<GameProfile> targets, String amountStr) {
-        EconomyProvider provider = BalanceManager.getProvider();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
+        String currencyName = BalanceManager.getCurrencyName();
         long amountMinor;
         try {
-            amountMinor = EconomyCommandUtil.parseAmountToMinorUnits(amountStr, provider.getDecimalPlaces());
+            amountMinor = EconomyCommandUtil.parseAmountToMinorUnits(amountStr, decimalPlaces);
         } catch (IllegalArgumentException e) {
             source.sendFailure(Component.translatable("command.futureshops.admin.bal.invalid_amount", amountStr)
                     .withStyle(ChatFormatting.RED));
@@ -807,13 +808,13 @@ public final class ShopAdminCommand {
         int successCount = 0;
         for (GameProfile profile : targets) {
             UUID uuid = profile.getId();
-            TransactionResult result = provider.deposit(uuid, amountMinor, "ADMIN");
-            String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, provider.getDecimalPlaces());
+            TransactionResult result = BalanceManager.deposit(uuid, amountMinor);
+            String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, decimalPlaces);
             if (result.success()) {
-                String newBal = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
+                String newBal = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), decimalPlaces);
                 source.sendSuccess(() -> Component.translatable(
                         "command.futureshops.admin.bal.add_success",
-                        formatted, provider.getCurrencyName(), profile.getName(), newBal)
+                        formatted, currencyName, profile.getName(), newBal)
                         .withStyle(ChatFormatting.GREEN), true);
                 successCount++;
             } else {
@@ -826,10 +827,11 @@ public final class ShopAdminCommand {
     }
 
     private static int adminBalRemove(CommandSourceStack source, Collection<GameProfile> targets, String amountStr) {
-        EconomyProvider provider = BalanceManager.getProvider();
+        int decimalPlaces = BalanceManager.getDecimalPlaces();
+        String currencyName = BalanceManager.getCurrencyName();
         long amountMinor;
         try {
-            amountMinor = EconomyCommandUtil.parseAmountToMinorUnits(amountStr, provider.getDecimalPlaces());
+            amountMinor = EconomyCommandUtil.parseAmountToMinorUnits(amountStr, decimalPlaces);
         } catch (IllegalArgumentException e) {
             source.sendFailure(Component.translatable("command.futureshops.admin.bal.invalid_amount", amountStr)
                     .withStyle(ChatFormatting.RED));
@@ -839,13 +841,13 @@ public final class ShopAdminCommand {
         int successCount = 0;
         for (GameProfile profile : targets) {
             UUID uuid = profile.getId();
-            TransactionResult result = provider.withdraw(uuid, amountMinor, "ADMIN");
-            String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, provider.getDecimalPlaces());
+            TransactionResult result = BalanceManager.withdraw(uuid, amountMinor);
+            String formatted = EconomyCommandUtil.formatMinorUnits(amountMinor, decimalPlaces);
             if (result.success()) {
-                String newBal = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
+                String newBal = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), decimalPlaces);
                 source.sendSuccess(() -> Component.translatable(
                         "command.futureshops.admin.bal.remove_success",
-                        formatted, provider.getCurrencyName(), profile.getName(), newBal)
+                        formatted, currencyName, profile.getName(), newBal)
                         .withStyle(ChatFormatting.YELLOW), true);
                 successCount++;
             } else {

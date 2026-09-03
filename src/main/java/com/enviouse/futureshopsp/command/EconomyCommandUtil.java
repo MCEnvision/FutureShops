@@ -4,10 +4,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.ChatFormatting;
+import com.enviouse.futureshopsp.server.economy.BalanceManager;
+import com.enviouse.futureshopsp.api.economy.BalanceSnapshot;
 import com.enviouse.futureshopsp.api.economy.ProviderError;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 public final class EconomyCommandUtil {
     private EconomyCommandUtil() {
@@ -36,6 +39,24 @@ public final class EconomyCommandUtil {
             return Long.toString(value);
         }
         return BigDecimal.valueOf(value, decimals).toPlainString();
+    }
+
+    /**
+     * Formats a confirmed post mutation balance without treating an unavailable query as zero.
+     */
+    public static Component formatResultingBalance(ProviderResult<?> mutation, UUID playerUUID, int decimals) {
+        if (mutation != null && mutation.receipt().isPresent()) {
+            var receipt = mutation.receipt().orElseThrow();
+            if (receipt.resultingBalanceMinorUnits().isPresent()) {
+                return Component.literal(formatMinorUnits(receipt.resultingBalanceMinorUnits().getAsLong(), decimals));
+            }
+        }
+        ProviderResult<BalanceSnapshot> balance = BalanceManager.queryBalance(playerUUID);
+        if (balance.confirmed()) {
+            return Component.literal(formatMinorUnits(
+                    balance.value().orElseThrow().balanceMinorUnits(), decimals));
+        }
+        return Component.translatable("gui.futureshops.economy.balance_unavailable");
     }
 
     /**

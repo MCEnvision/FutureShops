@@ -201,10 +201,8 @@ public final class DepositCommand {
                 new MoneyDepositEvent(player.getUUID(), creditedMinor, acceptedTotal));
 
         String depositedText = EconomyCommandUtil.formatMinorUnits(creditedMinor, provider.getDecimalPlaces());
-        long resultingBalance = mutation.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
-                ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong())
-                : java.util.Optional.empty()).orElseGet(() -> BalanceManager.getBalance(player.getUUID()));
-        String balanceText = EconomyCommandUtil.formatMinorUnits(resultingBalance, provider.getDecimalPlaces());
+        Component balanceText = EconomyCommandUtil.formatResultingBalance(mutation, player.getUUID(),
+                provider.getDecimalPlaces());
         player.sendSystemMessage(EconomyCommandUtil.success(Component.translatable("command.futureshops.deposit.success",
                 depositedText, provider.getCurrencyName(), balanceText)));
         return 1;

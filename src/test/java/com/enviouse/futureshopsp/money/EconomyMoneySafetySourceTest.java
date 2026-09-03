@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EconomyMoneySafetySourceTest {
@@ -30,6 +31,20 @@ class EconomyMoneySafetySourceTest {
         assertTrue(withdrawSource.contains("ShopTransactionUtil.insertIntoInventory(player.getInventory(), mintedStacks)"));
         assertTrue(withdrawSource.contains("withdraw delivery requires recovery"));
         assertTrue(withdrawSource.contains("withdraw custody finalization requires recovery"));
+    }
+
+    @Test
+    void postMutationBalanceDisplaysNeverFallbackToLegacyBalanceReads() throws Exception {
+        String depositSource = read("src/main/java/com/enviouse/futureshopsp/command/DepositCommand.java");
+        String withdrawSource = read("src/main/java/com/enviouse/futureshopsp/command/WithdrawCommand.java");
+        String moneySource = read("src/main/java/com/enviouse/futureshopsp/money/MoneyItem.java");
+        String utilitySource = read("src/main/java/com/enviouse/futureshopsp/command/EconomyCommandUtil.java");
+
+        assertFalse(depositSource.contains("BalanceManager.getBalance"));
+        assertFalse(withdrawSource.contains("BalanceManager.getBalance"));
+        assertFalse(moneySource.contains("BalanceManager.getBalance"));
+        assertTrue(utilitySource.contains("BalanceManager.queryBalance(playerUUID)"));
+        assertTrue(utilitySource.contains("balance_unavailable"));
     }
 
     @Test

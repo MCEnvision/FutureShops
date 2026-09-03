@@ -146,10 +146,8 @@ public final class WithdrawCommand {
         }
 
         String withdrawnText = EconomyCommandUtil.formatMinorUnits(amountMinorUnits, provider.getDecimalPlaces());
-        long resultingBalance = mutation.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
-                ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong())
-                : java.util.Optional.empty()).orElseGet(() -> BalanceManager.getBalance(player.getUUID()));
-        String balanceText = EconomyCommandUtil.formatMinorUnits(resultingBalance, provider.getDecimalPlaces());
+        Component balanceText = EconomyCommandUtil.formatResultingBalance(mutation, player.getUUID(),
+                provider.getDecimalPlaces());
         if (multipleBills) {
             StringBuilder detail = new StringBuilder();
             for (BillEntry bill : bills) {

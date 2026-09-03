@@ -65,7 +65,11 @@ public final class ShopModAPI {
      * Returns the balance of the given player in minor currency units.
      */
     public static long getBalance(UUID playerUUID) {
-        return BalanceManager.getBalance(playerUUID);
+        ProviderResult<BalanceSnapshot> result = BalanceManager.queryBalance(playerUUID);
+        if (result.confirmed()) {
+            return result.value().orElseThrow().balanceMinorUnits();
+        }
+        throw new IllegalStateException(result.diagnostic());
     }
 
     /**
@@ -79,14 +83,14 @@ public final class ShopModAPI {
      * Withdraws currency from a player's balance.
      */
     public static TransactionResult withdraw(UUID playerUUID, long amountMinor) {
-        return BalanceManager.getProvider().withdraw(playerUUID, amountMinor);
+        return BalanceManager.withdraw(playerUUID, amountMinor);
     }
 
     /**
      * Deposits currency into a player's balance.
      */
     public static TransactionResult deposit(UUID playerUUID, long amountMinor) {
-        return BalanceManager.getProvider().deposit(playerUUID, amountMinor);
+        return BalanceManager.deposit(playerUUID, amountMinor);
     }
 
     /**

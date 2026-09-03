@@ -140,10 +140,8 @@ public class MoneyItem extends Item {
 
             EconomyProvider provider = BalanceManager.getProvider();
             String depositedText = EconomyCommandUtil.formatMinorUnits(acceptedValue, provider.getDecimalPlaces());
-            long resultingBalance = mutation.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
-                    ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong())
-                    : java.util.Optional.empty()).orElseGet(() -> BalanceManager.getBalance(serverPlayer.getUUID()));
-            String balanceText = EconomyCommandUtil.formatMinorUnits(resultingBalance, provider.getDecimalPlaces());
+            Component balanceText = EconomyCommandUtil.formatResultingBalance(mutation, serverPlayer.getUUID(),
+                    provider.getDecimalPlaces());
             serverPlayer.sendSystemMessage(EconomyCommandUtil.success(
                     Component.translatable("command.futureshops.deposit.right_click_success",
                             outcome.accepted(), depositedText, provider.getCurrencyName(), balanceText)));
