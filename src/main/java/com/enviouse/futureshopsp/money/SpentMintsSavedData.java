@@ -176,6 +176,31 @@ public final class SpentMintsSavedData extends SavedData {
         return new ConsumeResult(accepted, rejected, rejected > 0 ? "EXCESS" : "");
     }
 
+    /** Restores a previously accepted count after a confirmed compensating leg. */
+    public synchronized void restore(String mintId, int count, long expectedDenomination,
+                                     int expectedAuthorizedCount) {
+        if (count <= 0) {
+            return;
+        }
+        MoneyMintRecord record = registry.get(mintId);
+        if (record == null || record.denomination() != expectedDenomination
+                || record.authorizedCount() != expectedAuthorizedCount) {
+            throw new IllegalStateException("mint restore does not match the original batch");
+        }
+        int restored;
+        try {
+            restored = Math.addExact(record.remainingCount(), count);
+        } catch (ArithmeticException exception) {
+            throw new IllegalStateException("mint restore exceeds supported count", exception);
+        }
+        if (restored > record.authorizedCount()) {
+            throw new IllegalStateException("mint restore exceeds authorized count");
+        }
+        registry.put(mintId, record.withRemainingCount(restored).withConsumedAt(restored == 0
+                ? record.consumedAt() : 0L));
+        setDirty();
+    }
+
     /** Outcome of a {@link #consume} call. */
     public record ConsumeResult(int accepted, int rejected, String errorCode) {
     }

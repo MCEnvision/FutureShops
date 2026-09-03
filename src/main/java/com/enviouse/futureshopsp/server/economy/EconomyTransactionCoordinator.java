@@ -188,6 +188,11 @@ public final class EconomyTransactionCoordinator {
         return execute(request, MutationKind.DEPOSIT);
     }
 
+    /** Executes one durable compensation leg with its own request identity. */
+    public ProviderResult<MutationReceipt> compensate(MutationRequest request) {
+        return execute(request, MutationKind.COMPENSATION);
+    }
+
     public ProviderResult<MutationReceipt> executeWithCustody(MutationRequest request, UUID owner,
                                                                String itemKey, long quantity,
                                                                String contentHash, CustodyState terminalState) {

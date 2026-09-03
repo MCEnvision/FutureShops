@@ -56,6 +56,10 @@ Legacy `EconomyProvider` calls are presented through the coordinator backed view
 
 Internal provider receipts are stored in checksummed `futureshops_internal_economy_receipts` SavedData and participate in clean marker validation. A restart can therefore look up ordinary completed internal legs without relying on process memory. An interrupted provider effect remains subject to the journal and recovery rules and is never inferred from a balance snapshot.
 
+Physical coin deposits reserve a durable custody record before consuming mint authorization or crediting the internal provider. A proven rejection restores consumed mint counts and stack quantities, while an ambiguous provider or custody result remains held for recovery. Right click deposits and `/deposit` use the same internal coordinator boundary.
+
+Physical withdrawals also hold a durable custody record before debiting the internal provider. Bills are inserted before their mint authorization is recorded, and delivery finalizes custody only after all bill stacks are present. An inventory failure leaves the debit and held custody for recovery instead of issuing an unjournaled compensating balance edit.
+
 Physical money items retain their existing identifiers and anti replay data. They are valid for the ready internal provider only and remain inert, but are not deleted, when an external provider or a recovery state is selected. No ATM path is added by this line.
 
 ## Persistence and recovery operations

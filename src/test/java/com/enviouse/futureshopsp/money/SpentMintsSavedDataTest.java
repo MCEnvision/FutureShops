@@ -62,4 +62,15 @@ class SpentMintsSavedDataTest {
         assertEquals(0, unknown.accepted());
         assertEquals("UNKNOWN_MINT", unknown.errorCode());
     }
+
+    @Test
+    void restoreReopensOnlyPreviouslyConsumedCount() {
+        SpentMintsSavedData ledger = new SpentMintsSavedData();
+        ledger.registerMint("mint-restore", new UUID(7L, 8L), 100L, 4, 1000L, "srv");
+
+        assertEquals(2, ledger.consume("mint-restore", 2, 100L, 4).accepted());
+        ledger.restore("mint-restore", 2, 100L, 4);
+
+        assertEquals(4, ledger.remainingCount("mint-restore"));
+    }
 }

@@ -3,14 +3,18 @@ package com.enviouse.futureshopsp.command;
 import com.enviouse.futureshopsp.money.CoinData;
 import com.enviouse.futureshopsp.money.ModDataComponents;
 import com.enviouse.futureshopsp.money.MoneyMintService;
-import com.enviouse.futureshopsp.money.MoneyNbtKeys;
 import com.enviouse.futureshopsp.money.SpentMintsSavedData;
 import com.enviouse.futureshopsp.event.MoneyMintEvent;
 import com.enviouse.futureshopsp.init.ModItems;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
-import net.minecraft.nbt.CompoundTag;
+import com.enviouse.futureshopsp.server.economy.CustodyState;
+import com.enviouse.futureshopsp.server.economy.EconomyRecordChecksum;
 import com.enviouse.futureshopsp.server.economy.EconomyProvider;
-import com.enviouse.futureshopsp.server.economy.TransactionResult;
+import com.enviouse.futureshopsp.api.economy.MutationKind;
+import com.enviouse.futureshopsp.api.economy.MutationRequest;
+import com.enviouse.futureshopsp.api.economy.MutationReceipt;
+import com.enviouse.futureshopsp.api.economy.ProviderResult;
+import com.enviouse.futureshopsp.api.economy.RequestId;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
@@ -112,22 +116,37 @@ public final class WithdrawCommand {
             return 0;
         }
 
-        // Debit balance
-        TransactionResult result = provider.withdraw(player.getUUID(), amountMinorUnits);
-        if (!result.success()) {
-            EconomyCommandUtil.sendProviderError(player, result.errorCode());
+        RequestId requestId = RequestId.random();
+        MutationRequest request = MutationRequest.forPlayer(requestId, player.getUUID(), amountMinorUnits,
+                MutationKind.WITHDRAW);
+        ProviderResult<MutationReceipt> mutation = BalanceManager.getCoordinator().executeWithCustody(request,
+                player.getUUID(), "physical-money-withdraw", slotsNeeded, custodyHash(bills), CustodyState.HELD);
+        if (!mutation.confirmed()) {
+            EconomyCommandUtil.sendProviderError(player, mutation);
             return 0;
         }
 
         // Mint and give coins
         if (!giveAllBills(player, bills)) {
-            provider.deposit(player.getUUID(), amountMinorUnits);
-            player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable("command.futureshops.error.server")));
+            player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                    "command.futureshops.economy.recovery_required")));
+            return 0;
+        }
+
+        try {
+            BalanceManager.getCoordinator().deliverCustody(requestId.child("custody"));
+            BalanceManager.getCoordinator().claimCustody(requestId.child("custody"));
+        } catch (RuntimeException exception) {
+            player.sendSystemMessage(EconomyCommandUtil.error(Component.translatable(
+                    "command.futureshops.economy.recovery_required")));
             return 0;
         }
 
         String withdrawnText = EconomyCommandUtil.formatMinorUnits(amountMinorUnits, provider.getDecimalPlaces());
-        String balanceText = EconomyCommandUtil.formatMinorUnits(result.resultingBalance(), provider.getDecimalPlaces());
+        long resultingBalance = mutation.receipt().flatMap(receipt -> receipt.resultingBalanceMinorUnits().isPresent()
+                ? java.util.Optional.of(receipt.resultingBalanceMinorUnits().getAsLong())
+                : java.util.Optional.empty()).orElseGet(() -> BalanceManager.getBalance(player.getUUID()));
+        String balanceText = EconomyCommandUtil.formatMinorUnits(resultingBalance, provider.getDecimalPlaces());
         if (multipleBills) {
             StringBuilder detail = new StringBuilder();
             for (BillEntry bill : bills) {
@@ -174,10 +193,14 @@ public final class WithdrawCommand {
     }
 
     private static boolean giveAllBills(ServerPlayer player, List<BillEntry> bills) {
-                SpentMintsSavedData mintData = SpentMintsSavedData.get(player.getServer());
+        SpentMintsSavedData mintData = SpentMintsSavedData.get(player.getServer());
 
         for (BillEntry bill : bills) {
             ItemStack stack = MoneyMintService.mintStack(player, bill.count, bill.denominationMinor);
+
+            if (!player.getInventory().add(stack)) {
+                return false;
+            }
 
             CoinData moneyData = stack.get(ModDataComponents.COIN_DATA.get());
             // authorizedCount == batch size; the entire stack shares one mint ID so
@@ -194,12 +217,16 @@ public final class WithdrawCommand {
             net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
                     new MoneyMintEvent(player.getUUID(), bill.denominationMinor, bill.count,
                             moneyData.mintId()));
-
-            if (!player.getInventory().add(stack)) {
-                return false;
-            }
         }
         return true;
+    }
+
+    private static String custodyHash(List<BillEntry> bills) {
+        StringBuilder canonical = new StringBuilder("physical-money-withdraw|");
+        for (BillEntry bill : bills) {
+            canonical.append(bill.denominationMinor).append('|').append(bill.count).append(';');
+        }
+        return EconomyRecordChecksum.sha256(canonical.toString());
     }
 
     private record BillEntry(long denominationMinor, int count) {
