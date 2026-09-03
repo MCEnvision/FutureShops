@@ -197,18 +197,27 @@ public final class EconomyTransactionCoordinator {
             return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "invalid custody terminal state");
         }
         synchronized (lock) {
+            EconomyJournalRecord existing = journal.find(request.requestId()).orElse(null);
+            if (existing != null) {
+                return replay(existing);
+            }
             ProviderResult<BalanceSnapshot> preflight = preflightInternal(request);
             if (!preflight.confirmed()) {
                 return copyFailure(preflight);
             }
+            EconomyJournalRecord prepared = new EconomyJournalRecord(request,
+                    EconomyTransactionState.PREPARED, Optional.empty(), ProviderResultStatus.REJECTED, "");
+            journal.append(prepared);
             RequestId custodyId = request.requestId().child("custody");
             try {
                 holdCustody(custodyId, owner, itemKey, quantity, contentHash);
             } catch (RuntimeException exception) {
+                replace(prepared, EconomyTransactionState.RESOLVED, Optional.empty(),
+                        ProviderResultStatus.REJECTED, "custody could not be persisted");
                 return ProviderResult.unavailable(ProviderError.UNKNOWN,
                         "custody could not be persisted");
             }
-            ProviderResult<MutationReceipt> result = execute(request, request.kind());
+            ProviderResult<MutationReceipt> result = executeAfterPrepared(request, request.kind());
             if (!result.confirmed()) {
                 if (result.status() != ProviderResultStatus.AMBIGUOUS
                         && result.status() != ProviderResultStatus.RECOVERY_REQUIRED) {
@@ -328,39 +337,43 @@ public final class EconomyTransactionCoordinator {
             EconomyJournalRecord prepared = new EconomyJournalRecord(request,
                     EconomyTransactionState.PREPARED, Optional.empty(), ProviderResultStatus.REJECTED, "");
             journal.append(prepared);
-            EconomyJournalRecord pending = new EconomyJournalRecord(request,
-                    EconomyTransactionState.EXTERNAL_PENDING, Optional.empty(), ProviderResultStatus.UNAVAILABLE, "");
-            journal.replace(pending);
-
-            ProviderResult<MutationReceipt> result;
-            try {
-                result = expectedKind == MutationKind.DEPOSIT || expectedKind == MutationKind.TRANSFER_CREDIT
-                        ? provider.deposit(request) : provider.withdraw(request);
-            } catch (RuntimeException exception) {
-                return ambiguous(pending, "provider mutation failed after pending state");
-            }
-            if (result == null) {
-                return ambiguous(pending, "provider returned no mutation result");
-            }
-            if (result.confirmed()) {
-                MutationReceipt receipt = result.receipt().orElse(result.value().orElse(null));
-                if (!validReceipt(request, receipt)) {
-                    return ambiguous(pending, "provider receipt does not match request");
-                }
-                replace(pending, EconomyTransactionState.EXTERNAL_CONFIRMED, Optional.of(receipt),
-                        ProviderResultStatus.CONFIRMED, "");
-                replace(pending, EconomyTransactionState.RESOLVED, Optional.of(receipt),
-                        ProviderResultStatus.CONFIRMED, "");
-                return ProviderResult.confirmed(receipt);
-            }
-            if (result.status() == ProviderResultStatus.REJECTED) {
-                replace(pending, EconomyTransactionState.RESOLVED, Optional.empty(),
-                        ProviderResultStatus.REJECTED, result.diagnostic());
-                return result;
-            }
-            return ambiguous(pending, result.diagnostic().isBlank()
-                    ? "provider outcome is not definitive" : result.diagnostic());
+            return executeAfterPrepared(request, expectedKind);
         }
+    }
+
+    private ProviderResult<MutationReceipt> executeAfterPrepared(MutationRequest request, MutationKind expectedKind) {
+        EconomyJournalRecord pending = new EconomyJournalRecord(request,
+                EconomyTransactionState.EXTERNAL_PENDING, Optional.empty(), ProviderResultStatus.UNAVAILABLE, "");
+        journal.replace(pending);
+
+        ProviderResult<MutationReceipt> result;
+        try {
+            result = expectedKind == MutationKind.DEPOSIT || expectedKind == MutationKind.TRANSFER_CREDIT
+                    ? provider.deposit(request) : provider.withdraw(request);
+        } catch (RuntimeException exception) {
+            return ambiguous(pending, "provider mutation failed after pending state");
+        }
+        if (result == null) {
+            return ambiguous(pending, "provider returned no mutation result");
+        }
+        if (result.confirmed()) {
+            MutationReceipt receipt = result.receipt().orElse(result.value().orElse(null));
+            if (!validReceipt(request, receipt)) {
+                return ambiguous(pending, "provider receipt does not match request");
+            }
+            replace(pending, EconomyTransactionState.EXTERNAL_CONFIRMED, Optional.of(receipt),
+                    ProviderResultStatus.CONFIRMED, "");
+            replace(pending, EconomyTransactionState.RESOLVED, Optional.of(receipt),
+                    ProviderResultStatus.CONFIRMED, "");
+            return ProviderResult.confirmed(receipt);
+        }
+        if (result.status() == ProviderResultStatus.REJECTED) {
+            replace(pending, EconomyTransactionState.RESOLVED, Optional.empty(),
+                    ProviderResultStatus.REJECTED, result.diagnostic());
+            return result;
+        }
+        return ambiguous(pending, result.diagnostic().isBlank()
+                ? "provider outcome is not definitive" : result.diagnostic());
     }
 
     private ProviderResult<MutationReceipt> admit(MutationRequest request) {

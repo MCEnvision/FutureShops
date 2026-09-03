@@ -17,6 +17,8 @@ import com.enviouse.futureshopsp.api.economy.RequestId;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
@@ -197,6 +199,20 @@ class EconomyTransactionCoordinatorTest {
                 journal.find(request.requestId()).orElseThrow().state());
     }
 
+    @Test
+    void executeWithCustodyPersistsIntentBeforeCustody() {
+        List<String> order = new ArrayList<>();
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyTransactionJournal journal = new RecordingJournal(order);
+        EconomyCustodyStore custody = new RecordingCustodyStore(order);
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(
+                provider, readyLifecycle(), journal, custody, new InMemoryEconomyClaimStore());
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+
+        assertTrue(coordinator.executeWithCustody(request, PLAYER, "shop:test", 1L, "hash", CustodyState.DELIVERED).confirmed());
+        assertEquals(List.of("journal:PREPARED", "custody:HELD", "journal:EXTERNAL_PENDING"), order.subList(0, 3));
+    }
+
     private static EconomyLifecycleController readyLifecycle() {
         EconomyLifecycleController lifecycle = new EconomyLifecycleController(EconomyApi.INTERNAL_PROVIDER_ID);
         lifecycle.resolve(ProviderLifecycle.READY, "", true, true, false);
@@ -291,6 +307,68 @@ class EconomyTransactionCoordinatorTest {
         private MutationReceipt receipt(MutationRequest request) {
             return new MutationReceipt(request.requestId(), request.kind(), request.amountMinorUnits(),
                     request.requestId().value().toString(), OptionalLong.of(75L));
+        }
+    }
+
+    private static final class RecordingJournal implements EconomyTransactionJournal {
+        private final InMemoryEconomyTransactionJournal delegate = new InMemoryEconomyTransactionJournal();
+        private final List<String> order;
+
+        private RecordingJournal(List<String> order) {
+            this.order = order;
+        }
+
+        @Override
+        public Optional<EconomyJournalRecord> find(RequestId requestId) {
+            return delegate.find(requestId);
+        }
+
+        @Override
+        public void append(EconomyJournalRecord record) {
+            order.add("journal:" + record.state());
+            delegate.append(record);
+        }
+
+        @Override
+        public void replace(EconomyJournalRecord record) {
+            order.add("journal:" + record.state());
+            delegate.replace(record);
+        }
+
+        @Override
+        public List<EconomyJournalRecord> snapshot() {
+            return delegate.snapshot();
+        }
+    }
+
+    private static final class RecordingCustodyStore implements EconomyCustodyStore {
+        private final InMemoryEconomyCustodyStore delegate = new InMemoryEconomyCustodyStore();
+        private final List<String> order;
+
+        private RecordingCustodyStore(List<String> order) {
+            this.order = order;
+        }
+
+        @Override
+        public Optional<CustodyRecord> find(RequestId requestId) {
+            return delegate.find(requestId);
+        }
+
+        @Override
+        public CustodyRecord hold(RequestId requestId, UUID owner, String itemKey, long quantity, String contentHash) {
+            CustodyRecord record = delegate.hold(requestId, owner, itemKey, quantity, contentHash);
+            order.add("custody:" + record.state());
+            return record;
+        }
+
+        @Override
+        public CustodyRecord transition(RequestId requestId, CustodyState expected, CustodyState next) {
+            return delegate.transition(requestId, expected, next);
+        }
+
+        @Override
+        public List<CustodyRecord> snapshot() {
+            return delegate.snapshot();
         }
     }
 }
