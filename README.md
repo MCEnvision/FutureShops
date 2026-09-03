@@ -8,22 +8,24 @@ This branch targets the following runtime.
 
 | Component | Version |
 | --- | --- |
-| FutureShops | 2.2.1 |
+| FutureShops | 2.3.0 |
 | Minecraft | 1.21.1 |
-| NeoForge | 21.1.233 |
+| NeoForge | 21.1.248 |
 | Java | 21 |
 | Parchment | 2024.11.17 |
 | GeckoLib | 4.8.4 |
 
-Client and server should use the same FutureShops build. This `2.2.1` NeoForge candidate is prepared locally and remains unpublished. Back up the complete world and configuration before replacing an older Forge installation. The runtime mod identifier and all resource namespaces remain `futureshops`, while the Java package for this port is `com.enviouse.futureshopsp`.
+Client and server should use the same FutureShops build. This `2.3.0` NeoForge candidate is prepared locally and remains unpublished. The provider API, deterministic registry, and restart only selection contract are present. Full transaction journaling, custody, external adapters, and recovery validation remain phase work. Back up the complete world and configuration before replacing an older installation. The runtime mod identifier and all resource namespaces remain `futureshops`, while the Java package for this port is `com.enviouse.futureshopsp`.
 
 ## Installation
 
-1. Install Minecraft 1.21.1 and NeoForge 21.1.233.
+1. Install Minecraft 1.21.1 and NeoForge 21.1.248.
 2. Install GeckoLib 4.8.4 for NeoForge 1.21.1.
 3. Place the same FutureShops JAR in the client and server `mods` directories.
 4. Back up the world, player data, and the complete `config/futureshops` directory before upgrading.
 5. Start the game or server once, then review the generated FutureShops configuration and shop catalogs.
+
+The generated `economy.provider` setting defaults to `internal`. Keep it on `internal` until the complete external provider and recovery phases are validated. Provider changes are restart only and do not migrate balances.
 
 ## Main features
 
@@ -57,6 +59,8 @@ gradlew.bat build
 Development launch tasks include `runClient`, `runServer`, `runGameTestServer`, and `runData`. Build artifacts are written to `build/libs`.
 
 The implementation and compatibility decisions are documented in [Porting notes](PORTING_NOTES.md). The original migration inventory and risk analysis are in [Port audit](FutureShopsAudit.md).
+
+The public provider contract is documented in [Economy provider API](docs/api/economy-provider.md).
 
 The maintained documentation index is in [Documentation](docs/README.md).
 

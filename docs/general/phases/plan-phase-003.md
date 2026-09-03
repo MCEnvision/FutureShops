@@ -1,0 +1,242 @@
+# Phase 003 Execution Plan
+
+> **Plan ID:** PLAN-PHASE-003
+> **Phase ID:** CORE-PHASE-003
+> **Owner:** FutureShops repository
+> **Classification:** MANDATORY
+> **Master plan:** [plan.md](../plan.md)
+> **Phase sequence:** 003 of 003
+
+## Purpose and Ownership
+
+This phase proves the integrated strict FutureShops `2.3.0` result, reconciles documentation to observed behavior, produces one inspected and hashed release candidate, and updates the already open GitHub continuation issue with implementation guidance for the `3.0.0` lines. The artifact remains unpublished.
+
+This phase owns `CORE-REQ-019` through `CORE-REQ-022`. The master owns product scope, locked decisions, the plan-wide Definition of Done, and publication exclusion. This file owns only final validation, documentation reconciliation, artifact identity, the post-artifact remote update and readback of issue 66, and terminal evidence. The owner boundary is exact: strict economy behavior is implemented and validated only in `2.3.0` for Minecraft `1.21.1`; the existing `3.0.0` Forge `1.20.1` beta and its future `1.21.1` port receive actionable issue guidance only. This phase does not absorb defects from an earlier owner requirement, redefine compatibility, create an initial or duplicate continuation issue, modify `3.0.0` code, publish a release, or authorize future `3.0.0` implementation.
+
+## Evidence-Based Entry State
+
+| Evidence class | Area | Finding | Source or command | Freshness condition |
+|---|---|---|---|---|
+| VERIFIED | Phase sequence | `CORE-PHASE-002` must be integrated on the approved default branch before this phase starts. | Phase 002 completion packet, merged pull request, approved default branch revision | Any upstream source or integration change invalidates entry. |
+| VERIFIED | External inputs | `EXT-001` through `EXT-006` identify exact reviewed artifacts and reproducible Pixelmon and hybrid environments. | Phase 000 and Phase 002 evidence packets | Any byte, version, license, configuration, or manifest change invalidates dependent proof. |
+| VERIFIED | Runtime terms authority | `EXT-008` is satisfied by explicit owner acceptance before the first full disposable Pixelmon or hybrid runtime launch. | Phase 002 completion packet and sanitized owner-acceptance record | Any environment, terms, or acceptance-scope change invalidates the affected runtime proof and requires renewed owner action. |
+| VERIFIED | Integrated behavior | Requirements `CORE-REQ-001` through `CORE-REQ-018` have phase-owned evidence and no known mandatory defect. | Prior completion packets and requirement trace | A changed implementation, schema, config, dependency, or user-visible behavior invalidates affected evidence. |
+| PROPOSED | Final candidate | The integrated source can produce one reproducible FutureShops `2.3.0` jar. | Clean checked-in wrapper build | Unknown until the final build and artifact inspection pass. |
+| VERIFIED | Tracking issue | Plan authoring created and read back GitHub issue 66 immediately after plan validation. Phase 003 must preserve that identity, then search for, verify, and update the same issue only after artifact validation; it must not create an initial or duplicate issue. | Issue 66 URL, number, and readback in authoring evidence | Repository, issue identity, state, milestone, labels, or body change requires post-artifact readback. |
+| UNKNOWN | Terminal evidence | `EVD-VER-001`, `EVD-VER-002`, and `EVD-ART-001` are not final until tied to one source commit and one candidate hash. | Phase 003 evidence store | Any candidate or source change invalidates final status. |
+
+Phase entry stops if Phase 002 is not integrated, exact external environments cannot be reproduced, `EXT-008` was not explicitly satisfied before their full launch, the authoring evidence does not identify issue 66, or a prior mandatory requirement lacks evidence. No later task may infer terms acceptance or convert an entry failure into a documentation caveat.
+
+## Scope Boundaries
+
+### Included Scope
+
+- `CORE-REQ-019`: execute the complete deterministic, runtime, recovery, security, dependency, packaging, and diff validation matrix.
+- `CORE-REQ-020`: reconcile `README.md`, `DOCUMENTATION.md`, `docs/README.md`, and applicable focused guides with the exact validated behavior.
+- `CORE-REQ-021`: build, inspect, hash, reinstall, and retain one unpublished `2.3.0` release candidate.
+- `CORE-REQ-022`: only after artifact validation, verify `EXT-007`, search for duplicates, update and read back the already open issue 66, preserve its required scope, milestone, and labels, and keep it open. The update must make the strict `2.3.0` design independently actionable for `3.0.0` Forge `1.20.1` and identify the work needed to carry it into a future `1.21.1` port.
+- Audit every `CORE-REQ-001` through `CORE-REQ-022` acceptance criterion and every plan-wide Definition of Done item.
+
+### Explicit Exclusions
+
+- `NG-001` and `DEC-016`: no GitHub release, release tag, announcement, CurseForge, Modrinth, or other publication.
+- `FUT-001` through `FUT-004`: no `3.0.0` maintenance code, port code, ATM, or additional provider implementation. Issue guidance for `FUT-001` and `FUT-002` is the only allowed `3.0.0` output.
+- No initial GitHub issue creation. Missing or unverifiable authoring issue evidence is an `EXT-007` blocker.
+- No closing of the continuation issue during validation. It remains open until future owner acceptance of the completed `2.3.0` outcome authorizes closure.
+- No weakening, waiver, or reassignment of an earlier requirement to make terminal evidence pass.
+
+## Phase Contract
+
+### CORE-PHASE-003 — Production Validation and Unpublished Delivery
+
+**Objective:** Produce reproducible proof for the strict `2.3.0` system, one exact unpublished artifact, accurate documentation, and a verified open issue 66 whose post-artifact update is sufficient to guide later implementation on both named `3.0.0` lines without changing their code.
+**Owner:** FutureShops repository
+**Dependencies:** CORE-PHASE-002, CORE-REQ-001, CORE-REQ-002, CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-006, CORE-REQ-007, CORE-REQ-008, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, DEC-015, DEC-016, DEC-017, DEC-018, EXT-001, EXT-002, EXT-003, EXT-004, EXT-005, EXT-006, EXT-007, EXT-008
+**Canonical requirements:** CORE-REQ-019, CORE-REQ-020, CORE-REQ-021, CORE-REQ-022
+**Documentation and release impact:** Final user, API, maintainer, operator, migration, recovery, integration, compatibility, verification, and artifact documentation; no publication
+**Next transition:** Plan-wide completion audit and owner-selected unpublished endpoint acceptance
+
+**Entry criteria**
+
+- Phase 002 is merged and its resulting default branch commit is the source baseline.
+- Prior phase evidence identifies exact external artifacts, environment manifests, and phase artifact hashes.
+- Prior evidence proves `EXT-008` was satisfied before full disposable runtime launch. Phase 003 may use that exact recorded scope but may not infer broader acceptance or write an EULA response.
+- The authoring evidence records issue 66, its repository, URL, creation readback, milestone, and exact labels; Phase 003 performs no live issue 66 search, query, readback, or mutation before artifact validation.
+- The immutable goal file and protected plan set are unchanged except through authorized plan authoring.
+
+**Implementation scope**
+
+- CORE-REQ-019 validates the complete integrated system and routes failures only through the owning stable requirement.
+- CORE-REQ-020 reconciles tracked documentation after observed behavior is final.
+- CORE-REQ-021 produces and validates one artifact from the final verified source commit.
+- CORE-REQ-022 verifies and updates the existing issue only after artifact acceptance gates pass. Its body is implementation guidance, not an implementation change, and covers both the existing Forge `1.20.1` beta and the future `1.21.1` port.
+
+**Execution order**
+
+1. `P003-TASK-001` executes CORE-PHASE-003 by freezing the source revision, rereading all registered requirements, importing prior evidence, and recording invalidation boundaries.
+2. `P003-TASK-002` preserves `DEC-015` and `EXT-007` by recording issue 66 from the authoring `EVD-GH-001` evidence and freezing its identity for later comparison without querying or mutating GitHub.
+3. `P003-TASK-003` runs focused and complete deterministic checks for `CORE-REQ-001` through `CORE-REQ-018`.
+4. `P003-TASK-004` executes CORE-REQ-019 through standard NeoForge server, client, multiplayer, reconnect, lifecycle, and optional-isolation workflows.
+5. `P003-TASK-005` executes CORE-REQ-019 through internal, fixture, Pixelmon, and `vault` capability, failure, crash, idempotency, recovery, and surface matrices, including direct Pixelmon refusal before intent or custody where durable receipts and idempotent retry are absent.
+6. `P003-TASK-006` executes CORE-REQ-019 by auditing dependencies, security, secrets, licenses, generated output, jar boundaries, and the complete diff.
+7. `P003-TASK-007` executes CORE-REQ-020 by reconciling and rehearsing all required documentation against the passing implementation and environments.
+8. `P003-TASK-008` executes CORE-REQ-021 by building the final candidate from the verified commit and recording SHA 256, SHA 512, metadata, contents, and reproducibility evidence.
+9. `P003-TASK-009` executes CORE-REQ-021 by installing the exact hashed candidate in every required environment and repeating artifact-dependent acceptance workflows.
+10. `P003-TASK-010` executes CORE-REQ-019 by completing the requirement trace and every plan-wide Definition of Done check.
+11. `P003-TASK-011` executes CORE-REQ-022 after artifact validation by searching for duplicates, verifying and updating the same open issue 66 with the complete economy-gate, journal, escrow, lifecycle, capability, bridge, backup, reconciliation, and port guidance, then reading it back and recording `EVD-GH-001` without creating another issue, implementing `3.0.0` code, or closing issue 66.
+12. `P003-TASK-012` executes CORE-PHASE-003 by assembling the terminal completion packet and presenting the unpublished endpoint for owner acceptance.
+
+**Required evidence**
+
+- `EVD-VER-001`, `EVD-VER-002`, `EVD-ART-001`, and `EVD-GH-001` tied to exact revisions, artifacts, manifests, commands, dates, and sanitized evidence locations.
+- Requirement trace, crash matrix, surface matrix, environment logs, documentation rehearsal, dependency report, jar listing, hashes, secret scan, and complete diff report.
+
+**Exit criteria**
+
+- Every mandatory requirement and every plan-wide Definition of Done item has fresh passing evidence.
+- One exact candidate passes the strict economy gate, journal, escrow, lifecycle, capability, safe-refusal, restart, recovery, and packaging matrices in all required environments and remains unpublished and untagged.
+- The existing issue is verified by URL and readback, updated after candidate validation with every required `3.0.0` design topic and port obligation, and remains open pending future owner acceptance.
+- No `3.0.0` Forge `1.20.1` or future `1.21.1` implementation file changed as part of `CORE-REQ-022`.
+- No known mandatory phase-owned defect remains.
+- No known mandatory upstream defect remains.
+
+## Inputs and Upstream Contracts
+
+| Input or contract | Provider | Required state | Validation | Failure behavior |
+|---|---|---|---|---|
+| Integrated source | `CORE-PHASE-002` | Approved default branch contains sequential phase results | Git and GitHub readback, source revision record | Stop and return to the missing integration gate. |
+| Requirement evidence | Phases 000 through 002 | Complete, sanitized, and tied to exact inputs | Trace every acceptance criterion | Return failure to owning requirement and invalidate dependents. |
+| External stacks | `EXT-001` through `EXT-006` | Exact reviewed bytes and reproducible manifests | Hash before every install and run | Discard mismatched runs and restore exact stack. |
+| Runtime terms authority | `EXT-008` | Explicit owner acceptance covers each exact disposable environment before full launch | Compare the sanitized acceptance record, environment identity, and launch chronology | Do not launch, mutate, restart, or claim runtime evidence; return to owner action without changing an EULA file. |
+| GitHub issue 66 evidence and capability | `EXT-007` | At entry, authoring `EVD-GH-001` identifies issue 66 and its creation readback. Only after tasks 009 and 010 pass is authenticated owner access required for the live search, verification, update, and readback. | Freeze authoring evidence locally before product checks; perform no live issue 66 operation until the post-artifact gate | Complete all independent validation first. If post-artifact access fails, block completion without creating a substitute or omitting metadata. |
+| Publication boundary | `DEC-016` | No release, tag, upload, announcement, or public artifact | Remote state and local artifact audit | Stop and report any unauthorized publication state. |
+
+## Outputs and Downstream Contracts
+
+| Output or contract | Consumer | Guaranteed state | Compatibility or versioning | Evidence |
+|---|---|---|---|---|
+| Validation record | Owner and maintainers | All mandatory checks map to exact source and artifacts | Invalid after any relevant input changes | `EVD-VER-001`, `EVD-VER-002` |
+| Documentation set | Users, integrators, operators | Describes only validated `2.3.0` behavior and exact compatibility | Must change with behavior or artifact identity | Documentation diff and rehearsal |
+| Release candidate | Owner | One inspected FutureShops `2.3.0` jar remains unpublished | Minecraft `1.21.1`, NeoForge `21.1.248` | `EVD-ART-001` |
+| Continuation issue | Future maintainers | Existing open issue states both `3.0.0` Forge `1.20.1` maintenance and future `1.21.1` port scope, with complete strict-design guidance and no implementation claim | Reference only, not `2.3.0` implementation authority and not proof of `3.0.0` completion | `EVD-GH-001` readback and no-code diff audit |
+
+## Work Packages
+
+| Task ID | Requirement IDs | Work | Inputs and dependencies | Outputs | Affected components or interfaces | Verification |
+|---|---|---|---|---|---|---|
+| `P003-TASK-001` | `CORE-REQ-019` | Freeze revision and construct the full acceptance and invalidation trace. | Integrated Phase 002, all prior packets | Validation baseline | Plan set, evidence store, Git state | Every criterion has an owner and planned proof. |
+| `P003-TASK-002` | `DEC-015`, `EXT-007` | Import and freeze issue 66 identity and creation readback from authoring evidence for later `CORE-REQ-022` proof without live issue access. | Authoring `EVD-GH-001` evidence | Frozen issue 66 identity for post-artifact comparison | Authoring evidence | Recorded URL and number match the authoring record; no Phase 003 live issue search, query, readback, or mutation occurs before the post-artifact gate. |
+| `P003-TASK-003` | `CORE-REQ-019` | Run focused tests, all tests, applicable data validation and GameTests, then build. | Frozen source and commands | `EVD-VER-001` draft | Build, tests, generated resources | Every required command passes in order. |
+| `P003-TASK-004` | `CORE-REQ-019` | Run clean server, client, multiplayer, reconnect, restart, and isolation workflows. | Phase artifact and standard NeoForge manifest | Standard runtime evidence | Common, client, network, lifecycle | Same bytes pass all standard workflows. |
+| `P003-TASK-005` | `CORE-REQ-019`, `DEC-017`, `DEC-018`, `EXT-008` | Execute provider, surface, clean-stop, crash-point, retry, compensation, claim, backup, restore, and operator-reconciliation matrices. Prove direct Pixelmon mutation-required surfaces refuse before intent, custody, or provider effect unless durable receipt lookup and idempotent retry are proven. | Exact external manifests, owner-authorized disposable launches, stable request fixtures | `EVD-VER-002` | Strict economy gate, lifecycle coordinator, journal, custody, claims, Pixelmon adapter, external bridge | No duplicate effect, guessed outcome, fallback, external balance restore, loss, or unsafe mutation; uncertainty remains `FROZEN`. |
+| `P003-TASK-006` | `CORE-REQ-019`, `CORE-REQ-021` | Inspect dependency graphs, classpaths, source, jar, secrets, licenses, output, and diff. | Passing build and exact artifacts | Audit report | Build and packaged jar | No forbidden dependency, embedded artifact, secret, debug file, or unrelated change. |
+| `P003-TASK-007` | `CORE-REQ-020` | Reconcile docs and rehearse commands, examples, migration, failure, restore, and recovery. | Passing behavior and exact manifests | Final documentation set | `README.md`, `DOCUMENTATION.md`, `docs/README.md`, focused guides | Links, claims, examples, and runbooks pass on disposable data. |
+| `P003-TASK-008` | `CORE-REQ-021` | Clean build the candidate and record identity, metadata, hashes, and contents. | Final verified source and docs | `EVD-ART-001` candidate | Release candidate jar | Reproducible bytes and correct `2.3.0` metadata. |
+| `P003-TASK-009` | `CORE-REQ-019`, `CORE-REQ-021` | Reinstall exact candidate in standard, Pixelmon, and hybrid environments. | Candidate hashes and exact manifests | Final artifact runtime proof | All supported environments | Installed hashes match and terminal workflows pass. |
+| `P003-TASK-010` | `CORE-REQ-019` through `CORE-REQ-021` | Audit all requirements and Definition of Done items. | Final evidence and candidate | Signed-off trace matrix | Whole product contract | No missing, stale, contradictory, or lower-fidelity proof. |
+| `P003-TASK-011` | `CORE-REQ-022`, `DEC-015`, `DEC-017`, `DEC-018`, `EXT-007` | After artifact validation, search duplicates, verify issue 66, update it with the complete strict design and separate Forge `1.20.1` and future `1.21.1` implementation obligations, then read back its body, state, milestone, labels, and links. | Passed tasks 009 and 010, frozen issue 66 identity, validated `2.3.0` behavior, `EXT-007` | `EVD-GH-001` and issue guidance checklist | Existing GitHub issue 66 only | Readback proves all required guidance is present, issue 66 remains open, and no replacement, duplicate, or `3.0.0` code change occurred. |
+| `P003-TASK-012` | `CORE-REQ-019` through `CORE-REQ-022` | Assemble completion packet and owner acceptance handoff. | All prior tasks | Terminal packet | Evidence, candidate, issue link | Packet independently reproduces every terminal claim. |
+
+Tasks are sequential where evidence depends on candidate identity. Independent deterministic checks may run in parallel only against the same frozen revision. A failure returns to its owning requirement, invalidates every dependent task result, and resumes from the earliest affected gate.
+
+## Architecture and Implementation Boundaries
+
+The logical server, provider API, coordinator, persistence, adapters, and client presentation remain owned by their earlier phases. Phase 003 changes implementation only to resolve a proven defect through the owning stable requirement. It never patches evidence, relaxes an assertion, substitutes a different external stack, or documents a failure as support.
+
+Candidate identity is content based. Every runtime manifest records source commit, jar SHA 256 and SHA 512, Minecraft, NeoForge, Java, external artifact hashes, configuration, player count, expected result, actual result, and sanitized evidence location. No balance mirror, production player data, credential, private log, or mutable external state enters evidence.
+
+### Issue 66 guidance contract
+
+The post-artifact issue update translates validated behavior into architecture guidance without copying `2.3.0` implementation or prescribing source paths. Its read-back body must cover all of the following contracts.
+
+1. **One economy gate.** Every buy, sell, cart, player shop, offline proceeds, pay, administration, analytics, future ATM, and other monetary mutation enters one server-owned gate. Callers never invoke the provider, internal balance store, journal, or custody service directly.
+2. **Write-ahead state and identity.** Every root operation and money leg has a stable request identity. Intent is checksummed and durably flushed before an external effect. Outcome, custody, claim, and compensation transitions are durable and replay-aware. A clean-shutdown marker is written only after journal, custody, claims, and outcomes are flushed.
+3. **Escrow and custody order.** A buy places the recoverable item in FutureShops custody before debit, then delivers it or creates a durable claim only after debit is proven. A sell moves the player's item into custody before credit, then finalizes the sale only after credit is proven. Failure before a proven external effect returns or preserves custody deterministically; failure after an ambiguous effect never guesses.
+4. **Lifecycle admission.** `READY` admits capability-supported requests. `DRAINING` rejects new monetary work, lets admitted work reach durable boundaries, flushes all state, and only then permits a clean stop. `RECOVERING` runs before readiness after an unclean start and blocks new money work while requests are classified. `FROZEN` blocks monetary mutations whenever an outcome, originating provider, journal integrity, or recovery action cannot be proven.
+5. **Capability negotiation.** Providers declare authoritative balance query, precheck, withdraw, deposit, durable receipt lookup, and idempotent retry separately. The gate verifies capabilities and enables each surface only when its entire required set passes. Missing, late, incompatible, or failing providers never trigger internal fallback.
+6. **Direct Pixelmon limit.** Pixelmon `9.4.0` balance, precheck, boolean `add`, and boolean `take` calls do not prove a crash-window result. Direct Pixelmon production mutation remains disabled unless an exact reviewed API or adapter supplies stable request identity, durable receipt lookup, and idempotent retry. A local journal or observed balance delta is not a substitute.
+7. **Bridge contract.** A separate bridge may register `vault` through the public provider API and owns Bukkit, Vault, hybrid runtime, and economy-plugin dependencies. It must adapt exact integer values, provider lifecycle, durable request identity, receipt lookup, and idempotent replay. FutureShops core must not link, reflect into, bundle, or fall back through Bukkit or Vault.
+8. **Backups and restoration.** Backups include a mutually consistent FutureShops journal, outcomes, custody index, claims, clean marker, configuration, selected and originating provider identities, artifact manifest, and checksums. External provider data stays authoritative and is backed up under that provider's procedure. FutureShops never restores, mirrors, or fabricates an external balance from its own backup.
+9. **Operator reconciliation.** An unresolved request remains frozen and exposes request ID, provider ID, amount and direction, custody state, last durable transition, and sanitized diagnostic context. Automated retry or compensation is allowed only from a durable receipt or idempotent provider result. Otherwise the operator preserves all data, restores the exact provider stack, performs documented evidence-based reconciliation, and records the resolution without direct balance guessing.
+10. **Required `3.0.0` work.** The Forge `1.20.1` beta must route its existing escrow, market, shops, commands, offline proceeds, claims, and future ATM boundaries through this contract, add schema versioning and migration for journal, lifecycle, custody, and recovery state, provide capability and crash tests, and preserve existing saves. The future `1.21.1` port must revalidate loader lifecycle, saved-data behavior, networking and client synchronization, exact Pixelmon and hybrid artifacts, adapter isolation, Java and dependency versions, and the full runtime and recovery matrix rather than assuming the Forge proof transfers.
+
+The issue must distinguish required behavior from suggested component names, preserve `FUT-001` and `FUT-002` as future work, and state that issue text and the validated `2.3.0` artifact are design evidence only. They do not prove either `3.0.0` line is implemented, migrated, compatible, or released.
+
+## Failure, Recovery, and Edge Cases
+
+| Scenario | Detection | Required behavior | Recovery or rollback | Regression proof |
+|---|---|---|---|---|
+| Required command fails | Nonzero exit or assertion failure | Stop dependent validation and identify owning requirement. | Fix on phase branch, rebuild, invalidate and rerun affected evidence. | Full sequence from earliest affected command. |
+| Candidate bytes change | Hash or reproducibility mismatch | Discard all artifact-dependent proof. | Freeze new candidate and repeat tasks 006 through 012. | Matching hashes in every environment. |
+| External stack drifts | Installed hash differs from manifest | Do not run or accept evidence. | Restore exact reviewed bytes or reopen prerequisite review. | Hash check followed by complete affected matrix. |
+| Runtime terms are not explicitly accepted | Exact `EXT-008` record is absent, mismatched, or later than launch | Do not edit `eula.txt`, launch the full environment, perform mutations, or claim runtime proof. | Preserve assembled environment at its preacceptance state and return to owner action. | Chronology and environment-identity audit followed by the full affected runtime matrix. |
+| Ambiguous or duplicate value effect | Receipt, balance delta, or journal conflict | Enter `FROZEN` with a typed `RECOVERY_REQUIRED` result; stop monetary writes. | Preserve journal and custody, recover by stable identity and durable provider evidence, repair owning requirement. | Full crash and idempotency matrix for provider and surfaces. |
+| Direct Pixelmon exposes mutation methods but no durable result contract | Capability inspection lacks receipt lookup or idempotent retry | Refuse every mutation-required surface before journal intent, custody, or Pixelmon effect; do not claim production mutation support. | Keep verified query and precheck behavior only, or re-review stronger exact evidence through the owning prerequisite and phase. | Capability report, negative surface matrix, bytecode and runtime no-effect proof. |
+| Documentation conflicts with runtime | Rehearsal or artifact cross-check differs | Treat documentation gate as failed. | Correct docs or behavior through the proper owner, then rerun. | Link, example, command, and runbook checks. |
+| Issue 66 is missing or inaccessible at the post-artifact gate | Task 011 search or readback fails after tasks 009 and 010 pass | Block completion; do not create a replacement in this phase. | Restore access to issue 66 or resolve the external repository state through owner-authorized action. | Repeat the post-artifact duplicate search and exact issue 66 remote readback. |
+| Issue metadata drifts | Milestone, labels, scope, state, or links differ | Update only after candidate validation, then read back. | Restore exact metadata; keep issue open. | `EVD-GH-001` readback. |
+| Issue guidance omits a strict design topic or blurs the version boundary | Post-update checklist or diff finds missing gate, state, journal, escrow, capability, Pixelmon, bridge, backup, reconciliation, or port guidance | Treat `CORE-REQ-022` as failed; do not close the issue or completion packet. | Correct issue 66 only, read it back, and repeat the no-code and metadata audit. | Complete issue guidance checklist and exact remote body readback. |
+| `3.0.0` implementation changes appear | Git diff, branch history, or issue wording claims implementation | Stop and remove the unauthorized implementation through the applicable repository workflow without rewriting history. | Restore the issue-only boundary and repeat source, artifact, and remote audits. | No-code diff evidence plus issue readback. |
+| Publication is detected | Tag, release, upload, or public artifact exists | Stop and report contract violation. | Owner directs safe remediation; never publish further. | Remote and artifact publication audit. |
+
+## Verification Matrix
+
+| Requirement or task | Static or unit | Integration | Real workflow or runtime | Negative and recovery | Evidence artifact |
+|---|---|---|---|---|---|
+| `CORE-REQ-019`, `DEC-017` | Focused journal, gate, custody, lifecycle, capability, and surface tests; all tests; build; scans | Full provider and surface matrices using stable root and leg identities | Server, client, multiplayer, clean drain, unclean restart, Pixelmon, hybrid | Crash at every durable boundary, retry, reconnect, `RECOVERING`, `FROZEN`, claim, compensation, backup, restore | `EVD-VER-001`, `EVD-VER-002` |
+| `DEC-018`, `EXT-008` | Pixelmon capability and class-isolation checks; owner-acceptance chronology audit | Exact Pixelmon query and precheck integration with mutation-required surfaces disabled | Owner-authorized exact disposable Pixelmon runtime | Missing receipt, missing idempotent retry, ambiguous result, preacceptance launch refusal | Pixelmon capability report, safe-refusal matrix, environment manifest |
+| `CORE-REQ-020` | Link, identifier, version, config, state, capability, and API checks | Documentation against final behavior | Operator install, selection, drain, failure, backup, frozen reconciliation, and recovery rehearsal | Invalid config, missing provider, ambiguous request, incomplete backup, prohibited external balance restore | Documentation diff and rehearsal record |
+| `CORE-REQ-021` | Metadata, contents, dependency, secret, and hash checks | Exact bytes across all manifests | Candidate installed in every required environment | Hash mismatch, forbidden contents, clean rebuild | `EVD-ART-001` |
+| `CORE-REQ-022` | Authoring evidence integrity, no-early-access proof, post-artifact duplicate, guidance, metadata, and no-code checks | Issue 66 linked to the validated endpoint and updated only after artifact validation | Post-artifact authenticated GitHub readback of issue 66 with all ten guidance contracts | Missing capability, wrong state, omitted design topic, metadata drift, replacement or duplicate creation, `3.0.0` code change, premature closure | `EVD-GH-001` and issue guidance checklist |
+| `P003-TASK-010` | Requirement trace audit | Cross-phase evidence reconciliation | Repeat any disputed terminal workflow | Invalidate stale or mismatched proof | Plan-wide completion checklist |
+
+Fixtures use disposable worlds, players, products, shops, claims, bills, requests, and provider data. Reruns begin with focused tests, then all tests, applicable data and GameTests, build, standard runtime, multiplayer and reconnect, crash and recovery, exact external environments, packaging and security inspection, candidate reinstall, documentation rehearsal, and issue readback. Lower-fidelity proof never replaces an exact environment or recovery workflow.
+
+## Documentation, Operations, and Release
+
+Update existing tracked documentation only. `README.md` covers purpose, exact versions, installation, provider selection, external compatibility, user behavior, build and support. `DOCUMENTATION.md` remains the maintainer and architecture hub. `docs/README.md` indexes focused API, configuration, integration, migration, recovery, security, and verification material where those files exist or are required by `CORE-REQ-020`.
+
+Documentation must state `internal` default, restart only selection, no fallback, exact minor units, no automatic migration, external money item restrictions, no ATM, the central gate, intent-before-effect journaling, buy and sell custody ordering, durable claims, `READY`, `DRAINING`, `RECOVERING`, and `FROZEN`, provider capability requirements, direct Pixelmon's no-mutation classification, the separate bridge boundary, checksummed backup contents, operator reconciliation, exact Pixelmon and hybrid limits, optional dependency isolation, candidate hashes, and unpublished status. Rehearse drain, unclean restart, backup, frozen preservation, receipt-based recovery, and restore procedures on disposable copies whose terms were accepted under `EXT-008`.
+
+Do not publish, tag, announce, upload, or create a release. The existing continuation issue is tracking output, not publication. Update it only after final candidate validation; keep it open until future owner acceptance authorizes closure.
+
+## Risks and Evidence Invalidation
+
+| Risk | Prevention | Detection | Recovery | Evidence invalidated | Reverification |
+|---|---|---|---|---|---|
+| Upstream source changes | Freeze source revision before validation. | Git diff or commit mismatch | Reclassify change by owning requirement. | All dependent deterministic, runtime, docs, and artifact proof | Restart at task 001. |
+| Different bytes reach an environment | Hash every install. | Manifest mismatch | Reinstall exact candidate. | Affected environment and terminal artifact proof | Repeat full affected environment. |
+| Failure is waived as documentation | Require behavior proof before claims. | Trace or rehearsal mismatch | Fix owning requirement. | Related docs and completion evidence | Rerun owner gates and docs. |
+| Sensitive data enters evidence | Disposable data, sanitization, scans. | Secret or privacy finding | Quarantine and regenerate. | Affected logs, docs, packet, and issue evidence | Reproduce and rescan. |
+| Issue is duplicated or closed early | Reuse authoring issue and search before update. | Search and state readback | Stop, preserve canonical issue, resolve duplicate with owner direction. | `EVD-GH-001` and plan completion | Repeat search and readback. |
+| Owner terms acceptance is inferred | Bind runtime evidence to the exact `EXT-008` record and environment. | Missing record or launch chronology mismatch | Discard affected runtime evidence and await explicit owner action. | Pixelmon, hybrid, artifact reinstall, and terminal evidence | Repeat every affected launch and workflow after valid acceptance. |
+| Direct Pixelmon is mistaken for mutation support | Require durable receipt and idempotent retry capability proof per surface. | Capability report, no-effect assertions, documentation and issue scan | Disable the surface, correct claims, and return to the owning requirement if code allowed an effect. | Pixelmon, surface, documentation, artifact, and issue evidence | Rerun capability, safe-refusal, packaging, docs, and issue checks. |
+| Issue guidance is mistaken for `3.0.0` implementation | State the version boundary and audit source diffs and claims. | Branch diff or issue text claims code exists | Restore issue-only scope and correct the existing issue. | `EVD-GH-001` and completion endpoint | Repeat no-code diff and remote readback. |
+| Artifact is published | Enforce `DEC-016` and audit remote state. | Release, tag, upload, or public URL | Stop for owner remediation. | Entire terminal endpoint | Full publication audit after remediation. |
+
+## Phase Completion Packet
+
+The packet outside the protected plan set contains:
+
+1. Integrated source commit, phase branch and pull request evidence, and proof of sequential phase integration.
+2. Complete requirement trace for `CORE-REQ-001` through `CORE-REQ-022` and all twenty Definition of Done conditions.
+3. `EVD-VER-001` with exact commands, results, environment, date, commit, and sanitized log locations.
+4. `EVD-VER-002` with standard, multiplayer, restart, recovery, Pixelmon, and hybrid manifests and results.
+5. `EVD-ART-001` with jar filename, byte size, source commit, SHA 256, SHA 512, metadata, contents, dependency and security inspection, and reproducibility result.
+6. Proof that the same hashed candidate passed standard NeoForge, exact Pixelmon, and exact hybrid environments.
+7. Documentation diff, link and example checks, compatibility cross-check, and disposable operator runbook rehearsal.
+8. Dependency, license, classpath, bytecode, archive, secret, generated output, debug output, and complete Git diff reports.
+9. Failure and evidence invalidation ledger showing every repair and required rerun.
+10. `EVD-GH-001` with issue 66 authoring creation and readback, proof that phases 000 through 002 and pre-artifact Phase 003 made no live issue access or mutation, the post-artifact duplicate search, issue 66 update and readback, exact milestone and labels, correct open state, and no replacement, duplicate, publication promise, or private data.
+11. A completed issue-guidance checklist proving issue 66 explains one economy gate, write-ahead identity and states, clean marker, buy and sell custody ordering, durable claims, `READY`, `DRAINING`, `RECOVERING`, `FROZEN`, provider capability negotiation, direct Pixelmon no-mutation behavior without durable receipts and idempotent retry, the separate bridge contract, checksummed backup scope, evidence-based operator reconciliation, Forge `1.20.1` implementation work, and future `1.21.1` port revalidation.
+12. A source and branch diff proving `CORE-REQ-022` changed no `3.0.0` implementation and created no duplicate tracking artifact.
+13. Proof that `docs/plan/goal.md` is byte for byte unchanged and no protected plan file became an execution diary.
+14. Remote audit proving no release, tag, mod platform upload, announcement, or public candidate occurred.
+
+Any failed command, stale evidence, hash mismatch, unverified exact stack, missing or mismatched `EXT-008` authority, missing recovery proof, documentation discrepancy, forbidden jar content, unsafe direct Pixelmon mutation, sensitive evidence, inaccessible or incorrect issue, incomplete issue guidance, `3.0.0` code change, premature issue closure, or publication blocks completion.
+
+## Next Transition
+
+This is the final phase. After tasks 001 through 012 pass, perform the plan-wide completion audit against the master from top to bottom, verify the owner-selected endpoint is exactly one fully validated and unpublished FutureShops `2.3.0` artifact plus the verified open continuation issue, and present the completion packet for owner acceptance.
+
+Do not create another phase, publish the artifact, create an initial or replacement issue, or close issue 66 as part of this transition. Issue 66 closure occurs only after future owner acceptance of the completed `2.3.0` outcome. Until that acceptance and every terminal gate pass, report the plan as incomplete.
