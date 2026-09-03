@@ -226,7 +226,7 @@ public class PlayerShopCartScreen extends AbstractShopScreen implements ShopScre
                 int priceColW = priceColRight - priceColLeft;
                 if (isCompound) {
                     String moneyStr = ShopUiUtil.formatMinorUnits(entry.totalPrice());
-                    int totalBarter = entry.barterItemCount() * entry.quantity();
+                    int totalBarter = saturatingMultiplyToInt(entry.barterItemCount(), entry.quantity());
                     String barterName = ShopUiUtil.getItemDisplayName(entry.barterItemId());
                     String combined = "§a" + moneyStr + "§f + §9" + totalBarter + "× " + barterName;
                     if (this.font.width(combined) > priceColW) {
@@ -237,7 +237,7 @@ public class PlayerShopCartScreen extends AbstractShopScreen implements ShopScre
                     int combinedW = this.font.width(combined);
                     graphics.drawString(this.font, combined, priceColLeft + (priceColW - combinedW) / 2, centerY, ShopColors.TEXT_STRONG, false);
                 } else if (showBarter) {
-                    int totalBarter = entry.barterItemCount() * entry.quantity();
+                    int totalBarter = saturatingMultiplyToInt(entry.barterItemCount(), entry.quantity());
                     String barterStr = totalBarter + "× " +
                             this.font.plainSubstrByWidth(ShopUiUtil.getItemDisplayName(entry.barterItemId()), priceColW - 30);
                     int barterW = this.font.width(barterStr);
@@ -441,6 +441,14 @@ public class PlayerShopCartScreen extends AbstractShopScreen implements ShopScre
         ShopPackets.sendToServer(new C2SVerifyCartPacket(lines));
     }
 
+    private static int saturatingMultiplyToInt(int left, int right) {
+        try {
+            return Math.multiplyExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return (left < 0) == (right < 0) ? Integer.MAX_VALUE : Integer.MIN_VALUE;
+        }
+    }
+
     @Override
     public void tick() {
         super.tick();
@@ -479,4 +487,3 @@ public class PlayerShopCartScreen extends AbstractShopScreen implements ShopScre
         return false;
     }
 }
-

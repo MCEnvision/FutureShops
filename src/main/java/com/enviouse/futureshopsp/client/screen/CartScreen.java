@@ -196,7 +196,8 @@ public class CartScreen extends AbstractShopScreen implements ShopScreenMarker {
 
             // Price — currency amber
             long unitPrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
-            String priceStr = this.font.plainSubstrByWidth(ShopUiUtil.formatMinorUnits(unitPrice * entry.quantity()), 60);
+            String priceStr = this.font.plainSubstrByWidth(
+                    ShopUiUtil.formatMinorUnits(saturatingMultiply(unitPrice, entry.quantity())), 60);
             graphics.drawString(this.font, priceStr, listX + listW - 86, y + 7, ShopColors.TEXT_CURRENCY, false);
 
             // Remove
@@ -254,6 +255,14 @@ public class CartScreen extends AbstractShopScreen implements ShopScreenMarker {
                 .toList();
         if (!lines.isEmpty()) {
             ShopPackets.sendToServer(C2SBuyRequestPacket.cart(ShopClientState.getActiveShopId(), lines));
+        }
+    }
+
+    private static long saturatingMultiply(long left, long right) {
+        try {
+            return Math.multiplyExact(left, right);
+        } catch (ArithmeticException ignored) {
+            return (left < 0L) == (right < 0L) ? Long.MAX_VALUE : Long.MIN_VALUE;
         }
     }
 
