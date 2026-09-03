@@ -8,7 +8,10 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Map;
+import java.util.OptionalLong;
 
 /**
  * Implements the spec §30 dynamic pricing formula.
@@ -25,6 +28,9 @@ import java.util.Map;
  */
 public final class DynamicPricingEngine {
     private static final Logger LOGGER = LogUtils.getLogger();
+    private static final BigDecimal ONE = BigDecimal.ONE;
+    private static final BigDecimal HUNDRED = BigDecimal.valueOf(100L);
+    private static final BigDecimal ONE_PERCENT = ONE.divide(HUNDRED);
 
     /** Ticks since last recalculation (volatile for cross-thread visibility). */
     private static volatile int tickCounter = 0;
@@ -108,20 +114,14 @@ public final class DynamicPricingEngine {
                     .orElse(0L);
             if (basePrice <= 0) continue;
 
-            double currentPrice = state.currentPriceMinor > 0 ? state.currentPriceMinor : basePrice;
-
-            // Formula
-            double demandPressure = state.buysSinceLastCalc * demandWeight;
-            double supplyPressure = state.sellsSinceLastCalc * supplyWeight;
-            double priceDelta = (demandPressure - supplyPressure) * basePrice * 0.01;
-            double newPrice = (currentPrice + priceDelta) * decayRate;
-
-            // Clamp
-            double floor = basePrice * (1.0 - maxDecreasePct / 100.0);
-            double ceiling = basePrice * (1.0 + maxIncreasePct / 100.0);
-            newPrice = Math.max(floor, Math.min(ceiling, newPrice));
-
-            state.currentPriceMinor = Math.max(1L, Math.round(newPrice));
+            OptionalLong newPrice = calculatePrice(basePrice, state.currentPriceMinor,
+                    state.buysSinceLastCalc, state.sellsSinceLastCalc,
+                    demandWeight, supplyWeight, decayRate, maxIncreasePct, maxDecreasePct);
+            if (newPrice.isEmpty()) {
+                LOGGER.warn("Dynamic pricing skipped invalid state for {}.", compositeKey);
+                continue;
+            }
+            state.currentPriceMinor = newPrice.getAsLong();
             state.resetCounters();
             updated++;
         }
@@ -138,5 +138,40 @@ public final class DynamicPricingEngine {
     public static void reset() {
         tickCounter = 0;
     }
-}
 
+    static OptionalLong calculatePrice(long basePrice, long currentPrice, int buys, int sells,
+                                       double demandWeight, double supplyWeight, double decayRate,
+                                       double maxIncreasePct, double maxDecreasePct) {
+        if (basePrice <= 0L || buys < 0 || sells < 0) {
+            return OptionalLong.empty();
+        }
+        try {
+            BigDecimal demand = decimal(demandWeight);
+            BigDecimal supply = decimal(supplyWeight);
+            BigDecimal decay = decimal(decayRate);
+            BigDecimal maxIncrease = decimal(maxIncreasePct);
+            BigDecimal maxDecrease = decimal(maxDecreasePct);
+            BigDecimal base = BigDecimal.valueOf(basePrice);
+            BigDecimal current = BigDecimal.valueOf(currentPrice > 0L ? currentPrice : basePrice);
+            BigDecimal demandPressure = BigDecimal.valueOf(buys).multiply(demand);
+            BigDecimal supplyPressure = BigDecimal.valueOf(sells).multiply(supply);
+            BigDecimal priceDelta = demandPressure.subtract(supplyPressure)
+                    .multiply(base).multiply(ONE_PERCENT);
+            BigDecimal calculated = current.add(priceDelta).multiply(decay);
+            BigDecimal floor = base.multiply(ONE.subtract(maxDecrease.divide(HUNDRED)));
+            BigDecimal ceiling = base.multiply(ONE.add(maxIncrease.divide(HUNDRED)));
+            BigDecimal clamped = calculated.max(floor).min(ceiling);
+            long rounded = clamped.setScale(0, RoundingMode.HALF_UP).longValueExact();
+            return rounded > 0L ? OptionalLong.of(rounded) : OptionalLong.empty();
+        } catch (ArithmeticException | NumberFormatException exception) {
+            return OptionalLong.empty();
+        }
+    }
+
+    private static BigDecimal decimal(double value) {
+        if (!Double.isFinite(value)) {
+            throw new NumberFormatException("non finite pricing configuration");
+        }
+        return BigDecimal.valueOf(value);
+    }
+}
