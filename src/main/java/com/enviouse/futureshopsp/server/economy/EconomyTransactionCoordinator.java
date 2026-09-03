@@ -133,6 +133,9 @@ public final class EconomyTransactionCoordinator {
                 }
                 return record;
             }
+            if (!lifecycle.admitMutation()) {
+                throw new IllegalStateException("economy mutations are not ready");
+            }
             return claims.create(requestId, claimant, amountMinorUnits, description);
         }
     }

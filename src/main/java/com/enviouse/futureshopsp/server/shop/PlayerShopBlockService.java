@@ -453,8 +453,13 @@ public final class PlayerShopBlockService {
                         return;
                     }
                     if (claim == null) {
-                        claim = coordinator.createClaim(requestId, player.getUUID(),
-                                settlementClaim.amountMinor(), description);
+                        try {
+                            claim = coordinator.createClaim(requestId, player.getUUID(),
+                                    settlementClaim.amountMinor(), description);
+                        } catch (RuntimeException exception) {
+                            sendResult(player, false, ShopResultCode.SERVER_ERROR);
+                            return;
+                        }
                     }
                     ProviderResult<?> deposit = coordinator.deposit(depositRequest);
                     if (!deposit.confirmed()) {

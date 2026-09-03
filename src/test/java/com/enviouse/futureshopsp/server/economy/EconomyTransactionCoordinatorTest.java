@@ -358,6 +358,21 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
+    void newClaimIsRefusedDuringDrainBeforeStoreMutation() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        InMemoryEconomyClaimStore claims = new InMemoryEconomyClaimStore();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(
+                provider, lifecycle, new InMemoryEconomyTransactionJournal(),
+                new InMemoryEconomyCustodyStore(), claims);
+        lifecycle.beginDraining();
+
+        assertThrows(IllegalStateException.class,
+                () -> coordinator.createClaim(RequestId.random(), PLAYER, 450L, "offline proceeds"));
+        assertTrue(claims.snapshot().isEmpty());
+    }
+
+    @Test
     void executeWithCustodyRefusesMissingCapabilitiesBeforeHolding() {
         FixtureProvider provider = new FixtureProvider(new ProviderCapabilities(true, true, true, true, false, false));
         EconomyLifecycleController lifecycle = readyLifecycle();
