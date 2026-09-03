@@ -1,9 +1,16 @@
 package com.enviouse.futureshopsp.money;
 
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -72,5 +79,72 @@ class SpentMintsSavedDataTest {
         ledger.restore("mint-restore", 2, 100L, 4);
 
         assertEquals(4, ledger.remainingCount("mint-restore"));
+    }
+
+    @Test
+    void malformedAndDuplicateRecordsAreDiscardedDuringLoad() {
+        CompoundTag saved = new CompoundTag();
+        saved.putInt("schemaVersion", 2);
+        ListTag entries = new ListTag();
+
+        CompoundTag valid = new CompoundTag();
+        valid.putString("id", "mint-valid");
+        valid.putUUID("player", new UUID(9L, 10L));
+        valid.putLong("denomination", 100L);
+        valid.putInt("authorized_count", 4);
+        valid.putInt("remaining_count", 4);
+        valid.putLong("minted_at", 1000L);
+        valid.putLong("consumed_at", 0L);
+        valid.putString("server", "srv");
+        entries.add(valid);
+
+        CompoundTag malformed = valid.copy();
+        malformed.putString("id", "mint-malformed");
+        malformed.putInt("remaining_count", 5);
+        entries.add(malformed);
+
+        CompoundTag duplicate = valid.copy();
+        entries.add(duplicate);
+
+        CompoundTag oversizedId = valid.copy();
+        oversizedId.putString("id", "x".repeat(257));
+        entries.add(oversizedId);
+        saved.put("mints", entries);
+
+        SpentMintsSavedData loaded = SpentMintsSavedData.load(saved, null);
+
+        assertEquals(1, loaded.snapshotRegistry().size());
+        assertEquals(4, loaded.remainingCount("mint-valid"));
+        assertEquals(0, loaded.remainingCount("mint-malformed"));
+    }
+
+    @Test
+    void concurrentConsumersCannotExceedAuthorizedCount() throws Exception {
+        SpentMintsSavedData ledger = new SpentMintsSavedData();
+        ledger.registerMint("mint-concurrent", new UUID(11L, 12L), 100L, 32, 1000L, "srv");
+
+        ExecutorService executor = Executors.newFixedThreadPool(8);
+        CountDownLatch ready = new CountDownLatch(8);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Integer>> results = new ArrayList<>();
+        try {
+            for (int i = 0; i < 8; i++) {
+                results.add(executor.submit(() -> {
+                    ready.countDown();
+                    start.await();
+                    return ledger.consume("mint-concurrent", 8, 100L, 32).accepted();
+                }));
+            }
+            ready.await();
+            start.countDown();
+            int accepted = 0;
+            for (Future<Integer> result : results) {
+                accepted += result.get();
+            }
+            assertEquals(32, accepted);
+            assertEquals(0, ledger.remainingCount("mint-concurrent"));
+        } finally {
+            executor.shutdownNow();
+        }
     }
 }
