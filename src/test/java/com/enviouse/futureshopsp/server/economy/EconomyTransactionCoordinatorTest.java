@@ -70,6 +70,59 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
+    void intentPersistenceFailureFreezesBeforeProviderMutation() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        FailingJournal journal = new FailingJournal();
+        journal.failAppend = true;
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+
+        var result = coordinator.withdraw(request);
+
+        assertEquals(ProviderResultStatus.RECOVERY_REQUIRED, result.status());
+        assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
+        assertEquals(0, provider.withdrawCalls);
+        assertTrue(journal.snapshot().isEmpty());
+    }
+
+    @Test
+    void confirmedOutcomePersistenceFailureFreezesAndRetainsConfirmedRecord() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        FailingJournal journal = new FailingJournal();
+        journal.failState = EconomyTransactionState.RESOLVED;
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+
+        var result = coordinator.withdraw(request);
+
+        assertEquals(ProviderResultStatus.RECOVERY_REQUIRED, result.status());
+        assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
+        assertEquals(1, provider.withdrawCalls);
+        assertEquals(EconomyTransactionState.EXTERNAL_CONFIRMED,
+                journal.find(request.requestId()).orElseThrow().state());
+    }
+
+    @Test
+    void ambiguousOutcomePersistenceFailureStillFreezesWithoutGuessing() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        provider.ambiguous = true;
+        FailingJournal journal = new FailingJournal();
+        journal.failState = EconomyTransactionState.UNCERTAIN;
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+
+        var result = coordinator.withdraw(request);
+
+        assertEquals(ProviderResultStatus.RECOVERY_REQUIRED, result.status());
+        assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
+        assertEquals(EconomyTransactionState.EXTERNAL_PENDING,
+                journal.find(request.requestId()).orElseThrow().state());
+    }
+
+    @Test
     void ambiguousProviderResultFreezesAndBlocksFurtherMutation() {
         FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
         provider.ambiguous = true;
@@ -491,6 +544,38 @@ class EconomyTransactionCoordinatorTest {
         @Override
         public void replace(EconomyJournalRecord record) {
             order.add("journal:" + record.state());
+            delegate.replace(record);
+        }
+
+        @Override
+        public List<EconomyJournalRecord> snapshot() {
+            return delegate.snapshot();
+        }
+    }
+
+    private static final class FailingJournal implements EconomyTransactionJournal {
+        private final InMemoryEconomyTransactionJournal delegate = new InMemoryEconomyTransactionJournal();
+        private boolean failAppend;
+        private EconomyTransactionState failState;
+
+        @Override
+        public Optional<EconomyJournalRecord> find(RequestId requestId) {
+            return delegate.find(requestId);
+        }
+
+        @Override
+        public void append(EconomyJournalRecord record) {
+            if (failAppend) {
+                throw new IllegalStateException("append failure");
+            }
+            delegate.append(record);
+        }
+
+        @Override
+        public void replace(EconomyJournalRecord record) {
+            if (record.state() == failState) {
+                throw new IllegalStateException("replace failure");
+            }
             delegate.replace(record);
         }
 

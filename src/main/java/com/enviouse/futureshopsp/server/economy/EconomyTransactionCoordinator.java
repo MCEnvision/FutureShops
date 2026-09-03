@@ -229,7 +229,14 @@ public final class EconomyTransactionCoordinator {
         synchronized (lock) {
             EconomyJournalRecord existing = journal.find(request.requestId()).orElse(null);
             if (existing != null) {
-                return replay(existing);
+                ProviderResult<MutationReceipt> replayed = replay(existing);
+                if (replayed.confirmed()) {
+                    CustodyRecord custodyRecord = custody.find(request.requestId().child("custody")).orElse(null);
+                    if (custodyRecord == null || !custodyTerminalStateMatches(custodyRecord.state(), terminalState)) {
+                        return journalFailure("custody finalization requires recovery");
+                    }
+                }
+                return replayed;
             }
             ProviderResult<BalanceSnapshot> preflight = preflightInternal(request);
             if (!preflight.confirmed()) {
@@ -237,15 +244,22 @@ public final class EconomyTransactionCoordinator {
             }
             EconomyJournalRecord prepared = new EconomyJournalRecord(request,
                     EconomyTransactionState.PREPARED, Optional.empty(), ProviderResultStatus.REJECTED, "");
-            journal.append(prepared);
+            try {
+                journal.append(prepared);
+            } catch (RuntimeException exception) {
+                return journalFailure("transaction intent could not be persisted");
+            }
             RequestId custodyId = request.requestId().child("custody");
             try {
                 holdCustody(custodyId, owner, itemKey, quantity, contentHash);
             } catch (RuntimeException exception) {
-                replace(prepared, EconomyTransactionState.RESOLVED, Optional.empty(),
-                        ProviderResultStatus.REJECTED, "custody could not be persisted");
-                lifecycle.markAmbiguous("custody persistence failed before provider mutation");
-                return ProviderResult.recoveryRequired("custody persistence requires recovery");
+                try {
+                    replace(prepared, EconomyTransactionState.RESOLVED, Optional.empty(),
+                            ProviderResultStatus.REJECTED, "custody could not be persisted");
+                } catch (RuntimeException ignored) {
+                    return journalFailure("custody and transaction state require recovery");
+                }
+                return journalFailure("custody persistence failed before provider mutation");
             }
             ProviderResult<MutationReceipt> result = executeAfterPrepared(request, request.kind());
             if (!result.confirmed()) {
@@ -334,33 +348,37 @@ public final class EconomyTransactionCoordinator {
             try {
                 lookup = provider.lookup(requestId);
             } catch (RuntimeException exception) {
-                lifecycle.markAmbiguous("provider receipt lookup failed");
-                replace(record, EconomyTransactionState.UNCERTAIN, Optional.empty(),
-                        ProviderResultStatus.AMBIGUOUS, "receipt lookup failed");
-                return ProviderResult.recoveryRequired("receipt lookup failed");
+                return markUncertainOrFreeze(record, "receipt lookup failed");
             }
             MutationReceipt recoveredReceipt = lookup == null ? null
                     : lookup.receipt().orElse(lookup.value().orElse(null));
             if (lookup != null && lookup.confirmed() && validReceipt(record.request(), recoveredReceipt)) {
-                replace(record, EconomyTransactionState.EXTERNAL_CONFIRMED, Optional.of(recoveredReceipt),
-                        ProviderResultStatus.CONFIRMED, "");
-                replace(record, EconomyTransactionState.RESOLVED, Optional.of(recoveredReceipt),
-                        ProviderResultStatus.CONFIRMED, "");
+                try {
+                    replace(record, EconomyTransactionState.EXTERNAL_CONFIRMED, Optional.of(recoveredReceipt),
+                            ProviderResultStatus.CONFIRMED, "");
+                    replace(new EconomyJournalRecord(record.request(), EconomyTransactionState.EXTERNAL_CONFIRMED,
+                                    Optional.of(recoveredReceipt), ProviderResultStatus.CONFIRMED, ""),
+                            EconomyTransactionState.RESOLVED, Optional.of(recoveredReceipt),
+                            ProviderResultStatus.CONFIRMED, "");
+                } catch (RuntimeException exception) {
+                    return journalFailure("recovered provider outcome could not be finalized");
+                }
                 publishConfirmedBalanceChange(record.request(), recoveredReceipt);
                 lifecycle.markRecovered();
                 return lookup;
             }
             if (lookup != null && lookup.status() == ProviderResultStatus.REJECTED
                     && lookup.error() != ProviderError.RECEIPT_NOT_FOUND) {
-                replace(record, EconomyTransactionState.RESOLVED, Optional.empty(),
-                        ProviderResultStatus.REJECTED, lookup.diagnostic());
+                try {
+                    replace(record, EconomyTransactionState.RESOLVED, Optional.empty(),
+                            ProviderResultStatus.REJECTED, lookup.diagnostic());
+                } catch (RuntimeException exception) {
+                    return journalFailure("rejected provider outcome could not be persisted");
+                }
                 lifecycle.markRecovered();
                 return lookup;
             }
-            replace(record, EconomyTransactionState.UNCERTAIN, Optional.empty(),
-                    ProviderResultStatus.AMBIGUOUS, "provider outcome remains unknown");
-            lifecycle.markAmbiguous("provider outcome remains unknown");
-            return ProviderResult.recoveryRequired("provider outcome remains unknown");
+            return markUncertainOrFreeze(record, "provider outcome remains unknown");
         }
     }
 
@@ -381,7 +399,11 @@ public final class EconomyTransactionCoordinator {
             }
             EconomyJournalRecord prepared = new EconomyJournalRecord(request,
                     EconomyTransactionState.PREPARED, Optional.empty(), ProviderResultStatus.REJECTED, "");
-            journal.append(prepared);
+            try {
+                journal.append(prepared);
+            } catch (RuntimeException exception) {
+                return journalFailure("transaction intent could not be persisted");
+            }
             return executeAfterPrepared(request, expectedKind);
         }
     }
@@ -389,7 +411,11 @@ public final class EconomyTransactionCoordinator {
     private ProviderResult<MutationReceipt> executeAfterPrepared(MutationRequest request, MutationKind expectedKind) {
         EconomyJournalRecord pending = new EconomyJournalRecord(request,
                 EconomyTransactionState.EXTERNAL_PENDING, Optional.empty(), ProviderResultStatus.UNAVAILABLE, "");
-        journal.replace(pending);
+        try {
+            journal.replace(pending);
+        } catch (RuntimeException exception) {
+            return journalFailure("pending transaction state could not be persisted");
+        }
 
         ProviderResult<MutationReceipt> result;
         try {
@@ -407,16 +433,30 @@ public final class EconomyTransactionCoordinator {
             if (!validReceipt(request, receipt)) {
                 return ambiguous(pending, "provider receipt does not match request");
             }
-            replace(pending, EconomyTransactionState.EXTERNAL_CONFIRMED, Optional.of(receipt),
-                    ProviderResultStatus.CONFIRMED, "");
-            replace(pending, EconomyTransactionState.RESOLVED, Optional.of(receipt),
-                    ProviderResultStatus.CONFIRMED, "");
+            try {
+                replace(pending, EconomyTransactionState.EXTERNAL_CONFIRMED, Optional.of(receipt),
+                        ProviderResultStatus.CONFIRMED, "");
+            } catch (RuntimeException exception) {
+                return journalFailure("confirmed provider outcome could not be persisted");
+            }
+            try {
+                replace(new EconomyJournalRecord(request, EconomyTransactionState.EXTERNAL_CONFIRMED,
+                                Optional.of(receipt), ProviderResultStatus.CONFIRMED, ""),
+                        EconomyTransactionState.RESOLVED, Optional.of(receipt),
+                        ProviderResultStatus.CONFIRMED, "");
+            } catch (RuntimeException exception) {
+                return journalFailure("confirmed provider outcome could not be finalized");
+            }
             publishConfirmedBalanceChange(request, receipt);
             return ProviderResult.confirmed(receipt);
         }
         if (result.status() == ProviderResultStatus.REJECTED) {
-            replace(pending, EconomyTransactionState.RESOLVED, Optional.empty(),
-                    ProviderResultStatus.REJECTED, result.diagnostic());
+            try {
+                replace(pending, EconomyTransactionState.RESOLVED, Optional.empty(),
+                        ProviderResultStatus.REJECTED, result.diagnostic());
+            } catch (RuntimeException exception) {
+                return journalFailure("rejected provider outcome could not be persisted");
+            }
             return result;
         }
         return ambiguous(pending, result.diagnostic().isBlank()
@@ -488,11 +528,39 @@ public final class EconomyTransactionCoordinator {
         return ProviderResult.recoveryRequired("transaction is already pending recovery");
     }
 
+    private static boolean custodyTerminalStateMatches(CustodyState actual, CustodyState expected) {
+        return switch (expected) {
+            case HELD -> actual == CustodyState.HELD || actual == CustodyState.DELIVERED
+                    || actual == CustodyState.CLAIMED;
+            case DELIVERED -> actual == CustodyState.DELIVERED || actual == CustodyState.CLAIMED;
+            case CLAIMED -> actual == CustodyState.CLAIMED;
+            case RELEASED -> actual == CustodyState.RELEASED;
+        };
+    }
+
     private ProviderResult<MutationReceipt> ambiguous(EconomyJournalRecord pending, String diagnostic) {
-        replace(pending, EconomyTransactionState.UNCERTAIN, Optional.empty(),
-                ProviderResultStatus.AMBIGUOUS, diagnostic);
+        return markUncertainOrFreeze(pending, diagnostic, true);
+    }
+
+    private ProviderResult<MutationReceipt> markUncertainOrFreeze(EconomyJournalRecord pending, String diagnostic) {
+        return markUncertainOrFreeze(pending, diagnostic, false);
+    }
+
+    private ProviderResult<MutationReceipt> markUncertainOrFreeze(EconomyJournalRecord pending, String diagnostic,
+                                                                  boolean ambiguousResult) {
+        try {
+            replace(pending, EconomyTransactionState.UNCERTAIN, Optional.empty(),
+                    ProviderResultStatus.AMBIGUOUS, diagnostic);
+        } catch (RuntimeException exception) {
+            return journalFailure("transaction outcome could not be persisted");
+        }
         lifecycle.markAmbiguous(diagnostic);
-        return ProviderResult.ambiguous(diagnostic);
+        return ambiguousResult ? ProviderResult.ambiguous(diagnostic) : ProviderResult.recoveryRequired(diagnostic);
+    }
+
+    private ProviderResult<MutationReceipt> journalFailure(String diagnostic) {
+        lifecycle.markAmbiguous(diagnostic);
+        return ProviderResult.recoveryRequired(diagnostic);
     }
 
     private boolean supports(EconomyCapability capability) {
