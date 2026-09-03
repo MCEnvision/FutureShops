@@ -6,7 +6,7 @@ This packet records the current Phase 002 result for FutureShops 2.3.0 on Minecr
 
 Phase 002 is not closed. Its independent Pixelmon query and refusal work is complete, but exact external runtime authorization and a mutation capable bridge remain unresolved. No pull request, phase integration, tag, release, upload, or issue 66 mutation is authorized by this packet.
 
-GitHub milestone `2.3.0 phase 002 external integrations` is open as milestone `6`. Its description records the exact Pixelmon query and bridge verification scope, with durable external receipts and owner terms authorization as the remaining blockers. Issue 66 remains untouched while this phase is open, as required by the phase contract.
+GitHub milestone `2.3.0 phase 002 external integrations` is open as milestone `6`. Its description records the exact Pixelmon query and bridge verification scope, with durable external receipts, player workflow coverage, and recovery evidence as the remaining blockers. Issue 66 remains untouched while this phase is open, as required by the phase contract.
 
 ## Pixelmon result
 
@@ -58,4 +58,4 @@ The security review found no exploitable repository defect. The residual risk is
 
 The exact universal artifact, interface injection file, public MDK compile path, and exact disposable Pixelmon and hybrid profiles are now available. Owner authorization for full disposable startup is satisfied, and both exact profiles reached FutureShops server startup with `eula=true`. Player account query, mutation refusal through a live player workflow, and complete restart and recovery matrices remain unexercised in these no-player bounded runs. The reviewed bridge lacks the strict mutation and recovery capabilities required for `vault`. These gates keep CORE-REQ-018 open and prevent Phase 002 pull request integration.
 
-The next safe action is to obtain the exact authorized development and runtime inputs, or a separately installed bridge that provides stable request identity, durable receipts, exact integer conversion, and idempotent retry. Reclassify and rerun only the affected capability, crash, recovery, and surface matrices when those inputs exist. Issue 66 remains frozen until Phase 003 validates the final artifact.
+The next safe action is to run the authorized player query and refusal workflows, complete the affected crash and recovery matrices, or obtain a separately installed bridge that provides stable request identity, durable receipts, exact integer conversion, and idempotent retry. Reclassify and rerun only the affected capability, crash, recovery, and surface matrices when those inputs exist. Issue 66 remains frozen until Phase 003 validates the final artifact.
