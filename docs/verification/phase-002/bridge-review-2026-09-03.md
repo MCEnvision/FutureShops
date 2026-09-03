@@ -26,7 +26,7 @@ An earlier assembly check intentionally used `eula=false` and stopped at the EUL
 
 The bridge's `v1_21_R1` `VaultBankAccount` implements the Pixelmon `BankAccount` interface with `getBalance`, `hasBalance`, boolean `take`, boolean `add`, and `setBalance`. Its bytecode calls `VaultIntegration.ecoGet`, `ecoHasEnough`, `ecoTake`, and `ecoGive`. `getBalance` converts the Vault `double` through `Math.floor`, and `add` has no boolean or receipt result.
 
-The inspected FinalEconomy and Vault APIs expose `double` balances and `EconomyResponse` values, but no FutureShops request UUID, durable receipt store, receipt lookup, or idempotent retry keyed by a request identity. The bridge also owns no transaction journal that FutureShops can query. A successful boolean or `EconomyResponse` cannot prove the outcome after a crash between the external effect and local persistence.
+Targeted `javap` inspection of `FinalEconomyAPI`, `IFinalEconomy`, `VaultEconomy`, `FEBankAccount`, and `VaultBankAccount` confirms that the available calls are `getBalance`, `has`, `withdrawPlayer`, `depositPlayer`, boolean `take`, boolean `add`, and `setBalance`. The inspected FinalEconomy and Vault APIs expose `double` balances and `EconomyResponse` values, but no FutureShops request UUID, durable receipt store, receipt lookup, or idempotent retry keyed by a request identity. The bridge also owns no transaction journal that FutureShops can query. A successful boolean or `EconomyResponse` cannot prove the outcome after a crash between the external effect and local persistence.
 
 | Required capability | Result |
 | --- | --- |
