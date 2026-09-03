@@ -31,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EconomyTransactionCoordinatorTest {
     private static final UUID PLAYER = UUID.fromString("00000000-0000-0000-0000-000000000010");
+    private static final UUID TARGET = UUID.fromString("00000000-0000-0000-0000-000000000011");
 
     @Test
     void writesIntentBeforeMutationAndReplaysCompletedRequest() {
@@ -213,6 +214,21 @@ class EconomyTransactionCoordinatorTest {
         assertEquals(List.of("journal:PREPARED", "custody:HELD", "journal:EXTERNAL_PENDING"), order.subList(0, 3));
     }
 
+    @Test
+    void transferCompensationCreditsSenderAfterCreditRejection() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        provider.rejectFirstDeposit = true;
+        EconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, readyLifecycle(), journal);
+
+        var result = coordinator.transfer(PLAYER, TARGET, 25L);
+
+        assertFalse(result.confirmed());
+        assertEquals(2, provider.depositCalls);
+        assertEquals(100L, provider.balances.get(PLAYER));
+        assertEquals(0L, provider.balances.getOrDefault(TARGET, 0L));
+    }
+
     private static EconomyLifecycleController readyLifecycle() {
         EconomyLifecycleController lifecycle = new EconomyLifecycleController(EconomyApi.INTERNAL_PROVIDER_ID);
         lifecycle.resolve(ProviderLifecycle.READY, "", true, true, false);
@@ -224,7 +240,9 @@ class EconomyTransactionCoordinatorTest {
         private final Map<UUID, Long> balances = new ConcurrentHashMap<>();
         private final Map<RequestId, MutationReceipt> receipts = new ConcurrentHashMap<>();
         private int withdrawCalls;
+        private int depositCalls;
         private boolean ambiguous;
+        private boolean rejectFirstDeposit;
 
         private FixtureProvider(ProviderCapabilities capabilities) {
             this.capabilities = capabilities;
@@ -264,7 +282,9 @@ class EconomyTransactionCoordinatorTest {
         @Override
         public ProviderResult<BalanceSnapshot> precheck(MutationRequest request) {
             long balance = balances.getOrDefault(request.actor(), 0L);
-            return balance < request.amountMinorUnits()
+            boolean requiresFunds = request.kind() != MutationKind.DEPOSIT
+                    && request.kind() != MutationKind.TRANSFER_CREDIT;
+            return requiresFunds && balance < request.amountMinorUnits()
                     ? ProviderResult.rejected(ProviderError.INSUFFICIENT_FUNDS, "insufficient")
                     : ProviderResult.confirmed(new BalanceSnapshot(request.actor(), balance));
         }
@@ -285,6 +305,10 @@ class EconomyTransactionCoordinatorTest {
 
         @Override
         public ProviderResult<MutationReceipt> deposit(MutationRequest request) {
+            depositCalls++;
+            if (rejectFirstDeposit && depositCalls == 1) {
+                return ProviderResult.rejected(ProviderError.PROVIDER_EXCEPTION, "fixture credit rejection");
+            }
             long balance = balances.merge(request.actor(), request.amountMinorUnits(), Long::sum);
             MutationReceipt receipt = new MutationReceipt(request.requestId(), request.kind(), request.amountMinorUnits(),
                     request.requestId().value().toString(), OptionalLong.of(balance));
