@@ -18,9 +18,9 @@ The public EverNife repositories for PixelmonEconomyBridge, FinalEconomy, and Ev
 
 ## Exact hybrid profile
 
-The disposable profile `/tmp/futureshops-youer-pixelmon-248.zhVzs4` contains the exact FutureShops 2.3.0, Pixelmon 9.4.0, GeckoLib 4.8.4, Youer `1.21.1-d4a204a0`, NeoForge 21.1.248, Vault 1.7.3, FinalEconomy 1.0.9, PixelmonEconomyBridge 1.1.6, and EverNifeCore 2.0.4.4 artifacts above. Its FutureShops configuration selects `pixelmon` and its `eula.txt` remains `eula=false`.
+The disposable profile `/tmp/futureshops-youer-pixelmon-248.zhVzs4` contains the exact FutureShops 2.3.0, Pixelmon 9.4.0, GeckoLib 4.8.4, Youer `1.21.1-d4a204a0`, NeoForge 21.1.248, Vault 1.7.3, FinalEconomy 1.0.9, PixelmonEconomyBridge 1.1.6, and EverNifeCore 2.0.4.4 artifacts above. Its FutureShops configuration selects `pixelmon` and its current `eula.txt` is `eula=true`.
 
-The Java 21 bounded launch reached ModLauncher with NeoForge 21.1.248, discovered the expected mod dependencies, and stopped at the EULA gate in `/tmp/futureshops-youer-pixelmon-248-java21-eula-false-20260903.log`. This proves exact byte assembly, loader discovery, and terms-gated startup only. It does not prove plugin loading, economy mutation, restart, or recovery behavior.
+An earlier assembly check intentionally used `eula=false` and stopped at the EULA gate in `/tmp/futureshops-youer-pixelmon-248-java21-eula-false-20260903.log`. After owner authorization, the same exact bytes were rerun with `eula=true`; that launch reached plugin loading and FutureShops startup as recorded in `pixelmon-refusal-2026-09-03.md`. The historical gate check proves only byte assembly and loader discovery. The authorized rerun is the applicable startup evidence, while economy mutation, restart, and recovery remain separate capability gates.
 
 ## API and capability result
 
