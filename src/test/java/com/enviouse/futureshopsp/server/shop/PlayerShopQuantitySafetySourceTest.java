@@ -19,6 +19,9 @@ class PlayerShopQuantitySafetySourceTest {
         assertTrue(source.contains("int needItems = checkedDeliveryCount(baseQty, qty);"));
         assertTrue(source.contains("quantity > ShopTransactionUtil.MAX_BUY_QUANTITY"));
         assertTrue(source.contains("int qty = quantity;"));
+        assertTrue(source.contains("requestedQuantity <= 0 || requestedQuantity > ShopTransactionUtil.MAX_SELL_QUANTITY"));
+        assertTrue(source.contains("int qty = requestedQuantity;"));
+        assertFalse(source.contains("Math.max(1, Math.min(packet.quantity(), ShopTransactionUtil.MAX_SELL_QUANTITY))"));
         assertFalse(source.contains("entry.count() * qty"));
         assertFalse(source.contains("baseQty * qty"));
     }

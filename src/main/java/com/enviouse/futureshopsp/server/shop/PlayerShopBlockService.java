@@ -2529,7 +2529,12 @@ public final class PlayerShopBlockService {
                 sendResult(seller, false, ShopResultCode.INVALID_ITEM);
                 return;
             }
-            int qty = Math.max(1, Math.min(packet.quantity(), ShopTransactionUtil.MAX_SELL_QUANTITY));
+            int requestedQuantity = packet.quantity();
+            if (requestedQuantity <= 0 || requestedQuantity > ShopTransactionUtil.MAX_SELL_QUANTITY) {
+                sendResult(seller, false, ShopResultCode.INVALID_AMOUNT);
+                return;
+            }
+            int qty = requestedQuantity;
             int baseQty = listing.baseQuantity();
             if (baseQty <= 0) {
                 sendResult(seller, false, ShopResultCode.UNCONFIGURED);
