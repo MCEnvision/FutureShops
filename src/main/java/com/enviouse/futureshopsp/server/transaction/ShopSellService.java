@@ -135,6 +135,9 @@ public final class ShopSellService {
             }
             // Allow event listeners to modify the price
             totalValue = preEvent.getPriceMinor();
+            if (totalValue <= 0L) {
+                return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_AMOUNT);
+            }
 
             EconomyTransactionCoordinator coordinator = BalanceManager.getCoordinator();
             RequestId requestId = RequestId.random();

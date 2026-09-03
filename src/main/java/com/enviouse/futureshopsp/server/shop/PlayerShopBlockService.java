@@ -1309,6 +1309,10 @@ public final class PlayerShopBlockService {
             }
             cost = preEvent.getPriceMinor();
         }
+        if (cost < 0L) {
+            sendResult(buyer, false, ShopResultCode.INVALID_AMOUNT);
+            return;
+        }
 
         // Validate barter availability without consuming yet.
         Item barterItem = null;
@@ -2045,6 +2049,10 @@ public final class PlayerShopBlockService {
                     return;
                 }
                 total = pre.getPriceMinor();
+            }
+            if (total <= 0L) {
+                sendResult(seller, false, ShopResultCode.INVALID_AMOUNT);
+                return;
             }
 
             EconomyTransactionCoordinator coordinator = BalanceManager.getCoordinator();

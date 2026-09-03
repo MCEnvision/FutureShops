@@ -174,20 +174,34 @@ public final class ShopBuyService {
                     return BuyResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVENTORY_FULL);
             }
 
-            BalanceView currentBalance = balanceView(player.getUUID());
-            if (!currentBalance.available() || currentBalance.amount() < totalCost) {
-                return BuyResult.error(shopId, currentBalance, currentBalance.available()
-                        ? ShopResultCode.INSUFFICIENT_FUNDS : ShopResultCode.SERVER_ERROR);
-            }
-
             // Fire cancellable ShopTransactionEvent.Pre (spec §33) — allows other mods to cancel or modify price
-            for (PreparedLine line : preparedLines) {
+            long adjustedTotalCost = 0L;
+            for (int lineIndex = 0; lineIndex < preparedLines.size(); lineIndex++) {
+                PreparedLine line = preparedLines.get(lineIndex);
                 ShopTransactionEvent.Pre preEvent = new ShopTransactionEvent.Pre(
                         player, shopId, line.itemId(), line.quantity(), "BUY", line.lineCost());
                 net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(preEvent);
                 if (preEvent.isCanceled()) {
                     return BuyResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.CANCELLED_BY_EVENT);
                 }
+                long adjustedCost = preEvent.getPriceMinor();
+                if (adjustedCost <= 0L) {
+                    return BuyResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_AMOUNT);
+                }
+                try {
+                    adjustedTotalCost = Math.addExact(adjustedTotalCost, adjustedCost);
+                } catch (ArithmeticException ex) {
+                    return BuyResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.SERVER_ERROR);
+                }
+                preparedLines.set(lineIndex,
+                        new PreparedLine(line.listingId(), line.itemId(), line.quantity(), adjustedCost));
+            }
+            totalCost = adjustedTotalCost;
+
+            BalanceView currentBalance = balanceView(player.getUUID());
+            if (!currentBalance.available() || currentBalance.amount() < totalCost) {
+                return BuyResult.error(shopId, currentBalance, currentBalance.available()
+                        ? ShopResultCode.INSUFFICIENT_FUNDS : ShopResultCode.SERVER_ERROR);
             }
 
             EconomyTransactionCoordinator coordinator = BalanceManager.getCoordinator();
