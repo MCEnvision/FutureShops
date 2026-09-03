@@ -16,6 +16,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.neoforged.fml.ModList;
@@ -78,6 +79,42 @@ public final class EconomyGameTests {
                 "public transfers must persist both coordinator legs");
         helper.assertTrue(BalanceManager.queryBalance(recipient).value().orElseThrow().balanceMinorUnits() == 350L,
                 "the recipient balance must include the confirmed transfer credit");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void twoServerPlayersKeepIndependentAuthoritativeBalances(GameTestHelper helper) {
+        ServerPlayer buyer = helper.makeMockServerPlayerInLevel();
+        ServerPlayer seller = helper.makeMockServerPlayerInLevel();
+        helper.assertTrue(!buyer.getUUID().equals(seller.getUUID()),
+                "the multiplayer fixture must create distinct server players");
+        helper.assertTrue(BalanceManager.setInternalBalance(buyer.getUUID(), 400L).confirmed(),
+                "the buyer balance must be initialized");
+        helper.assertTrue(BalanceManager.setInternalBalance(seller.getUUID(), 100L).confirmed(),
+                "the seller balance must be initialized");
+
+        RequestId buyerRequest = RequestId.random();
+        MutationRequest withdrawal = MutationRequest.forPlayer(buyerRequest, buyer.getUUID(),
+                150L, MutationKind.WITHDRAW);
+        var first = BalanceManager.getCoordinator().withdraw(withdrawal);
+        helper.assertTrue(first.confirmed(), "the buyer request must be confirmed");
+        helper.assertTrue(BalanceManager.queryBalance(buyer.getUUID()).value().orElseThrow().balanceMinorUnits() == 250L,
+                "the buyer request must change only the buyer balance");
+        helper.assertTrue(BalanceManager.queryBalance(seller.getUUID()).value().orElseThrow().balanceMinorUnits() == 100L,
+                "the buyer request must not change the seller balance");
+
+        RequestId sellerRequest = RequestId.random();
+        MutationRequest deposit = MutationRequest.forPlayer(sellerRequest, seller.getUUID(),
+                150L, MutationKind.DEPOSIT);
+        helper.assertTrue(BalanceManager.getCoordinator().deposit(deposit).confirmed(),
+                "the seller request must be confirmed");
+        helper.assertTrue(BalanceManager.queryBalance(seller.getUUID()).value().orElseThrow().balanceMinorUnits() == 250L,
+                "the seller request must change only the seller balance");
+        var replay = BalanceManager.getCoordinator().withdraw(withdrawal);
+        helper.assertTrue(replay.confirmed() && replay.receipt().equals(first.receipt()),
+                "a second player reconnect must replay the original buyer receipt");
+        helper.assertTrue(BalanceManager.queryBalance(buyer.getUUID()).value().orElseThrow().balanceMinorUnits() == 250L,
+                "a replay must not debit the buyer twice");
         helper.succeed();
     }
 
