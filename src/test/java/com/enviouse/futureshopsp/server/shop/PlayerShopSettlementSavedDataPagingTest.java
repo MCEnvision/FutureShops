@@ -45,6 +45,17 @@ class PlayerShopSettlementSavedDataPagingTest {
     }
 
     @Test
+    void settlementClaimIdentityIsRecoverableFromStablePendingState() {
+        UUID owner = UUID.randomUUID();
+        PlayerShopSettlementSavedData first = new PlayerShopSettlementSavedData();
+        PlayerShopSettlementSavedData second = new PlayerShopSettlementSavedData();
+        assertTrue(first.recordSale(owner, 42L, 100L, "minecraft:stone", 1));
+        assertTrue(second.recordSale(owner, 42L, 100L, "minecraft:stone", 1));
+
+        assertEquals(first.beginClaim(owner, 42L), second.beginClaim(owner, 42L));
+    }
+
+    @Test
     void settlementOverflowIsRejectedBeforeMutation() {
         UUID owner = UUID.randomUUID();
         PlayerShopSettlementSavedData data = new PlayerShopSettlementSavedData();

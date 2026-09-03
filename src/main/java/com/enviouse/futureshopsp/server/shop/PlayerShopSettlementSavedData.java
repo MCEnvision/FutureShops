@@ -14,6 +14,7 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.world.level.saveddata.SavedData;
 
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -222,13 +223,20 @@ public final class PlayerShopSettlementSavedData extends SavedData {
         UUID request = settlement.claimRequest();
         long amount = settlement.claimAmount();
         if (request == null || amount <= 0L) {
-            request = UUID.randomUUID();
+            request = stableClaimRequest(owner, shopPosLong, pending, settlement.lifetimeMinor());
             amount = pending;
             settlementsByShopPos.put(shopPosLong,
                     new ShopSettlement(owner, pending, settlement.lifetimeMinor(), request, amount));
             setDirty();
         }
         return new SettlementClaim(request, amount);
+    }
+
+    private static UUID stableClaimRequest(UUID owner, long shopPosLong, long pendingMinor,
+                                           long lifetimeMinor) {
+        String identity = "futureshops:player-shop-settlement:" + owner + ":" + shopPosLong
+                + ":" + pendingMinor + ":" + lifetimeMinor;
+        return UUID.nameUUIDFromBytes(identity.getBytes(StandardCharsets.UTF_8));
     }
 
     public synchronized boolean completeClaim(UUID owner, long shopPosLong,

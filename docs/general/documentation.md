@@ -58,8 +58,9 @@ All new records use explicit schema versions, bounded fields, defensive enum and
 
 Custody and claims are separate from provider balances. A held item cannot be claimed or released through an invalid transition. A pending claim remains durable while the owner is offline or the lifecycle is frozen. Recovery must use the originating provider and request identity, and it must never guess an external balance or create an automatic refund for an unknown effect.
 
-Player shop settlement claims reserve a request UUID and amount in settlement SavedData before
-crediting the owner. The coordinator records the same request in the durable claim index and
+Player shop settlement claims reserve a deterministic request UUID derived from owner, shop,
+pending amount, and lifetime proceeds, plus the amount in settlement SavedData before crediting
+the owner. Existing persisted claim UUIDs remain authoritative. The coordinator records the same request in the durable claim index and
 provider journal. Pending proceeds recorded while a claim is in flight remain available. The
 settlement amount is reduced only after a confirmed provider result and successful local claim
 delivery and resolution. If local claim finalization or settlement persistence fails after the
