@@ -13,6 +13,10 @@ import com.enviouse.futureshopsp.server.economy.ClaimState;
 import com.enviouse.futureshopsp.server.economy.EconomyClaimSavedData;
 import com.enviouse.futureshopsp.server.shop.PlayerShopBarterEscrowSavedData;
 import com.enviouse.futureshopsp.server.shop.PlayerShopSaleEscrowSavedData;
+import com.enviouse.futureshopsp.server.session.ShopSessionManager;
+import com.enviouse.futureshopsp.server.transaction.ShopSellService;
+import com.enviouse.futureshopsp.network.packets.C2SSellRequestPacket;
+import com.enviouse.futureshopsp.catalog.ShopCatalog;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -123,6 +127,32 @@ public final class EconomyGameTests {
                 "the public economy transfer must refuse for Pixelmon players");
         helper.assertTrue(BalanceManager.getCoordinator().custody(request.requestId().child("custody")).isEmpty(),
                 "Pixelmon mutation refusal must not create item custody");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void pixelmonServerShopSellRefusalBeforeItemRemoval(GameTestHelper helper) {
+        if (!"pixelmon".equals(BalanceManager.getLifecycleSnapshotOrUnresolved().providerId())) {
+            helper.succeed();
+            return;
+        }
+
+        helper.assertTrue(ShopCatalog.getItem("default", "minecraft:diamond").isPresent(),
+                "the disposable server shop must expose the diamond sell listing");
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        player.getInventory().add(new ItemStack(Items.DIAMOND, 1));
+        int before = player.getInventory().countItem(Items.DIAMOND);
+        ShopSessionManager.open(player.getUUID(), "default");
+        try {
+            ShopSellService.handleSellRequest(player,
+                    new C2SSellRequestPacket("default", "minecraft:diamond", 1));
+        } finally {
+            ShopSessionManager.close(player.getUUID());
+        }
+        helper.assertTrue(player.getInventory().countItem(Items.DIAMOND) == before,
+                "Pixelmon shop sell refusal must not remove the offered item");
+        helper.assertTrue(BalanceManager.getCustodyStore().snapshot().isEmpty(),
+                "Pixelmon shop sell refusal must not create custody");
         helper.succeed();
     }
 
