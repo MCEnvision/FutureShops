@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "planId": "PLAN-MASTER",
-  "planSetSha256": "4aaf562df32b14386154b910798adde12c1f16c079d5f276e976ba8e18cadf71",
+  "planSetSha256": "dfc84b0ee7e7db34607a2ea5093d78f9b5f34c5e33e7a49255b310171c608ba9",
   "planningSubject": {
     "name": "FutureShops 2.3.0 strict external economy safety for Minecraft 1.21.1 NeoForge, with capability gated Pixelmon 9.4.0 and Vault bridge interoperability",
     "requestedArtifact": "authoritative_plan",
@@ -55,6 +55,34 @@
         "subject": "strict restart safe economy amendment and 3.0.0 issue guidance",
         "source": "current owner request and accepted design discussion",
         "use": "binding safety model, exact Pixelmon artifact inspection, native PlayerPartyStorage mixin implementation, separate Vault bridge and backend proof, issue 66 guidance, and unchanged unpublished endpoint"
+      },
+      {
+        "id": "SRC-008",
+        "role": "owner_request",
+        "subject": "executable acquisition paths for exact development inputs, bridge, and backend",
+        "source": "current prerequisite acquisition amendment and standing disposable-server EULA authorization",
+        "use": "acquisition and proof work inside existing phases, separate test artifacts, and no repeated Minecraft EULA approval"
+      },
+      {
+        "id": "SRC-009",
+        "role": "reference",
+        "subject": "officially linked Pixelmon development dependency recipe",
+        "source": "https://github.com/EnvyWare/Pixelmon-MDK/blob/4309ac5fc79b6a167edfc922f055d1b4d2d56744/build.gradle",
+        "use": "universal jar and interface injection dependency pattern, with exact 9.4.0 inputs verified independently of the template version"
+      },
+      {
+        "id": "SRC-010",
+        "role": "reference",
+        "subject": "candidate hybrid and legacy economy sources",
+        "source": "https://github.com/ElainAwa/PRTS-SERVER/releases/tag/v1.21.1-1.0.30 and https://github.com/EverNife/PixelmonEconomyBridge and https://github.com/EverNife/FinalEconomy",
+        "use": "exact candidate acquisition and upstream provenance review, not a compatibility or atomicity claim"
+      },
+      {
+        "id": "SRC-011",
+        "role": "reference",
+        "subject": "durable embedded transaction proof inputs",
+        "source": "https://sqlite.org/atomiccommit.html and https://github.com/xerial/sqlite-jdbc",
+        "use": "separately built backend proof, version and license review, and crash tests against one authoritative database"
       }
     ]
   },
@@ -435,10 +463,13 @@
         "CORE-REQ-016",
         "DEC-017",
         "DEC-018",
+        "DEC-019",
+        "DEC-020",
         "EXT-001",
         "EXT-002",
         "EXT-003",
-        "EXT-008"
+        "EXT-008",
+        "EXT-009"
       ],
       "lifecycleStage": "change",
       "productionVerification": "nondestructive",
@@ -459,10 +490,13 @@
         "CORE-REQ-015",
         "CORE-REQ-016",
         "DEC-017",
+        "DEC-019",
+        "DEC-020",
         "EXT-004",
         "EXT-005",
         "EXT-006",
-        "EXT-008"
+        "EXT-008",
+        "EXT-009"
       ],
       "lifecycleStage": "change",
       "productionVerification": "nondestructive",
@@ -799,7 +833,7 @@
       "id": "DEC-013",
       "question": "Vault support",
       "selectedChoice": "A separately installed reviewed bridge registers `vault`; FutureShops contains no Bukkit or Vault dependency or reflection. Phase 002 must obtain and exercise a transaction-aware bridge or backend proof that persists the balance effect and provider receipt in one transaction before any `vault` mutation is enabled.",
-      "rationale": "The bridge owns hybrid-platform dependencies and lifecycle adaptation. Phase 002 owns the proof boundary and must produce a disposable transaction proof or a typed safe-refusal result. The currently observed PixelmonEconomyBridge and FinalEconomy path does not provide that atomic request-aware contract without modification, so production enablement remains refused and the modification is tracked for 3.0.0 in issue 66.",
+      "rationale": "The bridge owns hybrid-platform dependencies and lifecycle adaptation. Phase 002 owns the proof boundary and must produce a disposable transaction proof or a typed safe-refusal result. The currently observed PixelmonEconomyBridge and FinalEconomy path does not provide that atomic request-aware contract without modification. Production adaptation stays in issue 66; DEC-019 authorizes acquiring or constructing a separate Phase 002 test registrant and durable backend proof without waiting for that future production work.",
       "affectedRequirements": [
         "CORE-REQ-002",
         "CORE-REQ-018"
@@ -881,6 +915,36 @@
       "supersedes": [
         "DEC-012"
       ]
+    },
+    {
+      "id": "DEC-019",
+      "question": "Acquisition and proof work inside the existing phases",
+      "selectedChoice": "Execute the ordered public acquisition paths and compile probes for exact Pixelmon inputs. In Phase 002, obtain an existing compatible bridge or build a separate test registrant and durable backend proof using reviewed dependencies. These proof components run in the exact disposable hybrid environment and are never bundled or published with FutureShops. Production adaptation of the legacy PixelmonEconomyBridge and FinalEconomy stack remains issue 66 work for 3.0.0.",
+      "rationale": "Missing implementation and unattempted acquisition are executable work. A reachable runtime may also be a valid development input; a template version or missing sources archive does not decide that. A completed test backend proves only its own transaction boundary and cannot certify a different production economy.",
+      "affectedRequirements": [
+        "CORE-REQ-001",
+        "CORE-REQ-015",
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-020",
+        "CORE-REQ-021",
+        "CORE-REQ-022"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-020",
+      "question": "Standing Minecraft EULA authorization",
+      "selectedChoice": "Apply the owner's standing authorization to set and read back `eula=true` in every requested disposable Minecraft development and verification runtime. Do not request another consent phrase or treat a missing file or `eula=false` as missing consent. Review any separate third party license or development-use condition under EXT-009.",
+      "rationale": "Minecraft EULA acceptance is already authorized. It does not authorize unrelated licenses, account applications, redistribution, purchases, production mutations, or public exposure.",
+      "affectedRequirements": [
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-021"
+      ],
+      "supersedes": []
     }
   ],
   "externalPrerequisites": [
@@ -899,7 +963,7 @@
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Acquire exact official artifacts and record version, source, hashes, compatibility, license provenance, archive review, and security review."
+        "Execute P000-TASK-002 and P002-TASK-013: verify the official universal jar and exact interface injection metadata, then run an isolated compile probe. The same verified universal jar may satisfy runtime and development roles; no separate sources bundle is mandatory when the probe and permitted-use review pass."
       ],
       "artifact_evidence": [
         "exact_version",
@@ -960,7 +1024,7 @@
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Acquire and review the exact bridge artifact, source, hashes, compatibility, license provenance, security boundary, and whether it implements the required transaction-aware provider contract. The currently observed PixelmonEconomyBridge path is not accepted without modification."
+        "Review an exact existing registrant, or build the separate test registrant in P002-TASK-006 against the public FutureShops API and reviewed hybrid services. Record source revision, build recipe, hashes, provenance, and registration and receipt results. An absent ready-made bridge is not an external blocker to that build task."
       ],
       "artifact_evidence": [
         "exact_version",
@@ -986,7 +1050,7 @@
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Select and review every exact artifact and record versions, sources, hashes, compatibility, licenses, security conclusions, and proof that the backend persists the balance effect and receipt in one transaction."
+        "Execute P002-TASK-014 to acquire and pin a reviewed exact hybrid and Vault stack. P002-TASK-006 builds or obtains its separate durable backend proof. Record source and artifact identities, licenses, security, compatibility, and the one-transaction receipt matrix. Legacy backend refusal and proof-backend success are separate results."
       ]
     },
     {
@@ -1023,7 +1087,7 @@
     },
     {
       "id": "EXT-008",
-      "name": "Owner acceptance of applicable EULA and terms for disposable runtime validation",
+      "name": "Standing Minecraft EULA acceptance for disposable runtime validation",
       "affected_requirements": [
         "CORE-REQ-017",
         "CORE-REQ-018",
@@ -1032,11 +1096,11 @@
       ],
       "mandatory_for_endpoint": true,
       "kind": "authorization",
-      "availability": "unavailable",
-      "authorization": "unknown",
+      "availability": "available",
+      "authorization": "authorized",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Accept the applicable Minecraft and external runtime terms for the exact disposable environments before their first full launch. Never infer or write acceptance on the owner's behalf."
+        "Apply DEC-020 by creating or updating the exact disposable runtime eula.txt and verifying eula=true before launch; keep acceptance files untracked."
       ],
       "scope_binding": [
         "runbook_digest",
@@ -1046,6 +1110,25 @@
         "operators",
         "time_window",
         "rollback"
+      ]
+    },
+    {
+      "id": "EXT-009",
+      "mandatory_for_endpoint": true,
+      "kind": "other",
+      "blocked_plan_approved": true,
+      "name": "Third party artifact and development-use terms review",
+      "affected_requirements": [
+        "CORE-REQ-015",
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-021"
+      ],
+      "availability": "unknown",
+      "authorization": "not_required",
+      "required_evidence": [
+        "Review the exact upstream terms for download, private compilation, runtime mixins, execution, modification, and redistribution separately. Use documented permitted routes; prepare a precise owner-delivered developer inquiry only when a required right or authenticated input remains unresolved after public checks."
       ]
     }
   ],
@@ -1065,13 +1148,16 @@
         "DEC-013",
         "DEC-017",
         "DEC-018",
+        "DEC-019",
+        "DEC-020",
         "EXT-001",
         "EXT-002",
         "EXT-003",
         "EXT-004",
         "EXT-005",
         "EXT-006",
-        "EXT-008"
+        "EXT-008",
+        "EXT-009"
       ],
       "canonicalRequirements": [
         "CORE-REQ-001",
@@ -1133,13 +1219,16 @@
         "DEC-013",
         "DEC-017",
         "DEC-018",
+        "DEC-019",
+        "DEC-020",
         "EXT-001",
         "EXT-002",
         "EXT-003",
         "EXT-004",
         "EXT-005",
         "EXT-006",
-        "EXT-008"
+        "EXT-008",
+        "EXT-009"
       ],
       "canonicalRequirements": [
         "CORE-REQ-017",
@@ -1173,6 +1262,8 @@
         "DEC-016",
         "DEC-017",
         "DEC-018",
+        "DEC-019",
+        "DEC-020",
         "EXT-001",
         "EXT-002",
         "EXT-003",
@@ -1180,7 +1271,8 @@
         "EXT-005",
         "EXT-006",
         "EXT-007",
-        "EXT-008"
+        "EXT-008",
+        "EXT-009"
       ],
       "canonicalRequirements": [
         "CORE-REQ-019",
@@ -1194,11 +1286,11 @@
   "goalCreator": {
     "mandatoryBoundary": "CORE-REQ-001 through CORE-REQ-022 across CORE-PHASE-000 through CORE-PHASE-003, including the native Pixelmon transaction-mixin path, separate Vault bridge boundary, exact external integration evidence, the unpublished artifact, and the two-stage open issue lifecycle.",
     "optionalFutureDisposition": "excluded",
-    "lockedOwnerDecisions": "DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018",
+    "lockedOwnerDecisions": "DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018, DEC-019, DEC-020",
     "activePhase": "CORE-PHASE-000",
     "nextExecutableAction": "Execute P000-TASK-001 to reconfirm repository identity, toolchain, product metadata, economy ownership, and the complete provider call graph before implementation.",
     "knownFailingChecks": "none at validated plan handoff; execution checks have not yet run.",
-    "knownExternalBlockers": "Official Pixelmon 9.4.0 runtime and development artifacts; Disposable exact Pixelmon 9.4.0 integration environment; Separately installed Vault bridge artifact; Exact reviewed hybrid runtime, Vault, and economy plugin stack; Disposable exact Vault bridge integration environment; Owner acceptance of applicable EULA and terms for disposable runtime validation under EXT-008. Native Pixelmon mixin implementation and Phase 002 Vault backend transaction proof are executable phase work, not external blockers.",
-    "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, classify EXT-001 through EXT-006 with exact evidence, inspect the Pixelmon 9.4.0 classes and save path, implement and prove the native PlayerPartyStorage receipt, deduplication, account classification, and durable-save path, execute the Phase 002 Vault bridge or backend transaction proof, satisfy EXT-008 before full external runtime proof, pass journal, escrow, draining, recovery, frozen, capability, deterministic, and runtime matrices, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation."
+    "knownExternalBlockers": "Unresolved acquisition or runtime evidence for Official Pixelmon 9.4.0 runtime and development artifacts; Disposable exact Pixelmon 9.4.0 integration environment; Separately installed Vault bridge artifact; Exact reviewed hybrid runtime, Vault, and economy plugin stack; Disposable exact Vault bridge integration environment; Third party artifact and development-use terms review under EXT-009. Apply DEC-019 before declaring any route exhausted. P002-TASK-013 and P002-TASK-014 acquire exact inputs; P002-TASK-006 obtains or builds the separate bridge and durable backend proof. Native mixin implementation, proof construction, and provisioning are executable work, not prerequisites to start themselves. EXT-008 is already authorized; set and verify eula=true under DEC-020 without another consent request.",
+    "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, classify EXT-001 through EXT-006 with exact evidence, inspect the Pixelmon 9.4.0 classes and save path, implement and prove the native PlayerPartyStorage receipt, deduplication, account classification, and durable-save path, execute the Phase 002 Vault bridge or backend transaction proof, apply EXT-008 and DEC-020 before launch and review exact third party operations under EXT-009, obtain and compile the public Pixelmon inputs, build the separate bridge and durable backend proof when needed, pass journal, escrow, draining, recovery, frozen, capability, deterministic, and runtime matrices, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation."
   }
 }
