@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "planId": "PLAN-MASTER",
-  "planSetSha256": "a68961ea4435079aa2a60eed5f3e462b9038a20520d0aa1b17a851392a214245",
+  "planSetSha256": "4aaf562df32b14386154b910798adde12c1f16c079d5f276e976ba8e18cadf71",
   "planningSubject": {
     "name": "FutureShops 2.3.0 strict external economy safety for Minecraft 1.21.1 NeoForge, with capability gated Pixelmon 9.4.0 and Vault bridge interoperability",
     "requestedArtifact": "authoritative_plan",
@@ -54,7 +54,7 @@
         "role": "owner_request",
         "subject": "strict restart safe economy amendment and 3.0.0 issue guidance",
         "source": "current owner request and accepted design discussion",
-        "use": "binding safety model, native Pixelmon transaction path, separate Vault bridge boundary, issue 66 guidance, and unchanged unpublished endpoint"
+        "use": "binding safety model, exact Pixelmon artifact inspection, native PlayerPartyStorage mixin implementation, separate Vault bridge and backend proof, issue 66 guidance, and unchanged unpublished endpoint"
       }
     ]
   },
@@ -420,7 +420,7 @@
     },
     {
       "id": "CORE-REQ-017",
-      "summary": "bundled capability-gated Pixelmon adapter with native transaction mixin",
+      "summary": "bundled capability-gated Pixelmon adapter with complete native transaction mixin",
       "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-002`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-003`",
@@ -447,7 +447,7 @@
     },
     {
       "id": "CORE-REQ-018",
-      "summary": "separate Vault bridge interoperability with transaction-aware receipt boundary",
+      "summary": "separate Vault bridge interoperability with in-phase backend transaction proof",
       "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-002`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-003`",
@@ -798,8 +798,8 @@
     {
       "id": "DEC-013",
       "question": "Vault support",
-      "selectedChoice": "A separately installed reviewed bridge registers `vault`; FutureShops contains no Bukkit or Vault dependency or reflection. The bridge and economy backend must persist the balance effect and provider receipt as one transaction before any `vault` mutation is enabled.",
-      "rationale": "The bridge owns hybrid-platform dependencies and lifecycle adaptation. The currently observed PixelmonEconomyBridge and FinalEconomy path does not provide that atomic request-aware contract without modification, so it remains safely refused and is tracked for 3.0.0 in issue 66.",
+      "selectedChoice": "A separately installed reviewed bridge registers `vault`; FutureShops contains no Bukkit or Vault dependency or reflection. Phase 002 must obtain and exercise a transaction-aware bridge or backend proof that persists the balance effect and provider receipt in one transaction before any `vault` mutation is enabled.",
+      "rationale": "The bridge owns hybrid-platform dependencies and lifecycle adaptation. Phase 002 owns the proof boundary and must produce a disposable transaction proof or a typed safe-refusal result. The currently observed PixelmonEconomyBridge and FinalEconomy path does not provide that atomic request-aware contract without modification, so production enablement remains refused and the modification is tracked for 3.0.0 in issue 66.",
       "affectedRequirements": [
         "CORE-REQ-002",
         "CORE-REQ-018"
@@ -866,8 +866,8 @@
     {
       "id": "DEC-018",
       "question": "Pixelmon capability classification and native transaction path",
-      "selectedChoice": "Bundle an exact Pixelmon 9.4.0 capability adapter without bundling Pixelmon. Keep the unmodified direct API query and precheck capable but mutation-refusing. Separately, enable a request-aware mixin only for the exact native `PlayerPartyStorage` account when it persists the FutureShops request UUID, operation, amount, and outcome receipt beside `pixelDollars`, deduplicates retries, and forces a proven durable save. A custom or hybrid account remains mutation unavailable.",
-      "rationale": "The exact runtime exposes boolean `add` and `take` calls and balance events but no operation identity or durable outcome lookup. The mixin is an optional augmentation, not proof that arbitrary Pixelmon or plugin calls are transactional. If its target, receipt storage, or durable save boundary cannot be proven, the provider must refuse before journal, custody, or Pixelmon effects.",
+      "selectedChoice": "Bundle an exact Pixelmon 9.4.0 capability adapter without bundling Pixelmon. During Phase 002, inspect the exact `PlayerPartyStorage` and storage save implementation, then implement a request-aware mixin loaded only when FutureShops and Pixelmon are both present. It must persist the FutureShops request UUID, operation, amount, and outcome receipt beside `pixelDollars`, deduplicate retries, and force a proven durable save. A custom or hybrid account remains mutation unavailable, while unscoped Pixelmon calls retain their native behavior and are never claimed as FutureShops transactions.",
+      "rationale": "The exact runtime exposes `PlayerPartyStorage` as a native `BankAccount` with `pokeDollars` serialized as `pixelDollars`, and exposes `add` and `take` calls plus save adapter and scheduler hooks. The mixin must use that exact implementation evidence, add request identity and receipt persistence without globally breaking Pixelmon's own calls, and refuse before FutureShops effects if the target or save boundary is not proven.",
       "affectedRequirements": [
         "CORE-REQ-002",
         "CORE-REQ-003",
@@ -930,7 +930,7 @@
     },
     {
       "id": "EXT-003",
-      "name": "Pixelmon economy API and native transaction-mixin feasibility proof",
+      "name": "Pixelmon 9.4.0 artifact inspection and native mixin implementation evidence",
       "affected_requirements": [
         "CORE-REQ-002",
         "CORE-REQ-007",
@@ -938,11 +938,11 @@
       ],
       "mandatory_for_endpoint": true,
       "kind": "other",
-      "availability": "unknown",
+      "availability": "available",
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Prove exact values, native `PlayerPartyStorage` account and `BankAccountProxy` classification, request-aware receipt persistence beside `pixelDollars`, retry deduplication, durable save behavior, recovery, and duplicate prevention. The unmodified direct API remains a negative capability result."
+        "Inspect exact Pixelmon 9.4.0 bytecode and record PlayerPartyStorage inheritance, the pokeDollars field, pixelDollars NBT read and write, add and take behavior, BankAccountProxy account classification, StorageProxy save adapter and scheduler paths, and the exact mixin target. Implement and prove the request-aware native mixin, receipt persistence beside pixelDollars, retry deduplication, durable save acknowledgement, recovery, and duplicate prevention. The unmodified direct API remains a negative capability result."
       ]
     },
     {
@@ -1198,7 +1198,7 @@
     "activePhase": "CORE-PHASE-000",
     "nextExecutableAction": "Execute P000-TASK-001 to reconfirm repository identity, toolchain, product metadata, economy ownership, and the complete provider call graph before implementation.",
     "knownFailingChecks": "none at validated plan handoff; execution checks have not yet run.",
-    "knownExternalBlockers": "Official Pixelmon 9.4.0 runtime and development artifacts; Disposable exact Pixelmon 9.4.0 integration environment; Pixelmon economy API and native transaction-mixin feasibility proof; Separately installed Vault bridge artifact; Exact reviewed hybrid runtime, Vault, and economy plugin stack; Disposable exact Vault bridge integration environment; Owner acceptance of applicable EULA and terms for disposable runtime validation under EXT-008.",
-    "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, classify EXT-001 through EXT-006 with exact evidence, prove the native Pixelmon PlayerPartyStorage receipt, deduplication, account classification, and durable-save path, satisfy EXT-008 before full external runtime proof, pass journal, escrow, draining, recovery, frozen, capability, deterministic, and runtime matrices, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation."
+    "knownExternalBlockers": "Official Pixelmon 9.4.0 runtime and development artifacts; Disposable exact Pixelmon 9.4.0 integration environment; Separately installed Vault bridge artifact; Exact reviewed hybrid runtime, Vault, and economy plugin stack; Disposable exact Vault bridge integration environment; Owner acceptance of applicable EULA and terms for disposable runtime validation under EXT-008. Native Pixelmon mixin implementation and Phase 002 Vault backend transaction proof are executable phase work, not external blockers.",
+    "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, classify EXT-001 through EXT-006 with exact evidence, inspect the Pixelmon 9.4.0 classes and save path, implement and prove the native PlayerPartyStorage receipt, deduplication, account classification, and durable-save path, execute the Phase 002 Vault bridge or backend transaction proof, satisfy EXT-008 before full external runtime proof, pass journal, escrow, draining, recovery, frozen, capability, deterministic, and runtime matrices, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation."
   }
 }
