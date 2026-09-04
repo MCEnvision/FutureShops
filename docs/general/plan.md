@@ -374,6 +374,7 @@ Existing configured integer prices retain their integer magnitude and are interp
 | Currency metadata | Internal provider metadata | Selected external provider metadata | Freeze for server lifecycle, record provider identity with transaction evidence |
 | Root request and leg identifiers | FutureShops transaction coordinator | FutureShops transaction coordinator | Durable and stable across retry, restart, compensation, and claim delivery |
 | Write-ahead transaction state | FutureShops | FutureShops | Persist `PREPARED`, `EXTERNAL_PENDING`, `EXTERNAL_CONFIRMED`, `DELIVERED`, `CLAIMED`, `UNCERTAIN`, and `RESOLVED` transitions with integrity metadata before dependent effects |
+| Receipt audit journal | FutureShops | FutureShops | Write one checksummed transition record under `world/data/futureshops/receipts` for each request state and provider result. It proves what FutureShops durably recorded, not that an external effect is safe to replay |
 | Provider mutation outcome | Internal provider plus coordinator evidence | External provider receipt or query plus coordinator evidence | Persist request and outcome facts, not a balance ledger |
 | Shop, listing, order, cart, and custody state | FutureShops | FutureShops | Bind every monetary transition to its request identity and confirmed result |
 | Claims and offline proceeds | FutureShops delivery state, internal value through internal provider | FutureShops delivery state, external value through selected provider | Never discard. Failed delivery remains a durable claim or recoverable operation |
@@ -387,11 +388,11 @@ Persistent records introduced or changed by this release require an explicit sch
 
 Every monetary mutation has one server owned root request UUID. Each debit, credit, fee, refund, compensation, claim, and offline delivery leg has a deterministic child identity derived from the immutable root and leg role or an equivalently stable persisted UUID. Retries reuse the same identity. A logically new user action must never reuse a completed identity.
 
-Before an external effect, FutureShops persists a checksummed `PREPARED` record containing immutable request, provider, actor, amount, direction, required capability set, and any custody identity, then persists `EXTERNAL_PENDING`. The provider contract must prove a definitive outcome and safe retry through durable receipt lookup and idempotent identity, either directly or through an exact reviewed adapter mechanism. A timeout, process interruption, exception, or missing acknowledgement must never be guessed as success or failure. If lookup can reconcile the result, startup enters `RECOVERING`; if the result remains unknowable, the record becomes `UNCERTAIN`, lifecycle enters `FROZEN`, and no automatic retry, refund, compensation, or balance restoration occurs.
+Before an external effect, FutureShops persists a checksummed `PREPARED` record and matching receipt audit record under `world/data/futureshops/receipts` containing immutable request, provider, actor, amount, direction, required capability set, and any custody identity, then persists `EXTERNAL_PENDING` and its receipt audit record. Each later transition writes another checksummed receipt audit record with the provider result or recovery classification. The provider contract must prove a definitive outcome and safe retry through durable receipt lookup and idempotent identity, either directly or through an exact reviewed adapter mechanism. A timeout, process interruption, exception, missing acknowledgement, missing record, invalid checksum, or contradictory record must never be guessed as success or failure. If lookup can reconcile the result, startup enters `RECOVERING`; if the result remains unknowable or the local record cannot be trusted, the record becomes `UNCERTAIN`, lifecycle enters `FROZEN`, and no automatic retry, refund, compensation, or balance restoration occurs. Local receipt durability does not provide external atomicity or idempotency.
 
 Multi leg workflows must persist intent before the first external effect, persist every confirmed outcome, and order custody and value movements to prevent loss. For a buy, FutureShops first secures the item or exact delivery entitlement in durable custody, then performs a proven debit, then delivers the item or creates a durable claim. For a sell, FutureShops first secures the exact sold item in durable custody, then performs a proven credit, then completes or claims delivery. Operations without an escrowable item, including player pay, require all value legs to expose the full strict capability set. Recovery repeats only operations whose provider contract proves repetition safe. Compensation has its own stable identity and cannot run twice.
 
-The transaction record may contain provider identifier, root and child request IDs, operation type, amount, participants, direction, custody and claim identifiers, timestamps or monotonic sequence, journal state, required and observed capabilities, provider receipt, error classification, recovery state, and compensation relationship. It must not contain a periodically synchronized or independently mutable copy of player balances. Backups include the journal, escrow index, claims, request identities, integrity metadata, and clean-shutdown marker. They never treat a saved external balance as authoritative and never restore external money automatically.
+The transaction record may contain provider identifier, root and child request IDs, operation type, amount, participants, direction, custody and claim identifiers, timestamps or monotonic sequence, journal state, required and observed capabilities, provider receipt, error classification, recovery state, and compensation relationship. The receipt audit record under `world/data/futureshops/receipts` may contain the same immutable request facts, local transition, provider identifier, provider receipt when returned, checksum, and recovery classification. It must not contain a periodically synchronized or independently mutable copy of player balances. Backups include the journal, receipt audit directory, escrow index, claims, request identities, integrity metadata, and clean-shutdown marker as one matching recovery set. They never treat a saved external balance as authoritative and never restore external money automatically.
 
 ### Failure semantics
 
@@ -404,7 +405,7 @@ The transaction record may contain provider identifier, root and child request I
 * Claims and custody remain accessible and durable while monetary mutations are disabled. Claim delivery that requires an unavailable external credit remains pending rather than discarded.
 * Rollback means transaction aware recovery or compensation. It never means directly rewriting an external balance from a mirrored value.
 * Orderly restart enters `DRAINING`, rejects new money operations, completes or checkpoints bounded in-flight work, flushes durable state, and writes the clean marker last.
-* Unclean startup enters `RECOVERING` before provider readiness. An unprovable outcome enters `FROZEN`; operators see the request and safe next action, and the server never performs an automatic external balance correction.
+* Unclean startup or any unknown, incomplete, checksum-invalid, or contradictory receipt audit record enters `RECOVERING` before provider readiness. An unprovable outcome or untrusted local record enters `FROZEN`; operators see the request, provider, custody, and safe next action, and the server never performs an automatic external balance correction.
 
 ### Versioning and compatibility
 
@@ -559,7 +560,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 ### CORE-REQ-007 — write-ahead journal, escrow, and durable transaction coordination
 
-**Behavior:** Give every mutation a durable root request UUID and every leg or compensation a stable child identity. Persist a checksummed write-ahead record before effects using `PREPARED`, `EXTERNAL_PENDING`, `EXTERNAL_CONFIRMED`, `DELIVERED`, `CLAIMED`, `UNCERTAIN`, and `RESOLVED` states. Secure recoverable items in durable custody before the corresponding external value leg, retain failed delivery as a claim, require provider idempotency and durable outcome lookup for enabled mutations, and never use a mirrored balance ledger, unsafe retry, automatic refund, or automatic balance restoration to resolve uncertainty.
+**Behavior:** Give every mutation a durable root request UUID and every leg or compensation a stable child identity. Persist a checksummed write-ahead record before effects using `PREPARED`, `EXTERNAL_PENDING`, `EXTERNAL_CONFIRMED`, `DELIVERED`, `CLAIMED`, `UNCERTAIN`, and `RESOLVED` states, and write a matching durable receipt audit record for every transition under `world/data/futureshops/receipts`. The receipt audit journal records FutureShops intent, provider identity, returned outcome, and recovery facts; it is local evidence only and never proves that a Vault or Pixelmon effect is safe to replay. Secure recoverable items in durable custody before the corresponding external value leg, retain failed delivery as a claim, require provider idempotency and durable outcome lookup for enabled mutations, and never use a mirrored balance ledger, unsafe retry, automatic refund, or automatic balance restoration to resolve uncertainty. Unknown, incomplete, checksum-invalid, or contradictory receipt records force `RECOVERING` or `FROZEN` before monetary readiness.
 **Owner:** `CORE-PHASE-001`
 **Contributors:** `CORE-PHASE-002`, `CORE-PHASE-003`
 **Dependencies:** CORE-REQ-002, CORE-REQ-004, CORE-REQ-006, DEC-009, DEC-014, DEC-017, EXT-003
@@ -569,11 +570,11 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 **Acceptance criteria**
 
-- Intent and custody are durable before their dependent external effects; each logical leg changes value at most once; completed retries return the same outcome; a capability failure prevents the call; an ambiguous result becomes `UNCERTAIN` and freezes external writes; compensation executes at most once only after proof; custody and claims survive restart; the schema contains no external balance mirror.
+- Intent, custody, and the matching receipt audit record under `world/data/futureshops/receipts` are durable before their dependent external effects; each logical leg changes value at most once; completed retries return the same outcome; a capability failure prevents the call; an ambiguous or unknown record becomes `UNCERTAIN` and forces `RECOVERING` or `FROZEN`; compensation executes at most once only after proof; custody and claims survive restart; the schema contains no external balance mirror; local receipt durability is never treated as external idempotency.
 
 **Required evidence**
 
-- State transition tests, crash matrix, journal fixtures, provider receipt evidence, recovery logs, and persistence schema review.
+- State transition tests, receipt audit directory fixtures, crash matrix, journal fixtures, provider receipt evidence, recovery logs, backup comparison, and persistence schema review.
 
 ### CORE-REQ-008 — authoritative state and analytics separation
 
@@ -721,7 +722,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 ### CORE-REQ-016 — operational draining, backup, recovery, and rollback
 
-**Behavior:** Drain orderly restarts, reject new mutations, flush the checksummed journal, escrow index, claims, request identities, and recovery checkpoint, and write a clean-shutdown marker last. On unclean startup, enter `RECOVERING`; reconcile only through proven receipts and idempotent identities; enter `FROZEN` when an outcome remains unknowable. Provide backup, restore, provider correction, operator resolution, selection rollback, and reconciliation procedures that preserve all data and never automatically retry, refund, or rewrite external balances from guesses or backup snapshots.
+**Behavior:** Drain orderly restarts, reject new mutations, flush the checksummed journal, the durable receipt audit journal under `world/data/futureshops/receipts`, escrow index, claims, request identities, and recovery checkpoint, and write a clean-shutdown marker last. Backups and complete matching restores include the receipt audit journal with the FutureShops journal, custody, claims, and clean marker. On unclean startup, enter `RECOVERING`; classify every receipt record before readiness, reconcile only through proven provider receipts and idempotent identities, and enter `FROZEN` when an outcome, record integrity, or originating provider remains unknowable. Provide backup, restore, provider correction, operator resolution, selection rollback, and reconciliation procedures that preserve all data and never automatically retry, refund, or rewrite external balances from guesses, local receipt records, or backup snapshots.
 **Owner:** `CORE-PHASE-001`
 **Contributors:** `CORE-PHASE-002`, `CORE-PHASE-003`
 **Dependencies:** CORE-REQ-004, CORE-REQ-007, CORE-REQ-008, CORE-REQ-010, CORE-REQ-013, DEC-017
@@ -731,15 +732,15 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 **Acceptance criteria**
 
-- A clean stop has a valid marker only after durable state is flushed; an unclean stop enters recovery before readiness; restart neither duplicates value nor discards items, claims, or bills; unresolved ambiguity remains frozen with operator-visible evidence; selection rollback preserves independent balances; documentation prohibits deleting journals or restoring external balances automatically.
+- A clean stop has a valid marker only after the FutureShops journal, receipt audit directory, custody, claims, request identities, and checkpoint are durably flushed and verified; an unclean stop or unknown receipt record enters `RECOVERING` before readiness and enters `FROZEN` when the external outcome or local integrity cannot be proven; restart neither duplicates value nor discards items, claims, or bills; unresolved ambiguity remains frozen with operator-visible evidence; selection rollback preserves independent balances; documentation prohibits deleting receipt records or journals or restoring external balances automatically.
 
 **Required evidence**
 
-- Crash and restore matrix, backup hashes, recovery logs, and operator runbook validation.
+- Crash and restore matrix, receipt audit directory integrity and backup hashes, recovery logs, and operator runbook validation.
 
 ### CORE-REQ-017 — bundled capability-gated Pixelmon adapter
 
-**Behavior:** Bundle adapter code for exactly Pixelmon `9.4.0`, compiled and tested against the reviewed development artifact, without bundling Pixelmon. Detect and report verified query, precheck, withdraw, deposit, durable receipt lookup, and idempotent retry capabilities. Register exact compatibility and safe query behavior, but enable a mutation-required surface only when its full capability set is proven. The currently observed direct API lacks durable receipt lookup and idempotent retry, so strict mode must reject its production mutations and must not claim direct Pixelmon production economy support unless stronger exact evidence supersedes that observation.
+**Behavior:** Bundle adapter code for exactly Pixelmon `9.4.0`, compiled and tested against the reviewed development artifact, without bundling Pixelmon. Detect and report verified query, precheck, withdraw, deposit, durable receipt lookup, and idempotent retry capabilities. Register exact compatibility and safe query behavior, but enable a mutation-required surface only when its full capability set is proven. The currently observed direct API lacks durable receipt lookup and idempotent retry, so strict mode must reject its production mutations before creating a receipt audit record or invoking Pixelmon and must not claim direct Pixelmon production economy support unless stronger exact evidence supersedes that observation. A local receipt audit record cannot replace a Pixelmon provider receipt or idempotent retry contract.
 **Owner:** `CORE-PHASE-002`
 **Contributors:** `CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-003`
 **Dependencies:** CORE-REQ-001, CORE-REQ-002, CORE-REQ-004, CORE-REQ-006, CORE-REQ-007, CORE-REQ-009, CORE-REQ-015, CORE-REQ-016, DEC-017, DEC-018, EXT-001, EXT-002, EXT-003, EXT-008
@@ -757,7 +758,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 ### CORE-REQ-018 — separate Vault bridge interoperability
 
-**Behavior:** Support a separately installed and reviewed hybrid bridge that registers provider identifier `vault` through the public API. Validate its declared query, precheck, withdraw, deposit, durable receipt lookup, and idempotent retry capabilities against one exact hybrid runtime, Vault artifact, and economy plugin stack. Enable only surfaces whose capabilities are proven; otherwise fail closed with no generic Vault production support claim. Keep all bridge, Bukkit, Vault, hybrid, and plugin code and dependencies outside FutureShops.
+**Behavior:** Support a separately installed and reviewed hybrid bridge that registers provider identifier `vault` through the public API. Validate its declared query, precheck, withdraw, deposit, durable receipt lookup, and idempotent retry capabilities against one exact hybrid runtime, Vault artifact, and economy plugin stack. FutureShops records each local request and returned provider outcome in the durable receipt audit journal under `world/data/futureshops/receipts`, but that record does not make a Vault boolean call atomic or safe to replay. Enable only surfaces whose capabilities are proven; otherwise fail closed with no generic Vault production support claim. Keep all bridge, Bukkit, Vault, hybrid, and plugin code and dependencies outside FutureShops.
 **Owner:** `CORE-PHASE-002`
 **Contributors:** `CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-003`
 **Dependencies:** CORE-REQ-002, CORE-REQ-004, CORE-REQ-007, CORE-REQ-009, CORE-REQ-015, CORE-REQ-016, DEC-017, EXT-004, EXT-005, EXT-006, EXT-008
@@ -775,7 +776,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 ### CORE-REQ-019 — complete production validation
 
-**Behavior:** Execute the complete deterministic and runtime matrix after all implementation and phase-owned documentation are integrated. Prove clean draining, unclean-start recovery, frozen ambiguity, journal integrity, escrow and claim conservation, no unsafe retries or balance restoration, and exact provider capability gating. Resolve failures through the owning phase requirement, rerun invalidated checks, and preserve sanitized evidence tied to the source commit and exact external artifacts.
+**Behavior:** Execute the complete deterministic and runtime matrix after all implementation and phase-owned documentation are integrated. Prove clean draining, receipt audit journal integrity under `world/data/futureshops/receipts`, unclean-start recovery, unknown-record classification, frozen ambiguity, escrow and claim conservation, no unsafe retries or balance restoration, and exact provider capability gating. Resolve failures through the owning phase requirement, rerun invalidated checks, and preserve sanitized evidence tied to the source commit and exact external artifacts.
 **Owner:** `CORE-PHASE-003`
 **Contributors:** `CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`
 **Dependencies:** CORE-REQ-001, CORE-REQ-002, CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-006, CORE-REQ-007, CORE-REQ-008, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, EXT-001, EXT-002, EXT-003, EXT-004, EXT-005, EXT-006
@@ -793,7 +794,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 ### CORE-REQ-020 — user, API, maintainer, and operator documentation
 
-**Behavior:** Update the root user documentation, maintainer documentation, documentation index, provider API reference, configuration guide, integration guides, migration guide, recovery runbook, compatibility matrix, and validation record to match implemented behavior only, including strict capabilities, lifecycle states, journal and escrow ordering, clean marker, backup contents, frozen operator workflow, and direct Pixelmon's mutation limitation.
+**Behavior:** Update the root user documentation, maintainer documentation, documentation index, provider API reference, configuration guide, integration guides, migration guide, recovery runbook, compatibility matrix, and validation record to match implemented behavior only, including strict capabilities, lifecycle states, journal and escrow ordering, the `world/data/futureshops/receipts` receipt audit journal, clean marker, backup contents, unknown-record recovery, frozen operator workflow, and direct Pixelmon's mutation limitation.
 **Owner:** `CORE-PHASE-003`
 **Contributors:** `CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`
 **Dependencies:** CORE-REQ-001, CORE-REQ-002, CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-006, CORE-REQ-007, CORE-REQ-008, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, CORE-REQ-019
@@ -803,7 +804,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 **Acceptance criteria**
 
-- A user can select `internal`, Pixelmon, or the separately installed `vault` provider correctly and can tell whether each surface is capability-enabled or safely refused; an integrator can implement the public API; an operator can drain, back up, diagnose, recover, or preserve a frozen request without deleting data or restoring external balances; documentation clearly states no migration, restart-only selection, direct Pixelmon limitation, external money item behavior, exact compatibility, and no ATM or publication.
+- A user can select `internal`, Pixelmon, or the separately installed `vault` provider correctly and can tell whether each surface is capability-enabled or safely refused; an integrator can implement the public API; an operator can drain, back up, diagnose, recover, or preserve a frozen request and an unknown receipt record without deleting data or restoring external balances; documentation clearly states the receipt audit path, its local-evidence limit, unknown-record recovery, no migration, restart-only selection, direct Pixelmon limitation, external money item behavior, exact compatibility, and no ATM or publication.
 
 **Required evidence**
 
@@ -829,7 +830,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 ### CORE-REQ-022 — actual `3.0.0` continuation issue 66
 
-**Behavior:** Plan authoring searched for duplicates, created, and read back open GitHub issue 66 immediately after the integrated plan set passed validation and before the authoring pass returned. Issue 66 covers implementation of this strict design in the existing `3.0.0` Forge `1.20.1` beta and its future Minecraft `1.21.1` port. Its actionable design must explain the central economy gate, provider capabilities, `READY`, `DRAINING`, `RECOVERING`, and `FROZEN` behavior, write-ahead states and clean marker, buy and sell custody ordering, durable claims, backup scope, no unsafe retry or automatic external balance restoration, and direct Pixelmon receipt limitation. It uses the existing `3.0` beta maintenance milestone and labels `enhancement`, `forge`, `neoforge`, and `ready`. Phases 000 through 002 preserve issue 66 unchanged and open. CORE-PHASE-003 records authoring evidence without early live access to issue 66; only after `CORE-REQ-019` and `CORE-REQ-021` pass does it search again, update, and read back the same issue 66. No 3.0.0 code is implemented by this plan, and no replacement issue is created.
+**Behavior:** Plan authoring searched for duplicates, created, and read back open GitHub issue 66 immediately after the integrated plan set passed validation and before the authoring pass returned. Issue 66 covers implementation of this strict design in the existing `3.0.0` Forge `1.20.1` beta and its future Minecraft `1.21.1` port. Its actionable design must explain the central economy gate, provider capabilities, `READY`, `DRAINING`, `RECOVERING`, and `FROZEN` behavior, write-ahead states and clean marker, the durable receipt audit journal at `world/data/futureshops/receipts`, its local-evidence limit, unknown-record recovery, buy and sell custody ordering, durable claims, backup scope, no unsafe retry or automatic external balance restoration, and direct Pixelmon receipt limitation. It uses the existing `3.0` beta maintenance milestone and labels `enhancement`, `forge`, `neoforge`, and `ready`. Phases 000 through 002 preserve issue 66 unchanged and open. CORE-PHASE-003 records authoring evidence without early live access to issue 66; only after `CORE-REQ-019` and `CORE-REQ-021` pass does it search again, update, and read back the same issue 66. No 3.0.0 code is implemented by this plan, and no replacement issue is created.
 **Owner:** `CORE-PHASE-003`
 **Contributors:** `CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`
 **Dependencies:** CORE-REQ-019, CORE-REQ-021, DEC-015, DEC-016, EXT-007
@@ -966,13 +967,14 @@ Rollback means restoring one complete matching backup of world, config, mod set,
 
 ### Recovery priorities
 
-1. Preserve the current world, provider data, configuration, jar set, and logs.
+1. Preserve the current world, provider data, configuration, jar set, logs, and `world/data/futureshops/receipts`.
 2. Identify the selected and originating provider identifiers and exact artifact versions.
-3. Inspect the request and outcome record by stable UUID without mutating balances manually.
-4. Restore the missing exact provider stack when safe and retry only through idempotent recovery.
-5. Run documented compensation only when the original outcome is proven.
-6. Keep claims pending when delivery cannot be proven.
-7. Restore a complete known matching backup when deterministic recovery cannot proceed.
+3. Inspect the receipt audit record and linked journal, custody, and claim records by stable UUID without mutating balances manually.
+4. Classify unknown or integrity-invalid receipt records as `RECOVERING` or `FROZEN` before admitting monetary writes.
+5. Restore the missing exact provider stack when safe and retry only through idempotent recovery.
+6. Run documented compensation only when the original outcome is proven.
+7. Keep claims pending when delivery cannot be proven.
+8. Restore a complete known matching backup when deterministic recovery cannot proceed.
 
 ## 16. Documentation, Operations, and Release Boundaries and Gates
 
@@ -986,7 +988,7 @@ Tracked documentation remains canonical. At minimum, the final documentation set
 * Currency precision, price interpretation, overflow rejection, and absence of automatic balance migration.
 * Physical bill behavior under internal and external providers.
 * Complete surface behavior for shops, carts, player shops, offline proceeds, claims, pay, administration, analytics, events, and rollback.
-* Operator status, logs, backup, provider failure, recovery required, restore, and selection rollback procedures.
+* Operator status, logs, the durable receipt audit journal at `world/data/futureshops/receipts`, backup, provider failure, unknown-record recovery, recovery required, restore, and selection rollback procedures.
 * Security assumptions, artifact provenance, hashes, license conclusions, and optional dependency isolation.
 * Verification commands, environment manifests, expected results, known limitations, and the unpublished artifact identity.
 * The absence of an ATM interface or command and the exclusion of publication.
@@ -1025,8 +1027,8 @@ Official Pixelmon 9.4.0 runtime and development artifacts, Disposable exact Pixe
 5. The server remains online during external provider failure, all monetary mutations fail closed, browsing remains available, and pure barter remains available.
 6. Provider metadata controls currency name and precision, all accepted values use exact checked integer minor units, and every surface verifies balance, precheck, withdraw, deposit, receipt lookup, and idempotent retry capabilities as applicable.
 7. Every declared balance and mutation surface routes through the server-authoritative strict gate, lifecycle admission, write-ahead journal, and applicable custody boundary.
-8. Multi-leg operations, retries, clean and unclean shutdowns, compensation, claims, and offline proceeds demonstrate no duplicate debit or credit, durable escrow conservation, and frozen refusal whenever an outcome cannot be proven.
-9. External balances are not mirrored into FutureShops, while request facts, custody, claims, and confirmed analytics remain durable.
+8. Multi-leg operations, retries, clean and unclean shutdowns, compensation, claims, and offline proceeds demonstrate no duplicate debit or credit, durable escrow conservation, and frozen refusal whenever an outcome cannot be proven. Every transition has a matching durable receipt audit record under `world/data/futureshops/receipts`, and unknown records force `RECOVERING` or `FROZEN`.
+9. External balances are not mirrored into FutureShops, while request facts, receipt audit facts, custody, claims, and confirmed analytics remain durable. Local receipt audit records never substitute for external receipt lookup or idempotent retry.
 10. No automatic balance migration occurs. Internal starting balance remains internal only. Provider and precision changes preserve independent data and require operator review.
 11. With an external provider selected, money item activation, deposit, withdrawal, redemption, and future ATM mutations are disabled while registrations and existing bills remain safe. No ATM UI or command exists.
 12. The bundled capability-gated Pixelmon adapter passes against exact official Pixelmon `9.4.0` artifacts, reports the direct API's missing receipt and idempotency capabilities, refuses production mutation-required surfaces, and the jar does not bundle Pixelmon.

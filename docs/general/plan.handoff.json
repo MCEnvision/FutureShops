@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "planId": "PLAN-MASTER",
-  "planSetSha256": "d8ffaef4b5daa00ff515dc87708e4656992ec1b61e630a931e6b94b6e6ded97d",
+  "planSetSha256": "9d889e55bd56511be03d0bde9c6b567cbac173b12408d42e9f28d597e82f857b",
   "planningSubject": {
     "name": "FutureShops 2.3.0 strict external economy safety for Minecraft 1.21.1 NeoForge, with capability gated Pixelmon 9.4.0 and Vault bridge interoperability",
     "requestedArtifact": "authoritative_plan",
