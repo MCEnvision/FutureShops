@@ -35,13 +35,13 @@ The planning subject is the FutureShops 2.3.0 product change and its validation 
 | SRC-004 | reference | official Pixelmon 9.4.0 release compatibility | https://pixelmonmod.com/downloads.php | Pixelmon 9.4.0, Minecraft 1.21.1, and NeoForge 21.1.248 compatibility evidence |
 | SRC-005 | reference | NeoForge 1.21.1 lifecycle and inter-mod communication | https://docs.neoforged.net/docs/1.21.1/concepts/events/ | provider registration and startup lifecycle evidence |
 | SRC-006 | reference | Vault API economy boundary | https://github.com/MilkBowl/VaultAPI and https://milkbowl.github.io/VaultAPI/overview-summary.html | separate bridge boundary and exact checked conversion evidence |
-| SRC-007 | owner_request | strict restart safe economy amendment and 3.0.0 issue guidance | current owner request and accepted design discussion | binding safety model, direct Pixelmon classification, issue 66 guidance, and unchanged unpublished endpoint |
+| SRC-007 | owner_request | strict restart safe economy amendment and 3.0.0 issue guidance | current owner request and accepted design discussion | binding safety model, native Pixelmon transaction path, separate Vault bridge boundary, issue 66 guidance, and unchanged unpublished endpoint |
 
 After validation, the master owns global product scope and each registered phase plan owns only its detailed execution. Repository and runtime evidence may correct current-state claims but cannot weaken the target contract. `docs/plan/goal.md` remains untouched.
 
 ## 3. Purpose and Intended Outcome
 
-FutureShops 2.3.0 must expose one public, versioned NeoForge economy provider contract, retain the built-in internal provider as the restart-only default, capability-gate an exact optional Pixelmon 9.4.0 adapter, and allow a separately installed bridge to register `vault` without placing Bukkit or Vault code in FutureShops. One server-owned economy gate must place recoverable items in custody, persist transaction intent before any external effect, drain safely for orderly shutdown, recover before admitting writes after an unclean shutdown, and freeze rather than guess when an outcome cannot be proven. A provider may perform a production external mutation only when its declared and verified capabilities prove the result and safe replay semantics required by that surface. Operators must receive accurate fail-closed behavior, checksummed FutureShops recovery data, explicit manual escalation for unresolved uncertainty, reproducible evidence, one inspected unpublished artifact, and an updated open continuation issue for the 3.0.0 lines.
+FutureShops 2.3.0 must expose one public, versioned NeoForge economy provider contract, retain the built-in internal provider as the restart-only default, capability-gate an exact optional Pixelmon 9.4.0 adapter with a native `PlayerPartyStorage` transaction mixin, and allow a separately installed bridge to register `vault` without placing Bukkit or Vault code in FutureShops. The native Pixelmon path may mutate only an exact native account when the mixin adds a stable request identity, provider receipt, deduplication, and durable save contract. The `vault` path remains a separate adapter and may mutate only when its bridge and backend prove the same transaction contract. One server-owned economy gate must place recoverable items in custody, persist transaction intent before any external effect, drain safely for orderly shutdown, recover before admitting writes after an unclean shutdown, and freeze rather than guess when an outcome cannot be proven. Operators must receive accurate fail-closed behavior, checksummed FutureShops recovery data, explicit manual escalation for unresolved uncertainty, reproducible evidence, one inspected unpublished artifact, and an updated open continuation issue for the 3.0.0 lines.
 
 ## 4. Evidence-Based Current State
 
@@ -51,6 +51,7 @@ FutureShops 2.3.0 must expose one public, versioned NeoForge economy provider co
 | Economy boundary | OBSERVED | EconomyProvider, InternalEconomyProvider, and BalanceManager form the current economy boundary whose callers and persistence must be traced. | Source inspection at the pinned starting commit. |
 | External artifacts | UNKNOWN | Exact Pixelmon development, bridge, hybrid stack, license, security, and disposable environment evidence remains unresolved. | EXT-001 through EXT-006 require recorded hashes, manifests, reviews, and runtime proof. |
 | Direct Pixelmon mutation capability | OBSERVED | The exact Pixelmon 9.4.0 runtime exposes balance, precheck, and boolean `add` and `take` operations, but no request identity, durable receipt, idempotent retry, or outcome lookup contract. | [`docs/verification/phase-000/baseline-2026-09-02.md`](../verification/phase-000/baseline-2026-09-02.md), exact runtime class inventory, and public API signature review. |
+| Native Pixelmon transaction path | PROPOSED | A narrow mixin may augment exact `PlayerPartyStorage` accounts with request-aware mutations, receipts stored beside `pixelDollars`, retry deduplication, and a durable save boundary. It must remain unavailable when the exact account type, mixin target, or durable save contract is absent or unproven. | Current owner request and accepted design discussion, to be verified against `EXT-001` through `EXT-003` in `CORE-PHASE-002`. |
 | Tracking capability | VERIFIED | Repository issue capability was authorized for the two-stage continuation issue lifecycle, and plan authoring created and read back issue 66. | EXT-007, DEC-015, and EVD-GH-001 preserve the duplicate search, creation response, issue 66 URL, and readback. |
 | Protected goal | OBSERVED | Any existing goal is immutable and supplies no authority to change product scope. | Protected goal path inspection. |
 
@@ -75,7 +76,7 @@ Unknown external evidence is a blocker, not permission to substitute artifacts, 
 
 - CORE-REQ-001 through CORE-REQ-003 define the product target, public provider API, and restart-only provider selection.
 - CORE-REQ-004 through CORE-REQ-016 define fail-closed lifecycle, orderly draining, unclean-start recovery, frozen uncertainty, server authority, exact values, write-ahead journaling, escrow, state ownership, every monetary surface, switching, bills, presentation, diagnostics, bounded cost, security, backup, and recovery.
-- CORE-REQ-017 and CORE-REQ-018 define exact capability-gated Pixelmon and separate Vault bridge interoperability. A tested safe refusal is mandatory when an exact provider lacks production mutation capabilities.
+- CORE-REQ-017 and CORE-REQ-018 define an exact native Pixelmon transaction adapter and a separate Vault bridge boundary. A tested safe refusal is mandatory whenever the exact account, durable receipt, or recovery capability is absent.
 - CORE-REQ-019 through CORE-REQ-022 define complete validation, documentation, the unpublished artifact, and the two-stage continuation issue lifecycle.
 
 Every declared CORE-REQ ID is mandatory. Stable identifiers must not be renumbered, reused, or silently removed.
@@ -86,8 +87,8 @@ All locked future scope is excluded from implementation and remains non-blocking
 
 | Future ID | Deferred subject | Boundary |
 | --- | --- | --- |
-| FUT-001 | Add this strict external economy design to the existing 3.0.0 beta on Forge 1.20.1 | Explain the design and implementation guidance in existing issue 66 only. Do not import or implement 3.0.0 code in this plan. |
-| FUT-002 | Carry the same design into a future 3.0.0 Minecraft 1.21.1 port | Explain the port requirement in the same open issue 66. Product execution updates tracking only and does not implement the port. |
+| FUT-001 | Add this strict external economy design and a transaction-aware Vault bridge or backend to the existing 3.0.0 beta on Forge 1.20.1 | Explain the design and implementation guidance in existing issue 66 only. Do not import or implement 3.0.0 code in this plan. |
+| FUT-002 | Carry the same native Pixelmon and transaction-aware Vault design into a future 3.0.0 Minecraft 1.21.1 port | Explain the port requirement in the same open issue 66. Product execution updates tracking only and does not implement the port. |
 | FUT-003 | ATM user interface and commands | Future release only. The 2.3.0 mutation policy must prevent a future ATM path from bypassing provider rules. |
 | FUT-004 | Additional external economy adapters | No adapter beyond internal, Pixelmon 9.4.0, and separately validated vault interoperability is promised here. |
 
@@ -97,7 +98,7 @@ All locked future scope is excluded from implementation and remains non-blocking
 | --- | --- |
 | NG-001 | Publishing 2.3.0 to GitHub, CurseForge, Modrinth, or another distribution service. |
 | NG-002 | Automatically copying, converting, reconciling, or merging balances between providers. |
-| NG-003 | Shipping Bukkit, Vault, an economy plugin, a hybrid server, bridge code, or their APIs inside FutureShops. |
+| NG-003 | Shipping Pixelmon, Bukkit, Vault, an economy plugin, a hybrid server, a Vault bridge or backend, or their APIs inside FutureShops. A narrow optional mixin targeting the exact Pixelmon `9.4.0` native account is allowed, but no external runtime bytes are bundled. |
 | NG-004 | Hot switching, late activation, automatic fallback, or provider priority selection. |
 | NG-005 | Mirroring an external provider balance ledger inside FutureShops. |
 | NG-006 | Supporting Pixelmon versions other than exactly 9.4.0 in this release. |
@@ -134,8 +135,8 @@ All locked future scope is excluded from implementation and remains non-blocking
 ### DEC-004 — Integration boundary
 
 **Status:** RESOLVED
-**Selected choice:** A public NeoForge provider API, bundled internal and optional Pixelmon adapter, and a separate bridge registering vault.
-**Rationale:** The core API supports exact integrations without embedding unrelated platforms.
+**Selected choice:** A public NeoForge provider API, bundled internal and optional Pixelmon adapter with a narrow native-account mixin, and a separate bridge registering `vault`.
+**Rationale:** The core API supports exact integrations without embedding unrelated platforms. The Pixelmon mixin is limited to the reviewed native account, while Vault and its backend remain outside the FutureShops jar.
 **Affected requirements:** CORE-REQ-002, CORE-REQ-003, CORE-REQ-017, CORE-REQ-018
 **Supersedes:** none
 
@@ -199,16 +200,16 @@ All locked future scope is excluded from implementation and remains non-blocking
 
 **Status:** RESOLVED
 **Selected choice:** A bundled optional adapter for exactly Pixelmon 9.4.0, without bundling Pixelmon.
-**Rationale:** This original choice remains historical, but exact runtime evidence now proves that direct Pixelmon 9.4.0 lacks the request identity, durable receipt, idempotent retry, and outcome lookup required for production mutation in strict mode.
+**Rationale:** This original packaging choice remains historical. DEC-018 defines the direct API limitation and the separately reviewed native-account transaction-mixin path without bundling Pixelmon.
 **Affected requirements:** CORE-REQ-017
 **Supersedes:** none
-**Supersession history:** DEC-018 refines this resolved packaging choice by capability-gating direct Pixelmon behavior and prohibiting unsupported production mutations.
+**Supersession history:** DEC-018 refines this resolved packaging choice by separating direct API refusal from the conditionally enabled native-account mixin path.
 
 ### DEC-013 — Vault support
 
 **Status:** RESOLVED
-**Selected choice:** A separately installed reviewed bridge registers vault; FutureShops contains no Bukkit or Vault dependency or reflection.
-**Rationale:** The bridge owns hybrid-platform dependencies and lifecycle adaptation.
+**Selected choice:** A separately installed reviewed bridge registers `vault`; FutureShops contains no Bukkit or Vault dependency or reflection. The bridge and economy backend must persist the balance effect and provider receipt as one transaction before any `vault` mutation is enabled.
+**Rationale:** The bridge owns hybrid-platform dependencies and lifecycle adaptation. The currently observed PixelmonEconomyBridge and FinalEconomy path does not provide that atomic request-aware contract without modification, so it remains safely refused and is tracked for 3.0.0 in issue 66.
 **Affected requirements:** CORE-REQ-002, CORE-REQ-018
 **Supersedes:** none
 
@@ -223,8 +224,8 @@ All locked future scope is excluded from implementation and remains non-blocking
 ### DEC-015 — Continuation issue timing
 
 **Status:** RESOLVED
-**Selected choice:** Preserve the existing issue 66 created and read back by plan authoring, then update that issue only after 2.3.0 artifact validation with the strict economy gate, lifecycle, journal, escrow, capability, recovery, backup, and direct Pixelmon limitation design for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.
-**Rationale:** This plan implements only 2.3.0. The 3.0.0 lines receive one actionable design issue and no code, duplicate issue, early mutation, or closure.
+**Selected choice:** Preserve the existing issue 66 created and read back by plan authoring, then update that issue only after 2.3.0 artifact validation with the strict economy gate, lifecycle, journal, escrow, native Pixelmon transaction-mixin contract, transaction-aware Vault bridge and backend contract, capability, recovery, backup, and provider limitation design for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.
+**Rationale:** This plan implements only 2.3.0 native Pixelmon behavior. The 3.0.0 lines receive one actionable design issue for the Vault backend or bridge and the future port, with no code, duplicate issue, early mutation, or closure.
 **Affected requirements:** CORE-REQ-022
 **Supersedes:** none
 
@@ -244,11 +245,11 @@ All locked future scope is excluded from implementation and remains non-blocking
 **Affected requirements:** CORE-REQ-002, CORE-REQ-004, CORE-REQ-005, CORE-REQ-007, CORE-REQ-009, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, CORE-REQ-019, CORE-REQ-020, CORE-REQ-021
 **Supersedes:** none
 
-### DEC-018 — Direct Pixelmon capability classification
+### DEC-018 — Pixelmon capability classification and native transaction path
 
 **Status:** RESOLVED
-**Selected choice:** Bundle an exact Pixelmon 9.4.0 capability adapter without bundling Pixelmon. It may expose verified query and precheck behavior, but strict mode must not enable production mutation through the direct API unless exact reviewed evidence supplies durable request identity, receipt lookup, and idempotent retry. With the currently observed API, mutation-required surfaces are unavailable and the product claims safe capability detection and refusal, not direct Pixelmon production mutation support.
-**Rationale:** The exact runtime exposes boolean `add` and `take` calls and balance events but no operation identity or durable outcome lookup. A local journal cannot make that external effect atomic or safely replayable.
+**Selected choice:** Bundle an exact Pixelmon 9.4.0 capability adapter without bundling Pixelmon. Keep the unmodified direct API query and precheck capable but mutation-refusing. Separately, enable a request-aware mixin only for the exact native `PlayerPartyStorage` account when it persists the FutureShops request UUID, operation, amount, and outcome receipt beside `pixelDollars`, deduplicates retries, and forces a proven durable save. A custom or hybrid account remains mutation unavailable.
+**Rationale:** The exact runtime exposes boolean `add` and `take` calls and balance events but no operation identity or durable outcome lookup. The mixin is an optional augmentation, not proof that arbitrary Pixelmon or plugin calls are transactional. If its target, receipt storage, or durable save boundary cannot be proven, the provider must refuse before journal, custody, or Pixelmon effects.
 **Affected requirements:** CORE-REQ-002, CORE-REQ-003, CORE-REQ-007, CORE-REQ-012, CORE-REQ-017, CORE-REQ-019, CORE-REQ-020, CORE-REQ-021
 **Supersedes:** DEC-012
 
@@ -258,9 +259,9 @@ All locked future scope is excluded from implementation and remains non-blocking
 | --- | --- | --- | --- | --- | --- |
 | EXT-001 | Official Pixelmon 9.4.0 runtime and development artifacts | CORE-REQ-001, CORE-REQ-017, CORE-REQ-019, CORE-REQ-021 | unknown | not_required | Acquire exact official artifacts and record version, source, hashes, compatibility, license provenance, archive review, and security review. |
 | EXT-002 | Disposable exact Pixelmon 9.4.0 integration environment | CORE-REQ-017, CORE-REQ-019, CORE-REQ-021 | unknown | not_required | Provision the exact isolated runtime and record its reproducible manifest and sanitized logs. |
-| EXT-003 | Pixelmon economy API feasibility proof | CORE-REQ-002, CORE-REQ-007, CORE-REQ-017 | unknown | not_required | Prove exact values, lifecycle, persistence, durable outcomes, recovery, and duplicate prevention against the reviewed API. |
-| EXT-004 | Separately installed Vault bridge artifact | CORE-REQ-002, CORE-REQ-018, CORE-REQ-019, CORE-REQ-021 | unknown | not_required | Acquire and review the exact bridge artifact, source, hashes, compatibility, license provenance, and security boundary. |
-| EXT-005 | Exact reviewed hybrid runtime, Vault, and economy plugin stack | CORE-REQ-018, CORE-REQ-019, CORE-REQ-021 | unknown | not_required | Select and review every exact artifact and record versions, sources, hashes, compatibility, licenses, and security conclusions. |
+| EXT-003 | Pixelmon economy API and native transaction-mixin feasibility proof | CORE-REQ-002, CORE-REQ-007, CORE-REQ-017 | unknown | not_required | Prove exact values, native `PlayerPartyStorage` account classification, request-aware receipt persistence beside `pixelDollars`, retry deduplication, durable save behavior, recovery, and duplicate prevention. The unmodified direct API remains a negative capability result. |
+| EXT-004 | Separately installed Vault bridge artifact | CORE-REQ-002, CORE-REQ-018, CORE-REQ-019, CORE-REQ-021 | unknown | not_required | Acquire and review the exact bridge artifact, source, hashes, compatibility, license provenance, security boundary, and whether it implements the required transaction-aware provider contract. The currently observed PixelmonEconomyBridge path is not accepted without modification. |
+| EXT-005 | Exact reviewed hybrid runtime, Vault, and economy plugin stack | CORE-REQ-018, CORE-REQ-019, CORE-REQ-021 | unknown | not_required | Select and review every exact artifact and record versions, sources, hashes, compatibility, licenses, security conclusions, and proof that the backend persists the balance effect and receipt in one transaction. |
 | EXT-006 | Disposable exact Vault bridge integration environment | CORE-REQ-018, CORE-REQ-019, CORE-REQ-021 | unknown | not_required | Provision the isolated exact hybrid environment and record its reproducible manifest and sanitized logs. |
 | EXT-007 | GitHub repository tracking capabilities | CORE-REQ-022 | available | authorized | Preserve the completed authoring search, creation, and readback for issue 66, then verify and update that same open issue in CORE-PHASE-003 only after artifact validation. |
 | EXT-008 | Owner acceptance of applicable EULA and terms for disposable runtime validation | CORE-REQ-017, CORE-REQ-018, CORE-REQ-019, CORE-REQ-021 | unavailable | unknown | Accept the applicable Minecraft and external runtime terms for the exact disposable environments before their first full launch. Never infer or write acceptance on the owner's behalf. |
@@ -273,17 +274,17 @@ All locked future scope is excluded from implementation and remains non-blocking
 
 **Kind:** environment. **Required evidence:** Reproducible Minecraft 1.21.1, NeoForge 21.1.248, Pixelmon 9.4.0, and FutureShops artifact manifest, isolation statement, procedures, results, and sanitized logs. Missing evidence blocks Pixelmon runtime proof and completion.
 
-### EXT-003 — Pixelmon economy API feasibility proof
+### EXT-003 — Pixelmon economy API and native transaction-mixin feasibility proof
 
-**Kind:** other. **Required evidence:** Verified API signatures, exact value behavior, lifecycle, persistence, declared capabilities, durable receipt or outcome design, failure behavior, recovery, and duplicate prevention. A negative capability result is valid evidence only when the adapter deterministically refuses every unsupported mutation and documentation makes no production support claim. Direct Pixelmon mutation remains blocked unless the missing capabilities are proven; the strict core and safe-refusal implementation may continue.
+**Kind:** other. **Required evidence:** Verified API signatures, exact value behavior, lifecycle, persistence, native `PlayerPartyStorage` account and `BankAccountProxy` classification, request-aware receipt schema stored beside `pixelDollars`, retry deduplication, durable save or atomic replacement behavior, failure behavior, recovery, and duplicate prevention. A negative result for the unmodified API is valid evidence only when direct calls deterministically refuse every unsupported mutation. The native mixin may enable mutation only after the exact target, receipt, and durable save contract are proven; otherwise the strict core and safe-refusal implementation continues.
 
 ### EXT-004 — Separately installed Vault bridge artifact
 
-**Kind:** artifact. **Required evidence:** Exact version, authoritative source, SHA-256, SHA-512, compatibility, license or provenance, source or binary security review, and registration contract. Missing evidence blocks Vault interoperability and completion.
+**Kind:** artifact. **Required evidence:** Exact version, authoritative source, SHA-256, SHA-512, compatibility, license or provenance, source or binary security review, archive contents, dependencies, registration contract, and proof of a transaction-aware backend receipt contract. Missing atomicity evidence blocks Vault mutation interoperability and completion, while registration and safe refusal remain testable.
 
 ### EXT-005 — Exact reviewed hybrid runtime, Vault, and economy plugin stack
 
-**Kind:** group. **Required evidence:** Exact versions, authoritative sources, sizes, SHA-256, SHA-512, compatibility, licenses or provenance, archive and dependency review, and security conclusions for every artifact. Missing evidence blocks generic claims and completion.
+**Kind:** group. **Required evidence:** Exact versions, authoritative sources, sizes, SHA-256, SHA-512, compatibility, licenses or provenance, archive and dependency review, security conclusions for every artifact, and an integration trace proving one durable transaction for the balance change and provider receipt. Missing evidence blocks generic claims, Vault mutation enablement, and completion.
 
 ### EXT-006 — Disposable exact Vault bridge integration environment
 
@@ -335,7 +336,7 @@ The registry freezes before monetary services become available. The configured i
 | Client to server | Logical server | Packet values, menu state, displayed balances, request identifiers supplied by clients | Recompute identity and permissions, validate bounds and current provider state, and generate or validate server owned request identity |
 | Configuration | Validated server configuration snapshot | Provider identifier, prices, limits, and reload attempts | Validate before activation, retain last valid non selection settings, and require restart for provider changes |
 | Provider API | FutureShops orchestration contract | Provider metadata, balances, outcomes, exceptions, latency, and readiness | Validate every response, use checked arithmetic, fail closed, and never treat an error as zero or success |
-| Pixelmon | Verified adapter | Optional classes, version, API representation, lifecycle, persistence, and failure behavior | Isolate linkage, require exact `9.4.0`, reject incompatible or unavailable runtime, and preserve server startup |
+| Pixelmon | Verified adapter and exact native-account mixin | Optional classes, version, account implementation, API representation, lifecycle, persistence, and failure behavior | Isolate linkage, require exact `9.4.0`, enable request-aware mutation only for native `PlayerPartyStorage` with proven durable save, reject custom or hybrid accounts, and preserve server startup |
 | Hybrid and Vault | Separately installed bridge | Hybrid runtime, Vault services, plugin lifecycle, provider changes, and plugin exceptions | FutureShops sees only its provider API. Bridge failure makes `vault` unavailable without loading Bukkit or Vault classes in FutureShops |
 | Persistence | Versioned FutureShops data | Interrupted writes, old records, unknown outcomes, provider changes, and corrupted metadata | Preserve data, block ambiguous mutations, recover by request ID, and require operator action when safe reconciliation is impossible |
 | Build inputs | Pinned repository and reviewed artifacts | Downloaded jars, transitive dependencies, archives, licenses, and repositories | Verify provenance and hashes, inspect contents, avoid redistribution, and record exact tested inputs |
@@ -411,9 +412,9 @@ The transaction record may contain provider identifier, root and child request I
 
 The provider API has an explicit compatibility version independent of the product version. Public identifiers, required metadata, request semantics, outcomes, and lifecycle states are documented contracts. A provider built for an unsupported API version is `INCOMPATIBLE`. This release does not promise compatibility with unverified provider implementations.
 
-Pixelmon compatibility is exactly Pixelmon `9.4.0` on Minecraft `1.21.1` and NeoForge `21.1.248`. The adapter must not register for another Pixelmon version unless exact compatibility is proven in a future plan. Its classes must not link during ordinary startup when Pixelmon is absent. Direct Pixelmon mutation is not a production compatibility claim while the exact API lacks durable request identity, receipt lookup, and idempotent retry. The exact adapter must report those missing capabilities and make mutation-required surfaces unavailable without preventing safe queries or pure barter.
+Pixelmon compatibility is exactly Pixelmon `9.4.0` on Minecraft `1.21.1` and NeoForge `21.1.248`. The adapter must not register for another Pixelmon version unless exact compatibility is proven in a future plan. Its classes must not link during ordinary startup when Pixelmon is absent. The unmodified direct API remains query and precheck capable but mutation unsafe. A narrow mixin may add request-aware mutation only to an exact native `PlayerPartyStorage` account, with the request UUID, operation, amount, and outcome receipt persisted beside `pixelDollars`, retry deduplication, and a proven durable save boundary. A custom implementation or `BankAccountProxy` result such as a Vault account is never treated as native. If any mixin or persistence capability is absent, mutation-required surfaces remain unavailable without preventing safe queries or pure barter.
 
-Vault interoperability is limited to the exact separately reviewed bridge and hybrid stack. The bridge registers `vault` through the public API. FutureShops must run on standard NeoForge without Bukkit, Vault, the bridge, or any hybrid classes present.
+Vault interoperability is limited to the exact separately reviewed bridge and hybrid stack. The bridge registers `vault` through the public API and its backend must persist the balance effect and provider receipt in one transaction before any mutation is enabled. The currently observed PixelmonEconomyBridge and FinalEconomy path is not accepted without that modification; its transaction-aware implementation is tracked in issue 66 for the 3.0.0 lines. FutureShops must run on standard NeoForge without Bukkit, Vault, the bridge, or any hybrid classes present.
 
 ### Security, privacy, and determinism
 
@@ -738,9 +739,9 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 - Crash and restore matrix, receipt audit directory integrity and backup hashes, recovery logs, and operator runbook validation.
 
-### CORE-REQ-017 — bundled capability-gated Pixelmon adapter
+### CORE-REQ-017 — bundled capability-gated Pixelmon adapter with native transaction mixin
 
-**Behavior:** Bundle adapter code for exactly Pixelmon `9.4.0`, compiled and tested against the reviewed development artifact, without bundling Pixelmon. Detect and report verified query, precheck, withdraw, deposit, durable receipt lookup, and idempotent retry capabilities. Register exact compatibility and safe query behavior, but enable a mutation-required surface only when its full capability set is proven. The currently observed direct API lacks durable receipt lookup and idempotent retry, so strict mode must reject its production mutations before creating a receipt audit record or invoking Pixelmon and must not claim direct Pixelmon production economy support unless stronger exact evidence supersedes that observation. A local receipt audit record cannot replace a Pixelmon provider receipt or idempotent retry contract.
+**Behavior:** Bundle adapter code for exactly Pixelmon `9.4.0`, compiled and tested against the reviewed development artifact, without bundling Pixelmon. Detect and report verified query, precheck, withdraw, deposit, durable receipt lookup, and idempotent retry capabilities. Keep the unmodified direct API mutation-refusing. Add a narrow optional mixin targeting exact native `PlayerPartyStorage` accounts. The mixin may enable a mutation-required surface only when it persists the FutureShops request UUID, operation, amount, and outcome receipt beside `pixelDollars`, deduplicates retries by that UUID, and forces a proven durable save or atomic replacement before reporting success. A custom account or a `BankAccountProxy` result such as a Vault account must not use this path. If the exact target, account classification, receipt schema, save boundary, or recovery lookup is absent or contradictory, strict mode must reject before local journal, custody, inventory, Pixelmon, analytics, claim, or event effects. A local receipt audit record cannot replace the provider receipt stored with the native account.
 **Owner:** `CORE-PHASE-002`
 **Contributors:** `CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-003`
 **Dependencies:** CORE-REQ-001, CORE-REQ-002, CORE-REQ-004, CORE-REQ-006, CORE-REQ-007, CORE-REQ-009, CORE-REQ-015, CORE-REQ-016, DEC-017, DEC-018, EXT-001, EXT-002, EXT-003, EXT-008
@@ -750,7 +751,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 **Acceptance criteria**
 
-- Standard NeoForge starts without Pixelmon; exact Pixelmon starts on NeoForge `21.1.248`; verified metadata, balance, and precheck behavior is exact; the direct API's missing receipt and idempotency capabilities are reported and mutation-required surfaces refuse before journal, custody, or provider effects; any future enabled mutation requires exact proof of idempotent recovery; unsupported versions do not register; no Pixelmon artifact is packaged.
+- Standard NeoForge starts without Pixelmon; exact Pixelmon starts on NeoForge `21.1.248`; verified metadata, balance, and precheck behavior is exact; direct calls still refuse without the mixin; the native mixin enables mutations only for an exact `PlayerPartyStorage` account with durable receipt and save proof; custom or hybrid accounts refuse before effects; unsupported versions do not register; no Pixelmon artifact is packaged.
 
 **Required evidence**
 
@@ -758,7 +759,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 ### CORE-REQ-018 — separate Vault bridge interoperability
 
-**Behavior:** Support a separately installed and reviewed hybrid bridge that registers provider identifier `vault` through the public API. Validate its declared query, precheck, withdraw, deposit, durable receipt lookup, and idempotent retry capabilities against one exact hybrid runtime, Vault artifact, and economy plugin stack. FutureShops records each local request and returned provider outcome in the durable receipt audit journal under `world/data/futureshops/receipts`, but that record does not make a Vault boolean call atomic or safe to replay. Enable only surfaces whose capabilities are proven; otherwise fail closed with no generic Vault production support claim. Keep all bridge, Bukkit, Vault, hybrid, and plugin code and dependencies outside FutureShops.
+**Behavior:** Support a separately installed and reviewed hybrid bridge that registers provider identifier `vault` through the public API. Validate its declared query, precheck, withdraw, deposit, durable receipt lookup, and idempotent retry capabilities against one exact hybrid runtime, Vault artifact, and economy plugin stack. The bridge or economy backend must persist the balance effect and provider receipt in one transaction before any mutation surface is enabled. The currently observed PixelmonEconomyBridge and FinalEconomy path does not satisfy that contract without modification, so `vault` remains safely refused until the transaction-aware bridge or backend is supplied. FutureShops records each local request and returned provider outcome in the durable receipt audit journal under `world/data/futureshops/receipts`, but that record does not make a Vault boolean call atomic or safe to replay. Enable only surfaces whose capabilities are proven; otherwise fail closed with no generic Vault production support claim. Keep all bridge, Bukkit, Vault, hybrid, and plugin code and dependencies outside FutureShops. The transaction-aware bridge and backend work is issue 66 scope for the 3.0.0 Forge `1.20.1` beta and future `1.21.1` port.
 **Owner:** `CORE-PHASE-002`
 **Contributors:** `CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-003`
 **Dependencies:** CORE-REQ-002, CORE-REQ-004, CORE-REQ-007, CORE-REQ-009, CORE-REQ-015, CORE-REQ-016, DEC-017, EXT-004, EXT-005, EXT-006, EXT-008
@@ -768,7 +769,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 **Acceptance criteria**
 
-- `vault` resolves only through the separate bridge; every enabled mutation surface proves the exact capability set and crash recovery contract; a missing, failed, or capability-incomplete stack leaves the server online and FutureShops fail closed; no Bukkit or Vault class, reflection string, dependency, service lookup, or bundled bridge appears in FutureShops; exact limitations are documented without claiming generic compatibility.
+- `vault` resolves only through the separate bridge; every enabled mutation surface proves the exact capability set, one-transaction provider receipt contract, and crash recovery contract; the current unmodified hybrid stack remains refused; a missing, failed, or capability-incomplete stack leaves the server online and FutureShops fail closed; no Bukkit or Vault class, reflection string, dependency, service lookup, or bundled bridge appears in FutureShops; exact limitations are documented without claiming generic compatibility.
 
 **Required evidence**
 
@@ -794,7 +795,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 ### CORE-REQ-020 — user, API, maintainer, and operator documentation
 
-**Behavior:** Update the root user documentation, maintainer documentation, documentation index, provider API reference, configuration guide, integration guides, migration guide, recovery runbook, compatibility matrix, and validation record to match implemented behavior only, including strict capabilities, lifecycle states, journal and escrow ordering, the `world/data/futureshops/receipts` receipt audit journal, clean marker, backup contents, unknown-record recovery, frozen operator workflow, and direct Pixelmon's mutation limitation.
+**Behavior:** Update the root user documentation, maintainer documentation, documentation index, provider API reference, configuration guide, integration guides, migration guide, recovery runbook, compatibility matrix, and validation record to match implemented behavior only, including strict capabilities, lifecycle states, journal and escrow ordering, the `world/data/futureshops/receipts` receipt audit journal, clean marker, backup contents, unknown-record recovery, frozen operator workflow, the native Pixelmon receipt and durable-save contract, direct Pixelmon's mutation limitation, and the separate transaction-aware Vault bridge boundary.
 **Owner:** `CORE-PHASE-003`
 **Contributors:** `CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`
 **Dependencies:** CORE-REQ-001, CORE-REQ-002, CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-006, CORE-REQ-007, CORE-REQ-008, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, CORE-REQ-019
@@ -804,7 +805,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 **Acceptance criteria**
 
-- A user can select `internal`, Pixelmon, or the separately installed `vault` provider correctly and can tell whether each surface is capability-enabled or safely refused; an integrator can implement the public API; an operator can drain, back up, diagnose, recover, or preserve a frozen request and an unknown receipt record without deleting data or restoring external balances; documentation clearly states the receipt audit path, its local-evidence limit, unknown-record recovery, no migration, restart-only selection, direct Pixelmon limitation, external money item behavior, exact compatibility, and no ATM or publication.
+- A user can select `internal`, Pixelmon, or the separately installed `vault` provider correctly and can tell whether each surface is capability-enabled or safely refused; an integrator can implement the public API; an operator can drain, back up, diagnose, recover, or preserve a frozen request and an unknown receipt record without deleting data or restoring external balances; documentation clearly states the receipt audit path, its local-evidence limit, native Pixelmon receipt and durable-save rules, transaction-aware Vault bridge requirement, unknown-record recovery, no migration, restart-only selection, direct API limitation, external money item behavior, exact compatibility, and no ATM or publication.
 
 **Required evidence**
 
@@ -822,7 +823,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 **Acceptance criteria**
 
-- One artifact identifies FutureShops `2.3.0`, targets the locked platform, contains the public API and capability-gated Pixelmon adapter, excludes Pixelmon, Bukkit, Vault, and bridge artifacts, passes internal behavior plus exact-stack capability and safe-refusal matrices, and is not published or tagged as a release.
+- One artifact identifies FutureShops `2.3.0`, targets the locked platform, contains the public API and native-account capability-gated Pixelmon adapter, excludes Pixelmon, Bukkit, Vault, and bridge artifacts, passes internal behavior plus native Pixelmon receipt and exact-stack capability or safe-refusal matrices, and is not published or tagged as a release.
 
 **Required evidence**
 
@@ -830,7 +831,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 ### CORE-REQ-022 — actual `3.0.0` continuation issue 66
 
-**Behavior:** Plan authoring searched for duplicates, created, and read back open GitHub issue 66 immediately after the integrated plan set passed validation and before the authoring pass returned. Issue 66 covers implementation of this strict design in the existing `3.0.0` Forge `1.20.1` beta and its future Minecraft `1.21.1` port. Its actionable design must explain the central economy gate, provider capabilities, `READY`, `DRAINING`, `RECOVERING`, and `FROZEN` behavior, write-ahead states and clean marker, the durable receipt audit journal at `world/data/futureshops/receipts`, its local-evidence limit, unknown-record recovery, buy and sell custody ordering, durable claims, backup scope, no unsafe retry or automatic external balance restoration, and direct Pixelmon receipt limitation. It uses the existing `3.0` beta maintenance milestone and labels `enhancement`, `forge`, `neoforge`, and `ready`. Phases 000 through 002 preserve issue 66 unchanged and open. CORE-PHASE-003 records authoring evidence without early live access to issue 66; only after `CORE-REQ-019` and `CORE-REQ-021` pass does it search again, update, and read back the same issue 66. No 3.0.0 code is implemented by this plan, and no replacement issue is created.
+**Behavior:** Plan authoring searched for duplicates, created, and read back open GitHub issue 66 immediately after the integrated plan set passed validation and before the authoring pass returned. Issue 66 covers implementation of this strict design in the existing `3.0.0` Forge `1.20.1` beta and its future Minecraft `1.21.1` port. Its actionable design must explain the central economy gate, provider capabilities, `READY`, `DRAINING`, `RECOVERING`, and `FROZEN` behavior, write-ahead states and clean marker, the durable receipt audit journal at `world/data/futureshops/receipts`, its local-evidence limit, unknown-record recovery, buy and sell custody ordering, durable claims, backup scope, no unsafe retry or automatic external balance restoration, the native Pixelmon `PlayerPartyStorage` request-receipt and durable-save pattern, the separate transaction-aware Vault bridge or backend contract, and the limits of direct Pixelmon and Vault calls. It uses the existing `3.0` beta maintenance milestone and labels `enhancement`, `forge`, `neoforge`, and `ready`. Phases 000 through 002 preserve issue 66 unchanged and open. CORE-PHASE-003 records authoring evidence without early live access to issue 66; only after `CORE-REQ-019` and `CORE-REQ-021` pass does it search again, update, and read back the same issue 66. No 3.0.0 code is implemented by this plan, and no replacement issue is created.
 **Owner:** `CORE-PHASE-003`
 **Contributors:** `CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`
 **Dependencies:** CORE-REQ-019, CORE-REQ-021, DEC-015, DEC-016, EXT-007
@@ -881,9 +882,9 @@ Phases are sequential. A phase starts from the approved result of its predecesso
 
 | Phase ID | Future execution blueprint | Outcome | Owned requirements | Entry gate | Exit gate |
 | --- | --- | --- | --- | --- | --- |
-| `CORE-PHASE-000` | [`phases/plan-phase-000.md`](phases/plan-phase-000.md) | Verified external prerequisites, pinned platform, frozen capability-aware public API, and restart-only selection contract | `CORE-REQ-001`, `CORE-REQ-002`, `CORE-REQ-003` | Master and complete registered plan set accepted, repository baseline reconfirmed | `EXT-001` through `EXT-006` are classified with exact evidence, `EXT-008` is recorded for runtime gates, direct Pixelmon's missing mutation capabilities produce a frozen safe-refusal contract, and the platform and public API acceptance gates pass |
+| `CORE-PHASE-000` | [`phases/plan-phase-000.md`](phases/plan-phase-000.md) | Verified external prerequisites, pinned platform, frozen capability-aware public API, and restart-only selection contract | `CORE-REQ-001`, `CORE-REQ-002`, `CORE-REQ-003` | Master and complete registered plan set accepted, repository baseline reconfirmed | `EXT-001` through `EXT-006` are classified with exact evidence, `EXT-008` is recorded for runtime gates, the direct Pixelmon API's missing mutation capabilities produce a frozen safe-refusal contract, and the platform and public API acceptance gates pass |
 | `CORE-PHASE-001` | [`phases/plan-phase-001.md`](phases/plan-phase-001.md) | Complete strict economy gate, lifecycle draining and recovery, write-ahead journal, escrow and claims, capability routing, migration safety, presentation, backup, and frozen recovery | `CORE-REQ-004`, `CORE-REQ-005`, `CORE-REQ-006`, `CORE-REQ-007`, `CORE-REQ-008`, `CORE-REQ-009`, `CORE-REQ-010`, `CORE-REQ-011`, `CORE-REQ-012`, `CORE-REQ-013`, `CORE-REQ-014`, `CORE-REQ-015`, `CORE-REQ-016` | `CORE-PHASE-000` integrated and its public contract stable | Every owned requirement passes deterministic, persistence, clean and unclean shutdown, escrow conservation, failure, server, client, multiplayer, backup, recovery, and frozen-state gates with internal and fixture external providers |
-| `CORE-PHASE-002` | [`phases/plan-phase-002.md`](phases/plan-phase-002.md) | Bundled capability-gated Pixelmon `9.4.0` adapter and exact separate `vault` bridge interoperability | `CORE-REQ-017`, `CORE-REQ-018` | `CORE-PHASE-001` integrated; exact reviewed artifacts and disposable environments remain reproducible; `EXT-008` is satisfied before full runtime launch | Both exact stacks pass capability declaration, safe enablement or refusal, lifecycle, journal, escrow, restart, recovery, isolation, and packaging matrices; no unsupported mutation claim remains; standard NeoForge remains clean |
+| `CORE-PHASE-002` | [`phases/plan-phase-002.md`](phases/plan-phase-002.md) | Native-account capability-gated Pixelmon `9.4.0` adapter and exact separate `vault` bridge interoperability | `CORE-REQ-017`, `CORE-REQ-018` | `CORE-PHASE-001` integrated; exact reviewed artifacts and disposable environments remain reproducible; `EXT-008` is satisfied before full runtime launch | The native Pixelmon account path proves request receipts, retry deduplication, and durable saves or refuses safely; the separate Vault stack proves one-transaction provider receipts or remains refused; both exact stacks pass lifecycle, journal, escrow, restart, recovery, isolation, and packaging matrices; standard NeoForge remains clean |
 | `CORE-PHASE-003` | [`phases/plan-phase-003.md`](phases/plan-phase-003.md) | Final strict-safety validation, accurate documentation, validated unpublished artifact, and post-artifact verification and update of open issue 66 | `CORE-REQ-019`, `CORE-REQ-020`, `CORE-REQ-021`, `CORE-REQ-022` | `CORE-PHASE-002` integrated with complete external evidence and issue 66 identified by the authoring `EVD-GH-001` record | Plan-wide definition of done passes, exact artifact remains unpublished, and issue 66 is updated only after artifact validation with the 3.0.0 design, verified by URL and readback, and remains open |
 
 No future phase may start early. A failure in an earlier owned requirement returns work to that requirement's phase scope and invalidates affected downstream evidence.
@@ -901,7 +902,7 @@ No future phase may start early. A failure in an earlier owned requirement retur
 7. Run dedicated server smoke tests on standard NeoForge.
 8. Run client smoke tests for screens, localization, currency formatting, disabled actions, and optional mod isolation.
 9. Run multiplayer, reconnect, stale snapshot, delayed readiness, retry, and replay scenarios.
-10. Run restart and crash point recovery matrices with internal, fixture external, Pixelmon, and `vault` providers.
+10. Run restart and crash point recovery matrices with internal, fixture external, native Pixelmon, and `vault` providers.
 11. Run the exact Pixelmon environment and exact hybrid bridge environment.
 12. Inspect dependency graphs, runtime classpaths, the final jar, generated output, secrets, debug output, and the complete diff.
 13. Reinstall the exact hashed candidate in every production validation environment.
@@ -915,7 +916,7 @@ No future phase may start early. A failure in an earlier owned requirement retur
 | --- | --- |
 | Built in `internal` | New world, upgraded world, new player, existing player, restart, recovery, insufficient funds, numeric boundary |
 | Fixture external | Ready, missing, late, incompatible API, invalid metadata, thrown query, thrown mutation, ambiguous outcome, duplicate request, recovery required |
-| Pixelmon `9.4.0` | Absent, exact compatible, incompatible version, startup failure, runtime failure, exact conversion, duplicate and crash recovery |
+| Pixelmon `9.4.0` | Absent, exact compatible native `PlayerPartyStorage`, custom or `BankAccountProxy` account, incompatible version, startup failure, runtime failure, exact conversion, request receipt persistence, duplicate and crash recovery |
 | `vault` bridge | Absent bridge, absent Vault, absent economy plugin, exact complete stack, provider service loss, plugin failure, restart, duplicate and crash recovery |
 
 #### Surface matrix
@@ -942,8 +943,8 @@ Evidence must identify the source commit, exact command or procedure, date, envi
 | --- | --- |
 | Minecraft `1.21.1`, NeoForge `21.1.248`, no external provider mods, `internal` selected | Required |
 | Minecraft `1.21.1`, NeoForge `21.1.248`, Pixelmon absent, `internal` selected | Required |
-| Minecraft `1.21.1`, NeoForge `21.1.248`, exact Pixelmon `9.4.0`, capability-gated Pixelmon provider selected | Required for verified queries, direct mutation capability refusal, clean and unclean restart behavior, and isolation proof |
-| Exact reviewed hybrid stack with separately installed bridge registering `vault` | Required for exact capability enablement or safe-refusal proof after external gates pass |
+| Minecraft `1.21.1`, NeoForge `21.1.248`, exact Pixelmon `9.4.0`, native-account Pixelmon provider selected | Required for verified queries, native request receipt and durable-save mutation proof or safe refusal, custom and hybrid account refusal, clean and unclean restart behavior, and isolation proof |
+| Exact reviewed hybrid stack with separately installed bridge registering `vault` | Required for exact one-transaction receipt enablement or safe-refusal proof after external gates pass |
 | NeoForge `21.1.233` | Not a `2.3.0` target |
 | Pixelmon other than `9.4.0` | Unsupported and must not register as compatible |
 | Generic unreviewed hybrid runtime, Vault version, bridge, or economy plugin | Unverified and not claimed |
@@ -983,8 +984,8 @@ Tracked documentation remains canonical. At minimum, the final documentation set
 * User installation and supported version matrix.
 * Provider selection, `internal` default, restart behavior, and unavailable states.
 * Public API registration, metadata, threading, lifecycle, request, result, idempotency, recovery, and compatibility contracts.
-* Exact Pixelmon `9.4.0` installation and the fact that Pixelmon itself is not bundled.
-* Exact reviewed hybrid stack and separately installed bridge requirements, with no claim of generic Vault compatibility.
+* Exact Pixelmon `9.4.0` installation, native `PlayerPartyStorage` mixin requirements, and the fact that Pixelmon itself is not bundled.
+* Exact reviewed hybrid stack and separately installed bridge requirements, including the one-transaction provider receipt contract and no claim of generic Vault compatibility.
 * Currency precision, price interpretation, overflow rejection, and absence of automatic balance migration.
 * Physical bill behavior under internal and external providers.
 * Complete surface behavior for shops, carts, player shops, offline proceeds, claims, pay, administration, analytics, events, and rollback.
@@ -1000,10 +1001,10 @@ Release `2.3.0` ends at a validated artifact. No GitHub release, mod platform up
 | Risk ID | Risk | Impact | Required mitigation | Blocking condition |
 | --- | --- | --- | --- | --- |
 | `RISK-001` | Official Pixelmon development artifact or licensing terms are unavailable | Adapter cannot be lawfully compiled or verified | Obtain official artifact and written terms evidence, avoid redistribution | Blocks `CORE-PHASE-000` exit |
-| `RISK-002` | Pixelmon API cannot provide exact minor units or durable idempotent outcomes | Lossy values or duplicate money are possible | Report exact capabilities and reject every unsupported mutation in strict mode; enable writes only if later exact evidence proves durable identity, receipt lookup, and idempotent retry | Blocks a direct Pixelmon mutation claim, but safe-refusal implementation remains mandatory |
+| `RISK-002` | Pixelmon API or native save hook cannot provide exact minor units or durable idempotent outcomes | Lossy values or duplicate money are possible | Keep direct calls refused; enable writes only for an exact native `PlayerPartyStorage` mixin whose request receipt is stored beside `pixelDollars`, retries deduplicate, and durable save is proven. Custom and hybrid accounts remain refused | Blocks a native Pixelmon mutation claim, but query and safe-refusal implementation remains mandatory |
 | `RISK-003` | Hybrid bridge or exact stack is unavailable or unsafe | `vault` interoperability cannot be validated | Obtain reviewed exact artifacts and disposable environment, keep FutureShops boundary clean | Blocks `CORE-REQ-018` and final completion |
 | `RISK-004` | Existing direct `BalanceManager` access bypasses provider orchestration | External mode may mutate dormant internal balances or report false values | Complete call graph and surface matrix, enforce one route, add bypass tests | Blocks `CORE-REQ-009` |
-| `RISK-005` | Crash occurs between an external effect and local outcome persistence | Duplicate or lost value may occur | Require durable provider outcome lookup or proven adapter receipt semantics, enter recovery required on ambiguity | Blocks `CORE-REQ-007` |
+| `RISK-005` | Crash occurs between an external effect and local outcome persistence | Duplicate or lost value may occur | Require durable provider outcome lookup or a proven native Pixelmon receipt or Vault backend transaction, enter recovery required on ambiguity | Blocks `CORE-REQ-007` |
 | `RISK-006` | Different provider precision changes price meaning | Operator may unintentionally alter economy scale | No conversion, validate representation, require documented price review before selection | Blocks rollout until acknowledged in procedure |
 | `RISK-007` | Optional classes link when Pixelmon or hybrid APIs are absent | Standard NeoForge startup crashes | Isolate source and class loading, use exact presence and version gates, test clean jar | Blocks `CORE-REQ-001` and integrations |
 | `RISK-008` | Client controls remain active from a stale readiness snapshot | Users submit unsafe or confusing operations | Server revalidation, typed rejections, synchronized presentation, reconnect tests | Blocks `CORE-REQ-005` and `CORE-REQ-012` |
@@ -1016,9 +1017,9 @@ Release `2.3.0` ends at a validated artifact. No GitHub release, mod platform up
 
 The plan is complete only when every condition below is true.
 
-The exact completion endpoint is: One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior and strict capability-gated behavior against exact Pixelmon 9.4.0 and one exact reviewed Vault bridge stack, enabling external writes only where durable outcome and idempotent retry capabilities are proven and otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.
+The exact completion endpoint is: One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior, a native exact Pixelmon 9.4.0 `PlayerPartyStorage` transaction-mixin path, and separate `vault` registration with mutation enabled only when a bridge and backend provide one durable balance and receipt transaction, otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.
 
-Official Pixelmon 9.4.0 runtime and development artifacts, Disposable exact Pixelmon 9.4.0 integration environment, Pixelmon economy API feasibility proof, Separately installed Vault bridge artifact, Exact reviewed hybrid runtime, Vault, and economy plugin stack, Disposable exact Vault bridge integration environment, and Owner acceptance of applicable EULA and terms for disposable runtime validation under EXT-008 are known external blockers. If any remains unavailable, dependent scope is preserved and the result is **NOT COMPLETE — EXTERNALLY BLOCKED**. A negative capability result requires safe refusal rather than a false support claim. No substitute artifact, reduced verification, unsafe override, partial compatibility claim, or publication may bypass that state.
+Official Pixelmon 9.4.0 runtime and development artifacts, Disposable exact Pixelmon 9.4.0 integration environment, Pixelmon economy API and native transaction-mixin feasibility proof, Separately installed Vault bridge artifact, Exact reviewed hybrid runtime, Vault, and economy plugin stack, Disposable exact Vault bridge integration environment, and Owner acceptance of applicable EULA and terms for disposable runtime validation under EXT-008 are known external blockers. If any remains unavailable, dependent scope is preserved and the result is **NOT COMPLETE — EXTERNALLY BLOCKED**. A negative capability result requires safe refusal rather than a false support claim. No substitute artifact, reduced verification, unsafe override, partial compatibility claim, or publication may bypass that state.
 
 1. All four contiguous phases are integrated in order, and every mandatory requirement has traceable passing evidence.
 2. FutureShops identifies as `2.3.0` on Minecraft `1.21.1` and NeoForge `21.1.248`, with no unrelated platform upgrade.
@@ -1031,13 +1032,13 @@ Official Pixelmon 9.4.0 runtime and development artifacts, Disposable exact Pixe
 9. External balances are not mirrored into FutureShops, while request facts, receipt audit facts, custody, claims, and confirmed analytics remain durable. Local receipt audit records never substitute for external receipt lookup or idempotent retry.
 10. No automatic balance migration occurs. Internal starting balance remains internal only. Provider and precision changes preserve independent data and require operator review.
 11. With an external provider selected, money item activation, deposit, withdrawal, redemption, and future ATM mutations are disabled while registrations and existing bills remain safe. No ATM UI or command exists.
-12. The bundled capability-gated Pixelmon adapter passes against exact official Pixelmon `9.4.0` artifacts, reports the direct API's missing receipt and idempotency capabilities, refuses production mutation-required surfaces, and the jar does not bundle Pixelmon.
-13. The separately installed bridge registers `vault` and passes capability, enablement or safe-refusal, journal, escrow, restart, and recovery checks against one exact reviewed hybrid stack, while FutureShops contains no Bukkit or Vault dependency, reflection, or bridge code.
+12. The bundled capability-gated Pixelmon adapter passes against exact official Pixelmon `9.4.0` artifacts, reports the direct API's missing receipt and idempotency capabilities, enables mutations only through the exact native `PlayerPartyStorage` mixin with durable receipt and save proof, refuses custom and hybrid accounts, and the jar does not bundle Pixelmon.
+13. The separately installed bridge registers `vault` and passes capability, one-transaction receipt, enablement or safe-refusal, journal, escrow, restart, and recovery checks against one exact reviewed hybrid stack, while FutureShops contains no Bukkit or Vault dependency, reflection, or bridge code. The current PixelmonEconomyBridge and FinalEconomy path remains refused unless modified to satisfy that contract.
 14. Standard NeoForge client and dedicated server start from the same final jar without Pixelmon or hybrid components.
 15. Focused tests, complete tests, applicable data and GameTests, build, server, client, multiplayer, restart, failure, recovery, dependency, security, jar, and diff gates pass.
 16. User, API, maintainer, migration, integration, security, verification, and recovery documentation matches the validated behavior and exact artifacts.
 17. `EVD-ART-001` identifies one reproducible, inspected, SHA 256 and SHA 512 hashed FutureShops `2.3.0` artifact that remains unpublished.
-18. `EVD-GH-001` identifies open GitHub issue 66, created and read back immediately after plan validation, proves it remained unchanged and open through phases 000 through 002, and proves its post-artifact Phase 003 search, strict-design update, and readback for `3.0.0` Forge `1.20.1` and a future `1.21.1` port with the existing milestone and labels. Issue 66 remains open, no 3.0.0 code is implemented here, and product execution never creates a replacement or duplicate.
+18. `EVD-GH-001` identifies open GitHub issue 66, created and read back immediately after plan validation, proves it remained unchanged and open through phases 000 through 002, and proves its post-artifact Phase 003 search, strict-design update, and readback for `3.0.0` Forge `1.20.1` and a future `1.21.1` port with the native Pixelmon receipt and durable-save pattern plus the transaction-aware Vault bridge or backend contract, the existing milestone, and labels. Issue 66 remains open, no 3.0.0 code is implemented here, and product execution never creates a replacement or duplicate.
 19. `docs/plan/goal.md` is byte for byte unchanged.
 20. No publication, release tag, mod platform upload, private data disclosure, credential use outside approved authentication, or unrelated source change occurred.
 
@@ -1048,15 +1049,15 @@ Passing internal tests without the exact Pixelmon and Vault environments is not 
 After the master, all four phase plans, plan index, and deterministic handoff pass validation, Goal Creator uses the following exact execution handoff without altering an existing `docs/plan/goal.md`.
 
 ```text
-Mandatory boundary: CORE-REQ-001 through CORE-REQ-022 across CORE-PHASE-000 through CORE-PHASE-003, including exact external integration evidence, the unpublished artifact, and the two-stage open issue lifecycle.
+Mandatory boundary: CORE-REQ-001 through CORE-REQ-022 across CORE-PHASE-000 through CORE-PHASE-003, including the native Pixelmon transaction-mixin path, separate Vault bridge boundary, exact external integration evidence, the unpublished artifact, and the two-stage open issue lifecycle.
 Optional/future disposition: excluded
 Locked owner decisions: DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018
 Active phase: CORE-PHASE-000
 Next executable action: Execute P000-TASK-001 to reconfirm repository identity, toolchain, product metadata, economy ownership, and the complete provider call graph before implementation.
 Known failing checks: none at validated plan handoff; execution checks have not yet run.
-Known external blockers: Official Pixelmon 9.4.0 runtime and development artifacts; Disposable exact Pixelmon 9.4.0 integration environment; Pixelmon economy API feasibility proof; Separately installed Vault bridge artifact; Exact reviewed hybrid runtime, Vault, and economy plugin stack; Disposable exact Vault bridge integration environment; Owner acceptance of applicable EULA and terms for disposable runtime validation under EXT-008.
-Completion endpoint: One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior and strict capability-gated behavior against exact Pixelmon 9.4.0 and one exact reviewed Vault bridge stack, enabling external writes only where durable outcome and idempotent retry capabilities are proven and otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.
-Required evidence gates: Complete every requirement acceptance criterion and phase exit gate, classify EXT-001 through EXT-006 with exact evidence, satisfy EXT-008 before full external runtime proof, pass journal, escrow, draining, recovery, frozen, capability, deterministic, and runtime matrices, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation.
+Known external blockers: Official Pixelmon 9.4.0 runtime and development artifacts; Disposable exact Pixelmon 9.4.0 integration environment; Pixelmon economy API and native transaction-mixin feasibility proof; Separately installed Vault bridge artifact; Exact reviewed hybrid runtime, Vault, and economy plugin stack; Disposable exact Vault bridge integration environment; Owner acceptance of applicable EULA and terms for disposable runtime validation under EXT-008.
+Completion endpoint: One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior, a native exact Pixelmon 9.4.0 `PlayerPartyStorage` transaction-mixin path, and separate `vault` registration with mutation enabled only when a bridge and backend provide one durable balance and receipt transaction, otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.
+Required evidence gates: Complete every requirement acceptance criterion and phase exit gate, classify EXT-001 through EXT-006 with exact evidence, prove the native Pixelmon PlayerPartyStorage receipt, deduplication, account classification, and durable-save path, satisfy EXT-008 before full external runtime proof, pass journal, escrow, draining, recovery, frozen, capability, deterministic, and runtime matrices, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation.
 ```
 
 Execution advances one phase at a time. It does not stack future phase work, rewrite the master as status, alter the immutable goal, or declare success before the plan-wide Definition of Done and exact endpoint are satisfied.
