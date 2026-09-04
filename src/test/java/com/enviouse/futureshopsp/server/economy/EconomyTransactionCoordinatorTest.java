@@ -42,7 +42,9 @@ class EconomyTransactionCoordinatorTest {
         FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
         EconomyLifecycleController lifecycle = readyLifecycle();
         InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
-        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        InMemoryEconomyReceiptAuditJournal audit = new InMemoryEconomyReceiptAuditJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal,
+                new InMemoryEconomyCustodyStore(), new InMemoryEconomyClaimStore(), audit);
         MutationRequest request = MutationRequest.forPlayer(
                 new RequestId(UUID.fromString("00000000-0000-0000-0000-000000000011")), PLAYER, 25L,
                 MutationKind.WITHDRAW);
@@ -56,6 +58,8 @@ class EconomyTransactionCoordinatorTest {
         assertEquals(1, provider.withdrawCalls);
         assertEquals(EconomyTransactionState.RESOLVED,
                 journal.find(request.requestId()).orElseThrow().state());
+        assertEquals(4, audit.snapshot().size());
+        assertTrue(audit.matches(journal));
     }
 
     @Test

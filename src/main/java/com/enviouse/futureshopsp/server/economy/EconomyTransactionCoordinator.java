@@ -29,6 +29,7 @@ public final class EconomyTransactionCoordinator {
     private final EconomyTransactionJournal journal;
     private final EconomyCustodyStore custody;
     private final EconomyClaimStore claims;
+    private final EconomyReceiptAuditJournal receiptAudit;
     private final Object lock = new Object();
 
     public EconomyTransactionCoordinator(EconomyProvider provider,
@@ -42,11 +43,21 @@ public final class EconomyTransactionCoordinator {
                                          EconomyTransactionJournal journal,
                                          EconomyCustodyStore custody,
                                          EconomyClaimStore claims) {
+        this(provider, lifecycle, journal, custody, claims, new InMemoryEconomyReceiptAuditJournal());
+    }
+
+    public EconomyTransactionCoordinator(EconomyProvider provider,
+                                         EconomyLifecycleController lifecycle,
+                                         EconomyTransactionJournal journal,
+                                         EconomyCustodyStore custody,
+                                         EconomyClaimStore claims,
+                                         EconomyReceiptAuditJournal receiptAudit) {
         this.provider = Objects.requireNonNull(provider, "provider");
         this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle");
         this.journal = Objects.requireNonNull(journal, "journal");
         this.custody = Objects.requireNonNull(custody, "custody");
         this.claims = Objects.requireNonNull(claims, "claims");
+        this.receiptAudit = Objects.requireNonNull(receiptAudit, "receiptAudit");
     }
 
     public EconomyLifecycleSnapshot lifecycle() {
@@ -274,7 +285,7 @@ public final class EconomyTransactionCoordinator {
                     EconomyTransactionState.PREPARED, Optional.empty(), ProviderResultStatus.REJECTED, "",
                     provider.providerId());
             try {
-                journal.append(prepared);
+                append(prepared);
             } catch (RuntimeException exception) {
                 return journalFailure("transaction intent could not be persisted");
             }
@@ -463,7 +474,7 @@ public final class EconomyTransactionCoordinator {
                     EconomyTransactionState.PREPARED, Optional.empty(), ProviderResultStatus.REJECTED, "",
                     provider.providerId());
             try {
-                journal.append(prepared);
+                append(prepared);
             } catch (RuntimeException exception) {
                 return journalFailure("transaction intent could not be persisted");
             }
@@ -477,6 +488,13 @@ public final class EconomyTransactionCoordinator {
                 provider.providerId());
         try {
             journal.replace(pending);
+            if (!journal.flush()) {
+                throw new IllegalStateException("transaction journal flush failed");
+            }
+            receiptAudit.append(pending);
+            if (!receiptAudit.flush()) {
+                throw new IllegalStateException("receipt audit flush failed");
+            }
         } catch (RuntimeException exception) {
             return journalFailure("pending transaction state could not be persisted");
         }
@@ -685,8 +703,27 @@ public final class EconomyTransactionCoordinator {
 
     private void replace(EconomyJournalRecord source, EconomyTransactionState state,
                          Optional<MutationReceipt> receipt, ProviderResultStatus status, String diagnostic) {
-        journal.replace(new EconomyJournalRecord(source.request(), state, receipt, status, diagnostic,
-                source.providerId().isBlank() ? provider.providerId() : source.providerId()));
+        EconomyJournalRecord updated = new EconomyJournalRecord(source.request(), state, receipt, status, diagnostic,
+                source.providerId().isBlank() ? provider.providerId() : source.providerId());
+        journal.replace(updated);
+        if (!journal.flush()) {
+            throw new IllegalStateException("transaction journal flush failed");
+        }
+        receiptAudit.append(updated);
+        if (!receiptAudit.flush()) {
+            throw new IllegalStateException("receipt audit flush failed");
+        }
+    }
+
+    private void append(EconomyJournalRecord record) {
+        journal.append(record);
+        if (!journal.flush()) {
+            throw new IllegalStateException("transaction journal flush failed");
+        }
+        receiptAudit.append(record);
+        if (!receiptAudit.flush()) {
+            throw new IllegalStateException("receipt audit flush failed");
+        }
     }
 
     private static boolean validReceipt(MutationRequest request, MutationReceipt receipt) {
