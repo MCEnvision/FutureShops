@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "planId": "PLAN-MASTER",
-  "planSetSha256": "dfc84b0ee7e7db34607a2ea5093d78f9b5f34c5e33e7a49255b310171c608ba9",
+  "planSetSha256": "6fac49c5c2541eda3c722b0610aad0d5dc35c87655a59edbbf397c1d66ea20b8",
   "planningSubject": {
     "name": "FutureShops 2.3.0 strict external economy safety for Minecraft 1.21.1 NeoForge, with capability gated Pixelmon 9.4.0 and Vault bridge interoperability",
     "requestedArtifact": "authoritative_plan",
@@ -959,11 +959,11 @@
       ],
       "mandatory_for_endpoint": true,
       "kind": "artifact",
-      "availability": "unknown",
+      "availability": "available",
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Execute P000-TASK-002 and P002-TASK-013: verify the official universal jar and exact interface injection metadata, then run an isolated compile probe. The same verified universal jar may satisfy runtime and development roles; no separate sources bundle is mandatory when the probe and permitted-use review pass."
+        "Acquisition, hash, archive, API inspection, interface injection metadata review, and an isolated Java 21 compile probe passed for the exact universal jar. Use it as the pinned input for Phase 002; review runtime mixin and other third party operations separately under EXT-009."
       ],
       "artifact_evidence": [
         "exact_version",
@@ -985,11 +985,11 @@
       ],
       "mandatory_for_endpoint": true,
       "kind": "environment",
-      "availability": "unknown",
+      "availability": "available",
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Provision the exact isolated runtime and record its reproducible manifest and sanitized logs."
+        "The exact Minecraft 1.21.1 and NeoForge 21.1.248 profile with Pixelmon 9.4.0 and FutureShops was provisioned with eula=true, reached Done, and produced sanitized startup and refusal logs. Phase owned mutation and recovery evidence remains required."
       ]
     },
     {
@@ -1020,11 +1020,11 @@
       ],
       "mandatory_for_endpoint": true,
       "kind": "artifact",
-      "availability": "unknown",
+      "availability": "available",
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Review an exact existing registrant, or build the separate test registrant in P002-TASK-006 against the public FutureShops API and reviewed hybrid services. Record source revision, build recipe, hashes, provenance, and registration and receipt results. An absent ready-made bridge is not an external blocker to that build task."
+        "The exact separately installed bridge candidate is available and its identity and archive are recorded. Phase 002 must still build or obtain the FutureShops test registrant and durable backend proof, and must leave mutation disabled until that proof passes. An absent ready made transaction aware bridge is not an acquisition blocker."
       ],
       "artifact_evidence": [
         "exact_version",
@@ -1046,11 +1046,11 @@
       ],
       "mandatory_for_endpoint": true,
       "kind": "other",
-      "availability": "unknown",
+      "availability": "available",
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Execute P002-TASK-014 to acquire and pin a reviewed exact hybrid and Vault stack. P002-TASK-006 builds or obtains its separate durable backend proof. Record source and artifact identities, licenses, security, compatibility, and the one-transaction receipt matrix. Legacy backend refusal and proof-backend success are separate results."
+        "The exact Pixelmon 9.4.0 hybrid stack with Vault and its economy components is pinned, hashed, launched, and recorded. Third party terms remain under EXT-009, and the separate one transaction receipt proof remains Phase 002 work. Legacy backend refusal and proof backend success are separate results."
       ]
     },
     {
@@ -1063,11 +1063,11 @@
       ],
       "mandatory_for_endpoint": true,
       "kind": "environment",
-      "availability": "unknown",
+      "availability": "available",
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Provision the isolated exact hybrid environment and record its reproducible manifest and sanitized logs."
+        "The isolated exact hybrid environment was provisioned with eula=true, loaded the pinned stack and FutureShops, reached Done, and produced sanitized logs. Phase owned bridge registration, mutation, and recovery evidence remains required."
       ]
     },
     {
@@ -1290,7 +1290,7 @@
     "activePhase": "CORE-PHASE-000",
     "nextExecutableAction": "Execute P000-TASK-001 to reconfirm repository identity, toolchain, product metadata, economy ownership, and the complete provider call graph before implementation.",
     "knownFailingChecks": "none at validated plan handoff; execution checks have not yet run.",
-    "knownExternalBlockers": "Unresolved acquisition or runtime evidence for Official Pixelmon 9.4.0 runtime and development artifacts; Disposable exact Pixelmon 9.4.0 integration environment; Separately installed Vault bridge artifact; Exact reviewed hybrid runtime, Vault, and economy plugin stack; Disposable exact Vault bridge integration environment; Third party artifact and development-use terms review under EXT-009. Apply DEC-019 before declaring any route exhausted. P002-TASK-013 and P002-TASK-014 acquire exact inputs; P002-TASK-006 obtains or builds the separate bridge and durable backend proof. Native mixin implementation, proof construction, and provisioning are executable work, not prerequisites to start themselves. EXT-008 is already authorized; set and verify eula=true under DEC-020 without another consent request.",
+    "knownExternalBlockers": "Third party artifact and development-use terms review under EXT-009 remains unresolved. Exact Pixelmon runtime and development inputs, disposable Pixelmon runtime, bridge candidate, reviewed hybrid stack, and disposable hybrid environment are available under EXT-001, EXT-002, EXT-004, EXT-005, and EXT-006. P002-TASK-013 and P002-TASK-014 record and consume those inputs; P002-TASK-006 obtains or builds the separate bridge and durable backend proof. Native mixin implementation, proof construction, and provisioning are executable work, not prerequisites to start themselves. EXT-008 is already authorized; set and verify eula=true under DEC-020 without another consent request.",
     "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, classify EXT-001 through EXT-006 with exact evidence, inspect the Pixelmon 9.4.0 classes and save path, implement and prove the native PlayerPartyStorage receipt, deduplication, account classification, and durable-save path, execute the Phase 002 Vault bridge or backend transaction proof, apply EXT-008 and DEC-020 before launch and review exact third party operations under EXT-009, obtain and compile the public Pixelmon inputs, build the separate bridge and durable backend proof when needed, pass journal, escrow, draining, recovery, frozen, capability, deterministic, and runtime matrices, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation."
   }
 }
