@@ -82,6 +82,14 @@ That artifact run also preserved the known external stack parser warnings, inclu
 
 A separate fresh exact hybrid runtime omitted the proof registrant and kept the unmodified PixelmonEconomyBridge, FinalEconomy, EverNifeCore, and Vault stack. With `provider = "vault"`, FutureShops reached `Done` without registering a provider. The bounded debug command reported `provider=none`, `lifecycle=RECOVERING`, and `observed_capabilities=none`, then the server stopped cleanly. No provider mutation was attempted and no proof jar was present in the runtime. The sanitized refusal and debug log SHA 256 is `425463560881196d018416bab76203b1aff786b20e2e05e5769df7d7c75ab41c`.
 
+## Current artifact revalidation on 2026-09-05
+
+The exact hybrid profile was copied to a new disposable directory. Its FutureShops jar was replaced with source commit `6bbaf9156bcd8d79bee274717f2ae67d4db6f69e` and artifact SHA 256 `945d175c363ec06f6b0e965161cff081c5deebf1b1ed899e605b48890fc69563`. The separately packaged proof registrant was replaced with SHA 256 `4aa7b397543288c15b96f6df025dbd47faf43a5b78a0cfc1d5de86bb5b052e68`. Pixelmon, GeckoLib, Vault, FinalEconomy, EverNifeCore, PixelmonEconomyBridge, and Youer matched the component hashes in the runtime manifest above. The copied runtime verified `eula=true` before both launches.
+
+The first current artifact process registered `vault`, resolved the provider, completed precheck, withdrawal, lookup, retry, deposit, refund, compensation, custody, claims, and transfer, reached `Done`, and stopped. Its sanitized log SHA 256 is `da65861f3fe7d3b0fb53cf00bc832884339106cc494b19a67a58398f77f4bca6`. The second process reused the same world and provider database. It returned the stable requests as `CONFIRMED`, reported the already resolved claim, reported `transfer=REPLAYED`, retained balance `89`, reached `Done`, and stopped. Its sanitized log SHA 256 is `2e1a5d09df895135d4683e6832fce0e6230feb0734bf3ca00c57c758f7298d86`.
+
+The current hybrid process emitted only unrelated Youer warnings for missing Create classes. No FutureShops error or exception occurred. The disposable copied runtime, world, provider database, and active lock were removed after both logs and installed hashes were recorded. The unmodified legacy bridge remains a safe refusal without the separate request aware proof registrant and durable backend.
+
 ## Boundary proof
 
 `VaultTransactionProofTest` runs against the same public provider contract and SQLite backend. It proves:
