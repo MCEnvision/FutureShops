@@ -2,6 +2,9 @@ package com.enviouse.futureshopsp.vaultproof;
 
 import com.enviouse.futureshopsp.api.economy.EconomyApi;
 import com.enviouse.futureshopsp.api.economy.EconomyProviderRegistry;
+import com.enviouse.futureshopsp.server.economy.ClaimRecord;
+import com.enviouse.futureshopsp.server.economy.CustodyRecord;
+import com.enviouse.futureshopsp.server.economy.CustodyState;
 import com.enviouse.futureshopsp.api.economy.MutationKind;
 import com.enviouse.futureshopsp.api.economy.MutationReceipt;
 import com.enviouse.futureshopsp.api.economy.MutationRequest;
@@ -26,6 +29,11 @@ import java.util.UUID;
 @Mod("futureshops_vault_proof")
 public final class VaultProofRegistrant {
     private static final UUID PROOF_PLAYER = UUID.fromString("00000000-0000-0000-0000-000000000410");
+    private static final UUID WITHDRAW_REQUEST = UUID.fromString("00000000-0000-0000-0000-000000000510");
+    private static final UUID DEPOSIT_REQUEST = UUID.fromString("00000000-0000-0000-0000-000000000511");
+    private static final UUID REFUND_REQUEST = UUID.fromString("00000000-0000-0000-0000-000000000512");
+    private static final UUID COMPENSATION_REQUEST = UUID.fromString("00000000-0000-0000-0000-000000000513");
+    private static final UUID CUSTODY_REQUEST = UUID.fromString("00000000-0000-0000-0000-000000000514");
     private static final Logger LOGGER = LogUtils.getLogger();
     private static volatile SqliteVaultProofProvider provider;
 
@@ -50,15 +58,38 @@ public final class VaultProofRegistrant {
         }
         MutationRequest request = MutationRequest.forPlayer(
                 new com.enviouse.futureshopsp.api.economy.RequestId(
-                        UUID.fromString("00000000-0000-0000-0000-000000000510")),
+                        WITHDRAW_REQUEST),
                 PROOF_PLAYER, 25L, MutationKind.WITHDRAW);
         ProviderResult<?> providerPrecheck = active.precheck(request);
         ProviderResult<?> coordinatorPrecheck = BalanceManager.getCoordinator().preflight(request);
         ProviderResult<MutationReceipt> withdrawal = BalanceManager.getCoordinator().withdraw(request);
         ProviderResult<MutationReceipt> lookup = active.lookup(request.requestId());
         ProviderResult<MutationReceipt> retry = active.retry(request);
-        LOGGER.info("FutureShops Vault proof transaction provider_precheck={} coordinator_precheck={} withdrawal={} lookup={} retry={} balance={} database={}",
+        MutationRequest depositRequest = MutationRequest.forPlayer(new com.enviouse.futureshopsp.api.economy.RequestId(
+                DEPOSIT_REQUEST), PROOF_PLAYER, 5L, MutationKind.DEPOSIT);
+        MutationRequest refundRequest = MutationRequest.forPlayer(new com.enviouse.futureshopsp.api.economy.RequestId(
+                REFUND_REQUEST), PROOF_PLAYER, 3L, MutationKind.REFUND);
+        MutationRequest compensationRequest = MutationRequest.forPlayer(new com.enviouse.futureshopsp.api.economy.RequestId(
+                COMPENSATION_REQUEST), PROOF_PLAYER, 2L, MutationKind.COMPENSATION);
+        ProviderResult<MutationReceipt> deposit = BalanceManager.getCoordinator().deposit(depositRequest);
+        ProviderResult<MutationReceipt> refund = BalanceManager.getCoordinator().refund(refundRequest);
+        ProviderResult<MutationReceipt> compensation = BalanceManager.getCoordinator().compensate(compensationRequest);
+
+        MutationRequest custodyRequest = MutationRequest.forPlayer(new com.enviouse.futureshopsp.api.economy.RequestId(
+                CUSTODY_REQUEST), PROOF_PLAYER, 4L, MutationKind.DEPOSIT);
+        ProviderResult<MutationReceipt> custodyDeposit = BalanceManager.getCoordinator().executeWithCustody(
+                custodyRequest, PROOF_PLAYER, "vault-proof-item", 1L, "sha256:vault-proof-item", CustodyState.CLAIMED);
+        CustodyRecord custody = BalanceManager.getCoordinator().custody(custodyRequest.requestId().child("custody"))
+                .orElseThrow();
+        com.enviouse.futureshopsp.api.economy.RequestId claimRequest = custodyRequest.requestId().child("claim");
+        ClaimRecord claim = BalanceManager.getCoordinator().createClaim(claimRequest, PROOF_PLAYER, 4L,
+                "vault proof claim");
+        ClaimRecord deliveredClaim = BalanceManager.getCoordinator().deliverClaim(claimRequest);
+        ClaimRecord resolvedClaim = BalanceManager.getCoordinator().resolveClaim(claimRequest);
+        LOGGER.info("FutureShops Vault proof transaction provider_precheck={} coordinator_precheck={} withdrawal={} lookup={} retry={} deposit={} refund={} compensation={} custody={} custody_state={} claim={} claim_state_initial={} claim_state_delivered={} claim_state_resolved={} balance={} database={}",
                 providerPrecheck.status(), coordinatorPrecheck.status(), withdrawal.status(), lookup.status(), retry.status(),
+                deposit.status(), refund.status(), compensation.status(), custodyDeposit.status(), custody.state(),
+                claimRequest, claim.state(), deliveredClaim.state(), resolvedClaim.state(),
                 active.balance(PROOF_PLAYER).value().orElseThrow().balanceMinorUnits(), databasePath());
     }
 
