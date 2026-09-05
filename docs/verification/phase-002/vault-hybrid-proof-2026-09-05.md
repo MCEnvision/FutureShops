@@ -11,10 +11,10 @@ This record covers the separately installed Vault proof registrant and its durab
 | NeoForge | `21.1.248` |
 | Java | `21.0.11` |
 | Youer | `1.21.1-d4a204a0` |
-| FutureShops source | `c56f79f7a67c2a6c2cf2c3f2264e20e96f646e50` |
-| FutureShops artifact SHA 256 | `85c6bfae68020ef98bacf509dd9999bf03f913b2bdd895eb5a082bdf2e62d5f6` |
-| FutureShops artifact SHA 512 | `51775974d3885ea98eb61d25fe9d8d1e3740d99ea94f898f23a3e7140d82c0dd821cd51d946df31bc710713a7f722577e498bafb597c48ab376c6f1d0f2d732b` |
-| Proof registrant SHA 256 | `c3ddf897bfdfd3f9b77a07a9d8f9aaa190f2f17308b99359e06b2a043375fc06` |
+| FutureShops source | `6138eb8d6c7217d425f3840f5dae362ca2db27f0` |
+| FutureShops artifact SHA 256 | `5122aa663537e179abdab7bf30efda4c09f080cb9fcc7328c0eb2e4d8650b59c` |
+| FutureShops artifact SHA 512 | `e5d004902837bbe96078cebf590f1c0df2c556c6f272ec42fddc131eb14bd68e62c6a0e73f5c934870167a9e8812b93fd1efc1191ae9085a6abe11bf0e1b2cba` |
+| Proof registrant SHA 256 | `0807e1a846119dc3408809a619b5e9369c711e8a0c1ca98c77896e1619576842` |
 | SQLite JDBC SHA 256 | `e697df15be3f95219d80773c5f1002030e33e932adda186c1c86fd51df6691a9` |
 | EULA | `eula=true` |
 | selected provider | `vault` |
@@ -36,7 +36,7 @@ The SQLite JDBC dependency is test and proof fixture input only. It is not prese
 
 The runtime was assembled in a fresh temporary directory from the exact Youer profile, with a fresh world, the exact external jars above, `futureshops-2.3.0.jar`, and the separately packaged `futureshops-vault-proof-1.0.0.jar`. The production jar contains no proof classes, SQLite classes, Bukkit classes, Vault classes, or Pixelmon classes.
 
-The server reached `Done`, loaded all four Bukkit plugins, loaded Pixelmon `9.4.0`, applied the FutureShops native Pixelmon mixin target, and stopped through the server `stop` command. The registrant registered `vault` through `EconomyProviderRegistry.registerVault` before the registry froze. FutureShops resolved that provider for the selected restart configuration.
+The server reached `Done`, loaded all four Bukkit plugins, loaded Pixelmon `9.4.0`, applied the FutureShops native Pixelmon mixin target, and stopped through the server `stop` command. The registrant registered `vault` through `EconomyProviderRegistry.registerVault` before the registry froze. FutureShops resolved that provider for the selected restart configuration. The hybrid stack emitted an asynchronous EverNifeCore configuration save `ConcurrentModificationException` warning during startup. It did not prevent FutureShops startup or the proof transaction, and no FutureShops exception was observed.
 
 Sanitized server evidence:
 
@@ -47,14 +47,14 @@ NeoForge mod loading, version 21.1.248, for MC 1.21.1
 FutureShops Vault proof registration status=ACCEPTED provider=vault
 Loading Pixelmon version 9.4.0
 FutureShops server starting.
-FutureShops Vault proof transaction precheck=CONFIRMED withdrawal=CONFIRMED lookup=CONFIRMED retry=CONFIRMED balance=75
+FutureShops Vault proof transaction provider_precheck=CONFIRMED coordinator_precheck=CONFIRMED withdrawal=CONFIRMED lookup=CONFIRMED retry=CONFIRMED balance=75
 Done (30.560s)! For help, type "help"
 FutureShops server stopping.
 ```
 
-The complete disposable launch log SHA 256 is `387ea732efe6f19964a9f7d3cfb590652e844cb5fefc5075f4af4df3f09d0ac6`.
+The complete disposable launch log SHA 256 is `c4d8dd960401cd20a7233a43c98060f029b042d3ca25111437033de93f69b760`.
 
-The registrant startup callback used request `00000000-0000-0000-0000-000000000510`, actor `00000000-0000-0000-0000-000000000410`, kind `WITHDRAW`, and amount `25`. It called the public provider precheck, withdrew once, looked up the request, and retried the same request identity. Every result was `CONFIRMED`; the resulting balance was `75`.
+The registrant startup callback used request `00000000-0000-0000-0000-000000000510`, actor `00000000-0000-0000-0000-000000000410`, kind `WITHDRAW`, and amount `25`. It called the public provider precheck, the FutureShops coordinator preflight, and the FutureShops coordinator withdrawal once, then looked up the request and retried the same request identity through the provider. Every result was `CONFIRMED`; the resulting balance was `75`.
 
 The SQLite file was queried after shutdown. Its durable rows were:
 
@@ -64,6 +64,8 @@ account_id=00000000-0000-0000-0000-000000000410 balance=75
 ```
 
 The durable database SHA 256 is `014f5cdc1b439478b73e66febde181ac8cd1233c1de21ccf4f042a94dfe29de6`. The backend uses one SQLite transaction for the balance row and receipt row, `journal_mode=DELETE`, `synchronous=FULL`, a primary key on `request_id`, and a bounded busy timeout.
+
+The same run persisted the FutureShops receipt audit under `world/data/futureshops/receipts`. It retained `PREPARED`, `EXTERNAL_PENDING`, `EXTERNAL_CONFIRMED`, and `RESOLVED` records for request `00000000-0000-0000-0000-000000000510`, followed by a checksummed `.clean` marker. The coordinator therefore left a local recovery lineage while the SQLite provider receipt remained authoritative for retry.
 
 ## Boundary proof
 
