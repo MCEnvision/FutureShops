@@ -510,6 +510,48 @@ public final class EconomyGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 100)
+    public static void pixelmonPublicMutationKindsPersistReceipts(GameTestHelper helper) {
+        if (!"pixelmon".equals(BalanceManager.getLifecycleSnapshotOrUnresolved().providerId())) {
+            helper.succeed();
+            return;
+        }
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        if (!isNativePixelmonAccount(player)) {
+            helper.succeed();
+            return;
+        }
+        try {
+            setNativeBalance(player, 200L);
+            var withdrawal = BalanceManager.withdraw(player.getUUID(), 50L);
+            var deposit = BalanceManager.deposit(player.getUUID(), 10L);
+            RequestId root = RequestId.random();
+            MutationRequest refundRequest = MutationRequest.forPlayer(root.child("refund"), player.getUUID(),
+                    20L, MutationKind.REFUND);
+            MutationRequest compensationRequest = MutationRequest.forPlayer(root.child("compensation"),
+                    player.getUUID(), 5L, MutationKind.COMPENSATION);
+            var refund = BalanceManager.getCoordinator().refund(refundRequest);
+            var compensation = BalanceManager.getCoordinator().compensate(compensationRequest);
+            long balance = BalanceManager.queryBalance(player.getUUID()).value().orElseThrow().balanceMinorUnits();
+            LOGGER.info("futureshops.pixelmon.gametest native public mutations withdrawal={} deposit={} refund={} compensation={} balance={}",
+                    withdrawal.success(), deposit.success(), refund.status(), compensation.status(), balance);
+            helper.assertTrue(withdrawal.success() && withdrawal.resultingBalance() == 150L,
+                    "native Pixelmon public withdrawal must debit once");
+            helper.assertTrue(deposit.success() && deposit.resultingBalance() == 160L,
+                    "native Pixelmon public deposit must credit once");
+            helper.assertTrue(refund.confirmed() && compensation.confirmed(),
+                    "native Pixelmon refund and compensation must confirm through the durable coordinator");
+            helper.assertTrue(balance == 185L,
+                    "native Pixelmon public mutation kinds must preserve the exact resulting balance");
+            helper.assertTrue(!BalanceManager.getCustodyStore().hasIncompleteRecords(),
+                    "native Pixelmon public mutation kinds must not leave custody");
+        } catch (ReflectiveOperationException exception) {
+            helper.fail("the native Pixelmon public mutation probe failed: " + exception.getClass().getSimpleName());
+            return;
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
     public static void twoServerPlayersKeepIndependentAuthoritativeBalances(GameTestHelper helper) {
         if (!"internal".equals(BalanceManager.getLifecycleSnapshotOrUnresolved().providerId())) {
             helper.succeed();
