@@ -8,6 +8,21 @@ plugins {
 version = mod_version
 group = mod_group_id
 
+def sourceCommit = 'unknown'
+try {
+    sourceCommit = providers.exec {
+        commandLine 'git', 'rev-parse', 'HEAD'
+    }.standardOutput.asText.get().trim()
+} catch (Exception ignored) {
+    // A source archive without Git metadata keeps the diagnostic field explicit.
+}
+
+tasks.named('jar') {
+    manifest {
+        attributes 'FutureShops-Source-Commit': sourceCommit
+    }
+}
+
 repositories {
     mavenLocal()
     maven {

@@ -55,6 +55,8 @@ class DebugDiagnosticsTest {
         assertTrue(diagnostics.contains("LoggerFactory.getLogger(CATEGORY)"));
         assertTrue(diagnostics.contains("request_id="));
         assertTrue(diagnostics.contains("next_action="));
+        assertTrue(diagnostics.contains("FutureShops-Source-Commit"));
+        assertTrue(diagnostics.contains("discoverArtifactHash"));
     }
 
     private static Path projectRoot() {

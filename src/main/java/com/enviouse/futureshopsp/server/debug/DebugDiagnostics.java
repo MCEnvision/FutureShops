@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
+import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
@@ -20,6 +21,9 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.jar.Manifest;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public final class DebugDiagnostics {
     private static final String CATEGORY = "futureshops.debug";
@@ -27,6 +31,8 @@ public final class DebugDiagnostics {
     private static final int MAX_EVENTS_PER_WINDOW = 128;
     private static final long WINDOW_NANOS = 10_000_000_000L;
     private static final Map<DebugModule, RateWindow> WINDOWS = new ConcurrentHashMap<>();
+    private static final String DISCOVERED_ARTIFACT_HASH = discoverArtifactHash();
+    private static final String DISCOVERED_SOURCE_COMMIT = discoverSourceCommit();
     private static volatile DebugSession session;
 
     private DebugDiagnostics() {
@@ -179,11 +185,55 @@ public final class DebugDiagnostics {
     }
 
     private static String sourceCommit() {
-        return sanitize(System.getProperty("futureshops.source_commit", "unknown"));
+        return sanitize(System.getProperty("futureshops.source_commit", DISCOVERED_SOURCE_COMMIT));
     }
 
     private static String artifactHash() {
-        return sanitize(System.getProperty("futureshops.artifact_sha256", "unknown"));
+        return sanitize(System.getProperty("futureshops.artifact_sha256", DISCOVERED_ARTIFACT_HASH));
+    }
+
+    private static String discoverSourceCommit() {
+        String manifestValue = manifestValue("FutureShops-Source-Commit");
+        return manifestValue == null || manifestValue.isBlank() ? "unknown" : manifestValue;
+    }
+
+    private static String discoverArtifactHash() {
+        try {
+            Path location = null;
+            try {
+                location = ModList.get().getModFileById("futureshops").getFile().getFilePath();
+            } catch (RuntimeException ignored) {
+                // Unit tests and early loading may not have a mod file registry yet.
+            }
+            if (location == null) {
+                location = Path.of(DebugDiagnostics.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            }
+            if (!Files.isRegularFile(location)) {
+                return "dev-classes";
+            }
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            try (InputStream input = Files.newInputStream(location)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    digest.update(buffer, 0, read);
+                }
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (Exception exception) {
+            return "unknown";
+        }
+    }
+
+    private static String manifestValue(String name) {
+        try (InputStream input = DebugDiagnostics.class.getResourceAsStream("/META-INF/MANIFEST.MF")) {
+            if (input == null) {
+                return null;
+            }
+            return new Manifest(input).getMainAttributes().getValue(name);
+        } catch (Exception exception) {
+            return null;
+        }
     }
 
     private static String minecraftVersion() {
