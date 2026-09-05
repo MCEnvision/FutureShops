@@ -57,6 +57,7 @@ class DebugDiagnosticsTest {
         assertTrue(diagnostics.contains("next_action="));
         assertTrue(diagnostics.contains("FutureShops-Source-Commit"));
         assertTrue(diagnostics.contains("discoverArtifactHash"));
+        assertTrue(diagnostics.contains("lifecycleState"));
     }
 
     private static Path projectRoot() {

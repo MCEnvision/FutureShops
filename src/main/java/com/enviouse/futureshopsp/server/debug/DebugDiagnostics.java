@@ -33,6 +33,7 @@ public final class DebugDiagnostics {
     private static final Map<DebugModule, RateWindow> WINDOWS = new ConcurrentHashMap<>();
     private static final String DISCOVERED_ARTIFACT_HASH = discoverArtifactHash();
     private static final String DISCOVERED_SOURCE_COMMIT = discoverSourceCommit();
+    private static volatile String lifecycleState = "unknown";
     private static volatile DebugSession session;
 
     private DebugDiagnostics() {
@@ -111,6 +112,7 @@ public final class DebugDiagnostics {
     }
 
     public static void lifecycle(String provider, String state, String diagnostic) {
+        lifecycleState = sanitize(state);
         emit(DebugModule.LIFECYCLE, sanitize(provider), "lifecycle", "transition", null, null, "none", "none", state,
                 "none", "none", "none", "none", "none", sanitize(provider), sanitize(diagnostic),
                 "follow the lifecycle safe action");
@@ -170,7 +172,7 @@ public final class DebugDiagnostics {
         String selected = current == null ? "none" : current.module().id();
         LOGGER.info("{} session={} module={} source_commit={} artifact_sha256={} minecraft={} loader={} provider={} lifecycle={} surface={} operation={} request_id={} actor_ref={} account_class={} required_capabilities={} observed_capabilities={} validation={} journal={} receipt={} custody={} claim={} provider_result={} error={} elapsed_ms={} side=server thread={} next_action={}",
                 CATEGORY, sessionId, selected, sourceCommit(), artifactHash(), minecraftVersion(), loaderVersion(),
-                sanitize(provider), "unknown", sanitize(surface), sanitize(operation), sanitize(requestId),
+                sanitize(provider), lifecycleState, sanitize(surface), sanitize(operation), sanitize(requestId),
                 sanitize(actor), sanitize(accountClass), sanitize(required), sanitize(observed), sanitize(validation),
                 sanitize(journalState), sanitize(receiptState), sanitize(custodyState), sanitize(claimState),
                 sanitize(providerResult), sanitize(error), "0", Thread.currentThread().getName(), sanitize(nextAction));
