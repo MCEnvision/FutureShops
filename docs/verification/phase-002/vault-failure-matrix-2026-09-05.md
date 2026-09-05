@@ -20,7 +20,7 @@ This record covers the failure and recovery proof for the separately installed V
 | selected provider | `vault` |
 | EULA | `eula=true` |
 
-The SQLite JDBC driver was appended only to the disposable GameTest legacy classpath. It is not included in the production jar. The complete sanitized server log is `/tmp/futureshops-vault-failure-matrix-packaged-current-20260905.log` with SHA 256 `1be8a17c1da0ccfaae521b3acaf6e3f0a091b175bd02a11e76cc3fcb07af7567`.
+The SQLite JDBC driver was appended only to the disposable GameTest legacy classpath. It is not included in the production jar. The complete sanitized server log is `/tmp/futureshops-vault-surface-packaged-final-20260905.log` with SHA 256 `3eb85c4e24ee3a7b66469b6796e3ac720350477731595bf85cece3a6688bd4fc`.
 
 ## Failure and recovery assertions
 
