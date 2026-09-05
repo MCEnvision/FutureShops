@@ -1,16 +1,16 @@
 {
   "schemaVersion": 2,
   "planId": "PLAN-MASTER",
-  "planSetSha256": "d5f59d67b412e835375d6014a1cbbb9e047c1f5059171dc7bea4f010a33bac8a",
+  "planSetSha256": "fceecbc64c839aa25b2cf5c391ab811a65c9db81bb1337da40060afd5682932a",
   "planningSubject": {
-    "name": "FutureShops 2.3.0 strict external economy safety for Minecraft 1.21.1 NeoForge, with capability gated Pixelmon 9.4.0 and Vault bridge interoperability",
+    "name": "FutureShops 2.4.0 strict external economy safety for Minecraft 1.21.1 NeoForge, with capability gated Pixelmon 9.4.0 and Vault bridge interoperability",
     "requestedArtifact": "authoritative_plan",
     "planProfile": "software_product",
     "sources": [
       {
         "id": "SRC-001",
         "role": "owner_request",
-        "subject": "FutureShops 2.3.0 external economy provider behavior and 3.0.0 follow-up issue",
+        "subject": "FutureShops 2.4.0 external economy provider behavior and 3.0.0 follow-up issue",
         "source": "current owner request and approved defaults",
         "use": "binding scope, decisions, exclusions, compatibility target, and completion endpoint"
       },
@@ -26,7 +26,7 @@
         "role": "reference",
         "subject": "FutureShops 3.0.0 Forge 1.20.1 architecture and maintenance context",
         "source": "origin/1.20.1 plan.md and FutureShops3-0Plan.MD",
-        "use": "reference wording and future issue scope only, never 2.3.0 implementation authority"
+        "use": "reference wording and future issue scope only, never 2.4.0 implementation authority"
       },
       {
         "id": "SRC-004",
@@ -674,7 +674,7 @@
   "nonGoals": [
     {
       "id": "NG-001",
-      "summary": "Publishing 2.3.0 to GitHub, CurseForge, Modrinth, or another distribution service.",
+      "summary": "Publishing 2.4.0 to GitHub, CurseForge, Modrinth, or another distribution service.",
       "source": "SRC-001"
     },
     {
@@ -722,7 +722,7 @@
     {
       "id": "DEC-001",
       "question": "Product and platform target",
-      "selectedChoice": "FutureShops 2.3.0 on Minecraft 1.21.1 and NeoForge 21.1.248, with unrelated boundaries preserved.",
+      "selectedChoice": "FutureShops 2.4.0 on Minecraft 1.21.1 and NeoForge 21.1.248, with unrelated boundaries preserved.",
       "rationale": "Pixelmon 9.4.0 compatibility requires the exact NeoForge update while unrelated pins remain stable.",
       "affectedRequirements": [
         "CORE-REQ-001",
@@ -850,7 +850,7 @@
       "id": "DEC-011",
       "question": "ATM scope",
       "selectedChoice": "No ATM UI or command is added.",
-      "rationale": "ATM functionality is excluded from 2.3.0.",
+      "rationale": "ATM functionality is excluded from 2.4.0.",
       "affectedRequirements": [
         "CORE-REQ-011",
         "CORE-REQ-012"
@@ -894,8 +894,8 @@
     {
       "id": "DEC-015",
       "question": "Continuation issue timing",
-      "selectedChoice": "Preserve the existing issue 66 created and read back by plan authoring, then update that issue only after 2.3.0 artifact validation with the strict economy gate, lifecycle, journal, escrow, native Pixelmon transaction-mixin contract, transaction-aware Vault bridge and backend contract, capability, recovery, backup, and provider limitation design for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.",
-      "rationale": "This plan implements only 2.3.0 native Pixelmon behavior. The 3.0.0 lines receive one actionable design issue for the Vault backend or bridge and the future port, with no code, duplicate issue, early mutation, or closure.",
+      "selectedChoice": "Preserve the existing issue 66 created and read back by plan authoring, then update that issue only after 2.4.0 artifact validation with the strict economy gate, lifecycle, journal, escrow, native Pixelmon transaction-mixin contract, transaction-aware Vault bridge and backend contract, capability, recovery, backup, and provider limitation design for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.",
+      "rationale": "This plan implements only 2.4.0 native Pixelmon behavior. The 3.0.0 lines receive one actionable design issue for the Vault backend or bridge and the future port, with no code, duplicate issue, early mutation, or closure.",
       "affectedRequirements": [
         "CORE-REQ-022"
       ],
@@ -915,7 +915,7 @@
     {
       "id": "DEC-017",
       "question": "Strict external transaction safety",
-      "selectedChoice": "FutureShops 2.3.0 has one strict production mode. It requires a server-owned economy gate, write-ahead transaction journal, durable item custody and claims, orderly `DRAINING`, startup `RECOVERING`, fail-closed `FROZEN`, provider capability gating, and external mutation only when the requested operation has a provable outcome and safe retry contract. It provides no unsafe or experimental override.",
+      "selectedChoice": "FutureShops 2.4.0 has one strict production mode. It requires a server-owned economy gate, write-ahead transaction journal, durable item custody and claims, orderly `DRAINING`, startup `RECOVERING`, fail-closed `FROZEN`, provider capability gating, and external mutation only when the requested operation has a provable outcome and safe retry contract. It provides no unsafe or experimental override.",
       "rationale": "FutureShops can protect its own items and records, but it cannot infer whether a fallible external ledger changed during a crash window. Refusing or freezing is safer than a duplicate debit, duplicate credit, fabricated refund, or balance rewrite.",
       "affectedRequirements": [
         "CORE-REQ-002",
@@ -1010,6 +1010,20 @@
         "CORE-REQ-015",
         "CORE-REQ-017",
         "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-020",
+        "CORE-REQ-021",
+        "CORE-REQ-022"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-023",
+      "question": "Validation artifact version amendment",
+      "selectedChoice": "Use FutureShops 2.4.0 as the release and artifact identity for the existing Minecraft 1.21.1 and NeoForge 21.1.248 implementation and validation endpoint. Preserve the four phase topology, exact integration scope, unpublished boundary, and 3.0.0 issue only guidance.",
+      "rationale": "The owner requested that the completed external economy implementation be named 2.4.0. This changes version identity and all required evidence labels, but does not add 3.0.0 code, broaden provider support, or authorize publication.",
+      "affectedRequirements": [
+        "CORE-REQ-001",
         "CORE-REQ-019",
         "CORE-REQ-020",
         "CORE-REQ-021",
@@ -1401,11 +1415,11 @@
       ]
     }
   ],
-  "completionEndpoint": "One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior, a native exact Pixelmon 9.4.0 `PlayerPartyStorage` transaction-mixin path, an exact DanConomy 1.2.1 ledger saved-data transaction-mixin path, and separate `vault` registration with mutation enabled only when a bridge and backend provide one durable balance and receipt transaction, otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.",
+  "completionEndpoint": "One fully validated and inspected unpublished FutureShops 2.4.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior, a native exact Pixelmon 9.4.0 `PlayerPartyStorage` transaction-mixin path, an exact DanConomy 1.2.1 ledger saved-data transaction-mixin path, and separate `vault` registration with mutation enabled only when a bridge and backend provide one durable balance and receipt transaction, otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.",
   "goalCreator": {
     "mandatoryBoundary": "CORE-REQ-001 through CORE-REQ-022 across CORE-PHASE-000 through CORE-PHASE-003, including native Pixelmon and DanConomy transaction-mixin paths, the separate Vault bridge boundary, exact external integration evidence, the unpublished artifact, and the two-stage open issue lifecycle.",
     "optionalFutureDisposition": "excluded",
-    "lockedOwnerDecisions": "DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018, DEC-019, DEC-020, DEC-021, DEC-022",
+    "lockedOwnerDecisions": "DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018, DEC-019, DEC-020, DEC-021, DEC-022, DEC-023",
     "activePhase": "CORE-PHASE-000",
     "nextExecutableAction": "Execute P000-TASK-001 to reconfirm repository identity, toolchain, product metadata, economy ownership, and the complete provider call graph before implementation.",
     "knownFailingChecks": "none at validated plan handoff; execution checks have not yet run.",

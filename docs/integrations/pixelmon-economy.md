@@ -1,6 +1,6 @@
 # Pixelmon economy integration
 
-FutureShops 2.3.0 for NeoForge 1.21.1 includes an optional adapter for exactly Pixelmon 9.4.0. The adapter is bundled in the FutureShops jar as source and runtime class names only. Pixelmon is not a build dependency, is not copied into the jar, and is not required for standard client or dedicated server startup.
+FutureShops 2.4.0 for NeoForge 1.21.1 includes an optional adapter for exactly Pixelmon 9.4.0. The adapter is bundled in the FutureShops jar as source and runtime class names only. Pixelmon is not a build dependency, is not copied into the jar, and is not required for standard client or dedicated server startup.
 
 ## Supported stack
 
@@ -11,7 +11,7 @@ The adapter accepts only the following runtime identity.
 | Minecraft | 1.21.1 |
 | NeoForge | 21.1.248 or a compatible 21.1 release supported by Pixelmon 9.4.0 |
 | Pixelmon | 9.4.0 |
-| FutureShops | 2.3.0 |
+| FutureShops | 2.4.0 |
 | Provider setting | `economy.provider = "pixelmon"` |
 
 Selection is restart only. A missing Pixelmon installation or any version other than `9.4.0` does not register the adapter. FutureShops keeps the configured identifier and reports the provider as missing on that start. It does not fall back to `internal` during the lifecycle.
@@ -30,7 +30,7 @@ Money items and ATM behavior remain internal provider features. They are inert w
 
 ## Installation and rollback
 
-Install Pixelmon 9.4.0 and FutureShops 2.3.0 on the server. The same FutureShops jar must be present on clients. Back up the complete world, `config/futureshops`, the FutureShops jar, and Pixelmon economy data before changing provider selection. Set the provider, stop the server, replace the configuration, and restart. A provider change never migrates internal balances.
+Install Pixelmon 9.4.0 and FutureShops 2.4.0 on the server. The same FutureShops jar must be present on clients. Back up the complete world, `config/futureshops`, the FutureShops jar, and Pixelmon economy data before changing provider selection. Set the provider, stop the server, replace the configuration, and restart. A provider change never migrates internal balances.
 
 To roll back, stop the server, restore the matching backup, set `economy.provider = "internal"`, and restart. Do not delete the FutureShops journal, custody, claims, escrow, or world data to force a provider change. If a Pixelmon query is unavailable, correct the exact installation or return to the matching internal backup. Never guess a refund from a local balance snapshot.
 
@@ -43,4 +43,4 @@ The reviewed Pixelmon artifact remained outside this repository and was used unc
 
 The exact API map and negative direct mutation classification are recorded in [Phase 002 Pixelmon API evidence](../verification/phase-002/pixelmon-api-2026-09-03.md). The native mixin, reload, retry, unknown-record recovery, Vault proof fixture, and headless debug procedure are recorded in [Phase 002 integration evidence](../verification/phase-002/p002-integration-evidence-2026-09-04.md). The exact SQLite backend and hybrid startup transaction are recorded in [exact hybrid Vault proof](../verification/phase-002/vault-hybrid-proof-2026-09-05.md). The available hybrid bridge stack is classified in the [Phase 002 bridge review](../verification/phase-002/bridge-review-2026-09-03.md). The owner authorized the exact disposable terms before both full launches, as recorded in the [Phase 002 runtime terms authorization](../verification/phase-002/runtime-terms-2026-09-03.md). The unmodified PixelmonEconomyBridge and FinalEconomy stack remains refused because it does not expose the required durable receipt and idempotent retry contract. No unmodified direct Pixelmon `add` or `take` call is made by the provider.
 
-The current `2.3.0` artifact reached readiness with the exact Pixelmon profile and with the exact hybrid Vault stack plus the separate proof registrant. The hybrid run proves public `vault` registration and one request aware SQLite balance and receipt transaction. It does not certify the unmodified PixelmonEconomyBridge and FinalEconomy stack for production mutations. The [Phase 000 Pixelmon environment verification](../verification/phase-000/p000-task-011-2026-09-04.md) records the live query and typed refusal, and the [Phase 000 hybrid environment verification](../verification/phase-000/p000-task-012-2026-09-04.md) records plugin lifecycle startup and the same refusal through the legacy hybrid stack. These runs used unmodified external jars and a disposable proof component outside the FutureShops artifact.
+The current `2.4.0` artifact reached readiness with the exact Pixelmon profile and with the exact hybrid Vault stack plus the separate proof registrant. The hybrid run proves public `vault` registration and one request aware SQLite balance and receipt transaction. It does not certify the unmodified PixelmonEconomyBridge and FinalEconomy stack for production mutations. The [Phase 000 Pixelmon environment verification](../verification/phase-000/p000-task-011-2026-09-04.md) records the live query and typed refusal, and the [Phase 000 hybrid environment verification](../verification/phase-000/p000-task-012-2026-09-04.md) records plugin lifecycle startup and the same refusal through the legacy hybrid stack. These runs used unmodified external jars and a disposable proof component outside the FutureShops artifact.

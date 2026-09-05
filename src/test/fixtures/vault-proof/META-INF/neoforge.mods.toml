@@ -25,6 +25,6 @@ side = "SERVER"
 [[dependencies.futureshops_vault_proof]]
 modId = "futureshops"
 type = "required"
-versionRange = "[2.3.0,)"
+versionRange = "[2.4.0,)"
 ordering = "AFTER"
 side = "SERVER"

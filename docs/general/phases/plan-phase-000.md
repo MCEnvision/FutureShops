@@ -9,7 +9,7 @@
 
 ## Purpose and Ownership
 
-This phase establishes the platform, public provider, capability, restart-only selection, and diagnostic command contracts consumed by every later phase. It reconfirms the repository baseline, records exact external artifact evidence, applies the FutureShops `2.3.0` and NeoForge `21.1.248` pins, freezes API compatibility version `1`, defines the opt in headless first debug evidence schema, implements deterministic registration and selection, and proves that unsupported external mutation is refused before transaction intent, custody, or provider mutation.
+This phase establishes the platform, public provider, capability, restart-only selection, and diagnostic command contracts consumed by every later phase. It reconfirms the repository baseline, records exact external artifact evidence, applies the FutureShops `2.4.0` and NeoForge `21.1.248` pins, freezes API compatibility version `1`, defines the opt in headless first debug evidence schema, implements deterministic registration and selection, and proves that unsupported external mutation is refused before transaction intent, custody, or provider mutation.
 
 This phase canonically owns `CORE-REQ-001`, `CORE-REQ-002`, and `CORE-REQ-003`. The master owns product scope, decisions, prerequisites, global phase order, and release boundaries. This file owns only execution detail and evidence gates for `CORE-PHASE-000`. Under `DEC-017` and `DEC-018`, a negative direct Pixelmon capability result is an expected supported result: it becomes deterministic safe refusal, never an unsafe mutation path or an unqualified production-support claim.
 
@@ -34,7 +34,7 @@ This phase canonically owns `CORE-REQ-001`, `CORE-REQ-002`, and `CORE-REQ-003`. 
 
 ### Included Scope
 
-- `CORE-REQ-001`: Update FutureShops to `2.3.0`, pin NeoForge exactly `21.1.248`, preserve Minecraft `1.21.1` and unrelated pins, and prove identical client and server bytes.
+- `CORE-REQ-001`: Update FutureShops to `2.4.0`, pin NeoForge exactly `21.1.248`, preserve Minecraft `1.21.1` and unrelated pins, and prove identical client and server bytes.
 - `CORE-REQ-002`: Implement public API compatibility version `1`, deterministic registration, immutable verified capabilities, exact minor-unit values, typed readiness and outcomes, request identity, receipt and recovery contracts, and strict safe refusal without internal-package access.
 - `CORE-REQ-003`: Implement one server-authoritative selector with `internal` as the absent-key default, one startup resolution, active and staged values, restart-only activation, and no fallback.
 - `DEC-017`: Require verified balance, precheck, withdraw, deposit, durable receipt lookup, and idempotent retry capabilities as applicable to each surface. Missing capabilities reject the surface.
@@ -56,7 +56,7 @@ This phase canonically owns `CORE-REQ-001`, `CORE-REQ-002`, and `CORE-REQ-003`. 
 
 ### CORE-PHASE-000 — Platform, Evidence, Public API, and Restart-Only Selection
 
-**Objective:** Produce an integrated `2.3.0` and NeoForge `21.1.248` foundation whose public API verifies capabilities, whose selection freezes once per server lifecycle, and whose exact Pixelmon and DanConomy evidence causes unsupported production mutation to refuse safely.
+**Objective:** Produce an integrated `2.4.0` and NeoForge `21.1.248` foundation whose public API verifies capabilities, whose selection freezes once per server lifecycle, and whose exact Pixelmon and DanConomy evidence causes unsupported production mutation to refuse safely.
 **Owner:** FutureShops repository
 **Dependencies:** DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-009, DEC-013, DEC-017, DEC-018, DEC-019, DEC-020, DEC-021, DEC-022, EXT-009, EXT-001, EXT-002, EXT-003, EXT-004, EXT-005, EXT-006, EXT-008, EXT-010
 **Canonical requirements:** CORE-REQ-001, CORE-REQ-002, CORE-REQ-003
@@ -90,7 +90,7 @@ This phase canonically owns `CORE-REQ-001`, `CORE-REQ-002`, and `CORE-REQ-003`. 
 6. `P000-TASK-006` freezes the CORE-REQ-002 public API compatibility version `1`, including strict capabilities and unavailable and ambiguous outcomes.
 7. `P000-TASK-007` implements deterministic NeoForge registration, capability verification, reserved identifiers, and registry freeze for CORE-REQ-002.
 8. `P000-TASK-008` implements CORE-REQ-003 server config, startup resolution, active and staged values, restart-only changes, status, and no fallback.
-9. `P000-TASK-009` applies the CORE-REQ-001 target `2.3.0` and NeoForge `21.1.248` and proves unrelated pins did not change.
+9. `P000-TASK-009` applies the CORE-REQ-001 target `2.4.0` and NeoForge `21.1.248` and proves unrelated pins did not change.
 10. `P000-TASK-010` builds independent fixtures and verifies CORE-REQ-001, CORE-REQ-002, and CORE-REQ-003 platform, API, capability, selection, failure, and isolation behavior.
 11. `P000-TASK-011` assembles and fingerprints the Pixelmon environment. Before full launch, apply DEC-020, verify `eula=true`, and verify that every operation stays within DEC-022 and resolved EXT-009.
 12. `P000-TASK-012` assembles and fingerprints the hybrid environment. Before full launch, apply DEC-020, verify `eula=true`, and verify that every operation stays within DEC-022 and resolved EXT-009.
@@ -142,7 +142,7 @@ Tasks `P000-TASK-002`, `P000-TASK-004`, artifact discovery in `P000-TASK-005`, a
 
 | Output or contract | Consumer | Guaranteed state | Compatibility or versioning | Evidence |
 | --- | --- | --- | --- | --- |
-| Platform foundation | Phases 001 through 003 | `2.3.0`, Minecraft `1.21.1`, NeoForge `21.1.248`, unrelated pins preserved | Same FutureShops jar bytes on client and server | Metadata, dependency report, build, smoke, jar hashes |
+| Platform foundation | Phases 001 through 003 | `2.4.0`, Minecraft `1.21.1`, NeoForge `21.1.248`, unrelated pins preserved | Same FutureShops jar bytes on client and server | Metadata, dependency report, build, smoke, jar hashes |
 | Public provider API | Economy gate, adapters, separate bridge | Provider-neutral API version `1` without internal dependencies | Breaking change requires version change and full rerun | API report, fixture compile, dependency scan |
 | Frozen registry | Lifecycle and selection | Deterministic validation, reserved IDs, verified capabilities, one freeze | Registration order cannot resolve conflicts | Permutation and lifecycle tests |
 | Selection snapshot | Phase 001 | Active and staged identifiers are distinct and observable | Absent legacy key selects `internal`; change requires restart | Config, reload, restart, status tests |
@@ -163,7 +163,7 @@ Tasks `P000-TASK-002`, `P000-TASK-004`, artifact discovery in `P000-TASK-005`, a
 | `P000-TASK-006` | `CORE-REQ-002`, `EXT-003`, `DEC-017`, `DEC-018` | Freeze API version `1`, identifiers, metadata, readiness, values, capabilities, request IDs, outcomes, receipt lookup, recovery, threading, exceptions, and compatibility. | `P000-TASK-001`, `P000-TASK-003`, bridge evidence | Reviewed public API independent of internals | Public API types and docs | Surface review, fixture compile, exhaustive outcomes and capabilities, dependency scan |
 | `P000-TASK-007` | `CORE-REQ-002`, `CORE-REQ-003` | Implement deterministic NeoForge registration, validate factories and capabilities, reserve IDs, reject invalid and late registration, and freeze once. | `P000-TASK-006`; lifecycle evidence | Frozen registry and diagnostics | Public registration, registry, internal registration, lifecycle | Permutations, reservation, malformed, compatibility, late, capability, concurrency tests |
 | `P000-TASK-008` | `CORE-REQ-003`, `DEC-005`, `DEC-006`, `DEC-018` | Add server selection with `internal` default, one resolution, active and staged values, restart status, and no fallback. Capability-deficient selection remains selected but unavailable for unsupported surfaces. | `P000-TASK-007`; config conventions | Selection snapshot, state, diagnostics | Server config, resolution, reload, startup | Omitted, internal, external, unknown, malformed, missing, deficient, late, reload, restart tests |
-| `P000-TASK-009` | `CORE-REQ-001`, `DEC-001`, `DEC-002` | Set `2.3.0` and NeoForge `21.1.248` while preserving all unrelated boundaries. | Baseline and compatibility evidence | Minimal metadata and dependency diff | Build, settings, dependencies, mod metadata found by task 001 | Metadata, resolution, unrelated-pin diff, compile, jar metadata |
+| `P000-TASK-009` | `CORE-REQ-001`, `DEC-001`, `DEC-002` | Set `2.4.0` and NeoForge `21.1.248` while preserving all unrelated boundaries. | Baseline and compatibility evidence | Minimal metadata and dependency diff | Build, settings, dependencies, mod metadata found by task 001 | Metadata, resolution, unrelated-pin diff, compile, jar metadata |
 | `P000-TASK-010` | `CORE-REQ-001`, `CORE-REQ-002`, `CORE-REQ-003` | Build current, incompatible, throwing, ambiguous, and capability-deficient fixtures; run deterministic checks; smoke standard NeoForge client and server. | Tasks 006 through 009 | Reports, same-byte candidate, logs, scans | API, registry, selection, build, client and server | Focused and full tests, data and GameTest disposition, build, smoke, hashes, scans |
 | `P000-TASK-011` | `EXT-002`, `EXT-008`, `CORE-REQ-017` contributor | Assemble exact Pixelmon environment. Apply DEC-020, DEC-022, and resolved EXT-009, verify `eula=true`, then run requested startup, safe query, refusal, restart, and recovery prerequisites. | Tasks 002, 003, 010; `EXT-008` for launch | Manifest, exact unresolved external input or verified logs, hashes, recreation | Disposable Pixelmon and public boundary | Hash, isolation, authorization boundary, exact startup, safe query and refusal under standing authorization |
 | `P000-TASK-012` | `EXT-006`, `EXT-008`, `CORE-REQ-018` contributor | Assemble exact hybrid environment. Apply DEC-020, DEC-022, and resolved EXT-009, verify `eula=true`, then run requested registration, isolation, capability, restart, and recovery prerequisites. | Tasks 004, 005, 010; `EXT-008` for launch | Manifest, exact unresolved external input or verified logs, hashes, recreation | Disposable hybrid, bridge, public boundary | Hash, isolation, authorization boundary, registration and removal cases under standing authorization |
@@ -245,7 +245,7 @@ After the last implementation change, rerun task discovery, focused tests, all t
 
 ## Documentation, Operations, and Release
 
-- Update user docs for `2.3.0`, Minecraft `1.21.1`, NeoForge `21.1.248`, same-jar installation, default provider, restart-only changes, no fallback, and strict capability refusal.
+- Update user docs for `2.4.0`, Minecraft `1.21.1`, NeoForge `21.1.248`, same-jar installation, default provider, restart-only changes, no fallback, and strict capability refusal.
 - Update maintainer docs and index for API ownership, registry freeze, selection lifecycle, threading, error containment, values, and phase boundaries.
 - Document API version `1`, IDs, metadata, six capabilities, requests, outcomes, receipts, lookup, retry, ambiguity, threads, exceptions, and compatibility.
 - Document the discovered config key, default `internal`, validation, active and staged values, status, restart, and no migration.

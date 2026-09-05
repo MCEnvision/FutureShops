@@ -1,15 +1,15 @@
-# FutureShops 2.3.0 Strict External Economy Safety Plan
+# FutureShops 2.4.0 Strict External Economy Safety Plan
 
 > **Plan ID:** PLAN-MASTER
 > **Plan status:** VALIDATED
 > **Project state:** EXISTING
-> **Planning subject:** FutureShops 2.3.0 strict external economy safety for Minecraft 1.21.1 NeoForge, with capability gated Pixelmon 9.4.0 and Vault bridge interoperability
+> **Planning subject:** FutureShops 2.4.0 strict external economy safety for Minecraft 1.21.1 NeoForge, with capability gated Pixelmon 9.4.0 and Vault bridge interoperability
 > **Plan profile:** software_product
 
 ## 1. Project Identity
 
 ```text
-Project: FutureShops 2.3.0 strict external economy safety
+Project: FutureShops 2.4.0 strict external economy safety
 Requested artifact: authoritative_plan
 Repository root: /mnt/hermes/projects/FutureShops
 Starting branch: envy/plan-2.3.0-external-economy
@@ -21,17 +21,17 @@ Remote ref: origin/envy/plan-2.3.0-external-economy
 Remote commit: 9048380881a638cb3ab1916d8cca49eb50d6bf3d
 ```
 
-This existing repository evolves the observed FutureShops 2.2.1 implementation into an unpublished, validated 2.3.0 candidate for Minecraft 1.21.1 and NeoForge 21.1.248. Client and server use one FutureShops jar. External money is permitted only through the strict capability gate, durable write-ahead journal, item custody and claim escrow, and fail-closed lifecycle defined here. The four-phase topology remains CORE-PHASE-000 through CORE-PHASE-003. The immutable goal remains outside plan maintenance scope and is not regenerated for this amendment.
+This existing repository evolves the observed FutureShops 2.2.1 implementation into an unpublished, validated 2.4.0 candidate for Minecraft 1.21.1 and NeoForge 21.1.248. Client and server use one FutureShops jar. External money is permitted only through the strict capability gate, durable write-ahead journal, item custody and claim escrow, and fail-closed lifecycle defined here. The four-phase topology remains CORE-PHASE-000 through CORE-PHASE-003. The immutable goal remains outside plan maintenance scope and is not regenerated for this amendment.
 
 ## 2. Planning Subject and Source Roles
 
-The planning subject is the FutureShops 2.3.0 product change and its validation endpoint. Reference plans, repository audits, status evidence, and external documentation inform the contract but do not replace the authoritative plan.
+The planning subject is the FutureShops 2.4.0 product change and its validation endpoint. Reference plans, repository audits, status evidence, and external documentation inform the contract but do not replace the authoritative plan.
 
 | ID | Role | Subject | Source | Intended use |
 | --- | --- | --- | --- | --- |
-| SRC-001 | owner_request | FutureShops 2.3.0 external economy provider behavior and 3.0.0 follow-up issue | current owner request and approved defaults | binding scope, decisions, exclusions, compatibility target, and completion endpoint |
+| SRC-001 | owner_request | FutureShops 2.4.0 external economy provider behavior and 3.0.0 follow-up issue | current owner request and approved defaults | binding scope, decisions, exclusions, compatibility target, and completion endpoint |
 | SRC-002 | repository_evidence | FutureShops 2.2.1 NeoForge 1.21.1 implementation baseline | /mnt/hermes/projects/FutureShops at 5fb749b2e6dbc791c8c3984216877ab90b904ee9 | current versions, economy architecture, surfaces, packaging, tests, and branch identity |
-| SRC-003 | reference | FutureShops 3.0.0 Forge 1.20.1 architecture and maintenance context | origin/1.20.1 plan.md and FutureShops3-0Plan.MD | reference wording and future issue scope only, never 2.3.0 implementation authority |
+| SRC-003 | reference | FutureShops 3.0.0 Forge 1.20.1 architecture and maintenance context | origin/1.20.1 plan.md and FutureShops3-0Plan.MD | reference wording and future issue scope only, never 2.4.0 implementation authority |
 | SRC-004 | reference | official Pixelmon 9.4.0 release compatibility | https://pixelmonmod.com/downloads.php | Pixelmon 9.4.0, Minecraft 1.21.1, and NeoForge 21.1.248 compatibility evidence |
 | SRC-005 | reference | NeoForge 1.21.1 lifecycle and inter-mod communication | https://docs.neoforged.net/docs/1.21.1/concepts/events/ | provider registration and startup lifecycle evidence |
 | SRC-006 | reference | Vault API economy boundary | https://github.com/MilkBowl/VaultAPI and https://milkbowl.github.io/VaultAPI/overview-summary.html | separate bridge boundary and exact checked conversion evidence |
@@ -48,7 +48,7 @@ After validation, the master owns global product scope and each registered phase
 
 ## 3. Purpose and Intended Outcome
 
-FutureShops 2.3.0 must expose one public, versioned NeoForge economy provider contract, retain the built-in internal provider as the restart-only default, capability-gate exact optional Pixelmon 9.4.0 and DanConomy 1.2.1 adapters with request-aware transaction mixins, and allow a separately installed bridge to register `vault` without placing Bukkit or Vault code in FutureShops. When both mods are present, Phase 002 must inspect each exact external implementation and load only the matching FutureShops mixin. The Pixelmon path may mutate only an exact native account after its mixin adds stable request identity, provider receipt, deduplication, and durable save. The DanConomy path may mutate only an exact ledger-backed currency after its mixin stores the balance effect and immutable receipt in the same `danconomy_ledger` saved-data image and proves synchronous durable replacement; DanConomy `PIXELMON_MIRRORED` currencies remain refused. The `vault` path remains a separate adapter and may mutate only when its bridge and backend prove the same transaction contract, including the in-phase backend proof. One server-owned economy gate must place recoverable items in custody, persist transaction intent before any external effect, drain safely for orderly shutdown, recover before admitting writes after an unclean shutdown, and freeze rather than guess when an outcome cannot be proven. Operators must receive accurate fail-closed behavior, checksummed FutureShops recovery data, explicit manual escalation for unresolved uncertainty, reproducible evidence, one inspected unpublished artifact, and an updated open continuation issue for the 3.0.0 lines.
+FutureShops 2.4.0 must expose one public, versioned NeoForge economy provider contract, retain the built-in internal provider as the restart-only default, capability-gate exact optional Pixelmon 9.4.0 and DanConomy 1.2.1 adapters with request-aware transaction mixins, and allow a separately installed bridge to register `vault` without placing Bukkit or Vault code in FutureShops. When both mods are present, Phase 002 must inspect each exact external implementation and load only the matching FutureShops mixin. The Pixelmon path may mutate only an exact native account after its mixin adds stable request identity, provider receipt, deduplication, and durable save. The DanConomy path may mutate only an exact ledger-backed currency after its mixin stores the balance effect and immutable receipt in the same `danconomy_ledger` saved-data image and proves synchronous durable replacement; DanConomy `PIXELMON_MIRRORED` currencies remain refused. The `vault` path remains a separate adapter and may mutate only when its bridge and backend prove the same transaction contract, including the in-phase backend proof. One server-owned economy gate must place recoverable items in custody, persist transaction intent before any external effect, drain safely for orderly shutdown, recover before admitting writes after an unclean shutdown, and freeze rather than guess when an outcome cannot be proven. Operators must receive accurate fail-closed behavior, checksummed FutureShops recovery data, explicit manual escalation for unresolved uncertainty, reproducible evidence, one inspected unpublished artifact, and an updated open continuation issue for the 3.0.0 lines.
 
 ## 4. Evidence-Based Current State
 
@@ -99,14 +99,14 @@ All locked future scope is excluded from implementation and remains non-blocking
 | --- | --- | --- |
 | FUT-001 | Add this strict external economy design and a transaction-aware Vault bridge or backend to the existing 3.0.0 beta on Forge 1.20.1 | Explain the design and implementation guidance in existing issue 66 only, including the DanConomy request-receipt pattern while making clear that DanConomy 1.2.1 itself targets NeoForge 1.21.1. Do not import or implement 3.0.0 code in this plan. |
 | FUT-002 | Carry the same native Pixelmon, DanConomy, and transaction-aware Vault design into a future 3.0.0 Minecraft 1.21.1 port | Explain the port requirement in the same open issue 66. Product execution updates tracking only and does not implement the port. |
-| FUT-003 | ATM user interface and commands | Future release only. The 2.3.0 mutation policy must prevent a future ATM path from bypassing provider rules. |
+| FUT-003 | ATM user interface and commands | Future release only. The 2.4.0 mutation policy must prevent a future ATM path from bypassing provider rules. |
 | FUT-004 | Additional external economy adapters | No adapter beyond internal, Pixelmon 9.4.0, DanConomy 1.2.1, and separately validated vault interoperability is promised here. |
 
 ## 8. Non-Goals
 
 | Non-goal ID | Excluded work |
 | --- | --- |
-| NG-001 | Publishing 2.3.0 to GitHub, CurseForge, Modrinth, or another distribution service. |
+| NG-001 | Publishing 2.4.0 to GitHub, CurseForge, Modrinth, or another distribution service. |
 | NG-002 | Automatically copying, converting, reconciling, or merging balances between providers. |
 | NG-003 | Shipping Pixelmon, DanConomy, Bukkit, Vault, an economy plugin, a hybrid server, a Vault bridge or backend, or their source, bytecode, assets, or APIs inside FutureShops. Narrow original FutureShops mixins may target exact Pixelmon `9.4.0` and DanConomy `1.2.1` classes, but no external runtime bytes are copied, altered, rebuilt, repackaged, or bundled. |
 | NG-004 | Hot switching, late activation, automatic fallback, or provider priority selection. |
@@ -121,7 +121,7 @@ All locked future scope is excluded from implementation and remains non-blocking
 ### DEC-001 — Product and platform target
 
 **Status:** RESOLVED
-**Selected choice:** FutureShops 2.3.0 on Minecraft 1.21.1 and NeoForge 21.1.248, with unrelated boundaries preserved.
+**Selected choice:** FutureShops 2.4.0 on Minecraft 1.21.1 and NeoForge 21.1.248, with unrelated boundaries preserved.
 **Rationale:** Pixelmon 9.4.0 compatibility requires the exact NeoForge update while unrelated pins remain stable.
 **Affected requirements:** CORE-REQ-001, CORE-REQ-017, CORE-REQ-019, CORE-REQ-021
 **Supersedes:** none
@@ -202,7 +202,7 @@ All locked future scope is excluded from implementation and remains non-blocking
 
 **Status:** RESOLVED
 **Selected choice:** No ATM UI or command is added.
-**Rationale:** ATM functionality is excluded from 2.3.0.
+**Rationale:** ATM functionality is excluded from 2.4.0.
 **Affected requirements:** CORE-REQ-011, CORE-REQ-012
 **Supersedes:** none
 
@@ -234,8 +234,8 @@ All locked future scope is excluded from implementation and remains non-blocking
 ### DEC-015 — Continuation issue timing
 
 **Status:** RESOLVED
-**Selected choice:** Preserve the existing issue 66 created and read back by plan authoring, then update that issue only after 2.3.0 artifact validation with the strict economy gate, lifecycle, journal, escrow, native Pixelmon transaction-mixin contract, transaction-aware Vault bridge and backend contract, capability, recovery, backup, and provider limitation design for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.
-**Rationale:** This plan implements only 2.3.0 native Pixelmon behavior. The 3.0.0 lines receive one actionable design issue for the Vault backend or bridge and the future port, with no code, duplicate issue, early mutation, or closure.
+**Selected choice:** Preserve the existing issue 66 created and read back by plan authoring, then update that issue only after 2.4.0 artifact validation with the strict economy gate, lifecycle, journal, escrow, native Pixelmon transaction-mixin contract, transaction-aware Vault bridge and backend contract, capability, recovery, backup, and provider limitation design for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.
+**Rationale:** This plan implements only 2.4.0 native Pixelmon behavior. The 3.0.0 lines receive one actionable design issue for the Vault backend or bridge and the future port, with no code, duplicate issue, early mutation, or closure.
 **Affected requirements:** CORE-REQ-022
 **Supersedes:** none
 
@@ -250,7 +250,7 @@ All locked future scope is excluded from implementation and remains non-blocking
 ### DEC-017 — Strict external transaction safety
 
 **Status:** RESOLVED
-**Selected choice:** FutureShops 2.3.0 has one strict production mode. It requires a server-owned economy gate, write-ahead transaction journal, durable item custody and claims, orderly `DRAINING`, startup `RECOVERING`, fail-closed `FROZEN`, provider capability gating, and external mutation only when the requested operation has a provable outcome and safe retry contract. It provides no unsafe or experimental override.
+**Selected choice:** FutureShops 2.4.0 has one strict production mode. It requires a server-owned economy gate, write-ahead transaction journal, durable item custody and claims, orderly `DRAINING`, startup `RECOVERING`, fail-closed `FROZEN`, provider capability gating, and external mutation only when the requested operation has a provable outcome and safe retry contract. It provides no unsafe or experimental override.
 **Rationale:** FutureShops can protect its own items and records, but it cannot infer whether a fallible external ledger changed during a crash window. Refusing or freezing is safer than a duplicate debit, duplicate credit, fabricated refund, or balance rewrite.
 **Affected requirements:** CORE-REQ-002, CORE-REQ-004, CORE-REQ-005, CORE-REQ-007, CORE-REQ-009, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, CORE-REQ-019, CORE-REQ-020, CORE-REQ-021
 **Supersedes:** none
@@ -293,6 +293,14 @@ All locked future scope is excluded from implementation and remains non-blocking
 **Selected choice:** FutureShops may inspect and decompile exact lawfully obtained Pixelmon, DanConomy, Vault, bridge, and backend artifacts for interoperability research, use unmodified exact artifacts as compile-only or runtime dependencies, and ship original FutureShops adapter and mixin code that targets their public or inspected interfaces. FutureShops must not copy third party implementation code or assets, alter or rebuild a third party jar, bundle or redistribute third party bytes, or represent third party work as FutureShops. Add exact DanConomy 1.2.1 support as provider `danconomy` through a FutureShops-owned optional adapter and request-aware saved-data mixin. ARR status alone is not an external blocker for this bounded integration work.
 **Rationale:** The integration artifact remains `futureshops.jar`. Pixelmon, DanConomy, Vault, and bridge or backend jars remain unmodified and separately installed. DanConomy's public repository and exact release expose a ledger boundary that can be extended at runtime by original FutureShops code without copying or redistributing DanConomy. This records the owner's project and risk decision and does not grant rights for operations outside the stated boundary.
 **Affected requirements:** CORE-REQ-001, CORE-REQ-002, CORE-REQ-015, CORE-REQ-017, CORE-REQ-018, CORE-REQ-019, CORE-REQ-020, CORE-REQ-021, CORE-REQ-022
+**Supersedes:** none
+
+### DEC-023 — Validation artifact version amendment
+
+**Status:** RESOLVED
+**Selected choice:** Use FutureShops 2.4.0 as the release and artifact identity for the existing Minecraft 1.21.1 and NeoForge 21.1.248 implementation and validation endpoint. Preserve the four phase topology, exact integration scope, unpublished boundary, and 3.0.0 issue only guidance.
+**Rationale:** The owner requested that the completed external economy implementation be named 2.4.0. This changes version identity and all required evidence labels, but does not add 3.0.0 code, broaden provider support, or authorize publication.
+**Affected requirements:** CORE-REQ-001, CORE-REQ-019, CORE-REQ-020, CORE-REQ-021, CORE-REQ-022
 **Supersedes:** none
 
 ## 10. External Prerequisites
@@ -536,7 +544,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 ### CORE-REQ-001 — platform and dependency baseline
 
-**Behavior:** Reconfirm the observed `2.2.1` baseline, change the product target to `2.3.0`, and pin NeoForge `21.1.248` while preserving Minecraft `1.21.1` and every unrelated repository pinned boundary. Use the same jar on client and server.
+**Behavior:** Reconfirm the observed `2.2.1` baseline, change the product target to `2.4.0`, and pin NeoForge `21.1.248` while preserving Minecraft `1.21.1` and every unrelated repository pinned boundary. Use the same jar on client and server.
 **Owner:** `CORE-PHASE-000`
 **Contributors:** `CORE-PHASE-002`, `CORE-PHASE-003`
 **Dependencies:** DEC-001, DEC-002, EXT-001, EXT-003
@@ -546,7 +554,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 **Acceptance criteria**
 
-- Runtime and metadata consistently identify `2.3.0`; NeoForge is exactly `21.1.248`; no unrelated upgrade appears; a standard dedicated server does not load client classes; the jar is identical for client and server installation.
+- Runtime and metadata consistently identify `2.4.0`; NeoForge is exactly `21.1.248`; no unrelated upgrade appears; a standard dedicated server does not load client classes; the jar is identical for client and server installation.
 
 **Required evidence**
 
@@ -906,7 +914,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 **Acceptance criteria**
 
-- One artifact identifies FutureShops `2.3.0`, targets the locked platform, contains the public API plus capability-gated Pixelmon and DanConomy adapter and mixin classes, excludes Pixelmon, DanConomy, Bukkit, Vault, and bridge artifacts, passes internal behavior plus native Pixelmon, DanConomy saved-data receipt, and exact-stack capability or safe-refusal matrices, includes no test-only debug dependency or retained debug output, defaults debug mode off, and is not published or tagged as a release.
+- One artifact identifies FutureShops `2.4.0`, targets the locked platform, contains the public API plus capability-gated Pixelmon and DanConomy adapter and mixin classes, excludes Pixelmon, DanConomy, Bukkit, Vault, and bridge artifacts, passes internal behavior plus native Pixelmon, DanConomy saved-data receipt, and exact-stack capability or safe-refusal matrices, includes no test-only debug dependency or retained debug output, defaults debug mode off, and is not published or tagged as a release.
 
 **Required evidence**
 
@@ -924,7 +932,7 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 **Acceptance criteria**
 
-- Issue 66 URL and number exist from this plan authoring pass; no duplicate was created; both 3.0.0 Forge 1.20.1 implementation and future 1.21.1 port subjects are explicit; the strict design topics are complete enough to implement without copying 2.3.0 code; the required milestone and labels are attached; phases 000 through 002 keep issue 66 unchanged and open; `CORE-PHASE-003` performs no early live access to issue 66 and updates and reads back issue 66 only after artifact validation; issue 66 remains open until future owner acceptance.
+- Issue 66 URL and number exist from this plan authoring pass; no duplicate was created; both 3.0.0 Forge 1.20.1 implementation and future 1.21.1 port subjects are explicit; the strict design topics are complete enough to implement without copying 2.4.0 code; the required milestone and labels are attached; phases 000 through 002 keep issue 66 unchanged and open; `CORE-PHASE-003` performs no early live access to issue 66 and updates and reads back issue 66 only after artifact validation; issue 66 remains open until future owner acceptance.
 
 **Required evidence**
 
@@ -1039,14 +1047,14 @@ Evidence must identify the source commit, exact command or procedure, date, host
 
 ### Compatibility matrix
 
-| Environment | Support state for `2.3.0` |
+| Environment | Support state for `2.4.0` |
 | --- | --- |
 | Minecraft `1.21.1`, NeoForge `21.1.248`, no external provider mods, `internal` selected | Required |
 | Minecraft `1.21.1`, NeoForge `21.1.248`, Pixelmon absent, `internal` selected | Required |
 | Minecraft `1.21.1`, NeoForge `21.1.248`, exact Pixelmon `9.4.0`, native-account Pixelmon provider selected | Required for verified queries, native request receipt and durable-save mutation proof or safe refusal, custom and hybrid account refusal, clean and unclean restart behavior, and isolation proof |
 | Minecraft `1.21.1`, NeoForge `21.1.248`, exact DanConomy `1.2.1`, ledger-backed default currency selected through provider `danconomy` | Required for request-aware same-image balance and receipt persistence, durable-save mutation proof or safe refusal, ambiguous and mirrored-currency refusal, clean and unclean restart behavior, and isolation proof |
 | Exact reviewed hybrid stack with separately installed bridge registering `vault` | Required for exact one-transaction receipt enablement or safe-refusal proof after external gates pass |
-| NeoForge `21.1.233` | Not a `2.3.0` target |
+| NeoForge `21.1.233` | Not a `2.4.0` target |
 | Pixelmon other than `9.4.0` | Unsupported and must not register as compatible |
 | Generic unreviewed hybrid runtime, Vault version, bridge, or economy plugin | Unverified and not claimed |
 | FutureShops jar on dedicated server and client | Same artifact required |
@@ -1065,7 +1073,7 @@ Rollout for validation uses disposable copies, never the only production world. 
 
 ### Rollback
 
-Rollback means restoring one complete matching backup of world, config, mod set, and provider data after stopping the server. Do not delete FutureShops journals, claims, custody, money items, internal balances, or external plugin data. Do not install `2.2.1` over a world whose `2.3.0` schema was written unless downgrade compatibility is explicitly proven on a copy. A provider selection rollback is a restart based config change, not a balance migration.
+Rollback means restoring one complete matching backup of world, config, mod set, and provider data after stopping the server. Do not delete FutureShops journals, claims, custody, money items, internal balances, or external plugin data. Do not install `2.2.1` over a world whose `2.4.0` schema was written unless downgrade compatibility is explicitly proven on a copy. A provider selection rollback is a restart based config change, not a balance migration.
 
 ### Recovery priorities
 
@@ -1096,7 +1104,7 @@ Tracked documentation remains canonical. At minimum, the final documentation set
 * Verification commands, environment manifests, expected results, known limitations, and the unpublished artifact identity.
 * The absence of an ATM interface or command and the exclusion of publication.
 
-Release `2.3.0` ends at a validated artifact. No GitHub release, mod platform upload, release tag, announcement, or public download is authorized. The required GitHub issue is planning and tracking output, not release publication.
+Release `2.4.0` ends at a validated artifact. No GitHub release, mod platform upload, release tag, announcement, or public download is authorized. The required GitHub issue is planning and tracking output, not release publication.
 
 ## 17. Risks and Failure Boundaries
 
@@ -1120,12 +1128,12 @@ Release `2.3.0` ends at a validated artifact. No GitHub release, mod platform up
 
 The plan is complete only when every condition below is true.
 
-The exact completion endpoint is: One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior, a native exact Pixelmon 9.4.0 `PlayerPartyStorage` transaction-mixin path, an exact DanConomy 1.2.1 ledger saved-data transaction-mixin path, and separate `vault` registration with mutation enabled only when a bridge and backend provide one durable balance and receipt transaction, otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.
+The exact completion endpoint is: One fully validated and inspected unpublished FutureShops 2.4.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior, a native exact Pixelmon 9.4.0 `PlayerPartyStorage` transaction-mixin path, an exact DanConomy 1.2.1 ledger saved-data transaction-mixin path, and separate `vault` registration with mutation enabled only when a bridge and backend provide one durable balance and receipt transaction, otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.
 
 The exact Pixelmon 9.4.0 and DanConomy 1.2.1 runtime and development inputs, disposable Pixelmon runtime, separately installed bridge candidate, exact reviewed hybrid stack, and disposable hybrid environment are available under EXT-001, EXT-002, EXT-004, EXT-005, EXT-006, and EXT-010, with hashes, eula=true readback, startup logs, and isolated API or source inspection recorded. Their native mutation, receipt, durable-save, bridge atomicity, and recovery checks remain Phase 002 verification gates. EXT-009 is resolved by DEC-022 and does not block bounded original-code interoperability work. Execute DEC-019 acquisition and construction routes before classifying an external input as unavailable. EXT-008 is already authorized by DEC-020 and is not a missing-consent blocker. The native Pixelmon and DanConomy mixins and the in-phase Vault backend transaction proof are implementation work in CORE-PHASE-002, not prerequisites to begin that phase. If an exact runtime later becomes unavailable, dependent runtime scope is preserved and the result is **NOT COMPLETE — EXTERNALLY BLOCKED**. A negative capability result requires safe refusal rather than a false support claim. No substitute artifact, reduced verification, unsafe override, partial compatibility claim, copied external code, modified external jar, redistribution, or publication may bypass that state.
 
 1. All four contiguous phases are integrated in order, and every mandatory requirement has traceable passing evidence.
-2. FutureShops identifies as `2.3.0` on Minecraft `1.21.1` and NeoForge `21.1.248`, with no unrelated platform upgrade.
+2. FutureShops identifies as `2.4.0` on Minecraft `1.21.1` and NeoForge `21.1.248`, with no unrelated platform upgrade.
 3. One public, documented NeoForge economy provider API is present and usable without internal implementation access.
 4. `internal` remains the default, provider selection is restart only, and no missing, late, failing, or incompatible external provider can cause internal fallback.
 5. The server remains online during external provider failure, all monetary mutations fail closed, browsing remains available, and pure barter remains available.
@@ -1140,7 +1148,7 @@ The exact Pixelmon 9.4.0 and DanConomy 1.2.1 runtime and development inputs, dis
 14. Standard NeoForge client and dedicated server start from the same final jar without Pixelmon or hybrid components.
 15. Focused tests, complete tests, applicable data and GameTests, build, server, client, multiplayer, restart, failure, recovery, dependency, security, jar, and diff gates pass.
 16. User, API, maintainer, migration, integration, security, verification, and recovery documentation matches the validated behavior and exact artifacts.
-17. `EVD-ART-001` identifies one reproducible, inspected, SHA 256 and SHA 512 hashed FutureShops `2.3.0` artifact that remains unpublished.
+17. `EVD-ART-001` identifies one reproducible, inspected, SHA 256 and SHA 512 hashed FutureShops `2.4.0` artifact that remains unpublished.
 18. `EVD-GH-001` identifies open GitHub issue 66, created and read back immediately after plan validation, proves it remained unchanged and open through phases 000 through 002, and proves its post-artifact Phase 003 search, strict-design update, and readback for `3.0.0` Forge `1.20.1` and a future `1.21.1` port with the native Pixelmon receipt and durable-save pattern, the exact DanConomy ledger receipt pattern and version boundary, and the transaction-aware Vault bridge or backend contract, the existing milestone, and labels. Issue 66 remains open, no 3.0.0 code is implemented here, and product execution never creates a replacement or duplicate.
 19. `docs/plan/goal.md` is byte for byte unchanged.
 20. No publication, release tag, mod platform upload, private data disclosure, credential use outside approved authentication, or unrelated source change occurred.
@@ -1154,13 +1162,13 @@ After the master, all four phase plans, plan index, and deterministic handoff pa
 ```text
 Mandatory boundary: CORE-REQ-001 through CORE-REQ-022 across CORE-PHASE-000 through CORE-PHASE-003, including native Pixelmon and DanConomy transaction-mixin paths, the separate Vault bridge boundary, exact external integration evidence, the unpublished artifact, and the two-stage open issue lifecycle.
 Optional/future disposition: excluded
-Locked owner decisions: DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018, DEC-019, DEC-020, DEC-021, DEC-022
+Locked owner decisions: DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018, DEC-019, DEC-020, DEC-021, DEC-022, DEC-023
 Active phase: CORE-PHASE-000
 Next executable action: Execute P000-TASK-001 to reconfirm repository identity, toolchain, product metadata, economy ownership, and the complete provider call graph before implementation.
 Known failing checks: none at validated plan handoff; execution checks have not yet run.
 Known external blockers: none
 Exact Pixelmon, DanConomy, bridge, hybrid, and Vault artifacts are available. EXT-009 is resolved under DEC-022. Native mixin implementation, proof construction, and provisioning are executable work, not prerequisites to start themselves. EXT-008 is already authorized; set and verify eula=true under DEC-020 without another consent request.
-Completion endpoint: One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior, a native exact Pixelmon 9.4.0 `PlayerPartyStorage` transaction-mixin path, an exact DanConomy 1.2.1 ledger saved-data transaction-mixin path, and separate `vault` registration with mutation enabled only when a bridge and backend provide one durable balance and receipt transaction, otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.
+Completion endpoint: One fully validated and inspected unpublished FutureShops 2.4.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior, a native exact Pixelmon 9.4.0 `PlayerPartyStorage` transaction-mixin path, an exact DanConomy 1.2.1 ledger saved-data transaction-mixin path, and separate `vault` registration with mutation enabled only when a bridge and backend provide one durable balance and receipt transaction, otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.
 Required evidence gates: Complete every requirement acceptance criterion and phase exit gate, freeze and exercise the DEC-021 debug command and evidence contract, classify EXT-001 through EXT-006 and EXT-010 with exact evidence, apply the resolved DEC-022 and EXT-009 boundary, inspect the Pixelmon 9.4.0 classes and save path, implement and prove the native PlayerPartyStorage receipt, deduplication, account classification, and durable-save path, inspect exact DanConomy 1.2.1 source and bytecode, implement and prove ledger balance and receipt persistence in one `danconomy_ledger` image, durable save, receipt lookup, retry deduplication, conflicting-request rejection, ordinary-call preservation, and mirrored-currency refusal, execute the Phase 002 Vault bridge or backend transaction proof, apply EXT-008 and DEC-020 before launch, build the separate bridge and durable backend proof when needed, pass journal, escrow, draining, recovery, frozen, capability, deterministic, headless GameTest, server-log, and runtime matrices, use a laptop client only for a justified client-only gate, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation.
 ```
 

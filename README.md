@@ -8,14 +8,14 @@ This branch targets the following runtime.
 
 | Component | Version |
 | --- | --- |
-| FutureShops | 2.3.0 |
+| FutureShops | 2.4.0 |
 | Minecraft | 1.21.1 |
 | NeoForge | 21.1.248 |
 | Java | 21 |
 | Parchment | 2024.11.17 |
 | GeckoLib | 4.8.4 |
 
-Client and server should use the same FutureShops build. This `2.3.0` NeoForge candidate is prepared locally and remains unpublished. Phases 000 through 002 are integrated, and Phase 003 final validation is complete. The provider API, deterministic registry, restart only selection contract, checksummed transaction journal, durable receipt audit directory, durable custody and claims, lifecycle gate, clean marker handling, and exact Pixelmon 9.4.0 and DanConomy 1.2.1 adapters are present. Native Pixelmon `PlayerPartyStorage` accounts and exact DanConomy `LEDGER` accounts use request aware mixin receipt paths with retry deduplication and durable saves. Unsupported, unmodified, custom, and mirrored account paths remain refused. Back up the complete world and configuration before replacing an older installation. The runtime mod identifier and all resource namespaces remain `futureshops`, while the Java package for this port is `com.enviouse.futureshopsp`.
+Client and server should use the same FutureShops build. This `2.4.0` NeoForge candidate is prepared locally and remains unpublished. Phases 000 through 002 are integrated, and Phase 003 final validation is complete. The provider API, deterministic registry, restart only selection contract, checksummed transaction journal, durable receipt audit directory, durable custody and claims, lifecycle gate, clean marker handling, and exact Pixelmon 9.4.0 and DanConomy 1.2.1 adapters are present. Native Pixelmon `PlayerPartyStorage` accounts and exact DanConomy `LEDGER` accounts use request aware mixin receipt paths with retry deduplication and durable saves. Unsupported, unmodified, custom, and mirrored account paths remain refused. Back up the complete world and configuration before replacing an older installation. The runtime mod identifier and all resource namespaces remain `futureshops`, while the Java package for this port is `com.enviouse.futureshopsp`.
 
 ## Installation
 
