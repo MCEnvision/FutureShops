@@ -80,6 +80,10 @@ class BalanceManagerRecoverySourceTest {
         assertTrue(source.contains("if (!persistenceIntegrityValid())"));
         assertTrue(source.contains("economy persistence integrity requires operator recovery"));
         assertTrue(source.contains("private static boolean persistenceIntegrityValid()"));
+        assertTrue(source.contains("receiptAudit.integrityValid()"));
+        assertTrue(source.contains("receiptAudit.matches(journal)"));
+        assertTrue(source.contains("fileAudit.migrateFrom(journal)"));
+        assertTrue(source.contains("receipt audit requires operator recovery"));
         assertTrue(source.contains("for (EconomyJournalRecord record : journal.snapshot())"));
         assertTrue(source.contains("coordinator.recover(record.request().requestId())"));
         assertTrue(source.contains("ProviderLifecycle.FROZEN"));
@@ -102,6 +106,7 @@ class BalanceManagerRecoverySourceTest {
 
         assertTrue(source.contains("try {\n            EconomyLifecycleController controller = lifecycleController;"));
         assertTrue(source.contains("flushSafely(\"transaction journal\""));
+        assertTrue(source.contains("flushSafely(\"receipt audit journal\""));
         assertTrue(source.contains("flushSafely(\"player shop sale escrow\""));
         assertTrue(source.contains("controller.writeCleanMarkerLast"));
         assertTrue(source.contains("markCleanMarkerSafely"));

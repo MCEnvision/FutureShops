@@ -12,7 +12,7 @@ Stop the server before taking or restoring a backup. Keep one complete, matching
 4. The complete data directory for the selected external provider, bridge, or economy plugin. For Pixelmon, include the exact Pixelmon configuration and world data used by its economy implementation.
 5. A manifest containing the snapshot timestamp, source commit or jar identity, provider identifier, loader versions, and SHA 256 and SHA 512 hashes for every copied file.
 
-FutureShops recovery records are stored in the world SavedData files. They include the transaction journal, custody, claims, internal receipts, player shop barter escrow, player shop sale escrow, and player shop settlements. Do not omit these files or copy only selected records.
+FutureShops recovery records are stored in the world SavedData files and the receipt audit directory at `world/data/futureshops/receipts`. They include the transaction journal, receipt audit records and clean marker, custody, claims, internal receipts, player shop barter escrow, player shop sale escrow, and player shop settlements. Do not omit the receipt directory or copy only selected records.
 
 Do not put credentials, tokens, private player exports, raw provider logs, or local secret files in the manifest or repository evidence. Keep those items in the operator's protected backup store.
 
@@ -20,7 +20,7 @@ Do not put credentials, tokens, private player exports, raw provider logs, or lo
 
 1. Announce maintenance and stop the server normally.
 2. Confirm the log contains `FutureShops server stopping` and that the stop completed without a flush or clean marker failure.
-3. Copy the complete world, configuration, mod set, and provider data into a new timestamped snapshot directory. Do not overwrite an older snapshot.
+3. Copy the complete world, including `world/data/futureshops/receipts`, configuration, mod set, and provider data into a new timestamped snapshot directory. Do not overwrite an older snapshot.
 4. Generate SHA 256 and SHA 512 hashes for the copied files and store the manifest beside the snapshot.
 5. Record the active provider, lifecycle result, source revision, and exact runtime versions.
 6. Keep at least one prior known good snapshot until the replacement has passed a disposable restore rehearsal.
@@ -40,7 +40,7 @@ The hash files must not include themselves. Generate them outside the snapshot d
 2. Verify the backup manifest and every hash before copying anything.
 3. Restore the complete matching world, configuration, mod set, and provider data together. Do not combine a FutureShops world with a different provider version or a different bridge data directory.
 4. Start the server with the exact recorded runtime and inspect the lifecycle, recovery, and provider logs before admitting players.
-5. If a clean marker is missing or an incomplete journal record is found, allow `RECOVERING` to reconcile only through the original provider and request identity.
+5. If a clean marker is missing or an incomplete, unknown, or checksum invalid journal or receipt audit record is found, allow `RECOVERING` to reconcile only through the original provider and request identity.
 6. If the provider outcome remains unknowable, keep the lifecycle `FROZEN`. Resolve it with a durable provider receipt or an evidence backed operator decision. Do not retry, refund, compensate, or restore an external balance from a local snapshot by guesswork.
 7. Rehearse the restored copy before using it as the production replacement. Record the restored hashes, startup result, recovery result, and any pending claims.
 

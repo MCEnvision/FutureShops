@@ -12,6 +12,8 @@ import com.enviouse.futureshopsp.api.economy.ProviderLifecycle;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.api.economy.ProviderResultStatus;
 import com.enviouse.futureshopsp.api.economy.RequestId;
+import com.enviouse.futureshopsp.server.debug.DebugDiagnostics;
+import com.enviouse.futureshopsp.server.debug.DebugModule;
 import com.enviouse.futureshopsp.event.BalanceChangeEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
@@ -29,6 +31,7 @@ public final class EconomyTransactionCoordinator {
     private final EconomyTransactionJournal journal;
     private final EconomyCustodyStore custody;
     private final EconomyClaimStore claims;
+    private final EconomyReceiptAuditJournal receiptAudit;
     private final Object lock = new Object();
 
     public EconomyTransactionCoordinator(EconomyProvider provider,
@@ -42,11 +45,21 @@ public final class EconomyTransactionCoordinator {
                                          EconomyTransactionJournal journal,
                                          EconomyCustodyStore custody,
                                          EconomyClaimStore claims) {
+        this(provider, lifecycle, journal, custody, claims, new InMemoryEconomyReceiptAuditJournal());
+    }
+
+    public EconomyTransactionCoordinator(EconomyProvider provider,
+                                         EconomyLifecycleController lifecycle,
+                                         EconomyTransactionJournal journal,
+                                         EconomyCustodyStore custody,
+                                         EconomyClaimStore claims,
+                                         EconomyReceiptAuditJournal receiptAudit) {
         this.provider = Objects.requireNonNull(provider, "provider");
         this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle");
         this.journal = Objects.requireNonNull(journal, "journal");
         this.custody = Objects.requireNonNull(custody, "custody");
         this.claims = Objects.requireNonNull(claims, "claims");
+        this.receiptAudit = Objects.requireNonNull(receiptAudit, "receiptAudit");
     }
 
     public EconomyLifecycleSnapshot lifecycle() {
@@ -274,7 +287,7 @@ public final class EconomyTransactionCoordinator {
                     EconomyTransactionState.PREPARED, Optional.empty(), ProviderResultStatus.REJECTED, "",
                     provider.providerId());
             try {
-                journal.append(prepared);
+                append(prepared);
             } catch (RuntimeException exception) {
                 return journalFailure("transaction intent could not be persisted");
             }
@@ -463,7 +476,7 @@ public final class EconomyTransactionCoordinator {
                     EconomyTransactionState.PREPARED, Optional.empty(), ProviderResultStatus.REJECTED, "",
                     provider.providerId());
             try {
-                journal.append(prepared);
+                append(prepared);
             } catch (RuntimeException exception) {
                 return journalFailure("transaction intent could not be persisted");
             }
@@ -477,6 +490,13 @@ public final class EconomyTransactionCoordinator {
                 provider.providerId());
         try {
             journal.replace(pending);
+            if (!journal.flush()) {
+                throw new IllegalStateException("transaction journal flush failed");
+            }
+            receiptAudit.append(pending);
+            if (!receiptAudit.flush()) {
+                throw new IllegalStateException("receipt audit flush failed");
+            }
         } catch (RuntimeException exception) {
             return journalFailure("pending transaction state could not be persisted");
         }
@@ -492,6 +512,9 @@ public final class EconomyTransactionCoordinator {
         if (result == null) {
             return ambiguous(pending, "provider returned no mutation result");
         }
+        DebugDiagnostics.transaction(DebugModule.TRANSACTION, "economy", expectedKind.name().toLowerCase(), request,
+                null, provider.capabilities(), result, pending.state().name(), "provider_result", "unknown", "unknown",
+                result.confirmed() ? "persist confirmed receipt" : "follow the typed provider outcome");
         if (result.confirmed()) {
             MutationReceipt receipt = result.receipt().orElse(result.value().orElse(null));
             if (!validReceipt(request, receipt)) {
@@ -685,8 +708,33 @@ public final class EconomyTransactionCoordinator {
 
     private void replace(EconomyJournalRecord source, EconomyTransactionState state,
                          Optional<MutationReceipt> receipt, ProviderResultStatus status, String diagnostic) {
-        journal.replace(new EconomyJournalRecord(source.request(), state, receipt, status, diagnostic,
-                source.providerId().isBlank() ? provider.providerId() : source.providerId()));
+        EconomyJournalRecord updated = new EconomyJournalRecord(source.request(), state, receipt, status, diagnostic,
+                source.providerId().isBlank() ? provider.providerId() : source.providerId());
+        journal.replace(updated);
+        if (!journal.flush()) {
+            throw new IllegalStateException("transaction journal flush failed");
+        }
+        receiptAudit.append(updated);
+        if (!receiptAudit.flush()) {
+            throw new IllegalStateException("receipt audit flush failed");
+        }
+        DebugDiagnostics.transaction(DebugModule.RECEIPT, "economy", "journal_replace", updated.request(), null,
+                provider.capabilities(), null, updated.state().name(), updated.resultStatus().name(), "unknown", "unknown",
+                "continue with the recorded state");
+    }
+
+    private void append(EconomyJournalRecord record) {
+        journal.append(record);
+        if (!journal.flush()) {
+            throw new IllegalStateException("transaction journal flush failed");
+        }
+        receiptAudit.append(record);
+        if (!receiptAudit.flush()) {
+            throw new IllegalStateException("receipt audit flush failed");
+        }
+        DebugDiagnostics.transaction(DebugModule.RECEIPT, "economy", "journal_append", record.request(), null,
+                provider.capabilities(), null, record.state().name(), record.resultStatus().name(), "unknown", "unknown",
+                "continue with the recorded state");
     }
 
     private static boolean validReceipt(MutationRequest request, MutationReceipt receipt) {

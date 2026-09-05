@@ -30,7 +30,7 @@ public final class PixelmonEconomyProviderRegistration {
                         PixelmonEconomyProvider.PROVIDER_ID, "pixelmon version is unsupported");
             }
             return EconomyProviderRegistry.register(PixelmonEconomyProvider.PROVIDER_ID,
-                    EconomyApi.COMPATIBILITY_VERSION, context -> new PixelmonEconomyProvider());
+                    EconomyApi.COMPATIBILITY_VERSION, context -> new PixelmonEconomyProvider(context.server()));
         } catch (RuntimeException exception) {
             return new RegistrationResult(RegistrationStatus.INCOMPATIBLE,
                     PixelmonEconomyProvider.PROVIDER_ID, "pixelmon compatibility check failed");

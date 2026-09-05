@@ -8,6 +8,48 @@ plugins {
 version = mod_version
 group = mod_group_id
 
+def sourceCommit = 'unknown'
+try {
+    sourceCommit = providers.exec {
+        commandLine 'git', 'rev-parse', 'HEAD'
+    }.standardOutput.asText.get().trim()
+} catch (Exception ignored) {
+    // A source archive without Git metadata keeps the diagnostic field explicit.
+}
+
+tasks.named('jar') {
+    manifest {
+        attributes 'FutureShops-Source-Commit': sourceCommit
+    }
+}
+
+// Builds the separately installed transaction proof registrant, never the production mod jar.
+def vaultProofSources = fileTree('src/test/fixtures/vault-proof/src') {
+    include '**/*.java'
+}
+def compileVaultProofFixture = tasks.register('compileVaultProofFixture', JavaCompile) {
+    dependsOn tasks.named('testClasses')
+    source vaultProofSources
+    destinationDirectory = layout.buildDirectory.dir('vault-proof/classes')
+    classpath = sourceSets.test.runtimeClasspath
+    options.release = 21
+}
+tasks.register('vaultProofJar', Jar) {
+    dependsOn compileVaultProofFixture
+    archiveFileName = 'futureshops-vault-proof-1.0.0.jar'
+    destinationDirectory = layout.buildDirectory.dir('vault-proof')
+    from(compileVaultProofFixture) {
+        exclude 'previous-compilation-data.bin'
+    }
+    from(sourceSets.test.output.classesDirs) {
+        include 'com/enviouse/futureshopsp/vaultproof/SqliteVaultProofBackend*.class'
+        include 'com/enviouse/futureshopsp/vaultproof/SqliteVaultProofProvider*.class'
+    }
+    from('src/test/fixtures/vault-proof') {
+        exclude 'src/**'
+    }
+}
+
 repositories {
     mavenLocal()
     maven {
@@ -135,6 +177,8 @@ dependencies {
     // source set by the neoForge.unitTest block below (MDG wiring).
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // First party Vault transaction proof fixture only. This never enters the production jar.
+    testImplementation 'org.xerial:sqlite-jdbc:3.46.0.0'
     // NeoForge test framework: EphemeralTestServerProvider boots a MinecraftServer with the mod's
     // registries (item + data component) loaded, so registration-dependent invariants are testable.
     testImplementation "net.neoforged:testframework:${neo_version}"

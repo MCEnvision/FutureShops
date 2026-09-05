@@ -14,19 +14,21 @@ The available bridge files were inspected outside the repository.
 
 The bridge contains `v1_21_R1` classes and can wire Pixelmon to Vault on a hybrid server. It is still a Bukkit plugin stack, not a NeoForge provider API. The exact profile below includes its required EverNifeCore artifact.
 
+The authoritative [EverNife PixelmonEconomyBridge source](https://github.com/EverNife/PixelmonEconomyBridge) was inspected at commit `3290c81d248ed1241792e4c857b86f98f344bd08`. The repository exposes only tag `1.1.6`; its `v1_21_1` `VaultBankAccount` delegates `take` and `add` directly to Vault and provides no request identity, durable receipt, receipt lookup, or retry operation.
+
 The public EverNife repositories for PixelmonEconomyBridge, FinalEconomy, and EverNifeCore expose no GitHub license metadata and no root license file. Their separately installed artifacts therefore remain license provenance unresolved for this phase. The Youer repository declares a `LICENSE.md`, but its GitHub license metadata is `NOASSERTION`.
 
 ## Exact hybrid profile
 
-The disposable profile `/tmp/futureshops-youer-pixelmon-248.zhVzs4` contains the exact FutureShops 2.3.0, Pixelmon 9.4.0, GeckoLib 4.8.4, Youer `1.21.1-d4a204a0`, NeoForge 21.1.248, Vault 1.7.3, FinalEconomy 1.0.9, PixelmonEconomyBridge 1.1.6, and EverNifeCore 2.0.4.4 artifacts above. Its FutureShops configuration selects `pixelmon` and its `eula.txt` remains `eula=false`.
+The disposable profile `/tmp/futureshops-youer-pixelmon-248.zhVzs4` contains the exact FutureShops 2.3.0, Pixelmon 9.4.0, GeckoLib 4.8.4, Youer `1.21.1-d4a204a0`, NeoForge 21.1.248, Vault 1.7.3, FinalEconomy 1.0.9, PixelmonEconomyBridge 1.1.6, and EverNifeCore 2.0.4.4 artifacts above. Its FutureShops configuration selects `pixelmon` and its current `eula.txt` is `eula=true`.
 
-The Java 21 bounded launch reached ModLauncher with NeoForge 21.1.248, discovered the expected mod dependencies, and stopped at the EULA gate in `/tmp/futureshops-youer-pixelmon-248-java21-eula-false-20260903.log`. This proves exact byte assembly, loader discovery, and terms-gated startup only. It does not prove plugin loading, economy mutation, restart, or recovery behavior.
+An earlier assembly check intentionally used `eula=false` and stopped at the EULA gate in `/tmp/futureshops-youer-pixelmon-248-java21-eula-false-20260903.log`. After owner authorization, the same exact bytes were rerun with `eula=true`; that launch reached plugin loading and FutureShops startup as recorded in `pixelmon-refusal-2026-09-03.md`. The historical gate check proves only byte assembly and loader discovery. The authorized rerun is the applicable startup evidence, while economy mutation, restart, and recovery remain separate capability gates.
 
 ## API and capability result
 
 The bridge's `v1_21_R1` `VaultBankAccount` implements the Pixelmon `BankAccount` interface with `getBalance`, `hasBalance`, boolean `take`, boolean `add`, and `setBalance`. Its bytecode calls `VaultIntegration.ecoGet`, `ecoHasEnough`, `ecoTake`, and `ecoGive`. `getBalance` converts the Vault `double` through `Math.floor`, and `add` has no boolean or receipt result.
 
-The inspected FinalEconomy and Vault APIs expose `double` balances and `EconomyResponse` values, but no FutureShops request UUID, durable receipt store, receipt lookup, or idempotent retry keyed by a request identity. The bridge also owns no transaction journal that FutureShops can query. A successful boolean or `EconomyResponse` cannot prove the outcome after a crash between the external effect and local persistence.
+Targeted `javap` inspection of `FinalEconomyAPI`, `IFinalEconomy`, `VaultEconomy`, `FEBankAccount`, and `VaultBankAccount` confirms that the available calls are `getBalance`, `has`, `withdrawPlayer`, `depositPlayer`, boolean `take`, boolean `add`, and `setBalance`. The inspected FinalEconomy and Vault APIs expose `double` balances and `EconomyResponse` values, but no FutureShops request UUID, durable receipt store, receipt lookup, or idempotent retry keyed by a request identity. The bridge also owns no transaction journal that FutureShops can query. A successful boolean or `EconomyResponse` cannot prove the outcome after a crash between the external effect and local persistence.
 
 | Required capability | Result |
 | --- | --- |
@@ -54,3 +56,5 @@ The public [Youer](https://github.com/MohistMC/Youer) `1.21.1` branch was checke
 ## Reclassification gate
 
 Vault mutation support can be reconsidered only with an exact separately installed bridge that provides a stable request identity, durable receipt lookup, idempotent retry, exact integer conversion, and crash recovery evidence for every enabled route. Phase 003 owns any later issue 66 update and final artifact validation.
+
+The separate first party proof registrant and SQLite backend now satisfy this contract for the tested synthetic account path. Current exact hybrid runs with the production FutureShops artifact confirmed registration, coordinator precheck, withdrawal, lookup, retry, deposit, refund, compensation, custody, claims, transfer, restart replay, and clean shutdown. This proof component remains outside the production jar and does not modify or certify PixelmonEconomyBridge, FinalEconomy, EverNifeCore, Vault, or Youer. The unmodified legacy stack remains safely refused for FutureShops `vault` mutation because its request receipt and durable retry contract is absent.

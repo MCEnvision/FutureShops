@@ -42,7 +42,9 @@ class EconomyTransactionCoordinatorTest {
         FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
         EconomyLifecycleController lifecycle = readyLifecycle();
         InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
-        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        InMemoryEconomyReceiptAuditJournal audit = new InMemoryEconomyReceiptAuditJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal,
+                new InMemoryEconomyCustodyStore(), new InMemoryEconomyClaimStore(), audit);
         MutationRequest request = MutationRequest.forPlayer(
                 new RequestId(UUID.fromString("00000000-0000-0000-0000-000000000011")), PLAYER, 25L,
                 MutationKind.WITHDRAW);
@@ -56,6 +58,8 @@ class EconomyTransactionCoordinatorTest {
         assertEquals(1, provider.withdrawCalls);
         assertEquals(EconomyTransactionState.RESOLVED,
                 journal.find(request.requestId()).orElseThrow().state());
+        assertEquals(4, audit.snapshot().size());
+        assertTrue(audit.matches(journal));
     }
 
     @Test
@@ -271,6 +275,40 @@ class EconomyTransactionCoordinatorTest {
         assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
         assertEquals(ProviderResultStatus.RECOVERY_REQUIRED, retry.status());
         assertFalse(retry.confirmed());
+    }
+
+    @Test
+    void providerServiceLossBeforeIntentFailsClosedWithoutInternalFallback() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        provider.precheckUnavailable = true;
+        EconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, readyLifecycle(), journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+
+        var result = coordinator.withdraw(request);
+
+        assertEquals(ProviderResultStatus.UNAVAILABLE, result.status());
+        assertEquals(ProviderError.NOT_READY, result.error());
+        assertTrue(journal.snapshot().isEmpty());
+        assertEquals(0, provider.withdrawCalls);
+    }
+
+    @Test
+    void providerServiceLossAfterIntentFreezesUnknownOutcome() {
+        FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        provider.mutationUnavailable = true;
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+
+        var result = coordinator.withdraw(request);
+
+        assertEquals(ProviderResultStatus.AMBIGUOUS, result.status());
+        assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
+        assertEquals(EconomyTransactionState.UNCERTAIN,
+                journal.find(request.requestId()).orElseThrow().state());
+        assertEquals(100L, provider.balances.get(PLAYER));
     }
 
     @Test
@@ -713,6 +751,8 @@ class EconomyTransactionCoordinatorTest {
         private boolean throwCapabilities;
         private boolean throwMutation;
         private boolean malformedReceipt;
+        private boolean precheckUnavailable;
+        private boolean mutationUnavailable;
 
         private FixtureProvider(ProviderCapabilities capabilities) {
             this.capabilities = capabilities;
@@ -754,6 +794,9 @@ class EconomyTransactionCoordinatorTest {
 
         @Override
         public ProviderResult<BalanceSnapshot> precheck(MutationRequest request) {
+            if (precheckUnavailable) {
+                return ProviderResult.unavailable(ProviderError.NOT_READY, "fixture service unavailable");
+            }
             long balance = balances.getOrDefault(request.actor(), 0L);
             boolean requiresFunds = request.kind() != MutationKind.DEPOSIT
                     && request.kind() != MutationKind.TRANSFER_CREDIT;
@@ -765,6 +808,9 @@ class EconomyTransactionCoordinatorTest {
         @Override
         public ProviderResult<MutationReceipt> withdraw(MutationRequest request) {
             withdrawCalls++;
+            if (mutationUnavailable) {
+                return ProviderResult.unavailable(ProviderError.NOT_READY, "fixture service unavailable");
+            }
             if (throwMutation) {
                 throw new IllegalStateException("fixture mutation failure");
             }

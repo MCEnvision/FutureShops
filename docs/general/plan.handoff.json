@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "planId": "PLAN-MASTER",
-  "planSetSha256": "d8ffaef4b5daa00ff515dc87708e4656992ec1b61e630a931e6b94b6e6ded97d",
+  "planSetSha256": "95d05512287cc72e460cef6f81f150f4a3ac7ddc40e3c2dccf5c4c8391f5b0a1",
   "planningSubject": {
     "name": "FutureShops 2.3.0 strict external economy safety for Minecraft 1.21.1 NeoForge, with capability gated Pixelmon 9.4.0 and Vault bridge interoperability",
     "requestedArtifact": "authoritative_plan",
@@ -54,7 +54,42 @@
         "role": "owner_request",
         "subject": "strict restart safe economy amendment and 3.0.0 issue guidance",
         "source": "current owner request and accepted design discussion",
-        "use": "binding safety model, direct Pixelmon classification, issue 66 guidance, and unchanged unpublished endpoint"
+        "use": "binding safety model, exact Pixelmon artifact inspection, native PlayerPartyStorage mixin implementation, separate Vault bridge and backend proof, issue 66 guidance, and unchanged unpublished endpoint"
+      },
+      {
+        "id": "SRC-008",
+        "role": "owner_request",
+        "subject": "executable acquisition paths for exact development inputs, bridge, and backend",
+        "source": "current prerequisite acquisition amendment and standing disposable-server EULA authorization",
+        "use": "acquisition and proof work inside existing phases, separate test artifacts, and no repeated Minecraft EULA approval"
+      },
+      {
+        "id": "SRC-009",
+        "role": "reference",
+        "subject": "officially linked Pixelmon development dependency recipe",
+        "source": "https://github.com/EnvyWare/Pixelmon-MDK/blob/4309ac5fc79b6a167edfc922f055d1b4d2d56744/build.gradle",
+        "use": "universal jar and interface injection dependency pattern, with exact 9.4.0 inputs verified independently of the template version"
+      },
+      {
+        "id": "SRC-010",
+        "role": "reference",
+        "subject": "candidate hybrid and legacy economy sources",
+        "source": "https://github.com/ElainAwa/PRTS-SERVER/releases/tag/v1.21.1-1.0.30 and https://github.com/EverNife/PixelmonEconomyBridge and https://github.com/EverNife/FinalEconomy",
+        "use": "exact candidate acquisition and upstream provenance review, not a compatibility or atomicity claim"
+      },
+      {
+        "id": "SRC-011",
+        "role": "reference",
+        "subject": "durable embedded transaction proof inputs",
+        "source": "https://sqlite.org/atomiccommit.html and https://github.com/xerial/sqlite-jdbc",
+        "use": "separately built backend proof, version and license review, and crash tests against one authoritative database"
+      },
+      {
+        "id": "SRC-012",
+        "role": "owner_request",
+        "subject": "opt in debug mode and headless first evidence procedure",
+        "source": "current owner request and accepted debugging workflow",
+        "use": "binding debug toggle, structured log fields, sanitization, server log and GameTest priority, and laptop client escalation rules"
       }
     ]
   },
@@ -355,7 +390,8 @@
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
         "CORE-REQ-004",
-        "CORE-REQ-007"
+        "CORE-REQ-007",
+        "DEC-021"
       ],
       "lifecycleStage": "continuous",
       "productionVerification": "nondestructive",
@@ -372,7 +408,8 @@
         "CORE-REQ-002",
         "CORE-REQ-004",
         "CORE-REQ-009",
-        "DEC-014"
+        "DEC-014",
+        "DEC-021"
       ],
       "lifecycleStage": "continuous",
       "productionVerification": "nondestructive",
@@ -390,6 +427,7 @@
         "CORE-REQ-004",
         "CORE-REQ-005",
         "CORE-REQ-007",
+        "DEC-021",
         "EXT-001",
         "EXT-004",
         "EXT-005"
@@ -420,7 +458,7 @@
     },
     {
       "id": "CORE-REQ-017",
-      "summary": "bundled capability-gated Pixelmon adapter",
+      "summary": "bundled capability-gated Pixelmon adapter with complete native transaction mixin",
       "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-002`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-003`",
@@ -435,10 +473,13 @@
         "CORE-REQ-016",
         "DEC-017",
         "DEC-018",
+        "DEC-019",
+        "DEC-020",
         "EXT-001",
         "EXT-002",
         "EXT-003",
-        "EXT-008"
+        "EXT-008",
+        "EXT-009"
       ],
       "lifecycleStage": "change",
       "productionVerification": "nondestructive",
@@ -447,7 +488,7 @@
     },
     {
       "id": "CORE-REQ-018",
-      "summary": "separate Vault bridge interoperability",
+      "summary": "separate Vault bridge interoperability with in-phase backend transaction proof",
       "source": "SRC-001 and SRC-007",
       "owner": "`CORE-PHASE-002`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-003`",
@@ -459,10 +500,13 @@
         "CORE-REQ-015",
         "CORE-REQ-016",
         "DEC-017",
+        "DEC-019",
+        "DEC-020",
         "EXT-004",
         "EXT-005",
         "EXT-006",
-        "EXT-008"
+        "EXT-008",
+        "EXT-009"
       ],
       "lifecycleStage": "change",
       "productionVerification": "nondestructive",
@@ -494,6 +538,7 @@
         "CORE-REQ-016",
         "CORE-REQ-017",
         "CORE-REQ-018",
+        "DEC-021",
         "EXT-001",
         "EXT-002",
         "EXT-003",
@@ -531,7 +576,8 @@
         "CORE-REQ-016",
         "CORE-REQ-017",
         "CORE-REQ-018",
-        "CORE-REQ-019"
+        "CORE-REQ-019",
+        "DEC-021"
       ],
       "lifecycleStage": "post_change",
       "productionVerification": "nondestructive",
@@ -547,7 +593,8 @@
       "dependencies": [
         "CORE-REQ-019",
         "CORE-REQ-020",
-        "DEC-016"
+        "DEC-016",
+        "DEC-021"
       ],
       "lifecycleStage": "post_change",
       "productionVerification": "nondestructive",
@@ -576,13 +623,13 @@
   "optionalFutureScope": [
     {
       "id": "FUT-001",
-      "summary": "Add this strict external economy design to the existing 3.0.0 beta on Forge 1.20.1",
+      "summary": "Add this strict external economy design and a transaction-aware Vault bridge or backend to the existing 3.0.0 beta on Forge 1.20.1",
       "source": "SRC-001 and SRC-007",
       "disposition": "excluded"
     },
     {
       "id": "FUT-002",
-      "summary": "Carry the same design into a future 3.0.0 Minecraft 1.21.1 port",
+      "summary": "Carry the same native Pixelmon and transaction-aware Vault design into a future 3.0.0 Minecraft 1.21.1 port",
       "source": "SRC-001 and SRC-007",
       "disposition": "excluded"
     },
@@ -612,7 +659,7 @@
     },
     {
       "id": "NG-003",
-      "summary": "Shipping Bukkit, Vault, an economy plugin, a hybrid server, bridge code, or their APIs inside FutureShops.",
+      "summary": "Shipping Pixelmon, Bukkit, Vault, an economy plugin, a hybrid server, a Vault bridge or backend, or their APIs inside FutureShops. A narrow optional mixin targeting the exact Pixelmon 9.4.0 native account is allowed, but no external runtime bytes are bundled.",
       "source": "SRC-001"
     },
     {
@@ -688,8 +735,8 @@
     {
       "id": "DEC-004",
       "question": "Integration boundary",
-      "selectedChoice": "A public NeoForge provider API, bundled internal and optional Pixelmon adapter, and a separate bridge registering vault.",
-      "rationale": "The core API supports exact integrations without embedding unrelated platforms.",
+      "selectedChoice": "A public NeoForge provider API, bundled internal and optional Pixelmon adapter with a narrow native-account mixin, and a separate bridge registering `vault`.",
+      "rationale": "The core API supports exact integrations without embedding unrelated platforms. The Pixelmon mixin is limited to the reviewed native account, while Vault and its backend remain outside the FutureShops jar.",
       "affectedRequirements": [
         "CORE-REQ-002",
         "CORE-REQ-003",
@@ -789,7 +836,7 @@
       "id": "DEC-012",
       "question": "Pixelmon integration",
       "selectedChoice": "A bundled optional adapter for exactly Pixelmon 9.4.0, without bundling Pixelmon.",
-      "rationale": "This original choice remains historical, but exact runtime evidence now proves that direct Pixelmon 9.4.0 lacks the request identity, durable receipt, idempotent retry, and outcome lookup required for production mutation in strict mode.",
+      "rationale": "This original packaging choice remains historical. DEC-018 defines the direct API limitation and the separately reviewed native-account transaction-mixin path without bundling Pixelmon.",
       "affectedRequirements": [
         "CORE-REQ-017"
       ],
@@ -798,8 +845,8 @@
     {
       "id": "DEC-013",
       "question": "Vault support",
-      "selectedChoice": "A separately installed reviewed bridge registers vault; FutureShops contains no Bukkit or Vault dependency or reflection.",
-      "rationale": "The bridge owns hybrid-platform dependencies and lifecycle adaptation.",
+      "selectedChoice": "A separately installed reviewed bridge registers `vault`; FutureShops contains no Bukkit or Vault dependency or reflection. Phase 002 must obtain and exercise a transaction-aware bridge or backend proof that persists the balance effect and provider receipt in one transaction before any `vault` mutation is enabled.",
+      "rationale": "The bridge owns hybrid-platform dependencies and lifecycle adaptation. Phase 002 owns the proof boundary and must produce a disposable transaction proof or a typed safe-refusal result. The currently observed PixelmonEconomyBridge and FinalEconomy path does not provide that atomic request-aware contract without modification. Production adaptation stays in issue 66; DEC-019 authorizes acquiring or constructing a separate Phase 002 test registrant and durable backend proof without waiting for that future production work.",
       "affectedRequirements": [
         "CORE-REQ-002",
         "CORE-REQ-018"
@@ -822,8 +869,8 @@
     {
       "id": "DEC-015",
       "question": "Continuation issue timing",
-      "selectedChoice": "Preserve the existing issue 66 created and read back by plan authoring, then update that issue only after 2.3.0 artifact validation with the strict economy gate, lifecycle, journal, escrow, capability, recovery, backup, and direct Pixelmon limitation design for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.",
-      "rationale": "This plan implements only 2.3.0. The 3.0.0 lines receive one actionable design issue and no code, duplicate issue, early mutation, or closure.",
+      "selectedChoice": "Preserve the existing issue 66 created and read back by plan authoring, then update that issue only after 2.3.0 artifact validation with the strict economy gate, lifecycle, journal, escrow, native Pixelmon transaction-mixin contract, transaction-aware Vault bridge and backend contract, capability, recovery, backup, and provider limitation design for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.",
+      "rationale": "This plan implements only 2.3.0 native Pixelmon behavior. The 3.0.0 lines receive one actionable design issue for the Vault backend or bridge and the future port, with no code, duplicate issue, early mutation, or closure.",
       "affectedRequirements": [
         "CORE-REQ-022"
       ],
@@ -865,9 +912,9 @@
     },
     {
       "id": "DEC-018",
-      "question": "Direct Pixelmon capability classification",
-      "selectedChoice": "Bundle an exact Pixelmon 9.4.0 capability adapter without bundling Pixelmon. It may expose verified query and precheck behavior, but strict mode must not enable production mutation through the direct API unless exact reviewed evidence supplies durable request identity, receipt lookup, and idempotent retry. With the currently observed API, mutation-required surfaces are unavailable and the product claims safe capability detection and refusal, not direct Pixelmon production mutation support.",
-      "rationale": "The exact runtime exposes boolean `add` and `take` calls and balance events but no operation identity or durable outcome lookup. A local journal cannot make that external effect atomic or safely replayable.",
+      "question": "Pixelmon capability classification and native transaction path",
+      "selectedChoice": "Bundle an exact Pixelmon 9.4.0 capability adapter without bundling Pixelmon. During Phase 002, inspect the exact `PlayerPartyStorage` and storage save implementation, then implement a request-aware mixin loaded only when FutureShops and Pixelmon are both present. It must persist the FutureShops request UUID, operation, amount, and outcome receipt beside `pixelDollars`, deduplicate retries, and force a proven durable save. A custom or hybrid account remains mutation unavailable, while unscoped Pixelmon calls retain their native behavior and are never claimed as FutureShops transactions.",
+      "rationale": "The exact runtime exposes `PlayerPartyStorage` as a native `BankAccount` with `pokeDollars` serialized as `pixelDollars`, and exposes `add` and `take` calls plus save adapter and scheduler hooks. The mixin must use that exact implementation evidence, add request identity and receipt persistence without globally breaking Pixelmon's own calls, and refuse before FutureShops effects if the target or save boundary is not proven.",
       "affectedRequirements": [
         "CORE-REQ-002",
         "CORE-REQ-003",
@@ -881,6 +928,51 @@
       "supersedes": [
         "DEC-012"
       ]
+    },
+    {
+      "id": "DEC-019",
+      "question": "Acquisition and proof work inside the existing phases",
+      "selectedChoice": "Execute the ordered public acquisition paths and compile probes for exact Pixelmon inputs. In Phase 002, obtain an existing compatible bridge or build a separate test registrant and durable backend proof using reviewed dependencies. These proof components run in the exact disposable hybrid environment and are never bundled or published with FutureShops. Production adaptation of the legacy PixelmonEconomyBridge and FinalEconomy stack remains issue 66 work for 3.0.0.",
+      "rationale": "Missing implementation and unattempted acquisition are executable work. A reachable runtime may also be a valid development input; a template version or missing sources archive does not decide that. A completed test backend proves only its own transaction boundary and cannot certify a different production economy.",
+      "affectedRequirements": [
+        "CORE-REQ-001",
+        "CORE-REQ-015",
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-020",
+        "CORE-REQ-021",
+        "CORE-REQ-022"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-020",
+      "question": "Standing Minecraft EULA authorization",
+      "selectedChoice": "Apply the owner's standing authorization to set and read back `eula=true` in every requested disposable Minecraft development and verification runtime. Do not request another consent phrase or treat a missing file or `eula=false` as missing consent. Review any separate third party license or development-use condition under EXT-009.",
+      "rationale": "Minecraft EULA acceptance is already authorized. It does not authorize unrelated licenses, account applications, redistribution, purchases, production mutations, or public exposure.",
+      "affectedRequirements": [
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-021"
+      ],
+      "supersedes": []
+    },
+    {
+      "id": "DEC-021",
+      "question": "Headless first diagnostics and debug mode",
+      "selectedChoice": "Add an opt in, server authoritative FutureShops debug mode that is off by default, enabled by an operator at runtime with `/futureshops debug on <module>` and disabled with `/futureshops debug off`, and automatically disabled on restart. It emits bounded structured diagnostics to the server log, emits only a bounded correlated snapshot to an opted in client when client evidence is required, and never changes provider selection, readiness, transaction outcomes, or safety rules.",
+      "rationale": "Server logs, dedicated server GameTests, deterministic tests, and headless runtime traces provide the required evidence without requiring EnVy to join or consume laptop rendering resources. A laptop client is used only when rendering, input, client classloading, or an interaction that cannot be represented by a headless test is the acceptance gate.",
+      "affectedRequirements": [
+        "CORE-REQ-013",
+        "CORE-REQ-014",
+        "CORE-REQ-015",
+        "CORE-REQ-019",
+        "CORE-REQ-020",
+        "CORE-REQ-021"
+      ],
+      "supersedes": []
     }
   ],
   "externalPrerequisites": [
@@ -895,11 +987,11 @@
       ],
       "mandatory_for_endpoint": true,
       "kind": "artifact",
-      "availability": "unknown",
+      "availability": "available",
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Acquire exact official artifacts and record version, source, hashes, compatibility, license provenance, archive review, and security review."
+        "Acquisition, hash, archive, API inspection, interface injection metadata review, and an isolated Java 21 compile probe passed for the exact universal jar. Use it as the pinned input for Phase 002; review runtime mixin and other third party operations separately under EXT-009."
       ],
       "artifact_evidence": [
         "exact_version",
@@ -921,16 +1013,16 @@
       ],
       "mandatory_for_endpoint": true,
       "kind": "environment",
-      "availability": "unknown",
+      "availability": "available",
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Provision the exact isolated runtime and record its reproducible manifest and sanitized logs."
+        "The exact Minecraft 1.21.1 and NeoForge 21.1.248 profile with Pixelmon 9.4.0 and FutureShops was provisioned with eula=true, reached Done, and produced sanitized startup and refusal logs. Phase owned mutation and recovery evidence remains required."
       ]
     },
     {
       "id": "EXT-003",
-      "name": "Pixelmon economy API feasibility proof",
+      "name": "Pixelmon 9.4.0 artifact inspection and native mixin implementation evidence",
       "affected_requirements": [
         "CORE-REQ-002",
         "CORE-REQ-007",
@@ -938,11 +1030,11 @@
       ],
       "mandatory_for_endpoint": true,
       "kind": "other",
-      "availability": "unknown",
+      "availability": "available",
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Prove exact values, lifecycle, persistence, durable outcomes, recovery, and duplicate prevention against the reviewed API."
+        "Inspect exact Pixelmon 9.4.0 bytecode and record PlayerPartyStorage inheritance, the pokeDollars field, pixelDollars NBT read and write, add and take behavior, BankAccountProxy account classification, StorageProxy save adapter and scheduler paths, and the exact mixin target. Implement and prove the request-aware native mixin, receipt persistence beside pixelDollars, retry deduplication, durable save acknowledgement, recovery, and duplicate prevention. The unmodified direct API remains a negative capability result."
       ]
     },
     {
@@ -956,11 +1048,11 @@
       ],
       "mandatory_for_endpoint": true,
       "kind": "artifact",
-      "availability": "unknown",
+      "availability": "available",
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Acquire and review the exact bridge artifact, source, hashes, compatibility, license provenance, and security boundary."
+        "The exact separately installed bridge candidate is available and its identity and archive are recorded. Phase 002 must still build or obtain the FutureShops test registrant and durable backend proof, and must leave mutation disabled until that proof passes. An absent ready made transaction aware bridge is not an acquisition blocker."
       ],
       "artifact_evidence": [
         "exact_version",
@@ -982,11 +1074,11 @@
       ],
       "mandatory_for_endpoint": true,
       "kind": "other",
-      "availability": "unknown",
+      "availability": "available",
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Select and review every exact artifact and record versions, sources, hashes, compatibility, licenses, and security conclusions."
+        "The exact Pixelmon 9.4.0 hybrid stack with Vault and its economy components is pinned, hashed, launched, and recorded. Third party terms remain under EXT-009, and the separate one transaction receipt proof remains Phase 002 work. Legacy backend refusal and proof backend success are separate results."
       ]
     },
     {
@@ -999,11 +1091,11 @@
       ],
       "mandatory_for_endpoint": true,
       "kind": "environment",
-      "availability": "unknown",
+      "availability": "available",
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Provision the isolated exact hybrid environment and record its reproducible manifest and sanitized logs."
+        "The isolated exact hybrid environment was provisioned with eula=true, loaded the pinned stack and FutureShops, reached Done, and produced sanitized logs. Phase owned bridge registration, mutation, and recovery evidence remains required."
       ]
     },
     {
@@ -1023,7 +1115,7 @@
     },
     {
       "id": "EXT-008",
-      "name": "Owner acceptance of applicable EULA and terms for disposable runtime validation",
+      "name": "Standing Minecraft EULA acceptance for disposable runtime validation",
       "affected_requirements": [
         "CORE-REQ-017",
         "CORE-REQ-018",
@@ -1032,11 +1124,11 @@
       ],
       "mandatory_for_endpoint": true,
       "kind": "authorization",
-      "availability": "unavailable",
-      "authorization": "unknown",
+      "availability": "available",
+      "authorization": "authorized",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Accept the applicable Minecraft and external runtime terms for the exact disposable environments before their first full launch. Never infer or write acceptance on the owner's behalf."
+        "Apply DEC-020 by creating or updating the exact disposable runtime eula.txt and verifying eula=true before launch; keep acceptance files untracked."
       ],
       "scope_binding": [
         "runbook_digest",
@@ -1046,6 +1138,25 @@
         "operators",
         "time_window",
         "rollback"
+      ]
+    },
+    {
+      "id": "EXT-009",
+      "mandatory_for_endpoint": true,
+      "kind": "other",
+      "blocked_plan_approved": true,
+      "name": "Third party artifact and development-use terms review",
+      "affected_requirements": [
+        "CORE-REQ-015",
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-021"
+      ],
+      "availability": "unknown",
+      "authorization": "not_required",
+      "required_evidence": [
+        "Review the exact upstream terms for download, private compilation, runtime mixins, execution, modification, and redistribution separately. Use documented permitted routes; prepare a precise owner-delivered developer inquiry only when a required right or authenticated input remains unresolved after public checks."
       ]
     }
   ],
@@ -1065,13 +1176,17 @@
         "DEC-013",
         "DEC-017",
         "DEC-018",
+        "DEC-019",
+        "DEC-020",
+        "DEC-021",
         "EXT-001",
         "EXT-002",
         "EXT-003",
         "EXT-004",
         "EXT-005",
         "EXT-006",
-        "EXT-008"
+        "EXT-008",
+        "EXT-009"
       ],
       "canonicalRequirements": [
         "CORE-REQ-001",
@@ -1099,6 +1214,7 @@
         "DEC-014",
         "DEC-017",
         "DEC-018",
+        "DEC-021",
         "EXT-003"
       ],
       "canonicalRequirements": [
@@ -1133,13 +1249,17 @@
         "DEC-013",
         "DEC-017",
         "DEC-018",
+        "DEC-019",
+        "DEC-020",
+        "DEC-021",
         "EXT-001",
         "EXT-002",
         "EXT-003",
         "EXT-004",
         "EXT-005",
         "EXT-006",
-        "EXT-008"
+        "EXT-008",
+        "EXT-009"
       ],
       "canonicalRequirements": [
         "CORE-REQ-017",
@@ -1173,6 +1293,9 @@
         "DEC-016",
         "DEC-017",
         "DEC-018",
+        "DEC-019",
+        "DEC-020",
+        "DEC-021",
         "EXT-001",
         "EXT-002",
         "EXT-003",
@@ -1180,7 +1303,8 @@
         "EXT-005",
         "EXT-006",
         "EXT-007",
-        "EXT-008"
+        "EXT-008",
+        "EXT-009"
       ],
       "canonicalRequirements": [
         "CORE-REQ-019",
@@ -1190,15 +1314,15 @@
       ]
     }
   ],
-  "completionEndpoint": "One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior and strict capability-gated behavior against exact Pixelmon 9.4.0 and one exact reviewed Vault bridge stack, enabling external writes only where durable outcome and idempotent retry capabilities are proven and otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.",
+  "completionEndpoint": "One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior, a native exact Pixelmon 9.4.0 `PlayerPartyStorage` transaction-mixin path, and separate `vault` registration with mutation enabled only when a bridge and backend provide one durable balance and receipt transaction, otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.",
   "goalCreator": {
-    "mandatoryBoundary": "CORE-REQ-001 through CORE-REQ-022 across CORE-PHASE-000 through CORE-PHASE-003, including exact external integration evidence, the unpublished artifact, and the two-stage open issue lifecycle.",
+    "mandatoryBoundary": "CORE-REQ-001 through CORE-REQ-022 across CORE-PHASE-000 through CORE-PHASE-003, including the native Pixelmon transaction-mixin path, separate Vault bridge boundary, exact external integration evidence, the unpublished artifact, and the two-stage open issue lifecycle.",
     "optionalFutureDisposition": "excluded",
-    "lockedOwnerDecisions": "DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018",
+    "lockedOwnerDecisions": "DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018, DEC-019, DEC-020, DEC-021",
     "activePhase": "CORE-PHASE-000",
     "nextExecutableAction": "Execute P000-TASK-001 to reconfirm repository identity, toolchain, product metadata, economy ownership, and the complete provider call graph before implementation.",
     "knownFailingChecks": "none at validated plan handoff; execution checks have not yet run.",
-    "knownExternalBlockers": "Official Pixelmon 9.4.0 runtime and development artifacts; Disposable exact Pixelmon 9.4.0 integration environment; Pixelmon economy API feasibility proof; Separately installed Vault bridge artifact; Exact reviewed hybrid runtime, Vault, and economy plugin stack; Disposable exact Vault bridge integration environment; Owner acceptance of applicable EULA and terms for disposable runtime validation under EXT-008.",
-    "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, classify EXT-001 through EXT-006 with exact evidence, satisfy EXT-008 before full external runtime proof, pass journal, escrow, draining, recovery, frozen, capability, deterministic, and runtime matrices, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation."
+    "knownExternalBlockers": "Third party artifact and development-use terms review under EXT-009 remains unresolved. Exact Pixelmon runtime and development inputs, disposable Pixelmon runtime, bridge candidate, reviewed hybrid stack, and disposable hybrid environment are available under EXT-001, EXT-002, EXT-004, EXT-005, and EXT-006. P002-TASK-013 and P002-TASK-014 record and consume those inputs; P002-TASK-006 obtains or builds the separate bridge and durable backend proof. Native mixin implementation, proof construction, and provisioning are executable work, not prerequisites to start themselves. EXT-008 is already authorized; set and verify eula=true under DEC-020 without another consent request.",
+    "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, freeze and exercise the DEC-021 debug command and evidence contract, classify EXT-001 through EXT-006 with exact evidence, inspect the Pixelmon 9.4.0 classes and save path, implement and prove the native PlayerPartyStorage receipt, deduplication, account classification, and durable-save path, execute the Phase 002 Vault bridge or backend transaction proof, apply EXT-008 and DEC-020 before launch and review exact third party operations under EXT-009, obtain and compile the public Pixelmon inputs, build the separate bridge and durable backend proof when needed, pass journal, escrow, draining, recovery, frozen, capability, deterministic, headless GameTest, server-log, and runtime matrices, use a laptop client only for a justified client-only gate, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation."
   }
 }

@@ -29,6 +29,7 @@ public final class BalanceManager {
     private static EconomyTransactionJournal journal;
     private static EconomyCustodyStore custody;
     private static EconomyClaimStore claims;
+    private static EconomyReceiptAuditJournal receiptAudit;
     private static InternalEconomyReceiptStore receipts;
     private static PlayerShopBarterEscrowSavedData barterEscrow;
     private static PlayerShopSaleEscrowSavedData saleEscrow;
@@ -45,6 +46,14 @@ public final class BalanceManager {
         journal = ephemeral ? new InMemoryEconomyTransactionJournal() : EconomyJournalSavedData.get(server);
         custody = ephemeral ? new InMemoryEconomyCustodyStore() : EconomyCustodySavedData.get(server);
         claims = ephemeral ? new InMemoryEconomyClaimStore() : EconomyClaimSavedData.get(server);
+        receiptAudit = ephemeral ? new InMemoryEconomyReceiptAuditJournal()
+                : new FileEconomyReceiptAuditJournal(server.getWorldPath(
+                        net.minecraft.world.level.storage.LevelResource.ROOT)
+                        .resolve("data").resolve("futureshops").resolve(FileEconomyReceiptAuditJournal.DIRECTORY_NAME));
+        if (receiptAudit instanceof FileEconomyReceiptAuditJournal fileAudit && fileAudit.newStorage()
+                && !fileAudit.migrateFrom(journal)) {
+            com.mojang.logging.LogUtils.getLogger().error("receipt audit migration failed");
+        }
         receipts = ephemeral ? new InMemoryInternalEconomyReceiptStore() : InternalEconomyReceiptSavedData.get(server);
         barterEscrow = ephemeral ? new PlayerShopBarterEscrowSavedData() : PlayerShopBarterEscrowSavedData.get(server);
         saleEscrow = ephemeral ? new PlayerShopSaleEscrowSavedData() : PlayerShopSaleEscrowSavedData.get(server);
@@ -53,19 +62,24 @@ public final class BalanceManager {
         InternalEconomyProvider internalLegacy = internalSelection ? new InternalEconomyProvider(server) : null;
         internalBalanceIntegrity = internalLegacy == null || internalLegacy.persistenceIntegrityValid();
         boolean cleanMarkerValid = journal.cleanMarkerValid() && custody.cleanMarkerValid() && claims.cleanMarkerValid()
-                && barterEscrow.cleanMarkerValid() && saleEscrow.cleanMarkerValid() && settlements.cleanMarkerValid();
+                && receiptAudit.cleanMarkerValid() && barterEscrow.cleanMarkerValid()
+                && saleEscrow.cleanMarkerValid() && settlements.cleanMarkerValid();
         if (internalSelection) {
             cleanMarkerValid &= receipts.cleanMarkerValid();
         }
         boolean integrityValid = journal.integrityValid() && custody.integrityValid() && claims.integrityValid()
-                && barterEscrow.integrityValid() && saleEscrow.integrityValid() && settlements.integrityValid()
+                && receiptAudit.integrityValid() && barterEscrow.integrityValid()
+                && saleEscrow.integrityValid() && settlements.integrityValid()
+                && receiptAudit.matches(journal)
                 && (!internalSelection || internalBalanceIntegrity)
                 && (!internalSelection || receipts.integrityValid());
         boolean hasIncompleteRecords = journal.hasIncompleteRecords() || custody.hasIncompleteRecords()
-                || claims.hasIncompleteRecords() || barterEscrow.hasIncompleteRecords() || saleEscrow.hasIncompleteRecords();
+                || claims.hasIncompleteRecords() || receiptAudit.hasIncompleteRecords()
+                || barterEscrow.hasIncompleteRecords() || saleEscrow.hasIncompleteRecords();
         journal.markUnclean();
         custody.markUnclean();
         claims.markUnclean();
+        receiptAudit.markUnclean();
         barterEscrow.markUnclean();
         saleEscrow.markUnclean();
         settlements.markUnclean();
@@ -78,7 +92,8 @@ public final class BalanceManager {
                     new PublicInternalEconomyProvider(internalLegacy, receipts);
             lifecycleController.resolve(ProviderLifecycle.READY, "", cleanMarkerValid, integrityValid,
                     hasIncompleteRecords);
-            coordinator = new EconomyTransactionCoordinator(publicProvider, lifecycleController, journal, custody, claims);
+            coordinator = new EconomyTransactionCoordinator(publicProvider, lifecycleController, journal, custody, claims,
+                    receiptAudit);
             recoverIncompleteJournalRecords();
             provider = new CoordinatedEconomyProvider(publicProvider, coordinator, internalLegacy);
             return;
@@ -89,7 +104,8 @@ public final class BalanceManager {
             com.enviouse.futureshopsp.api.economy.EconomyProvider publicProvider = resolution.provider().orElseThrow();
             lifecycleController.resolve(resolution.lifecycle(), resolution.diagnostic(), cleanMarkerValid, integrityValid,
                     hasIncompleteRecords);
-            coordinator = new EconomyTransactionCoordinator(publicProvider, lifecycleController, journal, custody, claims);
+            coordinator = new EconomyTransactionCoordinator(publicProvider, lifecycleController, journal, custody, claims,
+                    receiptAudit);
             recoverIncompleteJournalRecords();
             provider = new ExternalLegacyEconomyProvider(publicProvider, coordinator);
         } else {
@@ -112,6 +128,8 @@ public final class BalanceManager {
             boolean journalFlushed = flushSafely("transaction journal", () -> journal == null || journal.flush());
             boolean custodyFlushed = flushSafely("economy custody", () -> custody == null || custody.flush());
             boolean claimsFlushed = flushSafely("economy claims", () -> claims == null || claims.flush());
+            boolean receiptAuditFlushed = flushSafely("receipt audit journal",
+                    () -> receiptAudit == null || receiptAudit.flush());
             boolean barterEscrowFlushed = flushSafely("player shop barter escrow",
                     () -> barterEscrow == null || barterEscrow.flush());
             boolean saleEscrowFlushed = flushSafely("player shop sale escrow",
@@ -122,7 +140,7 @@ public final class BalanceManager {
                     () -> receipts == null || receipts.flush());
             boolean markerWritten;
             try {
-                markerWritten = controller.writeCleanMarkerLast(journalFlushed && receiptsFlushed,
+                markerWritten = controller.writeCleanMarkerLast(journalFlushed && receiptsFlushed && receiptAuditFlushed,
                         custodyFlushed, claimsFlushed,
                         barterEscrowFlushed && saleEscrowFlushed && settlementsFlushed);
             } catch (RuntimeException exception) {
@@ -133,6 +151,8 @@ public final class BalanceManager {
                 markCleanMarkerSafely("transaction journal", journal == null ? null : journal::markCleanMarker);
                 markCleanMarkerSafely("economy custody", custody == null ? null : custody::markCleanMarker);
                 markCleanMarkerSafely("economy claims", claims == null ? null : claims::markCleanMarker);
+                markCleanMarkerSafely("receipt audit journal",
+                        receiptAudit == null ? null : receiptAudit::markCleanMarker);
                 markCleanMarkerSafely("player shop barter escrow",
                         barterEscrow == null ? null : barterEscrow::markCleanMarker);
                 markCleanMarkerSafely("player shop sale escrow",
@@ -149,6 +169,7 @@ public final class BalanceManager {
             journal = null;
             custody = null;
             claims = null;
+            receiptAudit = null;
             receipts = null;
             barterEscrow = null;
             saleEscrow = null;
@@ -200,6 +221,10 @@ public final class BalanceManager {
                 return;
             }
         }
+        if (receiptAudit.hasIncompleteRecords()) {
+            lifecycleController.markAmbiguous("receipt audit requires operator recovery");
+            return;
+        }
         if (freezeIfUnresolvedItemState(lifecycleController, custody, claims, barterEscrow, saleEscrow)) {
             return;
         }
@@ -208,7 +233,11 @@ public final class BalanceManager {
 
     private static boolean persistenceIntegrityValid() {
         if (!journal.integrityValid() || !custody.integrityValid() || !claims.integrityValid()
-                || !barterEscrow.integrityValid() || !saleEscrow.integrityValid() || !settlements.integrityValid()) {
+                || !receiptAudit.integrityValid() || !barterEscrow.integrityValid()
+                || !saleEscrow.integrityValid() || !settlements.integrityValid()) {
+            return false;
+        }
+        if (!receiptAudit.matches(journal)) {
             return false;
         }
         if (EconomyApi.INTERNAL_PROVIDER_ID.equals(lifecycleController.snapshot().providerId())
