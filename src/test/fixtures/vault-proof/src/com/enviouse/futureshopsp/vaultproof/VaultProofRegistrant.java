@@ -34,6 +34,8 @@ public final class VaultProofRegistrant {
     private static final UUID REFUND_REQUEST = UUID.fromString("00000000-0000-0000-0000-000000000512");
     private static final UUID COMPENSATION_REQUEST = UUID.fromString("00000000-0000-0000-0000-000000000513");
     private static final UUID CUSTODY_REQUEST = UUID.fromString("00000000-0000-0000-0000-000000000514");
+    private static final UUID TRANSFER_SOURCE = UUID.fromString("00000000-0000-0000-0000-000000000415");
+    private static final UUID TRANSFER_TARGET = UUID.fromString("00000000-0000-0000-0000-000000000416");
     private static final Logger LOGGER = LogUtils.getLogger();
     private static volatile SqliteVaultProofProvider provider;
 
@@ -86,10 +88,21 @@ public final class VaultProofRegistrant {
                 "vault proof claim");
         ClaimRecord deliveredClaim = BalanceManager.getCoordinator().deliverClaim(claimRequest);
         ClaimRecord resolvedClaim = BalanceManager.getCoordinator().resolveClaim(claimRequest);
-        LOGGER.info("FutureShops Vault proof transaction provider_precheck={} coordinator_precheck={} withdrawal={} lookup={} retry={} deposit={} refund={} compensation={} custody={} custody_state={} claim={} claim_state_initial={} claim_state_delivered={} claim_state_resolved={} balance={} database={}",
+        long transferSourceBefore = active.balance(TRANSFER_SOURCE).value().orElseThrow().balanceMinorUnits();
+        String transferStatus;
+        if (transferSourceBefore == 100L) {
+            transferStatus = BalanceManager.getCoordinator().transfer(TRANSFER_SOURCE, TRANSFER_TARGET, 6L)
+                    .status().name();
+        } else {
+            transferStatus = "REPLAYED";
+        }
+        long transferSourceAfter = active.balance(TRANSFER_SOURCE).value().orElseThrow().balanceMinorUnits();
+        long transferTargetAfter = active.balance(TRANSFER_TARGET).value().orElseThrow().balanceMinorUnits();
+        LOGGER.info("FutureShops Vault proof transaction provider_precheck={} coordinator_precheck={} withdrawal={} lookup={} retry={} deposit={} refund={} compensation={} custody={} custody_state={} claim={} claim_state_initial={} claim_state_delivered={} claim_state_resolved={} transfer={} transfer_source_before={} transfer_source_after={} transfer_target_after={} balance={} database={}",
                 providerPrecheck.status(), coordinatorPrecheck.status(), withdrawal.status(), lookup.status(), retry.status(),
                 deposit.status(), refund.status(), compensation.status(), custodyDeposit.status(), custody.state(),
-                claimRequest, claim.state(), deliveredClaim.state(), resolvedClaim.state(),
+                claimRequest, claim.state(), deliveredClaim.state(), resolvedClaim.state(), transferStatus,
+                transferSourceBefore, transferSourceAfter, transferTargetAfter,
                 active.balance(PROOF_PLAYER).value().orElseThrow().balanceMinorUnits(), databasePath());
     }
 

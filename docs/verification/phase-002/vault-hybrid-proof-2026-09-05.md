@@ -14,7 +14,7 @@ This record covers the separately installed Vault proof registrant and its durab
 | FutureShops source | `1f02bf46da4724369676617959fb1b1ac982e286` |
 | FutureShops artifact SHA 256 | `d7d2e14b192644859a276114508ceb2c5aed8991931aab523b899ffa9d0e4ad3` |
 | FutureShops artifact SHA 512 | `704c3495f1fca5ca2015ac4320e705b8e83d5dfc0b12c5fa2edccb85f12d0ce4a84d2ea4fb782760abca0beb1ea91047475e61698f441e7537984d9041980b23` |
-| Proof registrant SHA 256 | `44f687a6a02911bbe6f2c209819cd57b2712373a8bd3cd9c88d22df04ffd76c4` |
+| Proof registrant SHA 256 | `df91158865e7c75b80bfb5eea4d07478f41b6b18f54d1740274a86d95e29826b` |
 | SQLite JDBC SHA 256 | `e697df15be3f95219d80773c5f1002030e33e932adda186c1c86fd51df6691a9` |
 | EULA | `eula=true` |
 | selected provider | `vault` |
@@ -47,14 +47,14 @@ NeoForge mod loading, version 21.1.248, for MC 1.21.1
 FutureShops Vault proof registration status=ACCEPTED provider=vault
 Loading Pixelmon version 9.4.0
 FutureShops server starting.
-FutureShops Vault proof transaction provider_precheck=CONFIRMED coordinator_precheck=CONFIRMED withdrawal=CONFIRMED lookup=CONFIRMED retry=CONFIRMED deposit=CONFIRMED refund=CONFIRMED compensation=CONFIRMED custody=CONFIRMED custody_state=CLAIMED claim_state_initial=PENDING claim_state_delivered=DELIVERED claim_state_resolved=RESOLVED balance=89
-Done (28.428s)! For help, type "help"
+FutureShops Vault proof transaction provider_precheck=CONFIRMED coordinator_precheck=CONFIRMED withdrawal=CONFIRMED lookup=CONFIRMED retry=CONFIRMED deposit=CONFIRMED refund=CONFIRMED compensation=CONFIRMED custody=CONFIRMED custody_state=CLAIMED claim_state_initial=PENDING claim_state_delivered=DELIVERED claim_state_resolved=RESOLVED transfer=CONFIRMED transfer_source_before=100 transfer_source_after=94 transfer_target_after=106 balance=89
+Done (25.238s)! For help, type "help"
 FutureShops server stopping.
 ```
 
-The complete first launch log SHA 256 is `c8c13d5a74eb9e105e398dbb100831fb58abafe7f6e3764812e372154d17f5da`.
+The complete first launch log SHA 256 is `80092816a0fda9361f710bdedb8cd9ec1cb9f2d4b6e2c083ecfe70b3a2667aab`.
 
-The registrant startup callback used stable requests `00000000-0000-0000-0000-000000000510` through `00000000-0000-0000-0000-000000000514` for withdrawal, deposit, refund, compensation, and a custodied deposit. It called the public provider precheck, the FutureShops coordinator preflight, every coordinator mutation route, provider lookup, and duplicate retry. Every route returned `CONFIRMED`; custody reached `CLAIMED`, the claim reached `RESOLVED`, and the resulting balance was `89`.
+The registrant startup callback used stable requests `00000000-0000-0000-0000-000000000510` through `00000000-0000-0000-0000-000000000514` for withdrawal, deposit, refund, compensation, and a custodied deposit. It called the public provider precheck, the FutureShops coordinator preflight, every coordinator mutation route, provider lookup, and duplicate retry. It also exercised the coordinator transfer route from synthetic account `00000000-0000-0000-0000-000000000415` to `00000000-0000-0000-0000-000000000416`. Every first-run route returned `CONFIRMED`; custody reached `CLAIMED`, the claim reached `RESOLVED`, the transfer changed balances from `100` and `100` to `94` and `106`, and the FutureShops proof account remained `89`.
 
 The SQLite file was queried after shutdown. Its durable rows were:
 
@@ -64,14 +64,18 @@ request_id=00000000-0000-0000-0000-000000000511 actor=00000000-0000-0000-0000-00
 request_id=00000000-0000-0000-0000-000000000512 actor=00000000-0000-0000-0000-000000000410 kind=REFUND amount=3 external_id=vault:00000000-0000-0000-0000-000000000512 resulting_balance=83
 request_id=00000000-0000-0000-0000-000000000513 actor=00000000-0000-0000-0000-000000000410 kind=COMPENSATION amount=2 external_id=vault:00000000-0000-0000-0000-000000000513 resulting_balance=85
 request_id=00000000-0000-0000-0000-000000000514 actor=00000000-0000-0000-0000-000000000410 kind=DEPOSIT amount=4 external_id=vault:00000000-0000-0000-0000-000000000514 resulting_balance=89
+request_id=d64391ac-09fa-38a0-a7b0-f46a7b76055a actor=00000000-0000-0000-0000-000000000415 kind=TRANSFER_DEBIT amount=6 external_id=vault:d64391ac-09fa-38a0-a7b0-f46a7b76055a resulting_balance=94
+request_id=e9c967d7-30ff-3120-9bf5-286ca90d338f actor=00000000-0000-0000-0000-000000000416 kind=TRANSFER_CREDIT amount=6 external_id=vault:e9c967d7-30ff-3120-9bf5-286ca90d338f resulting_balance=106
 account_id=00000000-0000-0000-0000-000000000410 balance=89
+account_id=00000000-0000-0000-0000-000000000415 balance=94
+account_id=00000000-0000-0000-0000-000000000416 balance=106
 ```
 
-The durable database SHA 256 is `1642650526be49fa36aaa9656e24ebac5cff2e0ab37272dbf762035e02d8d9f7`. The backend uses one SQLite transaction for the balance row and receipt row, `journal_mode=DELETE`, `synchronous=FULL`, a primary key on `request_id`, and a bounded busy timeout. The file is `world/data/futureshops-vault-proof.sqlite/vault-proof.sqlite` inside the disposable world.
+The two transfer receipt rows were `TRANSFER_DEBIT` for account `00000000-0000-0000-0000-000000000415`, resulting balance `94`, and `TRANSFER_CREDIT` for account `00000000-0000-0000-0000-000000000416`, resulting balance `106`. The durable database SHA 256 is `093147cc406fd86187722bc29819f6b3670e53671bc9a413a3567c297f61008b`. The backend uses one SQLite transaction for each balance and receipt pair, `journal_mode=DELETE`, `synchronous=FULL`, a primary key on `request_id`, and a bounded busy timeout. The file is `world/data/futureshops-vault-proof.sqlite/vault-proof.sqlite` inside the disposable world.
 
-The same run persisted twenty FutureShops receipt audit records under `world/data/futureshops/receipts`, four transitions for each of the five request IDs, followed by a checksummed `.clean` marker. The coordinator therefore left a local recovery lineage while the SQLite provider receipts remained authoritative for retry.
+The same run persisted twenty-eight FutureShops receipt audit records under `world/data/futureshops/receipts`, four transitions for each of the seven provider request IDs, followed by a checksummed `.clean` marker. The coordinator therefore left a local recovery lineage while the SQLite provider receipts remained authoritative for retry.
 
-The runtime was started a second time without changing its world, provider database, or request IDs. The restart log SHA 256 is `3daaf80e46db544254ce6ad84ff24e8b1a1d0236519d422afca844f24fa83915`. It reported `withdrawal=CONFIRMED`, `deposit=CONFIRMED`, `refund=CONFIRMED`, `compensation=CONFIRMED`, `custody=CONFIRMED`, `claim_state_initial=RESOLVED`, and `balance=89`. The SQLite hash after restart remained `1642650526be49fa36aaa9656e24ebac5cff2e0ab37272dbf762035e02d8d9f7`, with five receipt rows and one account row, and no second balance effect occurred.
+The runtime was started a second time without changing its world or provider database. The restart log SHA 256 is `8b736245a2eba3cc8cb4f5d62f2be58c9162ea31262a9f7bac4685286d80bb15`. It reported `withdrawal=CONFIRMED`, `deposit=CONFIRMED`, `refund=CONFIRMED`, `compensation=CONFIRMED`, `custody=CONFIRMED`, `claim_state_initial=RESOLVED`, `transfer=REPLAYED`, and `balance=89`. The SQLite hash after restart remained `093147cc406fd86187722bc29819f6b3670e53671bc9a413a3567c297f61008b`, with seven receipt rows and three account rows, and no second balance effect occurred. The transfer replay guard observed the already debited synthetic source account and did not issue a new transfer leg.
 
 The current artifact run also preserved the known external stack parser warnings, including `Not a map: END` during restart. They are emitted by the unmodified external stack, not FutureShops, and did not prevent startup, proof completion, or clean shutdown. No FutureShops exception was present.
 
