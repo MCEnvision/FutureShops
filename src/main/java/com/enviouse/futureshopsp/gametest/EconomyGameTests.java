@@ -175,6 +175,14 @@ public final class EconomyGameTests {
                 var restoredReceipt = ((PixelmonNativeEconomyAccess) restored).futureshopsLookup(request.requestId());
                 helper.assertTrue(restoredReceipt.confirmed() && restoredReceipt.receipt().equals(mutation.receipt()),
                         "the native Pixelmon receipt must survive a storage reload");
+                var restoredReplay = ((PixelmonNativeEconomyAccess) restored).futureshopsMutate(request.requestId(),
+                        request.kind(), request.amountMinorUnits(), helper.getLevel().registryAccess());
+                helper.assertTrue(restoredReplay.confirmed() && restoredReplay.receipt().equals(mutation.receipt()),
+                        "the native Pixelmon request must deduplicate after a storage reload");
+                BigDecimal restoredBalance = (BigDecimal) restoredStorage.getClass().getMethod("getBalance")
+                        .invoke(restoredStorage);
+                helper.assertTrue(restoredBalance.longValueExact() == 75L,
+                        "the native Pixelmon balance must survive a storage reload");
 
                 CompoundTag unknownRecord = saved.copy();
                 unknownRecord.getCompound("FutureShopsReceipts").getList("entries", net.minecraft.nbt.Tag.TAG_COMPOUND)
@@ -210,10 +218,11 @@ public final class EconomyGameTests {
                 var wrongRootResult = ((PixelmonNativeEconomyAccess) wrongRoot).futureshopsLookup(request.requestId());
                 helper.assertTrue(wrongRootResult.status() == ProviderResultStatus.RECOVERY_REQUIRED,
                         "a non compound native Pixelmon receipt root must force recovery");
-                LOGGER.info("futureshops.pixelmon.gametest native mutation confirmed request={} replay={} balance={} receipt_nbt={} reload={} unknown_recovery={} wrong_type_recovery={} wrong_root_recovery={}",
+                LOGGER.info("futureshops.pixelmon.gametest native mutation confirmed request={} replay={} balance={} receipt_nbt={} reload={} reconnect_replay={} reloaded_balance={} unknown_recovery={} wrong_type_recovery={} wrong_root_recovery={}",
                         request.requestId().value(), replay.receipt().orElseThrow().requestId().value(),
                         after.value().orElseThrow().balanceMinorUnits(), saved.contains("FutureShopsReceipts"),
-                        restoredReceipt.status(), corruptedResult.status(), wrongTypeResult.status(), wrongRootResult.status());
+                        restoredReceipt.status(), restoredReplay.status(), restoredBalance, corruptedResult.status(),
+                        wrongTypeResult.status(), wrongRootResult.status());
             }
         } catch (ReflectiveOperationException | IOException | RuntimeException exception) {
             helper.fail("the exact Pixelmon native account probe failed: " + exception.getClass().getSimpleName());
