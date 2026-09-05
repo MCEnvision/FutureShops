@@ -2,9 +2,9 @@
 
 ## Current status
 
-Phase 002 remains open. The native Pixelmon workflow implementation and headless evidence remain valid. The current exact packaged artifact is `build/libs/futureshops-2.3.0.jar` from source revision `995b9f386d5a4edbd6db295e06bdee675e205752`, with SHA 256 `a3b3a1bdc1014efcbadf492b20599acb7f7dd35f41b53489de857a104447ac48` and SHA 512 `a4b21001342677af52347c96c6dbbbeaf8a2a9c4f313819cbf2e9dbd9e82d8b112cb6a1679831de806e956ecbcdb71796c50d4dc49d353208442fcbcfbec7a0c`.
+Phase 002 is integrated. The native Pixelmon workflow implementation and headless evidence remain valid. Pull request 69 was merged into `1.21.1` at `6346e0ad156472a7c2f8b5d34ec96f7891ef80b9`, and signed tag `2.3.0-phase-002` points to that merge. The final exact packaged candidate is `build/libs/futureshops-2.3.0.jar` from that source revision, with SHA 256 `75ea7deb671133ecc4205a776d80dc60976b69d0bfa9e1ccaa5b4ac690fb9cf5` and SHA 512 `ba174f809e9d8a33e7c7f97f13cdc2bfe1adbad7675d0578d16216217576a12a7714222a64de373a0a81a0ffef9df935e173998622f94e7168021ac8345ffbe5`.
 
-No pull request, phase integration, tag, release, upload, or issue 66 mutation was performed. Issue 66 remains frozen for Phase 003.
+No release or upload was performed. Issue 66 remains frozen until the Phase 003 artifact validation gate and is updated only after that gate.
 
 The artifact manifest binds this jar to the same source revision. The separate Vault proof fixture was extended at that revision to exercise every coordinator mutation route, custody, and claims without changing production integration classes.
 
@@ -40,7 +40,7 @@ The regenerated packaged artifact was revalidated after the build task updated i
 
 The current unmodified PixelmonEconomyBridge and FinalEconomy stack remains safely refused for `vault` mutation because it has no FutureShops request identity, durable provider receipt, lookup, or idempotent retry contract. The separate proof fixture passes the public registration and one transaction receipt contract, but it is not a claim about that legacy stack.
 
-The complete Phase 002 surface, crash, restart, reconnect, and recovery matrices against every enabled external surface remain open. Provider service loss is now covered by focused coordinator regressions, with pre intent loss failing closed and post intent loss freezing unknown outcome. Native Pixelmon storage reload and request replay pass in the exact artifact bound GameTest. The exact hybrid bridge and backend mutation proof must either pass the remaining matrices or remain explicitly refused. Phase 003 cannot begin until the Phase 002 completion packet is accepted through the sequential integration workflow.
+The remaining final validation evidence is recorded in [Phase 003 final validation](../phase-003/final-validation-2026-09-05.md) and [the requirement trace](../phase-003/requirement-trace-2026-09-05.md). Provider service loss is covered by focused coordinator regressions, with pre intent loss failing closed and post intent loss freezing unknown outcome. Native Pixelmon storage reload and request replay pass in the exact artifact bound GameTest. The exact hybrid proof backend passes the transaction receipt surface, while the unmodified legacy bridge remains explicitly refused. The candidate remains unpublished pending owner acceptance.
 
 ## Verification commands
 
