@@ -13,14 +13,14 @@ This record covers the failure and recovery proof for the separately installed V
 | FutureShops source commit | `6bbaf9156bcd8d79bee274717f2ae67d4db6f69e` |
 | FutureShops artifact SHA 256 | `945d175c363ec06f6b0e965161cff081c5deebf1b1ed899e605b48890fc69563` |
 | FutureShops artifact SHA 512 | `0e38cc66eaaf739413f5a8b2f193d97aca40ea4e8c5be18c4f9f29999ccbc6a1a8055045028a796183b623bf6e4d49478134683b23dbe31445e0db96fc02bae2` |
-| Vault proof registrant SHA 256 | `4aa7b397543288c15b96f6df025dbd47faf43a5b78a0cfc1d5de86bb5b052e68` |
-| Vault proof registrant SHA 512 | `2bcf7ce095587ca52eba190ab8bb8c723425b2e78910e872bd0a1fc8281fa7aa5b164d953e5199d7019ae4d10665f7f680da87d7a7fcc609e218df136b8e21ec` |
+| Vault proof registrant SHA 256 | `ab578f60f8302f304000ee6d0b401ec36bbb93589357ac6dce3f75cc7539bb30` |
+| Vault proof registrant SHA 512 | `b24883d97c8f82963909699da70889bcc2d863d7f1be70cabe1a1f4087a2865837398eceffc93ec17fcef7f85bfc29804e8080b1c3336b5db845e55ea01bfc38` |
 | Pixelmon `9.4.0` SHA 256 | `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2` |
 | GeckoLib `4.8.4` SHA 256 | `a1b6ce25e8627aa7e748672eedb6b71af68e0993462313649c259f38e42bcac9` |
 | selected provider | `vault` |
 | EULA | `eula=true` |
 
-The SQLite JDBC driver was appended only to the disposable GameTest legacy classpath. It is not included in the production jar. The complete sanitized server log is `/tmp/futureshops-vault-surface-packaged-final-20260905.log` with SHA 256 `3eb85c4e24ee3a7b66469b6796e3ac720350477731595bf85cece3a6688bd4fc`.
+The SQLite JDBC driver was appended only to the disposable GameTest legacy classpath. It is not included in the production jar. The complete sanitized server log is `/tmp/futureshops-vault-surface-current-log.MekPqH` with SHA 256 `fc96646872f1a0cfcb49af9db3d678a55b1feca5f07ddef6c204eff4fa4947fd`.
 
 ## Failure and recovery assertions
 
@@ -37,7 +37,7 @@ The bounded server diagnostics were:
 ```text
 FutureShops Vault failure matrix registration duplicate=LATE late=LATE missing_state=MISSING
 FutureShops Vault failure matrix provider=vault service_balance=UNAVAILABLE service_precheck=UNAVAILABLE service_mutation=UNAVAILABLE service_lookup=UNAVAILABLE service_retry=CONFIRMED after_balance=RECOVERY_REQUIRED after_receipt=RECOVERY_REQUIRED before_commit=RECOVERY_REQUIRED after_commit=RECOVERY_REQUIRED after_commit_lookup=CONFIRMED after_commit_retry=CONFIRMED duplicate=CONFIRMED duplicate_registration=LATE late_registration=LATE missing_state=MISSING balance=950 receipt_count=5 journal_mode=delete synchronous_mode=full lifecycle=READY
-All 25 required tests passed :)
+All 27 required tests passed :)
 ```
 
 The exact packaged runtime also ran the four Vault surface tests in the companion [surface GameTest record](vault-surface-gametest-2026-09-05.md). The complete process exited with status `0`, and the disposable runtime, world, database, classpath, and generated configuration were removed after the log and hashes were retained.

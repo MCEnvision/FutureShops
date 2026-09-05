@@ -1,6 +1,7 @@
 package com.enviouse.futureshopsp.vaultproof;
 
 import com.enviouse.futureshopsp.Futureshops;
+import com.enviouse.futureshopsp.api.ShopModAPI;
 import com.enviouse.futureshopsp.block.ShopBlockEntity;
 import com.enviouse.futureshopsp.catalog.ItemDef;
 import com.enviouse.futureshopsp.catalog.ShopCatalog;
@@ -121,6 +122,45 @@ public final class VaultSurfaceGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 200)
+    public static void vaultServerShopBuyUsesProvider(GameTestHelper helper) {
+        if (!requireReady(helper)) {
+            return;
+        }
+        ItemDef item = ShopCatalog.getItem("default", "minecraft:diamond").orElse(null);
+        helper.assertTrue(item != null && item.buyPriceMinorUnits() > 0L,
+                "the exact hybrid catalog must expose one positive buy listing");
+        Item resolved = BuiltInRegistries.ITEM.get(ResourceLocation.parse(item.itemId()));
+        helper.assertTrue(resolved != null && resolved != Items.AIR,
+                "the exact hybrid buy listing must resolve to a registered item");
+
+        ServerPlayer buyer = helper.makeMockServerPlayerInLevel();
+        helper.assertTrue(BalanceManager.deposit(buyer.getUUID(), item.buyPriceMinorUnits() + 100L).success(),
+                "the exact hybrid buy fixture must seed sufficient provider funds");
+        long balanceBefore = BalanceManager.queryBalance(buyer.getUUID()).value().orElseThrow().balanceMinorUnits();
+        int itemsBefore = buyer.getInventory().countItem(resolved);
+        ShopSessionManager.open(buyer.getUUID(), "default");
+        try {
+            ShopBuyService.handleBuyRequest(buyer,
+                    C2SBuyRequestPacket.single("default", item.resolutionKey(), 1));
+        } finally {
+            ShopSessionManager.close(buyer.getUUID());
+        }
+
+        long balanceAfter = BalanceManager.queryBalance(buyer.getUUID()).value().orElseThrow().balanceMinorUnits();
+        helper.assertTrue(buyer.getInventory().countItem(resolved) == itemsBefore + 1,
+                "vault server shop buy must deliver the item after provider confirmation");
+        helper.assertTrue(balanceAfter == balanceBefore - item.buyPriceMinorUnits(),
+                "vault server shop buy must debit the exact provider amount");
+        helper.assertTrue(!BalanceManager.getCustodyStore().hasIncompleteRecords(),
+                "vault server shop buy must claim custody");
+        LOGGER.info("FutureShops Vault surface route=server_shop_buy provider=vault status=CONFIRMED amount={} balance_delta={} item_delta={} custody_incomplete={}",
+                item.buyPriceMinorUnits(), balanceAfter - balanceBefore,
+                buyer.getInventory().countItem(resolved) - itemsBefore,
+                BalanceManager.getCustodyStore().hasIncompleteRecords());
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 200)
     public static void vaultCartAndPayUseProvider(GameTestHelper helper) {
         if (!requireReady(helper)) {
             return;
@@ -166,6 +206,27 @@ public final class VaultSurfaceGameTests {
                 BalanceManager.queryBalance(payer.getUUID()).value().orElseThrow().balanceMinorUnits() - payerBefore,
                 BalanceManager.queryBalance(recipient.getUUID()).value().orElseThrow().balanceMinorUnits() - recipientBefore,
                 BalanceManager.getCustodyStore().hasIncompleteRecords());
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 200)
+    public static void vaultPublicApiUsesProvider(GameTestHelper helper) {
+        if (!requireReady(helper)) {
+            return;
+        }
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        long before = ShopModAPI.queryBalance(player.getUUID()).value().orElseThrow().balanceMinorUnits();
+        var withdrawal = ShopModAPI.withdraw(player.getUUID(), 2L);
+        var deposit = ShopModAPI.deposit(player.getUUID(), 3L);
+        long after = ShopModAPI.queryBalance(player.getUUID()).value().orElseThrow().balanceMinorUnits();
+        helper.assertTrue(withdrawal.success() && deposit.success(),
+                "vault public economy API must confirm withdraw and deposit");
+        helper.assertTrue(after == before + 1L,
+                "vault public economy API must preserve exact provider deltas");
+        helper.assertTrue(!BalanceManager.getCustodyStore().hasIncompleteRecords(),
+                "vault public economy API must leave no incomplete custody");
+        LOGGER.info("FutureShops Vault surface route=public_api provider=vault status=CONFIRMED withdrawal=2 deposit=3 balance_delta={} custody_incomplete={}",
+                after - before, BalanceManager.getCustodyStore().hasIncompleteRecords());
         helper.succeed();
     }
 
