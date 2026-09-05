@@ -6,10 +6,10 @@ This record covers the native Pixelmon transaction path, the Vault proof boundar
 
 | Field | Value |
 | --- | --- |
-| Source revision | `1f02bf46da4724369676617959fb1b1ac982e286` |
+| Source revision | `5bb0199b355d12b6671a310cf8acd3857c67f77d` |
 | FutureShops artifact | `build/libs/futureshops-2.3.0.jar` |
-| FutureShops SHA 256 | `d7d2e14b192644859a276114508ceb2c5aed8991931aab523b899ffa9d0e4ad3` |
-| FutureShops SHA 512 | `704c3495f1fca5ca2015ac4320e705b8e83d5dfc0b12c5fa2edccb85f12d0ce4a84d2ea4fb782760abca0beb1ea91047475e61698f441e7537984d9041980b23` |
+| FutureShops SHA 256 | `f97805026224e435d00ed6478f6d122313bc99d44628fa9033602fd15d36173d` |
+| FutureShops SHA 512 | `e319285ac9069b12c3b12701deba8c92cd430dcf6c9b12e7a038886799f1d924a732d164400992307b70ee64ed06cf4bd74faee8971d15587856b80b4eea42cf` |
 | Pixelmon artifact | `/tmp/Pixelmon-1.21.1-9.4.0-universal.jar` |
 | Pixelmon SHA 256 | `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2` |
 | Minecraft | `1.21.1` |
@@ -120,11 +120,13 @@ The second process log SHA 256 is `7eb49c64fb39d36d8fdc9676b53cb2f88f725d48a5dad
 
 ## Current artifact bound rerun on 2026-09-05
 
-The service loss regression coverage was added after the previous artifact evidence, so the exact production artifact was rebuilt and rerun. A fresh disposable exact Pixelmon `9.4.0` GameTest runtime loaded `futureshops-2.3.0.jar` SHA 256 `d7d2e14b192644859a276114508ceb2c5aed8991931aab523b899ffa9d0e4ad3` and SHA 512 `704c3495f1fca5ca2015ac4320e705b8e83d5dfc0b12c5fa2edccb85f12d0ce4a84d2ea4fb782760abca0beb1ea91047475e61698f441e7537984d9041980b23`. EULA was verified as `eula=true`, the native mixin target applied, and both processes exited with code `0` after all twenty required tests passed.
+The service loss regression coverage was added after the previous artifact evidence. That earlier exact production artifact was `d7d2e14b192644859a276114508ceb2c5aed8991931aab523b899ffa9d0e4ad3`; its evidence is retained as historical input. The current packaged artifact rerun is recorded below.
 
-The first process log SHA 256 is `8e0548e72f7f714717f7ac08ef0b6d21bfa40f91f3b35747d11702540cfd861c`. It recorded `process_restart phase=FIRST`, a completed native receipt, and balance `75`. The second process log SHA 256 is `68a231774fd9a26e6eeedc287968d25b5eca0e4b3a5be653697a63b8a6057c7d`. It recorded `process_restart phase=SECOND`, replay `CONFIRMED`, and balance `75`. Both logs recorded `FutureShops Pixelmon mixin target com.pixelmonmod.pixelmon.api.storage.PlayerPartyStorage apply true` and `All 20 required tests passed :)`.
+The earlier exact run used the `d7d2e14b192644859a276114508ceb2c5aed8991931aab523b899ffa9d0e4ad3` artifact. Its first process log SHA 256 is `8e0548e72f7f714717f7ac08ef0b6d21bfa40f91f3b35747d11702540cfd861c`, and its second process log SHA 256 is `68a231774fd9a26e6eeedc287968d25b5eca0e4b3a5be653697a63b8a6057c7d`.
 
-This rerun binds the native mixin, request replay, receipt reload, wrong root recovery, and every routed native surface to the current packaged artifact. The temporary runtime, worlds, logs, classpath file, and marker were removed after hashing.
+The current packaged artifact from source revision `5bb0199b355d12b6671a310cf8acd3857c67f77d` has SHA 256 `f97805026224e435d00ed6478f6d122313bc99d44628fa9033602fd15d36173d` and SHA 512 `e319285ac9069b12c3b12701deba8c92cd430dcf6c9b12e7a038886799f1d924a732d164400992307b70ee64ed06cf4bd74faee8971d15587856b80b4eea42cf`. It was loaded as the mod file in a fresh exact Pixelmon GameTest runtime. The first packaged process passed all twenty tests and recorded a completed receipt with log SHA 256 `581766494f275acde701caf26a5fe0a605004bccb3ce4c83f3099256a5fe4f24`. The second process reused the world, replayed the stable request as `CONFIRMED`, and passed all twenty tests with log SHA 256 `a1ae7dfa69e5fd9b9b0360b70c45dd70de214a6528990f5edfadc3577a8ff4bc`. Both packaged processes exited with code `0`, the mixin target applied, and the disposable runtime was removed after hashing.
+
+This current rerun binds the native mixin, request replay, receipt reload, wrong root recovery, and every routed native surface to the current packaged artifact. The exact standard packaged server also reached `FutureShops common setup complete`, `FutureShops server starting`, and `Done` with Pixelmon absent and `provider = "internal"`. Its sanitized log SHA 256 is `12640336ff4cf3ff399aea0933c106bcedf1f0b43ed98abe869439aa572381aa`.
 
 The coordinator unit suite also covers provider service loss. Loss before intent returns `UNAVAILABLE` with no journal entry or provider mutation. Loss after intent returns `AMBIGUOUS`, freezes lifecycle, records `UNCERTAIN`, and does not fall back to the internal wallet.
 

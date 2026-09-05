@@ -11,10 +11,10 @@ This record covers the separately installed Vault proof registrant and its durab
 | NeoForge | `21.1.248` |
 | Java | `21.0.11` |
 | Youer | `1.21.1-d4a204a0` |
-| FutureShops source | `1f02bf46da4724369676617959fb1b1ac982e286` |
+| FutureShops source | `5bb0199b355d12b6671a310cf8acd3857c67f77d` |
 | Proof registrant source | `5471b8f1c10e8cd3eb79dc49f91f1b0f1bd2c89b` |
-| FutureShops artifact SHA 256 | `d7d2e14b192644859a276114508ceb2c5aed8991931aab523b899ffa9d0e4ad3` |
-| FutureShops artifact SHA 512 | `704c3495f1fca5ca2015ac4320e705b8e83d5dfc0b12c5fa2edccb85f12d0ce4a84d2ea4fb782760abca0beb1ea91047475e61698f441e7537984d9041980b23` |
+| FutureShops artifact SHA 256 | `f97805026224e435d00ed6478f6d122313bc99d44628fa9033602fd15d36173d` |
+| FutureShops artifact SHA 512 | `e319285ac9069b12c3b12701deba8c92cd430dcf6c9b12e7a038886799f1d924a732d164400992307b70ee64ed06cf4bd74faee8971d15587856b80b4eea42cf` |
 | Proof registrant SHA 256 | `df91158865e7c75b80bfb5eea4d07478f41b6b18f54d1740274a86d95e29826b` |
 | SQLite JDBC SHA 256 | `e697df15be3f95219d80773c5f1002030e33e932adda186c1c86fd51df6691a9` |
 | EULA | `eula=true` |
@@ -53,7 +53,7 @@ Done (25.238s)! For help, type "help"
 FutureShops server stopping.
 ```
 
-The complete first launch log SHA 256 is `80092816a0fda9361f710bdedb8cd9ec1cb9f2d4b6e2c083ecfe70b3a2667aab`.
+The complete first launch log SHA 256 for the earlier `d7d2e14b192644859a276114508ceb2c5aed8991931aab523b899ffa9d0e4ad3` artifact is `80092816a0fda9361f710bdedb8cd9ec1cb9f2d4b6e2c083ecfe70b3a2667aab`.
 
 The registrant startup callback used stable requests `00000000-0000-0000-0000-000000000510` through `00000000-0000-0000-0000-000000000514` for withdrawal, deposit, refund, compensation, and a custodied deposit. It called the public provider precheck, the FutureShops coordinator preflight, every coordinator mutation route, provider lookup, and duplicate retry. It also exercised the coordinator transfer route from synthetic account `00000000-0000-0000-0000-000000000415` to `00000000-0000-0000-0000-000000000416`. Every first-run route returned `CONFIRMED`; custody reached `CLAIMED`, the claim reached `RESOLVED`, the transfer changed balances from `100` and `100` to `94` and `106`, and the FutureShops proof account remained `89`.
 
@@ -74,9 +74,9 @@ account_id=00000000-0000-0000-0000-000000000416 balance=106
 
 The two transfer receipt rows were `TRANSFER_DEBIT` for account `00000000-0000-0000-0000-000000000415`, resulting balance `94`, and `TRANSFER_CREDIT` for account `00000000-0000-0000-0000-000000000416`, resulting balance `106`. The durable database SHA 256 is `093147cc406fd86187722bc29819f6b3670e53671bc9a413a3567c297f61008b`. The backend uses one SQLite transaction for each balance and receipt pair, `journal_mode=DELETE`, `synchronous=FULL`, a primary key on `request_id`, and a bounded busy timeout. The file is `world/data/futureshops-vault-proof.sqlite/vault-proof.sqlite` inside the disposable world.
 
-The same run persisted twenty-eight FutureShops receipt audit records under `world/data/futureshops/receipts`, four transitions for each of the seven provider request IDs, followed by a checksummed `.clean` marker. The coordinator therefore left a local recovery lineage while the SQLite provider receipts remained authoritative for retry.
+The same run persisted twenty-eight FutureShops receipt audit records under `world/data/futureshops/receipts`, four transitions for each of the seven provider request IDs, followed by a checksummed `.clean` marker. The coordinator therefore left a local recovery lineage while the SQLite provider receipts remained authoritative for retry. In the current packaged artifact rerun, the first process log SHA 256 is `85da87db12821a1a43676274377aed3d40f53ec5934e87431c5626499b19920a`, the restart log SHA 256 is `7d2b2245d22f44be8ad9eb12799421b038995b13237fa4f414b7eae82c2d6bbc`, and the post restart database SHA 256 is `73430219698eb89e8fc8325af954cdf27f229fb1698e1de346fed4165e438de6`. The receipt directory contained twenty-eight transition records and the `.clean` marker before cleanup.
 
-The runtime was started a second time without changing its world or provider database. The restart log SHA 256 is `8b736245a2eba3cc8cb4f5d62f2be58c9162ea31262a9f7bac4685286d80bb15`. It reported `withdrawal=CONFIRMED`, `deposit=CONFIRMED`, `refund=CONFIRMED`, `compensation=CONFIRMED`, `custody=CONFIRMED`, `claim_state_initial=RESOLVED`, `transfer=REPLAYED`, and `balance=89`. The SQLite hash after restart remained `093147cc406fd86187722bc29819f6b3670e53671bc9a413a3567c297f61008b`, with seven receipt rows and three account rows, and no second balance effect occurred. The transfer replay guard observed the already debited synthetic source account and did not issue a new transfer leg.
+The earlier artifact runtime was started a second time without changing its world or provider database. Its restart log SHA 256 is `8b736245a2eba3cc8cb4f5d62f2be58c9162ea31262a9f7bac4685286d80bb15`. It reported `withdrawal=CONFIRMED`, `deposit=CONFIRMED`, `refund=CONFIRMED`, `compensation=CONFIRMED`, `custody=CONFIRMED`, `claim_state_initial=RESOLVED`, `transfer=REPLAYED`, and `balance=89`. The SQLite hash after restart remained `093147cc406fd86187722bc29819f6b3670e53671bc9a413a3567c297f61008b`, with seven receipt rows and three account rows, and no second balance effect occurred. The transfer replay guard observed the already debited synthetic source account and did not issue a new transfer leg.
 
 The current artifact run also preserved the known external stack parser warnings, including `Not a map: END` during restart. They are emitted by the unmodified external stack, not FutureShops, and did not prevent startup, proof completion, or clean shutdown. No FutureShops exception was present.
 
@@ -110,7 +110,7 @@ JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash ./gradlew test --tests com.env
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash ./gradlew test --tests com.enviouse.futureshopsp.server.economy.EconomyTransactionCoordinatorTest --no-daemon
 ```
 
-Both focused suites passed on source revision `1f02bf46da4724369676617959fb1b1ac982e286`.
+Both focused suites passed on source revision `1f02bf46da4724369676617959fb1b1ac982e286`. The complete `test` and `build` checks then passed on source revision `5bb0199b355d12b6671a310cf8acd3857c67f77d`; the packaged artifact hashes and current two process evidence are recorded above.
 
 ## Cleanup
 
