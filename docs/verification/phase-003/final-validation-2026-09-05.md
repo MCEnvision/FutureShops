@@ -91,6 +91,6 @@ All disposable runtimes used for the Pixelmon, replay, standard, incompatible, V
 
 ## Evidence identifiers and exit result
 
-This packet supplies `EVD-VER-001` for deterministic and runtime validation and `EVD-ART-001` for the final candidate manifest and isolation audit. The requirement trace in [requirement trace](requirement-trace-2026-09-05.md) supplies `EVD-VER-002`. The GitHub issue readback will be added as `EVD-GH-001` after the artifact validation gate.
+This packet supplies `EVD-VER-001` for deterministic and runtime validation and `EVD-ART-001` for the final candidate manifest and isolation audit. The requirement trace in [requirement trace](requirement-trace-2026-09-05.md) supplies `EVD-VER-002`. The GitHub issue readback is recorded as `EVD-GH-001` in [the issue 66 evidence packet](github-issue-66-2026-09-05.md).
 
 The candidate is technically validated and remains unpublished pending owner acceptance. No release upload, public publication, or 3.0.0 implementation was performed.

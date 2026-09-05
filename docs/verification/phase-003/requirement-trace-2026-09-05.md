@@ -15,10 +15,10 @@ This trace maps the mandatory core requirements to the validated implementation 
 | `CORE-REQ-019` | Exact standard server with Pixelmon absent and internal provider, plus exact hybrid startup and restart validation. |
 | `CORE-REQ-020` | Headless debug command audit with bounded records and required evidence fields. |
 | `CORE-REQ-021` | Final candidate packaging, dependency isolation, checksums, source manifest, and no external provider classes in the production jar. |
-| `CORE-REQ-022` | Final validation packet, owner acceptance boundary, and post artifact issue 66 update recorded separately as `EVD-GH-001`. |
+| `CORE-REQ-022` | Final validation packet, owner acceptance boundary, and post artifact issue 66 update and readback in [the issue 66 evidence packet](github-issue-66-2026-09-05.md). |
 
 ## Definition of done trace
 
 The implementation source is frozen at `6346e0ad156472a7c2f8b5d34ec96f7891ef80b9`. Focused tests, all tests, data generation, build, exact Pixelmon GameTests, standard server startup, incompatible version refusal, pure Vault surface tests, hybrid two process replay, debug toggle, jar isolation, and cleanup all passed. The exact candidate remains unpublished. No 3.0.0 code was changed. Issue 66 is kept open and is updated only after this artifact validation packet is committed.
 
-`EVD-VER-001` is the runtime and deterministic evidence packet. `EVD-VER-002` is this requirement trace. `EVD-ART-001` is the candidate manifest and isolation evidence. `EVD-GH-001` will be the issue identity, update, and readback evidence.
+`EVD-VER-001` is the runtime and deterministic evidence packet. `EVD-VER-002` is this requirement trace. `EVD-ART-001` is the candidate manifest and isolation evidence. `EVD-GH-001` is the issue identity, update, and readback evidence.
