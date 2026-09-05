@@ -200,10 +200,20 @@ public final class EconomyGameTests {
                 var wrongTypeResult = ((PixelmonNativeEconomyAccess) wrongType).futureshopsLookup(request.requestId());
                 helper.assertTrue(wrongTypeResult.status() == ProviderResultStatus.RECOVERY_REQUIRED,
                         "a non compound native Pixelmon receipt entry must force recovery");
-                LOGGER.info("futureshops.pixelmon.gametest native mutation confirmed request={} replay={} balance={} receipt_nbt={} reload={} unknown_recovery={} wrong_type_recovery={}",
+                CompoundTag wrongRootRecord = saved.copy();
+                wrongRootRecord.put("FutureShopsReceipts", StringTag.valueOf("unknown receipt root type"));
+                Object wrongRootStorage = storage.getClass().getConstructor(UUID.class).newInstance(player.getUUID());
+                Object wrongRootFuture = wrongRootStorage.getClass()
+                        .getMethod("readFromNBT", CompoundTag.class, HolderLookup.Provider.class)
+                        .invoke(wrongRootStorage, wrongRootRecord, helper.getLevel().registryAccess());
+                Object wrongRoot = ((CompletableFuture<?>) wrongRootFuture).join();
+                var wrongRootResult = ((PixelmonNativeEconomyAccess) wrongRoot).futureshopsLookup(request.requestId());
+                helper.assertTrue(wrongRootResult.status() == ProviderResultStatus.RECOVERY_REQUIRED,
+                        "a non compound native Pixelmon receipt root must force recovery");
+                LOGGER.info("futureshops.pixelmon.gametest native mutation confirmed request={} replay={} balance={} receipt_nbt={} reload={} unknown_recovery={} wrong_type_recovery={} wrong_root_recovery={}",
                         request.requestId().value(), replay.receipt().orElseThrow().requestId().value(),
                         after.value().orElseThrow().balanceMinorUnits(), saved.contains("FutureShopsReceipts"),
-                        restoredReceipt.status(), corruptedResult.status(), wrongTypeResult.status());
+                        restoredReceipt.status(), corruptedResult.status(), wrongTypeResult.status(), wrongRootResult.status());
             }
         } catch (ReflectiveOperationException | IOException | RuntimeException exception) {
             helper.fail("the exact Pixelmon native account probe failed: " + exception.getClass().getSimpleName());
