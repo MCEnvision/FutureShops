@@ -204,14 +204,14 @@ public final class PixelmonEconomyProvider implements com.enviouse.futureshopsp.
 
     @Override
     public ProviderResult<MutationReceipt> retry(MutationRequest request) {
-        return mutate(request, request == null ? MutationKind.WITHDRAW : request.kind());
+        return mutate(request, request == null ? MutationKind.WITHDRAW : mutationRoute(request.kind()));
     }
 
     private ProviderResult<MutationReceipt> mutate(MutationRequest request, MutationKind expectedKind) {
         if (request == null) {
             return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "mutation request is invalid");
         }
-        if (request.kind() != expectedKind) {
+        if (!matchesMutationRoute(request.kind(), expectedKind)) {
             return mutationRefused();
         }
         AccountRead account = readAccount(request.actor());
@@ -242,6 +242,17 @@ public final class PixelmonEconomyProvider implements com.enviouse.futureshopsp.
     private static boolean requiresFunds(MutationKind kind) {
         return kind == MutationKind.WITHDRAW || kind == MutationKind.TRANSFER_DEBIT
                 || kind == MutationKind.FEE;
+    }
+
+    private static MutationKind mutationRoute(MutationKind kind) {
+        return switch (kind) {
+            case DEPOSIT, TRANSFER_CREDIT, REFUND, COMPENSATION -> MutationKind.DEPOSIT;
+            default -> MutationKind.WITHDRAW;
+        };
+    }
+
+    private static boolean matchesMutationRoute(MutationKind kind, MutationKind route) {
+        return mutationRoute(kind) == route;
     }
 
     private static ProviderResult<MutationReceipt> mutationRefused() {

@@ -1898,6 +1898,9 @@ public final class PlayerShopBlockService {
         if (online != null) {
             return online.getGameProfile().getName();
         }
+        if (viewer.server.getProfileCache() == null) {
+            return ownerUuid.toString().substring(0, 8);
+        }
         return viewer.server.getProfileCache().get(ownerUuid)
                 .map(profile -> profile.getName())
                 .orElse(ownerUuid.toString().substring(0, 8));

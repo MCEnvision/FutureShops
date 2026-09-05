@@ -204,6 +204,12 @@ public final class EconomyGameTests {
         throw new IllegalStateException("Pixelmon party storage is unavailable");
     }
 
+    private static void setNativeBalance(ServerPlayer player, long balance) throws ReflectiveOperationException {
+        Object storage = pixelmonPartyStorage(player);
+        storage.getClass().getMethod("setBalance", BigDecimal.class)
+                .invoke(storage, BigDecimal.valueOf(balance));
+    }
+
     private static Object pixelmonBankAccount(ServerPlayer player) throws ReflectiveOperationException {
         Class<?> proxy = Class.forName("com.pixelmonmod.pixelmon.api.economy.BankAccountProxy");
         for (Method method : proxy.getMethods()) {
@@ -237,7 +243,36 @@ public final class EconomyGameTests {
                 "the disposable server shop must expose the diamond sell listing");
         ServerPlayer player = helper.makeMockServerPlayerInLevel();
         if (isNativePixelmonAccount(player)) {
-            LOGGER.info("futureshops.pixelmon.gametest native account skips direct refusal surface sell");
+            try {
+                setNativeBalance(player, 0L);
+                player.getInventory().add(new ItemStack(Items.IRON_INGOT, 1));
+                int beforeItems = player.getInventory().countItem(Items.IRON_INGOT);
+                int beforeStock = ShopCatalog.getCurrentStock("default", "minecraft:iron_ingot");
+                ShopSessionManager.open(player.getUUID(), "default");
+                try {
+                    ShopSellService.handleSellRequest(player,
+                            new C2SSellRequestPacket("default", "minecraft:iron_ingot", 1));
+                } finally {
+                    ShopSessionManager.close(player.getUUID());
+                }
+                long afterBalance = BalanceManager.queryBalance(player.getUUID()).value().orElseThrow().balanceMinorUnits();
+                LOGGER.info("futureshops.pixelmon.gametest native server sell state items_before={} items_after={} balance={} stock_before={} stock_after={}",
+                        beforeItems, player.getInventory().countItem(Items.IRON_INGOT), afterBalance, beforeStock,
+                        ShopCatalog.getCurrentStock("default", "minecraft:iron_ingot"));
+                helper.assertTrue(player.getInventory().countItem(Items.IRON_INGOT) == beforeItems - 1,
+                        "native Pixelmon server shop sell must remove the sold item after provider confirmation");
+                helper.assertTrue(afterBalance == 25L,
+                        "native Pixelmon server shop sell must credit the exact provider amount");
+                helper.assertTrue(ShopCatalog.getCurrentStock("default", "minecraft:iron_ingot") == beforeStock + 1,
+                        "native Pixelmon server shop sell must increment finite stock");
+                helper.assertTrue(!BalanceManager.getCustodyStore().hasIncompleteRecords(),
+                        "native Pixelmon server shop sell must release custody");
+                LOGGER.info("futureshops.pixelmon.gametest native server sell confirmed balance={} stock_before={} stock_after={}",
+                        afterBalance, beforeStock, ShopCatalog.getCurrentStock("default", "minecraft:iron_ingot"));
+            } catch (ReflectiveOperationException exception) {
+                helper.fail("the native Pixelmon server shop sell probe failed: " + exception.getClass().getSimpleName());
+                return;
+            }
             helper.succeed();
             return;
         }
@@ -252,7 +287,7 @@ public final class EconomyGameTests {
         }
         helper.assertTrue(player.getInventory().countItem(Items.DIAMOND) == before,
                 "Pixelmon shop sell refusal must not remove the offered item");
-        helper.assertTrue(BalanceManager.getCustodyStore().snapshot().isEmpty(),
+        helper.assertTrue(!BalanceManager.getCustodyStore().hasIncompleteRecords(),
                 "Pixelmon shop sell refusal must not create custody");
         helper.succeed();
     }
@@ -264,9 +299,10 @@ public final class EconomyGameTests {
             return;
         }
 
-        BlockPos shopPos = new BlockPos(1, 1, 1);
-        helper.setBlock(shopPos, ModBlocks.SHOP_BLOCK.get().defaultBlockState());
-        ShopBlockEntity shop = helper.getBlockEntity(shopPos);
+        BlockPos relativeShopPos = new BlockPos(1, 1, 1);
+        BlockPos shopPos = helper.absolutePos(relativeShopPos);
+        helper.setBlock(relativeShopPos, ModBlocks.SHOP_BLOCK.get().defaultBlockState());
+        ShopBlockEntity shop = helper.getBlockEntity(relativeShopPos);
         helper.assertTrue(shop != null, "the player shop block entity must be available");
         shop.setPlacedByCreative(true);
         helper.assertTrue(shop.setAdminShopMode(true), "the disposable shop must enter admin mode");
@@ -280,7 +316,33 @@ public final class EconomyGameTests {
 
         ServerPlayer buyer = helper.makeMockServerPlayerInLevel();
         if (isNativePixelmonAccount(buyer)) {
-            LOGGER.info("futureshops.pixelmon.gametest native account skips direct refusal surface player_shop");
+            try {
+                setNativeBalance(buyer, 100L);
+                int diamondsBefore = buyer.getInventory().countItem(Items.DIAMOND);
+                int escrowRecordsBefore = PlayerShopSaleEscrowSavedData.get(buyer.getServer()).snapshot().size();
+                PlayerShopBlockService.buy(buyer, shopPos, listingIndex, 1, "MONEY");
+                long afterBalance = BalanceManager.queryBalance(buyer.getUUID()).value().orElseThrow().balanceMinorUnits();
+                List<PlayerShopSaleEscrowSavedData.EscrowRecord> escrowRecords =
+                        PlayerShopSaleEscrowSavedData.get(buyer.getServer()).snapshot();
+                LOGGER.info("futureshops.pixelmon.gametest native admin buy state diamonds_before={} diamonds_after={} balance={} escrow_before={} escrow_after={}",
+                        diamondsBefore, buyer.getInventory().countItem(Items.DIAMOND), afterBalance,
+                        escrowRecordsBefore, escrowRecords.size());
+                helper.assertTrue(buyer.getInventory().countItem(Items.DIAMOND) == diamondsBefore + 1,
+                        "native Pixelmon admin shop buy must deliver the item after provider confirmation");
+                helper.assertTrue(afterBalance == 99L,
+                        "native Pixelmon admin shop buy must debit the exact provider amount");
+                helper.assertTrue(escrowRecords.size() == escrowRecordsBefore + 1
+                                && escrowRecords.get(escrowRecords.size() - 1).state()
+                                == PlayerShopSaleEscrowSavedData.State.CLAIMED,
+                        "native Pixelmon admin shop buy must finish its durable sale escrow");
+                helper.assertTrue(!BalanceManager.getCustodyStore().hasIncompleteRecords(),
+                        "native Pixelmon admin shop buy must claim custody");
+                LOGGER.info("futureshops.pixelmon.gametest native admin shop buy confirmed balance={} escrow_state={}",
+                        afterBalance, escrowRecords.get(escrowRecords.size() - 1).state());
+            } catch (ReflectiveOperationException exception) {
+                helper.fail("the native Pixelmon admin shop buy probe failed: " + exception.getClass().getSimpleName());
+                return;
+            }
             helper.succeed();
             return;
         }
@@ -292,7 +354,7 @@ public final class EconomyGameTests {
                 "Pixelmon player shop buy refusal must not deliver an item");
         helper.assertTrue(PlayerShopSaleEscrowSavedData.get(buyer.getServer()).snapshot().size() == escrowRecordsBefore,
                 "Pixelmon player shop buy refusal must not prepare sale escrow");
-        helper.assertTrue(BalanceManager.getCustodyStore().snapshot().isEmpty(),
+        helper.assertTrue(!BalanceManager.getCustodyStore().hasIncompleteRecords(),
                 "Pixelmon player shop buy refusal must not create custody");
         helper.succeed();
     }
@@ -305,11 +367,6 @@ public final class EconomyGameTests {
         }
 
         ServerPlayer player = helper.makeMockServerPlayerInLevel();
-        if (isNativePixelmonAccount(player)) {
-            LOGGER.info("futureshops.pixelmon.gametest native account skips direct refusal surface money_item");
-            helper.succeed();
-            return;
-        }
         ItemStack money = new ItemStack(ModItems.MONEY_ITEM.get(), 1);
         player.setItemInHand(InteractionHand.MAIN_HAND, money);
         int before = money.getCount();
@@ -320,7 +377,7 @@ public final class EconomyGameTests {
                 "Pixelmon money item use must refuse without consuming the item");
         helper.assertTrue(money.getCount() == before,
                 "Pixelmon money item refusal must preserve the item stack");
-        helper.assertTrue(BalanceManager.getCustodyStore().snapshot().isEmpty(),
+        helper.assertTrue(!BalanceManager.getCustodyStore().hasIncompleteRecords(),
                 "Pixelmon money item refusal must not create custody");
         helper.succeed();
     }
@@ -335,11 +392,6 @@ public final class EconomyGameTests {
         helper.assertTrue(ShopCatalog.getItem("default", "minecraft:diamond").isPresent(),
                 "the disposable server shop must expose the diamond cart listing");
         ServerPlayer player = helper.makeMockServerPlayerInLevel();
-        if (isNativePixelmonAccount(player)) {
-            LOGGER.info("futureshops.pixelmon.gametest native account skips direct refusal surface cart");
-            helper.succeed();
-            return;
-        }
         int diamondsBefore = player.getInventory().countItem(Items.DIAMOND);
         int stockBefore = ShopCatalog.getCurrentStock("default", "minecraft:diamond");
         ShopSessionManager.open(player.getUUID(), "default");
@@ -354,7 +406,7 @@ public final class EconomyGameTests {
                 "Pixelmon cart refusal must not deliver an item");
         helper.assertTrue(ShopCatalog.getCurrentStock("default", "minecraft:diamond") == stockBefore,
                 "Pixelmon cart refusal must not reserve stock");
-        helper.assertTrue(BalanceManager.getCustodyStore().snapshot().isEmpty(),
+        helper.assertTrue(!BalanceManager.getCustodyStore().hasIncompleteRecords(),
                 "Pixelmon cart refusal must not create custody");
 
         ItemStack money = new ItemStack(ModItems.MONEY_ITEM.get(), 1);
@@ -368,8 +420,92 @@ public final class EconomyGameTests {
                 "Pixelmon withdraw command must refuse before minting bills");
         helper.assertTrue(player.getInventory().countItem(ModItems.MONEY_ITEM.get()) == 1,
                 "Pixelmon deposit command must refuse before consuming money");
-        helper.assertTrue(BalanceManager.getCustodyStore().snapshot().isEmpty(),
+        helper.assertTrue(!BalanceManager.getCustodyStore().hasIncompleteRecords(),
                 "Pixelmon physical commands must not create custody");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void pixelmonCartMutationSuccess(GameTestHelper helper) {
+        if (!"pixelmon".equals(BalanceManager.getLifecycleSnapshotOrUnresolved().providerId())) {
+            helper.succeed();
+            return;
+        }
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        if (!isNativePixelmonAccount(player)) {
+            helper.succeed();
+            return;
+        }
+        try {
+            setNativeBalance(player, 1_000L);
+            int diamondsBefore = player.getInventory().countItem(Items.DIAMOND);
+            ShopSessionManager.open(player.getUUID(), "default");
+            try {
+                ShopBuyService.handleBuyRequest(player,
+                        C2SBuyRequestPacket.cart("default",
+                                List.of(new C2SBuyRequestPacket.LineItem("minecraft:diamond", 1))));
+            } finally {
+                ShopSessionManager.close(player.getUUID());
+            }
+            long afterBalance = BalanceManager.queryBalance(player.getUUID()).value().orElseThrow().balanceMinorUnits();
+            LOGGER.info("futureshops.pixelmon.gametest native cart state diamonds_before={} diamonds_after={} balance={}",
+                    diamondsBefore, player.getInventory().countItem(Items.DIAMOND), afterBalance);
+            helper.assertTrue(player.getInventory().countItem(Items.DIAMOND) == diamondsBefore + 1,
+                    "native Pixelmon cart must deliver every prepared reward");
+            helper.assertTrue(afterBalance == 500L,
+                    "native Pixelmon cart must debit the exact aggregate price");
+            helper.assertTrue(!BalanceManager.getCustodyStore().hasIncompleteRecords(),
+                    "native Pixelmon cart must claim delivery custody");
+            LOGGER.info("futureshops.pixelmon.gametest native cart confirmed balance={} delivered={}",
+                    afterBalance, player.getInventory().countItem(Items.DIAMOND) - diamondsBefore);
+        } catch (ReflectiveOperationException exception) {
+            helper.fail("the native Pixelmon cart probe failed: " + exception.getClass().getSimpleName());
+            return;
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void pixelmonPayTransferSuccess(GameTestHelper helper) {
+        if (!"pixelmon".equals(BalanceManager.getLifecycleSnapshotOrUnresolved().providerId())) {
+            helper.succeed();
+            return;
+        }
+        ServerPlayer payer = helper.makeMockServerPlayerInLevel();
+        ServerPlayer recipient = helper.makeMockServerPlayerInLevel();
+        if (!isNativePixelmonAccount(payer) || !isNativePixelmonAccount(recipient)) {
+            helper.succeed();
+            return;
+        }
+        try {
+            setNativeBalance(payer, 1_000L);
+            setNativeBalance(recipient, 0L);
+            RequestId probeRoot = RequestId.random();
+            var payerPreflight = BalanceManager.getCoordinator().preflight(new MutationRequest(
+                    probeRoot.child("probe debit"), payer.getUUID(), java.util.Optional.of(recipient.getUUID()),
+                    125L, MutationKind.TRANSFER_DEBIT));
+            var recipientPreflight = BalanceManager.getCoordinator().preflight(new MutationRequest(
+                    probeRoot.child("probe credit"), recipient.getUUID(), java.util.Optional.of(payer.getUUID()),
+                    125L, MutationKind.TRANSFER_CREDIT));
+            var result = BalanceManager.transfer(payer.getUUID(), recipient.getUUID(), 125L);
+            LOGGER.info("futureshops.pixelmon.gametest native pay state same_account={} payer_preflight={} recipient_preflight={} success={} error={} payer_result={} payer_live={} recipient_live={}",
+                    payer.getUUID().equals(recipient.getUUID()),
+                    payerPreflight.error(), recipientPreflight.error(),
+                    result.success(), result.errorCode(), result.resultingBalance(),
+                    BalanceManager.queryBalance(payer.getUUID()).value().orElseThrow().balanceMinorUnits(),
+                    BalanceManager.queryBalance(recipient.getUUID()).value().orElseThrow().balanceMinorUnits());
+            helper.assertTrue(result.success() && result.resultingBalance() == 875L,
+                    "native Pixelmon pay transfer must debit the payer exactly once");
+            helper.assertTrue(BalanceManager.queryBalance(recipient.getUUID()).value().orElseThrow().balanceMinorUnits() == 125L,
+                    "native Pixelmon pay transfer must credit the recipient exactly once");
+            helper.assertTrue(!BalanceManager.getCustodyStore().hasIncompleteRecords(),
+                    "native Pixelmon pay transfer must not leave custody");
+            LOGGER.info("futureshops.pixelmon.gametest native pay transfer confirmed payer={} recipient={}",
+                    result.resultingBalance(), BalanceManager.queryBalance(recipient.getUUID()).value().orElseThrow().balanceMinorUnits());
+        } catch (ReflectiveOperationException exception) {
+            helper.fail("the native Pixelmon pay transfer probe failed: " + exception.getClass().getSimpleName());
+            return;
+        }
         helper.succeed();
     }
 
