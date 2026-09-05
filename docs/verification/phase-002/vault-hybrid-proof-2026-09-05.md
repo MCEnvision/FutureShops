@@ -11,10 +11,10 @@ This record covers the separately installed Vault proof registrant and its durab
 | NeoForge | `21.1.248` |
 | Java | `21.0.11` |
 | Youer | `1.21.1-d4a204a0` |
-| FutureShops source | `490f78d3374d663d17b1be608e1cafc91f0ca840` |
-| FutureShops artifact SHA 256 | `b56fd75fc96968eac8c05c50d6ff71be24e2c8472b43ad26fe4208535c2aa145` |
-| FutureShops artifact SHA 512 | `f0d6eb7b7660506816131184c5ce55f5edbc4853284321f16fd41bf5740ebd1ac3a2d542a397e52ccc707d2c5717356f89390e8ca5f05a4a2f6c346cfbda8442` |
-| Proof registrant SHA 256 | `46d8daa58a6019c6bac166ffbe684c2f018d88665df21f49c88e6b022ef84336` |
+| FutureShops source | `1f02bf46da4724369676617959fb1b1ac982e286` |
+| FutureShops artifact SHA 256 | `d7d2e14b192644859a276114508ceb2c5aed8991931aab523b899ffa9d0e4ad3` |
+| FutureShops artifact SHA 512 | `704c3495f1fca5ca2015ac4320e705b8e83d5dfc0b12c5fa2edccb85f12d0ce4a84d2ea4fb782760abca0beb1ea91047475e61698f441e7537984d9041980b23` |
+| Proof registrant SHA 256 | `44f687a6a02911bbe6f2c209819cd57b2712373a8bd3cd9c88d22df04ffd76c4` |
 | SQLite JDBC SHA 256 | `e697df15be3f95219d80773c5f1002030e33e932adda186c1c86fd51df6691a9` |
 | EULA | `eula=true` |
 | selected provider | `vault` |
@@ -52,7 +52,7 @@ Done (28.428s)! For help, type "help"
 FutureShops server stopping.
 ```
 
-The complete first launch log SHA 256 is `7f3fa82b5c9027e35e5b7249b32065b05aa9c174e872f2c96b2fb5960395493b`.
+The complete first launch log SHA 256 is `c8c13d5a74eb9e105e398dbb100831fb58abafe7f6e3764812e372154d17f5da`.
 
 The registrant startup callback used stable requests `00000000-0000-0000-0000-000000000510` through `00000000-0000-0000-0000-000000000514` for withdrawal, deposit, refund, compensation, and a custodied deposit. It called the public provider precheck, the FutureShops coordinator preflight, every coordinator mutation route, provider lookup, and duplicate retry. Every route returned `CONFIRMED`; custody reached `CLAIMED`, the claim reached `RESOLVED`, and the resulting balance was `89`.
 
@@ -71,7 +71,9 @@ The durable database SHA 256 is `1642650526be49fa36aaa9656e24ebac5cff2e0ab37272d
 
 The same run persisted twenty FutureShops receipt audit records under `world/data/futureshops/receipts`, four transitions for each of the five request IDs, followed by a checksummed `.clean` marker. The coordinator therefore left a local recovery lineage while the SQLite provider receipts remained authoritative for retry.
 
-The runtime was started a second time without changing its world, provider database, or request IDs. The restart log SHA 256 is `df38bcea97c0f8c3aea290636118e79a132adc0f26370be6ba192233bb55aced`. It reported `withdrawal=CONFIRMED`, `deposit=CONFIRMED`, `refund=CONFIRMED`, `compensation=CONFIRMED`, `custody=CONFIRMED`, `claim_state_initial=RESOLVED`, and `balance=89`. The SQLite hash after restart remained the same logical receipt set, and no second balance effect occurred.
+The runtime was started a second time without changing its world, provider database, or request IDs. The restart log SHA 256 is `3daaf80e46db544254ce6ad84ff24e8b1a1d0236519d422afca844f24fa83915`. It reported `withdrawal=CONFIRMED`, `deposit=CONFIRMED`, `refund=CONFIRMED`, `compensation=CONFIRMED`, `custody=CONFIRMED`, `claim_state_initial=RESOLVED`, and `balance=89`. The SQLite hash after restart remained `1642650526be49fa36aaa9656e24ebac5cff2e0ab37272dbf762035e02d8d9f7`, with five receipt rows and one account row, and no second balance effect occurred.
+
+The current artifact run also preserved the known external stack parser warnings, including `Not a map: END` during restart. They are emitted by the unmodified external stack, not FutureShops, and did not prevent startup, proof completion, or clean shutdown. No FutureShops exception was present.
 
 ## Boundary proof
 
@@ -93,6 +95,15 @@ JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash ./gradlew clean test --tests c
 ```
 
 It passed. The separate registrant jar is a first party proof component. It does not add a production Vault adapter, modify any external jar, or make the current PixelmonEconomyBridge and FinalEconomy stack transaction aware. That legacy stack remains refused by FutureShops unless a bridge and backend provide this same request receipt, lookup, retry, conversion, and recovery contract.
+
+The focused coordinator regression suite also passed after adding service loss coverage. A missing provider before intent returned `UNAVAILABLE` with an empty journal and no provider call. A provider loss after intent returned `AMBIGUOUS`, left the lifecycle `FROZEN`, and recorded an `UNCERTAIN` journal state without internal fallback or blind retry.
+
+```text
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash ./gradlew test --tests com.enviouse.futureshopsp.api.economy.VaultTransactionProofTest --no-daemon
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash ./gradlew test --tests com.enviouse.futureshopsp.server.economy.EconomyTransactionCoordinatorTest --no-daemon
+```
+
+Both focused suites passed on source revision `1f02bf46da4724369676617959fb1b1ac982e286`.
 
 ## Cleanup
 
