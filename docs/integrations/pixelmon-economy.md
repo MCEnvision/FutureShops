@@ -36,7 +36,7 @@ To roll back, stop the server, restore the matching backup, set `economy.provide
 
 ## Evidence
 
-The reviewed Pixelmon artifact was kept outside this repository at `/tmp/Pixelmon-1.21.1-9.4.0-universal.jar`.
+The reviewed Pixelmon artifact remained outside this repository and was used unchanged. Its SHA 256 is `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2`. Exact class and bytecode inspection was limited to interoperability research. FutureShops ships only its original adapter and mixin code, never copied Pixelmon code, assets, or jar bytes.
 
 * SHA 256, `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2`.
 * SHA 512, `b1485031c27cbe0dd7125f11d3b003954e654f66c102479d443841071a37131067371bfc5e1fc2d8bf96a7195afa3ca02fc1525d343fc096d5bc598680bccafe`.

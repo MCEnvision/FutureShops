@@ -22,6 +22,8 @@ The Java package is `com.enviouse.futureshopsp` and the runtime namespace is `fu
 
 Only `InternalEconomyProvider` owns the internal balance saved data. External providers own their balances. FutureShops records requests, provider outcomes, market state, custody, claims, and confirmed analytics facts, but never maintains an external balance mirror.
 
+Exact lawfully obtained Pixelmon, DanConomy, Vault, bridge, and backend artifacts may be inspected or decompiled only to establish interoperability targets and runtime behavior. Development may compile against and run the exact unchanged artifacts as optional local inputs. The shipped FutureShops jar may contain only original FutureShops adapter, mixin, provider API, and transaction code. It must never contain copied external source or assets, altered or rebuilt external jars, bundled external bytes, or redistributed external artifacts. An all rights reserved license does not block this original in jar compatibility layer, but the no-copy and no-redistribution boundary remains mandatory.
+
 ## Economy lifecycle
 
 `BalanceManager.initialize` freezes provider registration, resolves the restart selected provider, loads the transaction journal, custody index, claim index, player shop barter escrow, player shop sale escrow, and player shop settlement index, and marks each index unclean before readiness. The lifecycle controller admits queries and mutations only in `READY`. `DRAINING` rejects new mutations while allowing the shutdown checkpoint. `RECOVERING` permits only safe reconciliation. `FROZEN` preserves evidence when a provider outcome cannot be proven. `MISSING`, `INCOMPATIBLE`, and `FAILED` remain unavailable until a corrected restart. `STOPPED` is terminal for the current server lifecycle.
