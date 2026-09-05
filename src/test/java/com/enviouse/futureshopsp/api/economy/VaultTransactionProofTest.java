@@ -65,6 +65,21 @@ class VaultTransactionProofTest {
     }
 
     @Test
+    void creditPrecheckAllowsDepositFromZeroBalance() {
+        SqliteVaultProofBackend backend = new SqliteVaultProofBackend(directory, 0L);
+        EconomyProvider provider = new SqliteVaultProofProvider(backend);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 7L,
+                MutationKind.DEPOSIT);
+
+        ProviderResult<BalanceSnapshot> precheck = provider.precheck(request);
+
+        assertTrue(precheck.confirmed());
+        assertEquals(0L, precheck.value().orElseThrow().balanceMinorUnits());
+        assertTrue(provider.deposit(request).confirmed());
+        assertEquals(7L, provider.balance(PLAYER).value().orElseThrow().balanceMinorUnits());
+    }
+
+    @Test
     void interruptedSqliteBoundariesLeaveAtomicStateAndRetryIsSafe() {
         SqliteVaultProofBackend backend = new SqliteVaultProofBackend(directory, 100L);
         EconomyProvider provider = new SqliteVaultProofProvider(backend);

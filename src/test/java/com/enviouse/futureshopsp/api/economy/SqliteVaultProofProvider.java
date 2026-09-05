@@ -63,7 +63,7 @@ public final class SqliteVaultProofProvider implements EconomyProvider {
             return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "request is invalid");
         }
         long balance = backend.balance(request.actor());
-        return balance >= request.amountMinorUnits()
+        return !requiresFunds(request.kind()) || balance >= request.amountMinorUnits()
                 ? ProviderResult.confirmed(new BalanceSnapshot(request.actor(), balance))
                 : ProviderResult.rejected(ProviderError.INSUFFICIENT_FUNDS, "balance is insufficient");
     }
@@ -91,5 +91,10 @@ public final class SqliteVaultProofProvider implements EconomyProvider {
     private static boolean isCredit(MutationKind kind) {
         return kind == MutationKind.DEPOSIT || kind == MutationKind.REFUND
                 || kind == MutationKind.TRANSFER_CREDIT || kind == MutationKind.COMPENSATION;
+    }
+
+    private static boolean requiresFunds(MutationKind kind) {
+        return kind == MutationKind.WITHDRAW || kind == MutationKind.TRANSFER_DEBIT
+                || kind == MutationKind.FEE;
     }
 }
