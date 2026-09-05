@@ -6,10 +6,10 @@ This record covers the native Pixelmon transaction path, the Vault proof boundar
 
 | Field | Value |
 | --- | --- |
-| Source revision | `6138eb8d6c7217d425f3840f5dae362ca2db27f0` |
+| Source revision | `490f78d3374d663d17b1be608e1cafc91f0ca840` |
 | FutureShops artifact | `build/libs/futureshops-2.3.0.jar` |
-| FutureShops SHA 256 | `5122aa663537e179abdab7bf30efda4c09f080cb9fcc7328c0eb2e4d8650b59c` |
-| FutureShops SHA 512 | `e5d004902837bbe96078cebf590f1c0df2c556c6f272ec42fddc131eb14bd68e62c6a0e73f5c934870167a9e8812b93fd1efc1191ae9085a6abe11bf0e1b2cba` |
+| FutureShops SHA 256 | `b56fd75fc96968eac8c05c50d6ff71be24e2c8472b43ad26fe4208535c2aa145` |
+| FutureShops SHA 512 | `f0d6eb7b7660506816131184c5ce55f5edbc4853284321f16fd41bf5740ebd1ac3a2d542a397e52ccc707d2c5717356f89390e8ca5f05a4a2f6c346cfbda8442` |
 | Pixelmon artifact | `/tmp/Pixelmon-1.21.1-9.4.0-universal.jar` |
 | Pixelmon SHA 256 | `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2` |
 | Minecraft | `1.21.1` |
@@ -93,36 +93,36 @@ The sanitized two process evidence SHA 256 is `403e9a9f01ace4d209f4d81a35b01c6dc
 
 ## Artifact bound native GameTest rerun on 2026-09-05
 
-The current production artifact from source revision `6138eb8d6c7217d425f3840f5dae362ca2db27f0` was launched from a fresh temporary game directory with the exact Pixelmon `1.21.1-9.4.0` jar, GeckoLib `4.8.4`, the merged NeoForge `21.1.248` development artifact, and `provider = "pixelmon"`. The launcher verified `eula=true` and supplied `server.properties` before startup. This run used the artifact itself rather than a development classes directory.
+The current production artifact from source revision `490f78d3374d663d17b1be608e1cafc91f0ca840` was launched from a fresh temporary game directory with the exact Pixelmon `1.21.1-9.4.0` jar, GeckoLib `4.8.4`, the merged NeoForge `21.1.248` development artifact, and `provider = "pixelmon"`. The launcher verified `eula=true` and supplied `server.properties` before startup. This run used the artifact itself rather than a development classes directory.
 
 Sanitized evidence:
 
 ```text
 FutureShops Pixelmon mixin target com.pixelmonmod.pixelmon.api.storage.PlayerPartyStorage apply true
 FutureShops server starting.
-futureshops.pixelmon.gametest native mutation confirmed request=1143c38b-7995-414b-8c69-1f5a7e7e8bcd replay=1143c38b-7995-414b-8c69-1f5a7e7e8bcd balance=75 receipt_nbt=true reload=CONFIRMED reconnect_replay=CONFIRMED reloaded_balance=75 unknown_recovery=RECOVERY_REQUIRED wrong_type_recovery=RECOVERY_REQUIRED wrong_root_recovery=RECOVERY_REQUIRED
+futureshops.pixelmon.gametest native mutation confirmed request=d4a0c5d5-7e98-41e1-9a6e-2639f245843e replay=d4a0c5d5-7e98-41e1-9a6e-2639f245843e balance=75 receipt_nbt=true reload=CONFIRMED reconnect_replay=CONFIRMED reloaded_balance=75 unknown_recovery=RECOVERY_REQUIRED wrong_type_recovery=RECOVERY_REQUIRED wrong_root_recovery=RECOVERY_REQUIRED
 futureshops.pixelmon.gametest process_restart phase=FIRST request=00000000-0000-0000-0000-000000000241 balance=75 receipt=COMPLETED
 All 20 required tests passed :)
 Game test server shutting down
 ```
 
-The first process log SHA 256 is `203ff647978cab9807e42afb81aad4b7867232619a639bd3d435826dd47f107f`. A second process reused the same disposable world and proved the persisted restart replay:
+The first process log SHA 256 is `512976106c5f973fade79206bcd9721d847763968f90f218df00d89d88a80c16`. A second process reused the same disposable world and proved the persisted restart replay:
 
 ```text
 FutureShops Pixelmon mixin target com.pixelmonmod.pixelmon.api.storage.PlayerPartyStorage apply true
-futureshops.pixelmon.gametest native mutation confirmed request=a00b33c3-a59e-46c6-8206-54079327b18d replay=a00b33c3-a59e-46c6-8206-54079327b18d balance=75 receipt_nbt=true reload=CONFIRMED reconnect_replay=CONFIRMED reloaded_balance=75 unknown_recovery=RECOVERY_REQUIRED wrong_type_recovery=RECOVERY_REQUIRED wrong_root_recovery=RECOVERY_REQUIRED
+futureshops.pixelmon.gametest native mutation confirmed request=2b0ce758-123a-4a1b-8d1c-47e760892915 replay=2b0ce758-123a-4a1b-8d1c-47e760892915 balance=75 receipt_nbt=true reload=CONFIRMED reconnect_replay=CONFIRMED reloaded_balance=75 unknown_recovery=RECOVERY_REQUIRED wrong_type_recovery=RECOVERY_REQUIRED wrong_root_recovery=RECOVERY_REQUIRED
 futureshops.pixelmon.gametest process_restart phase=SECOND request=00000000-0000-0000-0000-000000000241 replay=CONFIRMED balance=75
 All 20 required tests passed :)
 Game test server shutting down
 ```
 
-The second process log SHA 256 is `12e8c58609c1e2401edc349d8caece4ef130c1a91b55ccb11e21b470e2e95091`. Both processes exited with code `0`. The runtime emitted an existing Pixelmon missing spawning tag warning, with no FutureShops exception. The runs stopped cleanly and their temporary runtime, classpath file, worlds, and logs were removed after hashing. These reruns bind the native mixin and all twenty tests to the current production jar whose SHA 256 is `5122aa663537e179abdab7bf30efda4c09f080cb9fcc7328c0eb2e4d8650b59c`.
+The second process log SHA 256 is `7eb49c64fb39d36d8fdc9676b53cb2f88f725d48a5dadc9cf36d5e83a7d1cd66`. Both processes exited with code `0`. The runtime emitted an existing Pixelmon missing spawning tag warning, with no FutureShops exception. The runs stopped cleanly and their temporary runtime, classpath file, worlds, and logs were removed after hashing. These reruns bind the native mixin and all twenty tests to the current production artifact whose SHA 256 is `b56fd75fc96968eac8c05c50d6ff71be24e2c8472b43ad26fe4208535c2aa145`.
 
 ## Vault bridge and backend proof
 
 `EconomyProviderRegistry.registerVault` is the only public registration boundary for the reserved `vault` provider. `VaultTransactionProofTest` registers a separate test provider through that boundary and exercises a durable SQLite backend fixture outside the production jar. The fixture writes the new balance and provider receipt in one forced SQLite transaction. A reopened backend confirms the receipt and balance. Injected interruptions before commit roll back both rows, while an interruption after commit leaves a lookupable receipt and a retry commits no second effect. Reuse with a conflicting amount, mutation kind, or actor is rejected as `INVALID_REQUEST`. Insufficient funds remains `INSUFFICIENT_FUNDS` across retry, and concurrent identical requests converge on one durable receipt and one balance delta. Receipt lookup scans persisted state before a new mutation, so a request cannot create a second effect under another account state.
 
-The proof backend now uses SQLite with `journal_mode=DELETE`, `synchronous=FULL`, a primary key on the request UUID, and one database transaction containing both the balance update and receipt insert. It injects interruption after the balance update, after receipt insertion, before commit, and after commit. A fresh backend instance looks up the committed receipt after the ambiguous post commit result and retry does not debit again. The exact hybrid server also loaded the separately packaged registrant beside the unmodified Pixelmon, Vault, FinalEconomy, EverNifeCore, and PixelmonEconomyBridge jars. The registrant registered `vault` through the public API and executed one precheck, withdraw, lookup, and duplicate retry at server start. See [exact hybrid Vault proof](vault-hybrid-proof-2026-09-05.md) for hashes, sanitized logs, database rows, and cleanup evidence.
+The proof backend now uses SQLite with `journal_mode=DELETE`, `synchronous=FULL`, a primary key on the request UUID, and one database transaction containing both the balance update and receipt insert. It injects interruption after the balance update, after receipt insertion, before commit, and after commit. A fresh backend instance looks up the committed receipt after the ambiguous post commit result and retry does not debit again. The exact hybrid server also loaded the separately packaged registrant beside the unmodified Pixelmon, Vault, FinalEconomy, EverNifeCore, and PixelmonEconomyBridge jars. The registrant registered `vault` through the public API and executed coordinator precheck, withdrawal, deposit, refund, compensation, custodied deposit, custody claim transitions, provider lookup, and duplicate retry. A second server process replayed all stable request IDs and retained balance `89` without another effect. See [exact hybrid Vault proof](vault-hybrid-proof-2026-09-05.md) for hashes, sanitized logs, database rows, and cleanup evidence.
 
 Commands:
 
