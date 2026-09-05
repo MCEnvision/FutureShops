@@ -6,10 +6,10 @@ This record covers the native Pixelmon transaction path, the Vault proof boundar
 
 | Field | Value |
 | --- | --- |
-| Source revision | `a7fef2f` |
+| Source revision | `694d7886b7253d25d94b5260b26b3a70576dbb82` |
 | FutureShops artifact | `build/libs/futureshops-2.3.0.jar` |
-| FutureShops SHA 256 | `e25fd666a88a8fbabd6d8f844ef8af8cd947c13f27a32c77b4a07a84a92e02a4` |
-| FutureShops SHA 512 | `86ea2169aae6f9d9ddd8d80ee6ad48f8f8aae4e9608edf103c160ee3cf5300798c633d610ace7e5eaa8e131db248e2e6a0403f58943ff450f25833534ba00f97` |
+| FutureShops SHA 256 | `306bcdb2febaa3fbbb7b93af50fe7d0ef030e0953df90ce45db65ff145635e90` |
+| FutureShops SHA 512 | `113bf340f396a3fa8eb4a3d706ef36ec03db9f03e27cf6e78b465e10ff8423f1abee23150b2dc65efdf9dc95945fa97148351ffe349e271b008c78c5bfd577a8` |
 | Pixelmon artifact | `/tmp/Pixelmon-1.21.1-9.4.0-universal.jar` |
 | Pixelmon SHA 256 | `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2` |
 | Minecraft | `1.21.1` |
@@ -27,19 +27,24 @@ Command:
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash ./gradlew runGameTestServer --no-daemon
 ```
 
-The disposable Gradle GameTest runtime loaded the exact Pixelmon jar and selected `pixelmon` in the test configuration. Sixteen required tests passed. The native test created a live `PlayerPartyStorage`, seeded `100` PokéDollars, withdrew `25` with a FutureShops request UUID, replayed that UUID, and observed a single debit with balance `75`. The mixin wrote `FutureShopsReceipts` beside Pixelmon's `pixelDollars` data. A new storage instance reloaded the receipt and returned `CONFIRMED`. An injected unknown receipt record returned `RECOVERY_REQUIRED` and was retained for later reconciliation.
+The disposable Gradle GameTest runtime loaded the exact Pixelmon jar and selected `pixelmon` in the test configuration. The packaged artifact run passed all eighteen required tests. The native tests exercised the live `PlayerPartyStorage` path, cart purchase, `/pay` transfer, server shop sell, admin player shop buy, physical money refusal, and direct mutation recovery. The mixin wrote `FutureShopsReceipts` beside Pixelmon's `pixelDollars` data. A replayed request UUID produced one debit, a reopened storage instance returned `CONFIRMED`, and an injected unknown receipt record returned `RECOVERY_REQUIRED` and remained available for reconciliation.
 
 Sanitized server evidence:
 
 ```text
-futureshops.pixelmon.gametest account=com.pixelmonmod.pixelmon.api.storage.PlayerPartyStorage native_access=true preflight=NONE
-futureshops.pixelmon.gametest native mutation confirmed request=64e304a1-6470-4efd-a098-91b0a935b6cf replay=64e304a1-6470-4efd-a098-91b0a935b6cf balance=75 receipt_nbt=true reload=CONFIRMED unknown_recovery=RECOVERY_REQUIRED
-All 16 required tests passed :)
+futureshops.pixelmon.gametest native cart state diamonds_before=0 diamonds_after=1 balance=500
+futureshops.pixelmon.gametest native pay state same_account=false payer_preflight=NONE recipient_preflight=NONE success=true error=OK payer_result=875 payer_live=875 recipient_live=125
+futureshops.pixelmon.gametest native server sell state items_before=1 items_after=0 balance=25 stock_before=100 stock_after=101
+futureshops.pixelmon.gametest native mutation confirmed request=306070ff-5e7a-4349-afa5-c07eac06eb7f replay=306070ff-5e7a-4349-afa5-c07eac06eb7f balance=75 receipt_nbt=true reload=CONFIRMED unknown_recovery=RECOVERY_REQUIRED
+futureshops.pixelmon.gametest native admin shop buy state diamonds_before=0 diamonds_after=1 balance=99 escrow_before=0 escrow_after=1
+All 18 required tests passed :)
 ```
+
+The packaged exact Pixelmon log SHA 256 is `e2cfc1e7460fd52435f4ebba64e0af2ca21c9aa1f4d3b8f0cd2f96dc686e6159`.
 
 The dedicated server stopped and saved its disposable world after the run. The repository test configuration was restored to `provider = "internal"`.
 
-The same headless GameTest command was rerun with the pre existing Pixelmon jar moved out of the dev runtime. The standard NeoForge environment loaded FutureShops, skipped the optional Pixelmon target, reached `FutureShops server starting`, and passed all sixteen required tests. The exact Pixelmon jar was restored with SHA 256 `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2`. The sanitized standard log SHA 256 was `c74c045014309e3acc4131c02880a745b9c894e7e553435aed5544becaf5d751`.
+The same headless GameTest launcher was run from a fresh temporary game directory with no Pixelmon jar. The standard NeoForge environment loaded FutureShops, skipped the optional Pixelmon target, reached `FutureShops server starting`, and passed all eighteen required tests. The sanitized absence log SHA 256 is `3b827fd0dcf6b78316956dfd5bc5603183823b6667fa9d07f0cd09fd219ea81d`. The exact Pixelmon jar remained external and was not copied into the temporary absence directory.
 
 ## Vault bridge and backend proof
 
