@@ -15,7 +15,7 @@ This packet records the current `CORE-PHASE-000` execution state for FutureShops
 | FutureShops jar SHA 256 | `198bc350c072d7731cfd00f9c1d0a0fcdca2d1bf5cda6828ef7b96f640bc6d9d` |
 | FutureShops jar SHA 512 | `87ca13d2689d00f3bc03490eeaa0e71f679df15a632d1c510286f880fb89a4fa0018aadc6716a32547a5d99a4fc75c60d923c3893732c44be836780b77572a57` |
 
-No plan or goal file was changed. Issue 66 remains frozen to the authoring record. No live issue query or mutation, pull request, tag, release, upload, or publication was performed.
+No plan or goal file was changed. Issue 66 remains open and was not mutated. A read only `gh issue view 66` lookup during the continuation preflight returned the existing open issue. The active plan reserves live issue verification and update for Phase 003, so this early read is recorded as a timing deviation and keeps the issue gate open. No pull request, tag, release, upload, or publication was performed.
 
 ## Phase outputs
 
@@ -54,4 +54,4 @@ The exact runtime logs also contain external Pixelmon tag and map diagnostics, a
 
 Every disposable workspace created for the current task was removed after its final log hashes were captured. Owned server processes were stopped or bounded by timeout, process absence was checked, and no generated runtime, world, log, probe, external jar, or private data was added to the repository. The repository branch is clean after the packet commit.
 
-Phase 000 may transition only after the laptop client smoke gate is completed, the complete diff and documentation links are rechecked, and the phase branch follows the required integration workflow. The next contiguous phase is `CORE-PHASE-001`; no Phase 001 implementation is started by this packet.
+Phase 000 may transition only after the laptop client smoke gate is completed, the early issue read timing deviation is reconciled against the active plan, the complete diff and documentation links are rechecked, and the phase branch follows the required integration workflow. The next contiguous phase is `CORE-PHASE-001`; no Phase 001 implementation is started by this packet.
