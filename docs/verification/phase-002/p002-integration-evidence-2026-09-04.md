@@ -39,6 +39,8 @@ All 16 required tests passed :)
 
 The dedicated server stopped and saved its disposable world after the run. The repository test configuration was restored to `provider = "internal"`.
 
+The same headless GameTest command was rerun with the pre existing Pixelmon jar moved out of the dev runtime. The standard NeoForge environment loaded FutureShops, skipped the optional Pixelmon target, reached `FutureShops server starting`, and passed all sixteen required tests. The exact Pixelmon jar was restored with SHA 256 `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2`. The sanitized standard log SHA 256 was `c74c045014309e3acc4131c02880a745b9c894e7e553435aed5544becaf5d751`.
+
 ## Vault bridge and backend proof
 
 `EconomyProviderRegistry.registerVault` is the only public registration boundary for the reserved `vault` provider. `VaultTransactionProofTest` registers a separate test provider through that boundary and exercises a durable backend fixture outside the production jar. The fixture writes the new balance and the provider receipt to one forced temporary file, then uses an atomic replacement. A reopened backend confirms the receipt and balance. An injected interruption before replacement leaves the previous balance and no receipt visible, and a retry commits once with the same request identity.
