@@ -92,6 +92,8 @@ The first current artifact process registered `vault`, resolved the provider, co
 
 The current hybrid process emitted only unrelated Youer warnings for missing Create classes. No FutureShops error or exception occurred. The disposable copied runtime, world, provider database, and active lock were removed after both logs and installed hashes were recorded. The unmodified legacy bridge remains a safe refusal without the separate request aware proof registrant and durable backend.
 
+The current proof registrant was then rerun in two fresh processes in a new exact hybrid copy. The proof registrant SHA 256 remained `ab578f60f8302f304000ee6d0b401ec36bbb93589357ac6dce3f75cc7539bb30`. The first process registered `vault`, completed every provider and coordinator route, reached `Done`, and stopped cleanly. Its complete log SHA 256 is `a01c6428cba7b62e83643058af0a1841acd07014fc4c1691f7133a0f44d96ff4`. The second process reused the same world and provider database, reported `claim_state_initial=RESOLVED` and `transfer=REPLAYED`, retained balance `89`, reached `Done`, and stopped cleanly. Its complete log SHA 256 is `71c75f6f5fc5d9390e4f67547c8aa37e69cc38866fa4dcbd6f83a975733ca68c`. The runtime was removed after both hashes were recorded. The only observed errors were external stack warnings, including five `Not a map: END` messages during restart and one transient Yggdrasil public key connection failure. No FutureShops error or exception occurred.
+
 ## Boundary proof
 
 `VaultTransactionProofTest` runs against the same public provider contract and SQLite backend. It proves:

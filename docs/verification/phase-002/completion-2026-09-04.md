@@ -32,6 +32,8 @@ The separate SQLite proof backend and NeoForge registrant are now built outside 
 
 The current production artifact was rerun in that exact hybrid stack in two fresh processes. The first log SHA 256 is `da65861f3fe7d3b0fb53cf00bc832884339106cc494b19a67a58398f77f4bca6` and the restart log SHA 256 is `2e1a5d09df895135d4683e6832fce0e6230feb0734bf3ca00c57c758f7298d86`. Both processes reached `Done` and stopped after the proof routes. The restart reported `transfer=REPLAYED` and balance `89` without a second effect. The current artifact and proof registrant hashes are recorded in [exact hybrid Vault proof](vault-hybrid-proof-2026-09-05.md).
 
+The current proof registrant was revalidated again in two fresh exact hybrid processes after the surface fixture update. The registrant SHA 256 is `ab578f60f8302f304000ee6d0b401ec36bbb93589357ac6dce3f75cc7539bb30`. The first log SHA 256 is `a01c6428cba7b62e83643058af0a1841acd07014fc4c1691f7133a0f44d96ff4` and the restart log SHA 256 is `71c75f6f5fc5d9390e4f67547c8aa37e69cc38866fa4dcbd6f83a975733ca68c`. Both processes reached `Done` and stopped cleanly. The restart reported `claim_state_initial=RESOLVED`, `transfer=REPLAYED`, and balance `89` without a second effect. The exact logs and cleanup record are in [exact hybrid Vault proof](vault-hybrid-proof-2026-09-05.md).
+
 ## Remaining gates
 
 The current unmodified PixelmonEconomyBridge and FinalEconomy stack remains safely refused for `vault` mutation because it has no FutureShops request identity, durable provider receipt, lookup, or idempotent retry contract. The separate proof fixture passes the public registration and one transaction receipt contract, but it is not a claim about that legacy stack.
