@@ -9,12 +9,14 @@ Stop the server before taking or restoring a backup. Keep one complete, matching
 1. The complete world directory, including `world/data` and every dimension save.
 2. The complete `config/futureshops` directory and the server configuration files that select the loader and mod set.
 3. The exact FutureShops jar, Minecraft version, NeoForge version, GeckoLib version, and any other required mod jars.
-4. The complete data directory for the selected external provider, bridge, or economy plugin. For Pixelmon, include the exact Pixelmon configuration and world data used by its economy implementation.
+4. The complete data directory for the selected external provider, bridge, or economy plugin. For Pixelmon, include the exact Pixelmon configuration and world data used by its economy implementation. For DanConomy, keep `world/data/danconomy_ledger.dat` in the same world snapshot as the FutureShops journal because its selected balance and provider receipts share that file.
 5. A manifest containing the snapshot timestamp, source commit or jar identity, provider identifier, loader versions, and SHA 256 and SHA 512 hashes for every copied file.
 
 FutureShops recovery records are stored in the world SavedData files and the receipt audit directory at `world/data/futureshops/receipts`. They include the transaction journal, receipt audit records and clean marker, custody, claims, internal receipts, player shop barter escrow, player shop sale escrow, and player shop settlements. Do not omit the receipt directory or copy only selected records.
 
 Do not put credentials, tokens, private player exports, raw provider logs, or local secret files in the manifest or repository evidence. Keep those items in the operator's protected backup store.
+
+Do not copy, edit, or restore `danconomy_ledger.dat` independently from the world snapshot. A DanConomy receipt is authoritative only for the exact request tuple and balance image in which it was committed. A `PIXELMON_MIRRORED` DanConomy currency is not a supported FutureShops provider path and must be handled through the native Pixelmon provider instead.
 
 ## Create a snapshot
 

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "planId": "PLAN-MASTER",
-  "planSetSha256": "95d05512287cc72e460cef6f81f150f4a3ac7ddc40e3c2dccf5c4c8391f5b0a1",
+  "planSetSha256": "d5f59d67b412e835375d6014a1cbbb9e047c1f5059171dc7bea4f010a33bac8a",
   "planningSubject": {
     "name": "FutureShops 2.3.0 strict external economy safety for Minecraft 1.21.1 NeoForge, with capability gated Pixelmon 9.4.0 and Vault bridge interoperability",
     "requestedArtifact": "authoritative_plan",
@@ -90,6 +90,20 @@
         "subject": "opt in debug mode and headless first evidence procedure",
         "source": "current owner request and accepted debugging workflow",
         "use": "binding debug toggle, structured log fields, sanitization, server log and GameTest priority, and laptop client escalation rules"
+      },
+      {
+        "id": "SRC-013",
+        "role": "owner_request",
+        "subject": "first party interoperability boundary and DanConomy support",
+        "source": "current owner request",
+        "use": "binding authority to inspect and run unmodified external artifacts for interoperability, ship only original FutureShops adapter and mixin code, and add exact DanConomy support without copying, modifying, repackaging, or redistributing third party code or jars"
+      },
+      {
+        "id": "SRC-014",
+        "role": "reference",
+        "subject": "exact DanConomy 1.2.1 artifact, public source, and ARR terms",
+        "source": "[Modrinth version 1.2.1](https://modrinth.com/mod/danconomy/version/1.2.1), [source revision `63aecdac12e437ae1f3de2801cdea0105b3d7e06`](https://github.com/Dandelion1608/danconomy/tree/63aecdac12e437ae1f3de2801cdea0105b3d7e06), and [ARR terms](https://github.com/Dandelion1608/danconomy/blob/63aecdac12e437ae1f3de2801cdea0105b3d7e06/ARR_LICENSE.txt)",
+        "use": "exact optional provider identity, public interface and persistence inspection, no-copy boundary, and runtime verification"
       }
     ]
   },
@@ -475,6 +489,7 @@
         "DEC-018",
         "DEC-019",
         "DEC-020",
+        "DEC-022",
         "EXT-001",
         "EXT-002",
         "EXT-003",
@@ -488,8 +503,8 @@
     },
     {
       "id": "CORE-REQ-018",
-      "summary": "separate Vault bridge interoperability with in-phase backend transaction proof",
-      "source": "SRC-001 and SRC-007",
+      "summary": "DanConomy and separate Vault interoperability",
+      "source": "SRC-001 and SRC-007 and SRC-013",
       "owner": "`CORE-PHASE-002`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-003`",
       "dependencies": [
@@ -502,11 +517,13 @@
         "DEC-017",
         "DEC-019",
         "DEC-020",
+        "DEC-022",
         "EXT-004",
         "EXT-005",
         "EXT-006",
         "EXT-008",
-        "EXT-009"
+        "EXT-009",
+        "EXT-010"
       ],
       "lifecycleStage": "change",
       "productionVerification": "nondestructive",
@@ -515,8 +532,8 @@
     },
     {
       "id": "CORE-REQ-019",
-      "summary": "complete production validation",
-      "source": "SRC-001 and SRC-007",
+      "summary": "complete production validation including exact DanConomy",
+      "source": "SRC-001 and SRC-007 and SRC-013",
       "owner": "`CORE-PHASE-003`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`",
       "dependencies": [
@@ -539,12 +556,14 @@
         "CORE-REQ-017",
         "CORE-REQ-018",
         "DEC-021",
+        "DEC-022",
         "EXT-001",
         "EXT-002",
         "EXT-003",
         "EXT-004",
         "EXT-005",
-        "EXT-006"
+        "EXT-006",
+        "EXT-010"
       ],
       "lifecycleStage": "post_change",
       "productionVerification": "nondestructive",
@@ -553,8 +572,8 @@
     },
     {
       "id": "CORE-REQ-020",
-      "summary": "user, API, maintainer, and operator documentation",
-      "source": "SRC-001 and SRC-007",
+      "summary": "user, API, maintainer, operator, and DanConomy documentation",
+      "source": "SRC-001 and SRC-007 and SRC-013",
       "owner": "`CORE-PHASE-003`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`",
       "dependencies": [
@@ -577,7 +596,9 @@
         "CORE-REQ-017",
         "CORE-REQ-018",
         "CORE-REQ-019",
-        "DEC-021"
+        "DEC-021",
+        "DEC-022",
+        "EXT-010"
       ],
       "lifecycleStage": "post_change",
       "productionVerification": "nondestructive",
@@ -586,15 +607,17 @@
     },
     {
       "id": "CORE-REQ-021",
-      "summary": "validated unpublished artifact",
-      "source": "SRC-001 and SRC-007",
+      "summary": "validated unpublished artifact with original DanConomy adapter and mixin",
+      "source": "SRC-001 and SRC-007 and SRC-013",
       "owner": "`CORE-PHASE-003`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`",
       "dependencies": [
         "CORE-REQ-019",
         "CORE-REQ-020",
         "DEC-016",
-        "DEC-021"
+        "DEC-021",
+        "DEC-022",
+        "EXT-010"
       ],
       "lifecycleStage": "post_change",
       "productionVerification": "nondestructive",
@@ -603,8 +626,8 @@
     },
     {
       "id": "CORE-REQ-022",
-      "summary": "actual 3.0.0 continuation issue 66",
-      "source": "SRC-001 and SRC-007",
+      "summary": "actual 3.0.0 continuation issue 66 with DanConomy guidance",
+      "source": "SRC-001 and SRC-007 and SRC-013",
       "owner": "`CORE-PHASE-003`",
       "contributors": "`CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`",
       "dependencies": [
@@ -612,7 +635,9 @@
         "CORE-REQ-021",
         "DEC-015",
         "DEC-016",
-        "EXT-007"
+        "DEC-022",
+        "EXT-007",
+        "EXT-010"
       ],
       "lifecycleStage": "post_change",
       "productionVerification": "nondestructive",
@@ -623,14 +648,14 @@
   "optionalFutureScope": [
     {
       "id": "FUT-001",
-      "summary": "Add this strict external economy design and a transaction-aware Vault bridge or backend to the existing 3.0.0 beta on Forge 1.20.1",
-      "source": "SRC-001 and SRC-007",
+      "summary": "Add this strict external economy design and a transaction-aware Vault bridge or backend to the existing 3.0.0 beta on Forge 1.20.1, with the DanConomy request-receipt architecture but no unsupported DanConomy 1.2.1 compatibility claim",
+      "source": "SRC-001 and SRC-007 and SRC-013",
       "disposition": "excluded"
     },
     {
       "id": "FUT-002",
-      "summary": "Carry the same native Pixelmon and transaction-aware Vault design into a future 3.0.0 Minecraft 1.21.1 port",
-      "source": "SRC-001 and SRC-007",
+      "summary": "Carry the same native Pixelmon, exact DanConomy, and transaction-aware Vault design into a future 3.0.0 Minecraft 1.21.1 port",
+      "source": "SRC-001 and SRC-007 and SRC-013",
       "disposition": "excluded"
     },
     {
@@ -641,8 +666,8 @@
     },
     {
       "id": "FUT-004",
-      "summary": "Additional external economy adapters",
-      "source": "SRC-001 and SRC-007",
+      "summary": "Additional external economy adapters beyond internal, Pixelmon 9.4.0, DanConomy 1.2.1, and separately validated Vault interoperability",
+      "source": "SRC-001 and SRC-007 and SRC-013",
       "disposition": "excluded"
     }
   ],
@@ -659,8 +684,8 @@
     },
     {
       "id": "NG-003",
-      "summary": "Shipping Pixelmon, Bukkit, Vault, an economy plugin, a hybrid server, a Vault bridge or backend, or their APIs inside FutureShops. A narrow optional mixin targeting the exact Pixelmon 9.4.0 native account is allowed, but no external runtime bytes are bundled.",
-      "source": "SRC-001"
+      "summary": "Shipping Pixelmon, DanConomy, Bukkit, Vault, an economy plugin, a hybrid server, a Vault bridge or backend, or their source, bytecode, assets, or APIs inside FutureShops. Narrow original FutureShops mixins may target exact Pixelmon 9.4.0 and DanConomy 1.2.1 classes, but no external runtime bytes are copied, altered, rebuilt, repackaged, or bundled.",
+      "source": "SRC-001 and SRC-013"
     },
     {
       "id": "NG-004",
@@ -735,8 +760,8 @@
     {
       "id": "DEC-004",
       "question": "Integration boundary",
-      "selectedChoice": "A public NeoForge provider API, bundled internal and optional Pixelmon adapter with a narrow native-account mixin, and a separate bridge registering `vault`.",
-      "rationale": "The core API supports exact integrations without embedding unrelated platforms. The Pixelmon mixin is limited to the reviewed native account, while Vault and its backend remain outside the FutureShops jar.",
+      "selectedChoice": "A public NeoForge provider API, bundled internal, optional Pixelmon and DanConomy adapters with narrow exact-version mixins, and a separate bridge registering `vault`.",
+      "rationale": "The core API supports exact integrations without embedding unrelated platforms. Pixelmon and DanConomy mixins are limited to reviewed exact targets and live only in FutureShops, while every external jar and the Vault bridge and backend remain separate.",
       "affectedRequirements": [
         "CORE-REQ-002",
         "CORE-REQ-003",
@@ -948,8 +973,8 @@
     },
     {
       "id": "DEC-020",
-      "question": "Standing Minecraft EULA authorization",
-      "selectedChoice": "Apply the owner's standing authorization to set and read back `eula=true` in every requested disposable Minecraft development and verification runtime. Do not request another consent phrase or treat a missing file or `eula=false` as missing consent. Review any separate third party license or development-use condition under EXT-009.",
+      "question": "Standing disposable-runtime Minecraft EULA authorization",
+      "selectedChoice": "Apply the owner's standing authorization to set and read back `eula=true` in every requested disposable Minecraft development and verification runtime. Do not request another consent phrase or treat a missing file or `eula=false` as missing consent. Apply DEC-022 and resolved EXT-009 to bounded third party inspection, compile-only use, ordinary runtime installation, and original FutureShops adapter and mixin work.",
       "rationale": "Minecraft EULA acceptance is already authorized. It does not authorize unrelated licenses, account applications, redistribution, purchases, production mutations, or public exposure.",
       "affectedRequirements": [
         "CORE-REQ-017",
@@ -973,6 +998,24 @@
         "CORE-REQ-021"
       ],
       "supersedes": []
+    },
+    {
+      "id": "DEC-022",
+      "question": "First party interoperability and DanConomy boundary",
+      "selectedChoice": "FutureShops may inspect and decompile exact lawfully obtained Pixelmon, DanConomy, Vault, bridge, and backend artifacts for interoperability research, use unmodified exact artifacts as compile-only or runtime dependencies, and ship original FutureShops adapter and mixin code that targets their public or inspected interfaces. FutureShops must not copy third party implementation code or assets, alter or rebuild a third party jar, bundle or redistribute third party bytes, or represent third party work as FutureShops. Add exact DanConomy 1.2.1 support as provider `danconomy` through a FutureShops-owned optional adapter and request-aware saved-data mixin. ARR status alone is not an external blocker for this bounded integration work.",
+      "rationale": "The integration artifact remains `futureshops.jar`. Pixelmon, DanConomy, Vault, and bridge or backend jars remain unmodified and separately installed. DanConomy's public repository and exact release expose a ledger boundary that can be extended at runtime by original FutureShops code without copying or redistributing DanConomy. This records the owner's project and risk decision and does not grant rights for operations outside the stated boundary.",
+      "affectedRequirements": [
+        "CORE-REQ-001",
+        "CORE-REQ-002",
+        "CORE-REQ-015",
+        "CORE-REQ-017",
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-020",
+        "CORE-REQ-021",
+        "CORE-REQ-022"
+      ],
+      "supersedes": []
     }
   ],
   "externalPrerequisites": [
@@ -991,7 +1034,7 @@
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "Acquisition, hash, archive, API inspection, interface injection metadata review, and an isolated Java 21 compile probe passed for the exact universal jar. Use it as the pinned input for Phase 002; review runtime mixin and other third party operations separately under EXT-009."
+        "Acquisition, hash, archive, API inspection, interface injection metadata review, and the isolated compile probe passed for the exact universal jar. Use it as the pinned input for Phase 002 within DEC-022."
       ],
       "artifact_evidence": [
         "exact_version",
@@ -1078,7 +1121,7 @@
       "authorization": "not_required",
       "blocked_plan_approved": true,
       "required_evidence": [
-        "The exact Pixelmon 9.4.0 hybrid stack with Vault and its economy components is pinned, hashed, launched, and recorded. Third party terms remain under EXT-009, and the separate one transaction receipt proof remains Phase 002 work. Legacy backend refusal and proof backend success are separate results."
+        "The exact Pixelmon 9.4.0 hybrid stack with Vault and its economy components is pinned, hashed, launched, and recorded. The separate one-transaction receipt proof remains Phase 002 work. Legacy backend refusal and proof-backend success are separate results."
       ]
     },
     {
@@ -1143,9 +1186,9 @@
     {
       "id": "EXT-009",
       "mandatory_for_endpoint": true,
-      "kind": "other",
-      "blocked_plan_approved": true,
-      "name": "Third party artifact and development-use terms review",
+      "kind": "authorization",
+      "blocked_plan_approved": false,
+      "name": "Owner-approved first party interoperability boundary",
       "affected_requirements": [
         "CORE-REQ-015",
         "CORE-REQ-017",
@@ -1153,10 +1196,48 @@
         "CORE-REQ-019",
         "CORE-REQ-021"
       ],
-      "availability": "unknown",
-      "authorization": "not_required",
+      "availability": "available",
+      "authorization": "authorized",
+      "scope_binding": [
+        "runbook_digest",
+        "artifact_identities",
+        "systems",
+        "operations",
+        "operators",
+        "time_window",
+        "rollback"
+      ],
       "required_evidence": [
-        "Review the exact upstream terms for download, private compilation, runtime mixins, execution, modification, and redistribution separately. Use documented permitted routes; prepare a precise owner-delivered developer inquiry only when a required right or authenticated input remains unresolved after public checks."
+        "Apply DEC-022. Inspect or decompile only lawfully obtained exact artifacts for interoperability, compile and test against unmodified artifacts, run them as ordinary dependencies, and ship only original FutureShops adapter and mixin code. Do not copy external code or assets, alter or rebuild external jars, bundle or redistribute external bytes, or extend this authorization to another operation. ARR status alone does not block work inside this boundary."
+      ]
+    },
+    {
+      "id": "EXT-010",
+      "mandatory_for_endpoint": true,
+      "kind": "artifact",
+      "blocked_plan_approved": false,
+      "name": "Exact DanConomy 1.2.1 runtime and public source",
+      "affected_requirements": [
+        "CORE-REQ-015",
+        "CORE-REQ-018",
+        "CORE-REQ-019",
+        "CORE-REQ-020",
+        "CORE-REQ-021",
+        "CORE-REQ-022"
+      ],
+      "availability": "available",
+      "authorization": "authorized",
+      "required_evidence": [
+        "Use Modrinth version `9rRHHMnY`, artifact `danconomy-1.2.1.jar`, size `161611`, SHA-256 `61d3eb69a3a235929ac2376d151130e61ea4fe65c2f84990618c79e27e954b72`, SHA-512 `865aba88f26d1a78ec92b4981f9a9b5af701a5f62cb38904d9439138f7a95ac740ce80d6e717b95169e4df6e07bac3893a90ae78de8565e9c168c8b0190713f0`, and public source revision `63aecdac12e437ae1f3de2801cdea0105b3d7e06` for exact inspection, compile-only integration, and disposable runtime proof under DEC-022. Keep DanConomy unmodified and separately installed."
+      ],
+      "artifact_evidence": [
+        "exact_version",
+        "authoritative_source",
+        "sha256",
+        "sha512",
+        "compatibility",
+        "license_provenance",
+        "security_review"
       ]
     }
   ],
@@ -1179,6 +1260,7 @@
         "DEC-019",
         "DEC-020",
         "DEC-021",
+        "DEC-022",
         "EXT-001",
         "EXT-002",
         "EXT-003",
@@ -1186,7 +1268,8 @@
         "EXT-005",
         "EXT-006",
         "EXT-008",
-        "EXT-009"
+        "EXT-009",
+        "EXT-010"
       ],
       "canonicalRequirements": [
         "CORE-REQ-001",
@@ -1252,6 +1335,7 @@
         "DEC-019",
         "DEC-020",
         "DEC-021",
+        "DEC-022",
         "EXT-001",
         "EXT-002",
         "EXT-003",
@@ -1259,7 +1343,8 @@
         "EXT-005",
         "EXT-006",
         "EXT-008",
-        "EXT-009"
+        "EXT-009",
+        "EXT-010"
       ],
       "canonicalRequirements": [
         "CORE-REQ-017",
@@ -1296,6 +1381,7 @@
         "DEC-019",
         "DEC-020",
         "DEC-021",
+        "DEC-022",
         "EXT-001",
         "EXT-002",
         "EXT-003",
@@ -1304,7 +1390,8 @@
         "EXT-006",
         "EXT-007",
         "EXT-008",
-        "EXT-009"
+        "EXT-009",
+        "EXT-010"
       ],
       "canonicalRequirements": [
         "CORE-REQ-019",
@@ -1314,15 +1401,15 @@
       ]
     }
   ],
-  "completionEndpoint": "One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior, a native exact Pixelmon 9.4.0 `PlayerPartyStorage` transaction-mixin path, and separate `vault` registration with mutation enabled only when a bridge and backend provide one durable balance and receipt transaction, otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.",
+  "completionEndpoint": "One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior, a native exact Pixelmon 9.4.0 `PlayerPartyStorage` transaction-mixin path, an exact DanConomy 1.2.1 ledger saved-data transaction-mixin path, and separate `vault` registration with mutation enabled only when a bridge and backend provide one durable balance and receipt transaction, otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.",
   "goalCreator": {
-    "mandatoryBoundary": "CORE-REQ-001 through CORE-REQ-022 across CORE-PHASE-000 through CORE-PHASE-003, including the native Pixelmon transaction-mixin path, separate Vault bridge boundary, exact external integration evidence, the unpublished artifact, and the two-stage open issue lifecycle.",
+    "mandatoryBoundary": "CORE-REQ-001 through CORE-REQ-022 across CORE-PHASE-000 through CORE-PHASE-003, including native Pixelmon and DanConomy transaction-mixin paths, the separate Vault bridge boundary, exact external integration evidence, the unpublished artifact, and the two-stage open issue lifecycle.",
     "optionalFutureDisposition": "excluded",
-    "lockedOwnerDecisions": "DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018, DEC-019, DEC-020, DEC-021",
+    "lockedOwnerDecisions": "DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018, DEC-019, DEC-020, DEC-021, DEC-022",
     "activePhase": "CORE-PHASE-000",
     "nextExecutableAction": "Execute P000-TASK-001 to reconfirm repository identity, toolchain, product metadata, economy ownership, and the complete provider call graph before implementation.",
     "knownFailingChecks": "none at validated plan handoff; execution checks have not yet run.",
-    "knownExternalBlockers": "Third party artifact and development-use terms review under EXT-009 remains unresolved. Exact Pixelmon runtime and development inputs, disposable Pixelmon runtime, bridge candidate, reviewed hybrid stack, and disposable hybrid environment are available under EXT-001, EXT-002, EXT-004, EXT-005, and EXT-006. P002-TASK-013 and P002-TASK-014 record and consume those inputs; P002-TASK-006 obtains or builds the separate bridge and durable backend proof. Native mixin implementation, proof construction, and provisioning are executable work, not prerequisites to start themselves. EXT-008 is already authorized; set and verify eula=true under DEC-020 without another consent request.",
-    "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, freeze and exercise the DEC-021 debug command and evidence contract, classify EXT-001 through EXT-006 with exact evidence, inspect the Pixelmon 9.4.0 classes and save path, implement and prove the native PlayerPartyStorage receipt, deduplication, account classification, and durable-save path, execute the Phase 002 Vault bridge or backend transaction proof, apply EXT-008 and DEC-020 before launch and review exact third party operations under EXT-009, obtain and compile the public Pixelmon inputs, build the separate bridge and durable backend proof when needed, pass journal, escrow, draining, recovery, frozen, capability, deterministic, headless GameTest, server-log, and runtime matrices, use a laptop client only for a justified client-only gate, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation."
+    "knownExternalBlockers": "none",
+    "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, freeze and exercise the DEC-021 debug command and evidence contract, classify EXT-001 through EXT-006 and EXT-010 with exact evidence, apply the resolved DEC-022 and EXT-009 boundary, inspect the Pixelmon 9.4.0 classes and save path, implement and prove the native PlayerPartyStorage receipt, deduplication, account classification, and durable-save path, inspect exact DanConomy 1.2.1 source and bytecode, implement and prove ledger balance and receipt persistence in one `danconomy_ledger` image, durable save, receipt lookup, retry deduplication, conflicting-request rejection, ordinary-call preservation, and mirrored-currency refusal, execute the Phase 002 Vault bridge or backend transaction proof, apply EXT-008 and DEC-020 before launch, build the separate bridge and durable backend proof when needed, pass journal, escrow, draining, recovery, frozen, capability, deterministic, headless GameTest, server-log, and runtime matrices, use a laptop client only for a justified client-only gate, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation."
   }
 }

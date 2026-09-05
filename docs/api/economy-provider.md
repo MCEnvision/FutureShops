@@ -4,7 +4,7 @@ The public provider contract is in `com.enviouse.futureshopsp.api.economy`. It i
 
 ## Compatibility
 
-`EconomyApi.COMPATIBILITY_VERSION` is `1`. A provider must report the same compatibility version before it can be registered. Provider identifiers are lowercase resource identifiers between two and sixty four characters. The identifiers `internal` and `vault` are reserved by FutureShops.
+`EconomyApi.COMPATIBILITY_VERSION` is `1`. A provider must report the same compatibility version before it can be registered. Provider identifiers are lowercase resource identifiers between two and sixty four characters. The identifiers `internal`, `pixelmon`, `danconomy`, and `vault` are reserved by FutureShops.
 
 ## Provider contract
 
@@ -25,7 +25,7 @@ Capabilities are not inferred. A balance query does not imply a mutation, and a 
 
 ## Registration and selection
 
-Optional integrations call `EconomyProviderRegistry.register` before the registry freezes. Registration is deterministic and rejects invalid identifiers, duplicate identifiers, incompatible arguments, and late calls. `registerVault` is the only public path for the reserved `vault` identifier. The registry exposes a sorted immutable snapshot and resolves each factory once for a server lifecycle. A factory that throws, reports another identifier, or reports an unsupported compatibility version is unavailable or incompatible.
+Optional integrations call `EconomyProviderRegistry.register` before the registry freezes. Registration is deterministic and rejects invalid identifiers, duplicate identifiers, incompatible arguments, and late calls. The dedicated `registerPixelmon`, `registerDanconomy`, and `registerVault` methods are the only paths for their reserved identifiers. The registry exposes a sorted immutable snapshot and resolves each factory once for a server lifecycle. A factory that throws, reports another identifier, or reports an unsupported compatibility version is unavailable or incompatible.
 
 The server configuration key is `economy.provider`. An absent value selects `internal`. A reload stages a new identifier and reports that a restart is required. It never changes the active identifier during the current server lifecycle. Unknown or malformed identifiers remain selected for diagnostics and do not silently fall back to `internal`.
 
@@ -43,6 +43,8 @@ Balances and amounts use signed `long` integer minor units. `MutationRequest` re
 
 `MutationReceipt` contains the original request identity, mutation kind, amount, provider operation identity, and an optional resulting balance. The optional balance is evidence only and is never a FutureShops shadow ledger.
 
+`lookup(MutationRequest)` is the actor bound recovery entry point. Its default implementation delegates to the original `lookup(RequestId)` method so existing compatibility version `1` providers remain source compatible. Providers whose authoritative account lookup requires the actor must override the request form and verify the full immutable request tuple before returning a receipt.
+
 ## Lifecycle
 
 The provider readiness snapshot exposes `UNRESOLVED`, `READY`, `DRAINING`, `MISSING`, `INCOMPATIBLE`, `FAILED`, `RECOVERING`, `FROZEN`, and `STOPPED`. FutureShops admits monetary operations only when the selected provider is ready and the operation's required capabilities are proven. Registration and selection are frozen before monetary readiness. Unclean startup and unknown outcomes require recovery, and unknown outcomes freeze external mutation until an operator resolves them with evidence.
@@ -59,6 +61,10 @@ Item custody and offline proceeds use separate versioned SavedData indexes. `fut
 
 `BalanceManager` loads the journal, custody, claims, barter escrow, sale escrow, and settlement indexes before provider readiness, marks them unclean before admission, and includes their integrity and incomplete record state in lifecycle resolution. Shutdown drains the coordinator, flushes all indexes, and writes each clean marker only after the complete flush gate passes. Internal fixtures use in memory implementations only when no world exists, such as unit test servers.
 
-Existing internal provider calls are routed through this boundary. The internal adapter supplies the same typed receipt and retry contract, while unresolved external selections stay unavailable. The bundled Pixelmon 9.4.0 adapter supplies authoritative balance queries and non mutating funds prechecks through the exact `BankAccountProxy` API. Its capability descriptor intentionally disables withdrawals, deposits, receipt lookup, and idempotent retry. Every mutation result is a typed capability refusal before journal, custody, inventory, claims, analytics, or event effects, because Pixelmon's boolean `add` and `take` methods cannot prove a durable outcome after a crash. The adapter is isolated behind runtime class loading, does not add a Pixelmon dependency, and does not mirror balances. A separately installed Vault bridge remains subject to the same complete capability and recovery proof before it can register or enable mutations.
+Existing internal provider calls are routed through this boundary. The internal adapter supplies the same typed receipt and retry contract, while unresolved external selections stay unavailable. The bundled Pixelmon 9.4.0 adapter supplies authoritative queries and prechecks through the exact `BankAccountProxy` API. Its native `PlayerPartyStorage` mixin adds durable request receipts and idempotent retry only when the exact native account is returned. Custom, hybrid, and untransformed accounts remain safely refused.
+
+The bundled DanConomy 1.2.1 adapter accepts only one explicit default currency whose backing type is exactly `LEDGER`. Its mixin stores the new balance and immutable FutureShops receipt in the same `danconomy_ledger` SavedData image, replaces that file durably, reads it back, and acknowledges only after the balance and receipt match. A repeated request returns the existing receipt. A missing default, a `PIXELMON_MIRRORED` currency, malformed receipt data, a conflicting request tuple, a failed durable replacement, or an unverifiable result is unavailable or recovery required with no fallback. The integration is isolated behind runtime class loading and the FutureShops jar does not contain DanConomy classes or its jar.
+
+A separately installed Vault bridge remains subject to the same complete capability and recovery proof before it can register or enable mutations. The test fixture proves that contract with a one transaction SQLite balance and receipt backend, but does not certify the unmodified legacy hybrid stack.
 
 The registry, server selection, transaction journal, custody, claims, and surface routing are implemented in their owning phase. This document describes the stable public contract and must be kept aligned with the API source and compatibility tests.

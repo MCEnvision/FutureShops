@@ -26,8 +26,10 @@ class EconomyProviderApiTest {
         assertFalse(EconomyApi.isValidProviderId("p"));
         assertFalse(EconomyApi.isValidProviderId("provider-name"));
         assertTrue(EconomyApi.isReservedProviderId(EconomyApi.INTERNAL_PROVIDER_ID));
+        assertTrue(EconomyApi.isReservedProviderId(EconomyApi.PIXELMON_PROVIDER_ID));
+        assertTrue(EconomyApi.isReservedProviderId(EconomyApi.DANCONOMY_PROVIDER_ID));
         assertTrue(EconomyApi.isReservedProviderId(EconomyApi.VAULT_PROVIDER_ID));
-        assertFalse(EconomyApi.isReservedProviderId("pixelmon"));
+        assertFalse(EconomyApi.isReservedProviderId("custom"));
     }
 
     @Test

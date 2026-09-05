@@ -6,6 +6,8 @@ import java.util.Locale;
 public final class EconomyApi {
     public static final int COMPATIBILITY_VERSION = 1;
     public static final String INTERNAL_PROVIDER_ID = "internal";
+    public static final String PIXELMON_PROVIDER_ID = "pixelmon";
+    public static final String DANCONOMY_PROVIDER_ID = "danconomy";
     public static final String VAULT_PROVIDER_ID = "vault";
 
     private EconomyApi() {
@@ -30,6 +32,9 @@ public final class EconomyApi {
     }
 
     public static boolean isReservedProviderId(String providerId) {
-        return INTERNAL_PROVIDER_ID.equals(providerId) || VAULT_PROVIDER_ID.equals(providerId);
+        return INTERNAL_PROVIDER_ID.equals(providerId)
+                || PIXELMON_PROVIDER_ID.equals(providerId)
+                || DANCONOMY_PROVIDER_ID.equals(providerId)
+                || VAULT_PROVIDER_ID.equals(providerId);
     }
 }

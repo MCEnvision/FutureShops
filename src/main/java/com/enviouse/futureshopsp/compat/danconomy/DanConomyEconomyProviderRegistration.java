@@ -1,4 +1,4 @@
-package com.enviouse.futureshopsp.compat.pixelmon;
+package com.enviouse.futureshopsp.compat.danconomy;
 
 import com.enviouse.futureshopsp.api.economy.EconomyApi;
 import com.enviouse.futureshopsp.api.economy.EconomyProviderRegistry;
@@ -7,19 +7,18 @@ import com.enviouse.futureshopsp.api.economy.RegistrationStatus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.ModList;
 
-/** Registers the exact Pixelmon adapter. */
-public final class PixelmonEconomyProviderRegistration {
-    private PixelmonEconomyProviderRegistration() {
+public final class DanConomyEconomyProviderRegistration {
+    private DanConomyEconomyProviderRegistration() {
     }
 
     public static RegistrationResult register() {
         try {
-            if (!ModList.get().isLoaded(PixelmonEconomyProvider.PROVIDER_ID)) {
+            if (!ModList.get().isLoaded(DanConomyEconomyProvider.PROVIDER_ID)) {
                 return new RegistrationResult(RegistrationStatus.INCOMPATIBLE,
-                        PixelmonEconomyProvider.PROVIDER_ID, "pixelmon is not installed");
+                        DanConomyEconomyProvider.PROVIDER_ID, "danconomy is not installed");
             }
             ModContainer container = ModList.get()
-                    .getModContainerById(PixelmonEconomyProvider.PROVIDER_ID)
+                    .getModContainerById(DanConomyEconomyProvider.PROVIDER_ID)
                     .orElse(null);
             String version = container == null || container.getModInfo() == null
                     || container.getModInfo().getVersion() == null
@@ -27,17 +26,17 @@ public final class PixelmonEconomyProviderRegistration {
                     : container.getModInfo().getVersion().toString();
             if (!isSupportedVersion(version)) {
                 return new RegistrationResult(RegistrationStatus.INCOMPATIBLE,
-                        PixelmonEconomyProvider.PROVIDER_ID, "pixelmon version is unsupported");
+                        DanConomyEconomyProvider.PROVIDER_ID, "danconomy version is unsupported");
             }
-            return EconomyProviderRegistry.registerPixelmon(
-                    EconomyApi.COMPATIBILITY_VERSION, context -> new PixelmonEconomyProvider(context.server()));
+            return EconomyProviderRegistry.registerDanconomy(EconomyApi.COMPATIBILITY_VERSION,
+                    context -> new DanConomyEconomyProvider(context.server()));
         } catch (RuntimeException exception) {
             return new RegistrationResult(RegistrationStatus.INCOMPATIBLE,
-                    PixelmonEconomyProvider.PROVIDER_ID, "pixelmon compatibility check failed");
+                    DanConomyEconomyProvider.PROVIDER_ID, "danconomy compatibility check failed");
         }
     }
 
     public static boolean isSupportedVersion(String version) {
-        return PixelmonEconomyProvider.SUPPORTED_VERSION.equals(version);
+        return DanConomyEconomyProvider.SUPPORTED_VERSION.equals(version);
     }
 }

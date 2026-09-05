@@ -39,6 +39,18 @@ class EconomyProviderRegistryTest {
                 EconomyProviderRegistry.register("zeta", 1, context -> provider("zeta")).status());
         assertEquals(RegistrationStatus.RESERVED,
                 EconomyProviderRegistry.register(EconomyApi.INTERNAL_PROVIDER_ID, 1, context -> provider("internal")).status());
+        assertEquals(RegistrationStatus.RESERVED,
+                EconomyProviderRegistry.register(EconomyApi.PIXELMON_PROVIDER_ID, 1,
+                        context -> provider(EconomyApi.PIXELMON_PROVIDER_ID)).status());
+        assertEquals(RegistrationStatus.RESERVED,
+                EconomyProviderRegistry.register(EconomyApi.DANCONOMY_PROVIDER_ID, 1,
+                        context -> provider(EconomyApi.DANCONOMY_PROVIDER_ID)).status());
+        assertEquals(RegistrationStatus.ACCEPTED,
+                EconomyProviderRegistry.registerPixelmon(1,
+                        context -> provider(EconomyApi.PIXELMON_PROVIDER_ID)).status());
+        assertEquals(RegistrationStatus.ACCEPTED,
+                EconomyProviderRegistry.registerDanconomy(1,
+                        context -> provider(EconomyApi.DANCONOMY_PROVIDER_ID)).status());
         assertEquals(RegistrationStatus.ACCEPTED,
                 EconomyProviderRegistry.registerVault(1, context -> provider(EconomyApi.VAULT_PROVIDER_ID)).status());
 

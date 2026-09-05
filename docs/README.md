@@ -15,6 +15,7 @@ FutureShops documentation is organized by topic. The phase verification packet r
 ## Integrations
 
 * [Pixelmon economy integration](integrations/pixelmon-economy.md)
+* [DanConomy economy integration](integrations/danconomy-economy.md)
 
 ## Operations
 
@@ -55,6 +56,8 @@ FutureShops documentation is organized by topic. The phase verification packet r
 * [Phase 002 security review](verification/phase-002/security-2026-09-03.md)
 * [Phase 002 completion packet](verification/phase-002/completion-2026-09-03.md)
 * [Phase 002 receipt audit amendment](verification/phase-002/receipt-audit-2026-09-03.md)
+* [Phase 002 DanConomy target evidence](verification/phase-002/danconomy-target-2026-09-05.md)
+* [Phase 002 DanConomy runtime evidence](verification/phase-002/danconomy-runtime-2026-09-05.md)
 * [Phase 003 final validation](verification/phase-003/final-validation-2026-09-05.md)
 * [Phase 003 requirement trace](verification/phase-003/requirement-trace-2026-09-05.md)
 * [Phase 003 issue 66 readback](verification/phase-003/github-issue-66-2026-09-05.md)

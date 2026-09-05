@@ -15,7 +15,7 @@ This branch targets the following runtime.
 | Parchment | 2024.11.17 |
 | GeckoLib | 4.8.4 |
 
-Client and server should use the same FutureShops build. This `2.3.0` NeoForge candidate is prepared locally and remains unpublished. Phases 000 through 002 are integrated, and phase 003 final validation is in progress. The provider API, deterministic registry, restart only selection contract, checksummed transaction journal, durable receipt audit directory, durable custody and claims, lifecycle gate, clean marker handling, and the exact Pixelmon 9.4.0 adapter are present. Native `PlayerPartyStorage` accounts use the request aware mixin receipt path with retry deduplication and durable saves. Unmodified, custom, and hybrid Pixelmon accounts remain refused. Back up the complete world and configuration before replacing an older installation. The runtime mod identifier and all resource namespaces remain `futureshops`, while the Java package for this port is `com.enviouse.futureshopsp`.
+Client and server should use the same FutureShops build. This `2.3.0` NeoForge candidate is prepared locally and remains unpublished. Phases 000 and 001 are integrated, and the amended Phase 002 exact provider work is in validation. The provider API, deterministic registry, restart only selection contract, checksummed transaction journal, durable receipt audit directory, durable custody and claims, lifecycle gate, clean marker handling, and exact Pixelmon 9.4.0 and DanConomy 1.2.1 adapters are present. Native Pixelmon `PlayerPartyStorage` accounts and exact DanConomy `LEDGER` accounts use request aware mixin receipt paths with retry deduplication and durable saves. Unsupported, unmodified, custom, and mirrored account paths remain refused. Back up the complete world and configuration before replacing an older installation. The runtime mod identifier and all resource namespaces remain `futureshops`, while the Java package for this port is `com.enviouse.futureshopsp`.
 
 ## Installation
 
@@ -25,7 +25,7 @@ Client and server should use the same FutureShops build. This `2.3.0` NeoForge c
 4. Back up the world, player data, and the complete `config/futureshops` directory before upgrading.
 5. Start the game or server once, then review the generated FutureShops configuration and shop catalogs.
 
-The generated `economy.provider` setting defaults to `internal`. Set it to `pixelmon` only with Pixelmon 9.4.0 installed. Native Pixelmon `PlayerPartyStorage` mutation surfaces require the exact transformed account, durable provider receipts, and idempotent retry. Other Pixelmon account types remain unavailable. Provider changes are restart only and do not migrate balances. Transaction transitions are also recorded in the local audit directory at `world/data/futureshops/receipts`; this is FutureShops evidence and does not make an external operation safe to replay. Enable bounded server diagnostics with `/futureshops debug on <module>`, inspect it with `/futureshops debug status`, and disable it with `/futureshops debug off`. Server logs and dedicated GameTests are the primary support evidence. See [Pixelmon economy integration](docs/integrations/pixelmon-economy.md), [the maintainer overview](docs/general/documentation.md), and the [backup and restore runbook](docs/operations/backup-restore.md).
+The generated `economy.provider` setting defaults to `internal`. Set it to `pixelmon` only with Pixelmon 9.4.0 installed. Set it to `danconomy` only with DanConomy 1.2.1 installed, one explicit default currency, and that currency backed by `LEDGER`. A `PIXELMON_MIRRORED` DanConomy currency is intentionally rejected because the native Pixelmon adapter owns that account path. Provider changes are restart only and do not migrate balances. Transaction transitions are also recorded in the local audit directory at `world/data/futureshops/receipts`; this is FutureShops evidence and does not make an unsupported external operation safe to replay. Enable bounded server diagnostics with `/futureshops debug on <module>`, inspect it with `/futureshops debug status`, and disable it with `/futureshops debug off`. Server logs and dedicated GameTests are the primary support evidence. See [Pixelmon economy integration](docs/integrations/pixelmon-economy.md), [DanConomy economy integration](docs/integrations/danconomy-economy.md), [the maintainer overview](docs/general/documentation.md), and the [backup and restore runbook](docs/operations/backup-restore.md).
 
 ## Main features
 
@@ -45,8 +45,8 @@ Use the checked in Gradle Wrapper and Java 21.
 Linux and macOS.
 
 ```text
-./gradlew test
-./gradlew build
+bash ./gradlew test
+bash ./gradlew build
 ```
 
 Windows.
@@ -57,6 +57,8 @@ gradlew.bat build
 ```
 
 Development launch tasks include `runClient`, `runServer`, `runGameTestServer`, and `runData`. Build artifacts are written to `build/libs`.
+
+DanConomy is an optional compile and local runtime verification input. Supply the exact unmodified `1.2.1` jar with `-PdanconomyJar=/path/to/danconomy-1.2.1.jar` when compiling or running its exact compatibility profile. The property adds the verified jar to the development runtime only, the build rejects any other SHA 256, and the production artifact never packages or publishes the dependency.
 
 The implementation and compatibility decisions are documented in [Porting notes](PORTING_NOTES.md). The original migration inventory and risk analysis are in [Port audit](FutureShopsAudit.md).
 

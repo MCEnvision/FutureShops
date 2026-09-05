@@ -41,6 +41,14 @@ public interface EconomyProvider {
     /** Looks up a durable outcome by the original request identity. */
     ProviderResult<MutationReceipt> lookup(RequestId requestId);
 
+    /** Looks up a durable outcome with the persisted account binding when the provider requires it. */
+    default ProviderResult<MutationReceipt> lookup(MutationRequest request) {
+        if (request == null) {
+            return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "mutation request is required");
+        }
+        return lookup(request.requestId());
+    }
+
     /** Retries the same request identity only when the provider proves idempotent retry. */
     ProviderResult<MutationReceipt> retry(MutationRequest request);
 }

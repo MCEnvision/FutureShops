@@ -21,6 +21,7 @@ class DebugDiagnosticsTest {
         assertEquals("debug=off", DebugDiagnostics.statusLine());
         assertFalse(DebugDiagnostics.enabled(DebugModule.PROVIDER));
         assertEquals(DebugModule.PIXELMON, DebugModule.parse(" PIXELMON ").orElseThrow());
+        assertEquals(DebugModule.DANCONOMY, DebugModule.parse(" DANCONOMY ").orElseThrow());
         assertTrue(DebugModule.parse("all").isPresent());
         assertTrue(DebugModule.parse("not-a-module").isEmpty());
     }
@@ -43,6 +44,7 @@ class DebugDiagnosticsTest {
         Path root = projectRoot();
         String command = Files.readString(root.resolve("src/main/java/com/enviouse/futureshopsp/command/DebugCommand.java"));
         String mixin = Files.readString(root.resolve("src/main/resources/futureshops-pixelmon.mixins.json"));
+        String danconomyMixin = Files.readString(root.resolve("src/main/resources/futureshops-danconomy.mixins.json"));
         String mixinSource = Files.readString(root.resolve(
                 "src/main/java/com/enviouse/futureshopsp/mixin/PixelmonPlayerPartyStorageMixin.java"));
         assertTrue(command.contains("literal(\"futureshops\")"));
@@ -56,6 +58,8 @@ class DebugDiagnosticsTest {
         assertTrue(mixinSource.contains("Tag rawEntries = root.get(FUTURESHOPS_RECEIPT_ENTRIES)"));
         assertTrue(mixinSource.contains("if (!(rawEntry instanceof CompoundTag entry))"));
         assertTrue(mixinSource.contains("futureshopsUnknownReceiptRecords.add(rawEntry.copy())"));
+        assertTrue(danconomyMixin.contains("DanConomyLedgerDataMixin"));
+        assertTrue(danconomyMixin.contains("\"required\": false"));
         String diagnostics = Files.readString(root.resolve(
                 "src/main/java/com/enviouse/futureshopsp/server/debug/DebugDiagnostics.java"));
         assertTrue(diagnostics.contains("LoggerFactory.getLogger(CATEGORY)"));
