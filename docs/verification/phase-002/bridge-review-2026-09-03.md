@@ -56,3 +56,5 @@ The public [Youer](https://github.com/MohistMC/Youer) `1.21.1` branch was checke
 ## Reclassification gate
 
 Vault mutation support can be reconsidered only with an exact separately installed bridge that provides a stable request identity, durable receipt lookup, idempotent retry, exact integer conversion, and crash recovery evidence for every enabled route. Phase 003 owns any later issue 66 update and final artifact validation.
+
+The separate first party proof registrant and SQLite backend now satisfy this contract for the tested synthetic account path. Current exact hybrid runs with the production FutureShops artifact confirmed registration, coordinator precheck, withdrawal, lookup, retry, deposit, refund, compensation, custody, claims, transfer, restart replay, and clean shutdown. This proof component remains outside the production jar and does not modify or certify PixelmonEconomyBridge, FinalEconomy, EverNifeCore, Vault, or Youer. The unmodified legacy stack remains safely refused for FutureShops `vault` mutation because its request receipt and durable retry contract is absent.
