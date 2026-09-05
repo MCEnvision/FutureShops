@@ -6,10 +6,10 @@ This record covers the native Pixelmon transaction path, the Vault proof boundar
 
 | Field | Value |
 | --- | --- |
-| Source revision | `5bb0199b355d12b6671a310cf8acd3857c67f77d` |
+| Source revision | `a8523e1e15cf5a4db79812ca6581fba25339ce67` |
 | FutureShops artifact | `build/libs/futureshops-2.3.0.jar` |
-| FutureShops SHA 256 | `f97805026224e435d00ed6478f6d122313bc99d44628fa9033602fd15d36173d` |
-| FutureShops SHA 512 | `e319285ac9069b12c3b12701deba8c92cd430dcf6c9b12e7a038886799f1d924a732d164400992307b70ee64ed06cf4bd74faee8971d15587856b80b4eea42cf` |
+| FutureShops SHA 256 | `ab1284d23159d4e5fddacc7740ad13db433a8c2d37a67ceac7fcde291ee45247` |
+| FutureShops SHA 512 | `972baa653876716a8f2a1dee5340237687710261299d22b7ed329e773ed4dc0e9aa411c74ee947a01abcf90104b888f30ce64cb6aab0dfffa39fd761c949dae4` |
 | Pixelmon artifact | `/tmp/Pixelmon-1.21.1-9.4.0-universal.jar` |
 | Pixelmon SHA 256 | `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2` |
 | Minecraft | `1.21.1` |
@@ -29,7 +29,7 @@ JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash ./gradlew runGameTestServer --
 
 The disposable Gradle GameTest runtime loaded the exact Pixelmon jar and selected `pixelmon` in the test configuration. The source revision passed all twenty required tests. The native tests exercised the live `PlayerPartyStorage` path, cart purchase, `/pay` transfer, server shop sell, admin player shop buy, public withdraw and deposit, refund, compensation, physical money refusal, and direct mutation recovery. The mixin wrote `FutureShopsReceipts` beside Pixelmon's `pixelDollars` data. A replayed request UUID produced one debit, a reopened storage instance returned `CONFIRMED`, and injected unknown compound, non compound entry, and non compound root records returned `RECOVERY_REQUIRED` and remained available for reconciliation.
 
-Sanitized server evidence from the current artifact bound restart run:
+Sanitized server evidence from the earlier artifact bound restart run:
 
 ```text
 FutureShops Pixelmon mixin target com.pixelmonmod.pixelmon.api.storage.PlayerPartyStorage apply true
@@ -118,7 +118,7 @@ Game test server shutting down
 
 The second process log SHA 256 is `7eb49c64fb39d36d8fdc9676b53cb2f88f725d48a5dadc9cf36d5e83a7d1cd66`. Both processes exited with code `0`. The runtime emitted an existing Pixelmon missing spawning tag warning, with no FutureShops exception. The runs stopped cleanly and their temporary runtime, classpath file, worlds, and logs were removed after hashing. These reruns bind the native mixin and all twenty tests to the previous production artifact whose SHA 256 is `b56fd75fc96968eac8c05c50d6ff71be24e2c8472b43ad26fe4208535c2aa145`.
 
-## Current artifact bound rerun on 2026-09-05
+## Historical artifact bound rerun on 2026-09-05
 
 The service loss regression coverage was added after the previous artifact evidence. That earlier exact production artifact was `d7d2e14b192644859a276114508ceb2c5aed8991931aab523b899ffa9d0e4ad3`; its evidence is retained as historical input. The current packaged artifact rerun is recorded below.
 
@@ -126,9 +126,15 @@ The earlier exact run used the `d7d2e14b192644859a276114508ceb2c5aed8991931aab52
 
 The current packaged artifact from source revision `5bb0199b355d12b6671a310cf8acd3857c67f77d` has SHA 256 `f97805026224e435d00ed6478f6d122313bc99d44628fa9033602fd15d36173d` and SHA 512 `e319285ac9069b12c3b12701deba8c92cd430dcf6c9b12e7a038886799f1d924a732d164400992307b70ee64ed06cf4bd74faee8971d15587856b80b4eea42cf`. It was loaded as the mod file in a fresh exact Pixelmon GameTest runtime. The first packaged process passed all twenty tests and recorded a completed receipt with log SHA 256 `581766494f275acde701caf26a5fe0a605004bccb3ce4c83f3099256a5fe4f24`. The second process reused the world, replayed the stable request as `CONFIRMED`, and passed all twenty tests with log SHA 256 `a1ae7dfa69e5fd9b9b0360b70c45dd70de214a6528990f5edfadc3577a8ff4bc`. Both packaged processes exited with code `0`, the mixin target applied, and the disposable runtime was removed after hashing.
 
-This current rerun binds the native mixin, request replay, receipt reload, wrong root recovery, and every routed native surface to the current packaged artifact. The exact standard packaged server also reached `FutureShops common setup complete`, `FutureShops server starting`, and `Done` with Pixelmon absent and `provider = "internal"`. Its sanitized log SHA 256 is `12640336ff4cf3ff399aea0933c106bcedf1f0b43ed98abe869439aa572381aa`.
+This historical rerun binds the native mixin, request replay, receipt reload, wrong root recovery, and every routed native surface to that packaged artifact. The exact standard packaged server also reached `FutureShops common setup complete`, `FutureShops server starting`, and `Done` with Pixelmon absent and `provider = "internal"`. Its sanitized log SHA 256 is `12640336ff4cf3ff399aea0933c106bcedf1f0b43ed98abe869439aa572381aa`.
 
 The coordinator unit suite also covers provider service loss. Loss before intent returns `UNAVAILABLE` with no journal entry or provider mutation. Loss after intent returns `AMBIGUOUS`, freezes lifecycle, records `UNCERTAIN`, and does not fall back to the internal wallet.
+
+## Current artifact bound rerun on 2026-09-05
+
+The current packaged artifact from source revision `a8523e1e15cf5a4db79812ca6581fba25339ce67` has SHA 256 `ab1284d23159d4e5fddacc7740ad13db433a8c2d37a67ceac7fcde291ee45247` and SHA 512 `972baa653876716a8f2a1dee5340237687710261299d22b7ed329e773ed4dc0e9aa411c74ee947a01abcf90104b888f30ce64cb6aab0dfffa39fd761c949dae4`. The exact Pixelmon `9.4.0` GameTest passed all twenty tests with log SHA 256 `5bd44830fc864bd78120c2a9500caad8cc2e1f7c916761241f40267d24e083ad`. A separate two process replay run passed all twenty tests in both processes, with first log SHA 256 `6b4696fb9f9a14954d50c038371cf2be9101a8b3bd29fcf5b21b61befaf80564` and restart log SHA 256 `60b5d3e6873c9285f205b7530e75d7774468977f5d1de6d2a6da1546ed05c3e2`. The mixin target applied in each process and both exited with code `0`.
+
+The same current artifact and separately installed proof registrant passed all twenty four exact NeoForge Vault surface tests. The route diagnostic log SHA 256 is `fb6456f6bc72ea47f8c20b7ea97021d0640aba1a55ade645ef0f79fab6c3a96e`. It confirms server shop sell, player shop buy, cart buy, pay transfer, and physical money refusal with no incomplete custody. Full assertions and the provider database hash are recorded in [exact Vault surface GameTest](vault-surface-gametest-2026-09-05.md).
 
 ## Exact hybrid refusal without proof bridge
 

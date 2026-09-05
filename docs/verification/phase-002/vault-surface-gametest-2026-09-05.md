@@ -10,8 +10,9 @@ This record covers the mutation surface proof for the separately installed Futur
 | Minecraft | `1.21.1` |
 | NeoForge | `21.1.248` |
 | Java | `21.0.11` |
-| FutureShops artifact SHA 256 | `f97805026224e435d00ed6478f6d122313bc99d44628fa9033602fd15d36173d` |
-| FutureShops artifact SHA 512 | `e319285ac9069b12c3b12701deba8c92cd430dcf6c9b12e7a038886799f1d924a732d164400992307b70ee64ed06cf4bd74faee8971d15587856b80b4eea42cf` |
+| FutureShops source commit | `a8523e1e15cf5a4db79812ca6581fba25339ce67` |
+| FutureShops artifact SHA 256 | `ab1284d23159d4e5fddacc7740ad13db433a8c2d37a67ceac7fcde291ee45247` |
+| FutureShops artifact SHA 512 | `972baa653876716a8f2a1dee5340237687710261299d22b7ed329e773ed4dc0e9aa411c74ee947a01abcf90104b888f30ce64cb6aab0dfffa39fd761c949dae4` |
 | Vault proof registrant SHA 256 | `9927e5897ff76b2bdd9eb2fff4bdec37480ba5aaf317ba7529782af2ce84c20d` |
 | Pixelmon `9.4.0` SHA 256 | `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2` |
 | GeckoLib `4.8.4` SHA 256 | `a1b6ce25e8627aa7e748672eedb6b71af68e0993462313649c259f38e42bcac9` |
@@ -40,7 +41,7 @@ FutureShops Vault surface route=player_shop_buy provider=vault status=CONFIRMED 
 FutureShops Vault surface route=cart_buy_and_pay provider=vault cart_status=CONFIRMED cart_amount=500 cart_balance_delta=-500 cart_item_delta=1 pay_status=CONFIRMED pay_amount=25 pay_source_delta=-25 pay_target_delta=25 custody_incomplete=false
 ```
 
-The complete log is `/tmp/futureshops-neoforge-vault-surface-20260905-final.log` with SHA 256 `254c32130090186c5760c0ea3bf4832c4e29fba8bd157714c909f10505df5515`. NeoForge reported `24` registered tests and `All 24 required tests passed`. The process exited with status `0` and the disposable runtime was removed after the log, database hash, and receipt count were recorded. The provider database hash before cleanup was `0666d362122924a228fd0cea0f20a04248d5847ff9e8d8c4a576913e115fe880`. The receipt directory contained `53` files, including the clean marker.
+The complete log for the current artifact is `/tmp/futureshops-vault-surface-packaged-current-20260905.log` with SHA 256 `fb6456f6bc72ea47f8c20b7ea97021d0640aba1a55ade645ef0f79fab6c3a96e`. NeoForge reported `24` registered tests and `All 24 required tests passed`. The process exited with status `0` and the disposable runtime was removed after the log, database hash, and receipt count were recorded. The provider database hash before cleanup was `39474b679087892193a8fbccaff5031d14fd3a7f17ae88806824237996511a04`. The receipt directory contained `53` files, including the clean marker.
 
 Pixelmon emitted one external tag warning for a missing spawning reference. No FutureShops exception or FutureShops error was present. This headless GameTest is primary server evidence. No client run was needed because these assertions cover server-side provider mutation and refusal behavior only.
 
