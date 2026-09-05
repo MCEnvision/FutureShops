@@ -23,7 +23,7 @@ import java.util.UUID;
 
 /** Optional Pixelmon adapter. */
 public final class PixelmonEconomyProvider implements com.enviouse.futureshopsp.api.economy.EconomyProvider {
-    public static final String PROVIDER_ID = "pixelmon";
+    public static final String PROVIDER_ID = EconomyApi.PIXELMON_PROVIDER_ID;
     public static final String SUPPORTED_VERSION = "9.4.0";
     private static final String PROXY_CLASS = "com.pixelmonmod.pixelmon.api.economy.BankAccountProxy";
     private static final String ACCOUNT_CLASS = "com.pixelmonmod.pixelmon.api.economy.BankAccount";
@@ -185,17 +185,26 @@ public final class PixelmonEconomyProvider implements com.enviouse.futureshopsp.
 
     @Override
     public ProviderResult<MutationReceipt> lookup(RequestId requestId) {
-        if (requestId == null || server == null) {
+        if (requestId == null) {
+            return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "receipt request is required");
+        }
+        return ProviderResult.rejected(ProviderError.CAPABILITY_MISSING,
+                "pixelmon receipt lookup requires the persisted account binding");
+    }
+
+    @Override
+    public ProviderResult<MutationReceipt> lookup(MutationRequest request) {
+        if (request == null || server == null) {
             return ProviderResult.rejected(ProviderError.CAPABILITY_MISSING,
                     "pixelmon native receipt lookup is unavailable");
         }
         try {
-            Object account = runtime.account(requestId.value());
+            Object account = runtime.account(request.actor());
             if (!(account instanceof PixelmonNativeEconomyAccess nativeAccount)) {
                 return ProviderResult.rejected(ProviderError.CAPABILITY_MISSING,
                         "pixelmon account is not a native receipt account");
             }
-            return nativeAccount.futureshopsLookup(requestId);
+            return nativeAccount.futureshopsLookup(request.requestId());
         } catch (ReflectiveOperationException | RuntimeException exception) {
             return ProviderResult.unavailable(ProviderError.PROVIDER_EXCEPTION,
                     "pixelmon receipt lookup failed");

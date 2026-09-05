@@ -121,18 +121,35 @@ public final class DebugDiagnostics {
     public static void provider(String provider, String operation, UUID actor, ProviderResult<?> result,
                                 String accountClass, ProviderCapabilities required,
                                 ProviderCapabilities observed, String nextAction) {
-        emit(DebugModule.PROVIDER, sanitize(provider), "provider", operation, null, actor == null ? "none" : pseudonym(actor),
+        provider(provider, operation, null, actor, result, accountClass, required, observed, nextAction);
+    }
+
+    public static void provider(String provider, String operation, RequestId requestId, UUID actor,
+                                ProviderResult<?> result, String accountClass, ProviderCapabilities required,
+                                ProviderCapabilities observed, String nextAction) {
+        String correlatedRequest = requestId == null ? null : requestId.value().toString();
+        emit(DebugModule.PROVIDER, sanitize(provider), "provider", operation, correlatedRequest,
+                actor == null ? "none" : pseudonym(actor),
                 sanitize(accountClass), capabilities(required), capabilities(observed), validation(result),
                 "none", "none", "none", "none", result == null ? "none" : result.status().name(),
                 result == null ? "none" : result.error().name() + ":" + result.diagnostic(), nextAction);
         if ("pixelmon".equals(provider)) {
-            emit(DebugModule.PIXELMON, "pixelmon", "pixelmon", operation, null, actor == null ? "none" : pseudonym(actor),
+            emit(DebugModule.PIXELMON, "pixelmon", "pixelmon", operation, correlatedRequest,
+                    actor == null ? "none" : pseudonym(actor),
                     sanitize(accountClass), capabilities(required), capabilities(observed), validation(result),
                     "none", "none", "none", "none", result == null ? "none" : result.status().name(),
                     result == null ? "none" : result.error().name() + ":" + result.diagnostic(), nextAction);
         }
+        if ("danconomy".equals(provider)) {
+            emit(DebugModule.DANCONOMY, "danconomy", "danconomy", operation, correlatedRequest,
+                    actor == null ? "none" : pseudonym(actor), sanitize(accountClass), capabilities(required),
+                    capabilities(observed), validation(result), "none", "none", "none", "none",
+                    result == null ? "none" : result.status().name(),
+                    result == null ? "none" : result.error().name() + ":" + result.diagnostic(), nextAction);
+        }
         if ("vault".equals(provider)) {
-            emit(DebugModule.VAULT, "vault", "vault", operation, null, actor == null ? "none" : pseudonym(actor),
+            emit(DebugModule.VAULT, "vault", "vault", operation, correlatedRequest,
+                    actor == null ? "none" : pseudonym(actor),
                     sanitize(accountClass), capabilities(required), capabilities(observed), validation(result),
                     "none", "none", "none", "none", result == null ? "none" : result.status().name(),
                     result == null ? "none" : result.error().name() + ":" + result.diagnostic(), nextAction);

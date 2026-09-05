@@ -23,6 +23,35 @@ tasks.named('jar') {
     }
 }
 
+def danconomyJarProperty = providers.gradleProperty('danconomyJar')
+def danconomyJarFile = danconomyJarProperty.map { new File(it).absoluteFile }
+def verificationGameDirectory = providers.gradleProperty('verificationGameDirectory')
+def danconomyCrashPoint = providers.gradleProperty('danconomyCrashPoint')
+def expectedDanconomySha256 = '61d3eb69a3a235929ac2376d151130e61ea4fe65c2f84990618c79e27e954b72'
+def verifyDanconomyCompileOnly = tasks.register('verifyDanconomyCompileOnly') {
+    onlyIf { danconomyJarProperty.isPresent() }
+    inputs.file(danconomyJarFile).optional()
+    inputs.property('expectedSha256', expectedDanconomySha256)
+    doLast {
+        def artifact = danconomyJarFile.get()
+        if (!artifact.isFile()) {
+            throw new GradleException('the danconomy compile only artifact is missing')
+        }
+        def digest = java.security.MessageDigest.getInstance('SHA-256')
+        artifact.withInputStream { input ->
+            byte[] buffer = new byte[8192]
+            int count
+            while ((count = input.read(buffer)) >= 0) {
+                digest.update(buffer, 0, count)
+            }
+        }
+        def actual = digest.digest().collect { String.format('%02x', it) }.join()
+        if (actual != expectedDanconomySha256) {
+            throw new GradleException('the danconomy compile only artifact hash is unsupported')
+        }
+    }
+}
+
 // Builds the separately installed transaction proof registrant, never the production mod jar.
 def vaultProofSources = fileTree('src/test/fixtures/vault-proof/src') {
     include '**/*.java'
@@ -120,6 +149,9 @@ neoForge {
         gameTestServer {
             type = "gameTestServer"
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            if (danconomyCrashPoint.isPresent()) {
+                systemProperty 'futureshops.danconomy.crash.point', danconomyCrashPoint.get()
+            }
         }
 
         data {
@@ -134,6 +166,9 @@ neoForge {
 
         // applies to all the run configs above
         configureEach {
+            if (verificationGameDirectory.isPresent()) {
+                gameDirectory = file(verificationGameDirectory.get())
+            }
             // Recommended logging data for a userdev environment
             // The markers can be added/remove as needed separated by commas.
             // "SCAN": For mods scan.
@@ -172,6 +207,9 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 dependencies {
     // GeckoLib — animated shop block (GeoBlockEntity + renderers).
     implementation 'software.bernie.geckolib:geckolib-neoforge-1.21.1:4.8.4'
+    if (danconomyJarProperty.isPresent()) {
+        compileOnly files(danconomyJarProperty.get())
+    }
 
     // Unit tests (JUnit 5). The Minecraft/NeoForge classpath is provided to the test
     // source set by the neoForge.unitTest block below (MDG wiring).
@@ -203,6 +241,10 @@ dependencies {
     // For more info:
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
+}
+
+tasks.named('compileJava') {
+    dependsOn verifyDanconomyCompileOnly
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.

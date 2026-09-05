@@ -12,6 +12,7 @@ public enum DebugModule {
     RECEIPT("receipt"),
     RECOVERY("recovery"),
     PIXELMON("pixelmon"),
+    DANCONOMY("danconomy"),
     VAULT("vault"),
     NETWORK("network"),
     SURFACE("surface");

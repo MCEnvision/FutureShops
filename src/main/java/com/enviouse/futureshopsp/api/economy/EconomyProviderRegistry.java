@@ -38,14 +38,31 @@ public final class EconomyProviderRegistry {
         return registerValidated(providerId, compatibilityVersion, factory);
     }
 
+    /** Registers the bundled exact Pixelmon adapter under its reserved identifier. */
+    public static RegistrationResult registerPixelmon(
+            int compatibilityVersion, EconomyProviderFactory factory) {
+        return registerReserved(EconomyApi.PIXELMON_PROVIDER_ID, compatibilityVersion, factory);
+    }
+
+    /** Registers the bundled exact DanConomy adapter under its reserved identifier. */
+    public static RegistrationResult registerDanconomy(
+            int compatibilityVersion, EconomyProviderFactory factory) {
+        return registerReserved(EconomyApi.DANCONOMY_PROVIDER_ID, compatibilityVersion, factory);
+    }
+
     /** Registers the separately installed Vault bridge under its reserved identifier. */
     public static RegistrationResult registerVault(
             int compatibilityVersion, EconomyProviderFactory factory) {
+        return registerReserved(EconomyApi.VAULT_PROVIDER_ID, compatibilityVersion, factory);
+    }
+
+    private static RegistrationResult registerReserved(
+            String providerId, int compatibilityVersion, EconomyProviderFactory factory) {
         if (factory == null || compatibilityVersion < 1) {
             return new RegistrationResult(RegistrationStatus.INVALID_ARGUMENT,
-                    EconomyApi.VAULT_PROVIDER_ID, "registration arguments are invalid");
+                    providerId, "registration arguments are invalid");
         }
-        return registerValidated(EconomyApi.VAULT_PROVIDER_ID, compatibilityVersion, factory);
+        return registerValidated(providerId, compatibilityVersion, factory);
     }
 
     private static RegistrationResult registerValidated(

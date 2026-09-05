@@ -390,8 +390,29 @@ class EconomyTransactionCoordinatorTest {
     }
 
     @Test
-    void missingReceiptDuringRecoveryFreezesInsteadOfGuessingRejection() {
+    void missingReceiptDuringRecoveryUsesProvenIdempotentRetry() {
         FixtureProvider provider = new FixtureProvider(ProviderCapabilities.all());
+        EconomyLifecycleController lifecycle = readyLifecycle();
+        InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
+        EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L, MutationKind.WITHDRAW);
+        journal.append(new EconomyJournalRecord(request, EconomyTransactionState.EXTERNAL_PENDING,
+                Optional.empty(), ProviderResultStatus.UNAVAILABLE, ""));
+        lifecycle.markUncleanStart();
+
+        var result = coordinator.recover(request.requestId());
+
+        assertTrue(result.confirmed());
+        assertEquals(ProviderLifecycle.READY, lifecycle.snapshot().lifecycle());
+        assertEquals(EconomyTransactionState.RESOLVED,
+                journal.find(request.requestId()).orElseThrow().state());
+        assertEquals(1, provider.withdrawCalls);
+    }
+
+    @Test
+    void missingReceiptWithoutIdempotentRetryFreezes() {
+        ProviderCapabilities capabilities = new ProviderCapabilities(true, true, true, true, true, false);
+        FixtureProvider provider = new FixtureProvider(capabilities);
         EconomyLifecycleController lifecycle = readyLifecycle();
         InMemoryEconomyTransactionJournal journal = new InMemoryEconomyTransactionJournal();
         EconomyTransactionCoordinator coordinator = new EconomyTransactionCoordinator(provider, lifecycle, journal);
@@ -406,6 +427,7 @@ class EconomyTransactionCoordinatorTest {
         assertEquals(ProviderLifecycle.FROZEN, lifecycle.snapshot().lifecycle());
         assertEquals(EconomyTransactionState.UNCERTAIN,
                 journal.find(request.requestId()).orElseThrow().state());
+        assertEquals(0, provider.withdrawCalls);
     }
 
     @Test

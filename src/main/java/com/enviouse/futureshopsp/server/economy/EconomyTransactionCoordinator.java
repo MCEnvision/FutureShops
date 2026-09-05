@@ -408,7 +408,7 @@ public final class EconomyTransactionCoordinator {
             }
             ProviderResult<MutationReceipt> lookup;
             try {
-                lookup = provider.lookup(requestId);
+                lookup = provider.lookup(record.request());
             } catch (RuntimeException exception) {
                 return markUncertainOrFreeze(record, "receipt lookup failed");
             }
@@ -428,6 +428,44 @@ public final class EconomyTransactionCoordinator {
                 publishConfirmedBalanceChange(record.request(), recoveredReceipt);
                 lifecycle.markRecovered();
                 return lookup;
+            }
+            if (lookup != null && lookup.status() == ProviderResultStatus.REJECTED
+                    && lookup.error() == ProviderError.RECEIPT_NOT_FOUND
+                    && supports(EconomyCapability.IDEMPOTENT_RETRY)) {
+                ProviderResult<MutationReceipt> retry;
+                try {
+                    retry = provider.retry(record.request());
+                } catch (RuntimeException exception) {
+                    return markUncertainOrFreeze(record, "idempotent provider retry failed");
+                }
+                MutationReceipt retryReceipt = retry == null ? null
+                        : retry.receipt().orElse(retry.value().orElse(null));
+                if (retry != null && retry.confirmed() && validReceipt(record.request(), retryReceipt)) {
+                    try {
+                        replace(record, EconomyTransactionState.EXTERNAL_CONFIRMED, Optional.of(retryReceipt),
+                                ProviderResultStatus.CONFIRMED, "");
+                        replace(new EconomyJournalRecord(record.request(), EconomyTransactionState.EXTERNAL_CONFIRMED,
+                                        Optional.of(retryReceipt), ProviderResultStatus.CONFIRMED, "", provider.providerId()),
+                                EconomyTransactionState.RESOLVED, Optional.of(retryReceipt),
+                                ProviderResultStatus.CONFIRMED, "");
+                    } catch (RuntimeException exception) {
+                        return journalFailure("retried provider outcome could not be finalized");
+                    }
+                    publishConfirmedBalanceChange(record.request(), retryReceipt);
+                    lifecycle.markRecovered();
+                    return retry;
+                }
+                if (retry != null && retry.status() == ProviderResultStatus.REJECTED) {
+                    try {
+                        replace(record, EconomyTransactionState.RESOLVED, Optional.empty(),
+                                ProviderResultStatus.REJECTED, retry.diagnostic());
+                    } catch (RuntimeException exception) {
+                        return journalFailure("retried provider rejection could not be persisted");
+                    }
+                    lifecycle.markRecovered();
+                    return retry;
+                }
+                return markUncertainOrFreeze(record, "idempotent provider retry remains unknown");
             }
             if (lookup != null && lookup.status() == ProviderResultStatus.REJECTED
                     && lookup.error() != ProviderError.RECEIPT_NOT_FOUND) {
