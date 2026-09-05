@@ -80,6 +80,24 @@ class VaultTransactionProofTest {
     }
 
     @Test
+    void serviceLossReturnsTypedUnavailableResultsAndRecoversByRetry() {
+        SqliteVaultProofBackend backend = new SqliteVaultProofBackend(directory, 100L);
+        EconomyProvider provider = new SqliteVaultProofProvider(backend);
+        MutationRequest request = MutationRequest.forPlayer(RequestId.random(), PLAYER, 10L,
+                MutationKind.WITHDRAW);
+
+        backend.serviceUnavailable(true);
+        assertEquals(ProviderResultStatus.UNAVAILABLE, provider.balance(PLAYER).status());
+        assertEquals(ProviderResultStatus.UNAVAILABLE, provider.precheck(request).status());
+        assertEquals(ProviderResultStatus.UNAVAILABLE, provider.withdraw(request).status());
+        assertEquals(ProviderResultStatus.UNAVAILABLE, provider.lookup(request.requestId()).status());
+
+        backend.serviceUnavailable(false);
+        assertTrue(provider.retry(request).confirmed());
+        assertEquals(90L, provider.balance(PLAYER).value().orElseThrow().balanceMinorUnits());
+    }
+
+    @Test
     void interruptedSqliteBoundariesLeaveAtomicStateAndRetryIsSafe() {
         SqliteVaultProofBackend backend = new SqliteVaultProofBackend(directory, 100L);
         EconomyProvider provider = new SqliteVaultProofProvider(backend);

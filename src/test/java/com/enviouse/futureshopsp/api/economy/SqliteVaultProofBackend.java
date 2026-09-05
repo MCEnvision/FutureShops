@@ -29,6 +29,7 @@ public final class SqliteVaultProofBackend {
     private volatile boolean interruptAfterReceiptInsert;
     private volatile boolean interruptBeforeCommit;
     private volatile boolean interruptAfterCommit;
+    private volatile boolean serviceUnavailable;
 
     public SqliteVaultProofBackend(Path directory, long startingBalance) {
         this.directory = directory;
@@ -51,6 +52,10 @@ public final class SqliteVaultProofBackend {
 
     public void interruptAfterCommit(boolean value) {
         interruptAfterCommit = value;
+    }
+
+    public void serviceUnavailable(boolean value) {
+        serviceUnavailable = value;
     }
 
     public Path databasePath() {
@@ -83,6 +88,9 @@ public final class SqliteVaultProofBackend {
     }
 
     public long balance(UUID playerId) {
+        if (serviceUnavailable) {
+            throw new IllegalStateException("vault proof service is unavailable");
+        }
         try (Connection connection = openConnection();
                 PreparedStatement statement = connection.prepareStatement(
                         "SELECT balance FROM accounts WHERE account_id = ?")) {
@@ -98,6 +106,10 @@ public final class SqliteVaultProofBackend {
     ProviderResult<MutationReceipt> mutate(MutationRequest request, boolean credit) {
         if (request == null || request.amountMinorUnits() <= 0L || request.actor() == null) {
             return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "request is invalid");
+        }
+        if (serviceUnavailable) {
+            return ProviderResult.unavailable(ProviderError.PROVIDER_EXCEPTION,
+                    "vault proof service is unavailable");
         }
         synchronized (TRANSACTION_LOCK) {
             return mutateLocked(request, credit);
@@ -167,6 +179,10 @@ public final class SqliteVaultProofBackend {
     ProviderResult<MutationReceipt> lookup(RequestId requestId) {
         if (requestId == null) {
             return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "receipt request is required");
+        }
+        if (serviceUnavailable) {
+            return ProviderResult.unavailable(ProviderError.PROVIDER_EXCEPTION,
+                    "vault proof service is unavailable");
         }
         try (Connection connection = openConnection();
                 PreparedStatement statement = connection.prepareStatement(

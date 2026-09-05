@@ -54,7 +54,12 @@ public final class SqliteVaultProofProvider implements EconomyProvider {
         if (playerId == null) {
             return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "player id is required");
         }
-        return ProviderResult.confirmed(new BalanceSnapshot(playerId, backend.balance(playerId)));
+        try {
+            return ProviderResult.confirmed(new BalanceSnapshot(playerId, backend.balance(playerId)));
+        } catch (RuntimeException exception) {
+            return ProviderResult.unavailable(ProviderError.PROVIDER_EXCEPTION,
+                    "vault balance query failed");
+        }
     }
 
     @Override
@@ -62,10 +67,15 @@ public final class SqliteVaultProofProvider implements EconomyProvider {
         if (request == null || request.amountMinorUnits() <= 0L) {
             return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "request is invalid");
         }
-        long balance = backend.balance(request.actor());
-        return !requiresFunds(request.kind()) || balance >= request.amountMinorUnits()
-                ? ProviderResult.confirmed(new BalanceSnapshot(request.actor(), balance))
-                : ProviderResult.rejected(ProviderError.INSUFFICIENT_FUNDS, "balance is insufficient");
+        try {
+            long balance = backend.balance(request.actor());
+            return !requiresFunds(request.kind()) || balance >= request.amountMinorUnits()
+                    ? ProviderResult.confirmed(new BalanceSnapshot(request.actor(), balance))
+                    : ProviderResult.rejected(ProviderError.INSUFFICIENT_FUNDS, "balance is insufficient");
+        } catch (RuntimeException exception) {
+            return ProviderResult.unavailable(ProviderError.PROVIDER_EXCEPTION,
+                    "vault precheck failed");
+        }
     }
 
     @Override
