@@ -6,10 +6,10 @@ This record covers the native Pixelmon transaction path, the Vault proof boundar
 
 | Field | Value |
 | --- | --- |
-| Source revision | `96f1d34df2e307b474863b0a99806e56db2d1673` |
+| Source revision | `7d2922c3a75b80e076d63dc1776559c15c27822f` |
 | FutureShops artifact | `build/libs/futureshops-2.3.0.jar` |
-| FutureShops SHA 256 | `481199ca49d7b1cdec5eed644d81226fa099aad6f3797dc4640aad40b9466c7d` |
-| FutureShops SHA 512 | `bd2d12956aa53f8efbfdf57bdb130ba1ce46675453de2ff6d1972b130a100add1c8337ddd2febb152a8bbae19d1123a38fa9713cc2f766f522a41b6353cfd797` |
+| FutureShops SHA 256 | `308649223ad5c57474d20c84a6c1ea62eb9c6f23d7321be1eb850159bb49e43c` |
+| FutureShops SHA 512 | `83300774e8c42ac04aaa5036390f046139fb32a93d798d83840c647ed57eb75d0fb491f8141ff3c2e537a3c502ae6b3a47cc09a2392628f3502585711f95b358` |
 | Pixelmon artifact | `/tmp/Pixelmon-1.21.1-9.4.0-universal.jar` |
 | Pixelmon SHA 256 | `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2` |
 | Minecraft | `1.21.1` |
@@ -40,11 +40,11 @@ futureshops.pixelmon.gametest native admin shop buy state diamonds_before=0 diam
 All 18 required tests passed :)
 ```
 
-The packaged exact Pixelmon log SHA 256 is `7f7a746717b9ade430ef4a4a2941d3b89f86ce3e858f89312d8108f6933d0a37`.
+The packaged exact Pixelmon log SHA 256 is `39bd7d0c71e6f44dc68c9cbc58f1ea1e527177c9e5a2ac300a0319171fdfb586`.
 
 The dedicated server stopped and saved its disposable world after the run. The repository test configuration was restored to `provider = "internal"`.
 
-The same headless GameTest launcher was run from a fresh temporary game directory with no Pixelmon jar. The standard NeoForge environment loaded FutureShops, skipped the optional Pixelmon target, reached `FutureShops server starting`, and passed all eighteen required tests. The sanitized absence log SHA 256 is `7e7bdfe540fff8d8759420801da29956dfa200d462176779efe2cc4ba20729f5`. The exact Pixelmon jar remained external and was not copied into the temporary absence directory.
+The same headless GameTest launcher was run from a fresh temporary game directory with no Pixelmon jar. The standard NeoForge environment loaded FutureShops, skipped the optional Pixelmon target, reached `FutureShops server starting`, and passed all eighteen required tests. The sanitized absence log SHA 256 is `4340e458dfbc7e63c0290b400902102f2aec9ee61a9d454333d87b2139b729f5`. The exact Pixelmon jar remained external and was not copied into the temporary absence directory.
 
 ## Vault bridge and backend proof
 
@@ -71,7 +71,7 @@ futureshops debug status
 stop
 ```
 
-The sanitized log records used the named `futureshops.debug` category, session correlation, source and artifact fields, Minecraft and loader versions, module, operation, lifecycle, capability, validation, receipt, custody, claim, error, elapsed time, server side, thread, and next action fields. The source commit and artifact SHA were discovered from the packaged manifest and loaded mod file, not supplied by the operator. The session was ephemeral and status returned `debug=off` after disable. Raw profile output was not retained in the repository. The current temporary log SHA 256 is `f53f5fec4f7df96bb607b006a5c51241b4c7343f30acf64e83af2d87ccbb19a1`.
+The sanitized log records used the named `futureshops.debug` category, session correlation, source and artifact fields, Minecraft and loader versions, module, operation, lifecycle, capability, validation, receipt, custody, claim, error, elapsed time, server side, thread, and next action fields. The source commit and artifact SHA were discovered from the packaged manifest and loaded mod file, not supplied by the operator. The session was ephemeral and status returned `debug=off` after disable. Raw profile output was not retained in the repository. The current temporary log SHA 256 is `1abfe255361f28c4973f30482aac00710146868439a944dce7c0ca82e100d6b0`.
 
 No laptop client run was needed. The phase acceptance criteria exercised server authority, persistence, provider receipts, retry behavior, and recovery, all represented by deterministic tests and dedicated server logs. A laptop remains reserved for a later client only criterion such as rendered UI, real input, client classloading, or visual synchronization.
 
