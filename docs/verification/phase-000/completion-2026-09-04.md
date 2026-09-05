@@ -7,7 +7,7 @@ This packet records the current `CORE-PHASE-000` execution state for FutureShops
 | Field | Value |
 | --- | --- |
 | Branch | `envy/phase-002-pixelmon-vault` |
-| Integrated source revision | `889c03603e205a63e2425fc41d311f425b7f44de` |
+| Integrated source revision | `e32e3222e1d9e7f09c2b732403c7e48f3944e2e4` |
 | Goal | `docs/plan/goal.md`, SHA 256 `4dcfb5f126ce39e6beb88fe12a1f8507c4529dc1f41d261f4f63dcbb6ebbc0e9` |
 | Plan | `docs/general/plan.md`, SHA 256 `c6b23d02feb52fb0bf220323eed5f1a46cf921939f9d7da94af23de819c3d99a` |
 | Plan set | `docs/general/plan.index.json`, SHA 256 `a071ab073bba2af16bbafe6bee375552ffa63205c8f16973b1f7e6a052ddb8d3` |
