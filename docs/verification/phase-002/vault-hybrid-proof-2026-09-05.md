@@ -12,6 +12,7 @@ This record covers the separately installed Vault proof registrant and its durab
 | Java | `21.0.11` |
 | Youer | `1.21.1-d4a204a0` |
 | FutureShops source | `1f02bf46da4724369676617959fb1b1ac982e286` |
+| Proof registrant source | `5471b8f1c10e8cd3eb79dc49f91f1b0f1bd2c89b` |
 | FutureShops artifact SHA 256 | `d7d2e14b192644859a276114508ceb2c5aed8991931aab523b899ffa9d0e4ad3` |
 | FutureShops artifact SHA 512 | `704c3495f1fca5ca2015ac4320e705b8e83d5dfc0b12c5fa2edccb85f12d0ce4a84d2ea4fb782760abca0beb1ea91047475e61698f441e7537984d9041980b23` |
 | Proof registrant SHA 256 | `df91158865e7c75b80bfb5eea4d07478f41b6b18f54d1740274a86d95e29826b` |
