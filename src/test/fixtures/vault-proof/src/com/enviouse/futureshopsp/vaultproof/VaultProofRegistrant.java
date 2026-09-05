@@ -43,8 +43,14 @@ public final class VaultProofRegistrant {
         RegistrationResult result = EconomyProviderRegistry.registerVault(
                 EconomyApi.COMPATIBILITY_VERSION,
                 context -> {
-                    provider = new SqliteVaultProofProvider(new SqliteVaultProofBackend(databasePath(), 100L));
-                    return provider;
+                    try {
+                        provider = new SqliteVaultProofProvider(new SqliteVaultProofBackend(databasePath(), 100L));
+                        return provider;
+                    } catch (RuntimeException exception) {
+                        LOGGER.error("FutureShops Vault proof provider factory failed type={} message={}",
+                                exception.getClass().getName(), exception.getMessage(), exception);
+                        throw exception;
+                    }
                 });
         LOGGER.info("FutureShops Vault proof registration status={} provider={} database={}",
                 result.status(), result.providerId(), databasePath());
@@ -55,7 +61,9 @@ public final class VaultProofRegistrant {
     public void onServerStarted(ServerStartedEvent event) {
         SqliteVaultProofProvider active = provider;
         if (active == null) {
-            LOGGER.error("FutureShops Vault proof provider was not resolved before server start");
+            var lifecycle = BalanceManager.getLifecycleSnapshotOrUnresolved();
+            LOGGER.error("FutureShops Vault proof provider was not resolved before server start provider={} lifecycle={} diagnostic={}",
+                    lifecycle.providerId(), lifecycle.lifecycle(), lifecycle.diagnostic());
             return;
         }
         MutationRequest request = MutationRequest.forPlayer(

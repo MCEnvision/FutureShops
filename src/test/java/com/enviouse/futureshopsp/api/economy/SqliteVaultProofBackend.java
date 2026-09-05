@@ -210,6 +210,7 @@ public final class SqliteVaultProofBackend {
 
     private void initialize() {
         try {
+            Class.forName("org.sqlite.JDBC");
             Files.createDirectories(directory);
             try (Connection connection = openConnection(); Statement statement = connection.createStatement()) {
                 statement.execute("PRAGMA journal_mode = DELETE");
