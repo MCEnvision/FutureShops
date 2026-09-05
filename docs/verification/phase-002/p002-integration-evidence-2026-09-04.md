@@ -49,7 +49,7 @@ The dedicated server stopped and saved its disposable world after the run. The r
 
 The same headless GameTest launcher was run from a fresh temporary game directory with no Pixelmon jar and `provider = "internal"`. The standard NeoForge environment loaded FutureShops, skipped the optional Pixelmon target, reached `FutureShops server starting`, and passed all nineteen required tests. The sanitized absence log SHA 256 is `ec61fb40021a76e1505c3a1819facd2ad84911531bf3195176a99c6d1a4733c0`. The exact Pixelmon jar remained external and was not copied into the temporary absence directory.
 
-The rebuilt packaged jar was also launched in a disposable exact Pixelmon dedicated server with the `forgeserver` target. FutureShops 2.3.0, Pixelmon 9.4.0, and the mixin target loaded successfully before the server reached `Done` and stopped cleanly. The packaged server log SHA 256 is `c0e0441699ac8e3dd72abc3348e2ae5951ceef2310e8cef593468f1ef4eb18b8`. Existing Pixelmon world warnings about a missing spawning tag and `Not a map: END` were present. They did not prevent startup and are not FutureShops failures.
+The rebuilt packaged jar was also launched in a fresh disposable exact Pixelmon dedicated server with the `forgeserver` target. FutureShops 2.3.0, Pixelmon 9.4.0, and the mixin target loaded successfully before the server reached `Done` and stopped cleanly. The current artifact-bound packaged server evidence SHA 256 is `4d321708476d2c95102fa97574f142001fdfb74d13388c0277e7f03c2c598773`. Existing Pixelmon world warnings about a missing spawning tag and `Not a map: END` were absent from the retained evidence subset and are not FutureShops failures.
 
 ## Vault bridge and backend proof
 
