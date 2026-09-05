@@ -13,6 +13,8 @@ The Phase 003 artifact validation gate passed before any live issue 66 mutation.
 | State | `OPEN` |
 | Milestone | `3.0 beta maintenance` |
 | Labels | `enhancement`, `forge`, `neoforge`, `ready` |
+| Validated artifact | `futureshops-2.4.0.jar` |
+| Artifact SHA 256 | `f28de22b0ab56b8a38eb5ec538394b5a6df26c128253748a46680a5cd95563fd` |
 | Duplicate search result count | `1` |
 | Duplicate search output SHA 256 | `5f66faa15070d8205397fb57038f9b0c7fbfd6edb0af8d7c64e055fc1737b0aa` |
 
@@ -45,7 +47,7 @@ The existing issue body was updated in place after artifact validation. It retai
 12. separate Forge 1.20.1 implementation and future NeoForge 1.21.1 port obligations. DanConomy 1.2.1 evidence applies only to NeoForge 1.21.1 until an exact compatible Forge artifact is verified.
 13. the interoperability and distribution boundary. FutureShops may use exact lawfully obtained jars unchanged for inspection, decompilation, compile only resolution, and runtime tests while shipping only original optional integration code. External source, assets, modified jars, rebuilt jars, bundled bytes, and redistributed artifacts remain prohibited.
 
-The issue states that this is future 3.0.0 guidance only. It does not claim that 3.0.0 code was implemented, and it keeps publication as a separate owner decision.
+The issue states that this is future 3.0.0 guidance based on the validated 2.4.0 implementation only. It does not claim that 3.0.0 code was implemented, and it keeps publication as a separate owner decision.
 
 ## Readback
 
@@ -53,12 +55,12 @@ The authenticated readback returned issue 66 with the expected URL, title, open 
 
 | Evidence | SHA 256 |
 | --- | --- |
-| Submitted and read back issue body | `594d4b53827a67c659a2c0d3d66b47d7b703976a67f80940af2d9cf35e14384f` |
-| Complete JSON readback | `5ddb54440a292ea1f9387cbb853b22d25c10e337ab029e2282d37ec526dcd5f7` |
+| Submitted and read back issue body | `fdd104928515ed81ab7e461a3d7d908cc79251ac2fb2e84fa136eb8c35c757f4` |
+| Complete JSON readback | `59a41b13670b16357a11f088908dbca151d462d4b99e9dd2733115b7f5f951e9` |
 
 GitHub removed only the terminal newline from the uploaded Markdown. The body bytes otherwise matched the submitted file. The readback was checked for `world/data/futureshops/receipts`, `PlayerPartyStorage`, `danconomy_ledger`, `prepared`, `unknown`, `frozen`, `resolved`, `ready`, `draining`, `recovering`, `transaction aware`, `receipt lookup`, `idempotent retry`, `1.20.1`, `1.21.1`, `debug`, `backup`, inspection, decompilation, original FutureShops code, no copied source or assets, no altered or rebuilt third party jar, no bundling, no redistribution, and the no fallback boundary.
 
-Issue 66 remains open. It was not closed, replaced, duplicated, or linked to an unvalidated release.
+Issue 66 remains open. It was not closed, replaced, duplicated, or linked to an unvalidated release. The updated body now includes the 2.4.0 candidate identity and the exact steps and evidence used to validate the 2.4.0 behavior before writing the 3.0.0 guidance.
 
 ## Evidence identifier
 
