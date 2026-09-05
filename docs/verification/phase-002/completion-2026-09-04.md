@@ -10,7 +10,7 @@ No pull request, phase integration, tag, release, upload, or issue 66 mutation w
 
 The exact Pixelmon `9.4.0` packaged run loaded the candidate jar and passed all eighteen required dedicated server GameTests. The tests now cover native cart purchase, native `/pay` transfer, native server shop sell, native admin player shop buy with claimed sale escrow, physical money refusal, request receipt replay, durable receipt reload, and unknown receipt recovery. Sanitized evidence is in [p002 integration evidence](p002-integration-evidence-2026-09-04.md). The packaged log SHA 256 is `7f7a746717b9ade430ef4a4a2941d3b89f86ce3e858f89312d8108f6933d0a37`.
 
-The same source passed eighteen required tests in a fresh temporary standard NeoForge directory with Pixelmon absent. The absence log SHA 256 is `3b827fd0dcf6b78316956dfd5bc5603183823b6667fa9d07f0cd09fd219ea81d`. The exact Pixelmon jar was not copied into that directory.
+The same source passed eighteen required tests in a fresh temporary standard NeoForge directory with Pixelmon absent. The absence log SHA 256 is `7e7bdfe540fff8d8759420801da29956dfa200d462176779efe2cc4ba20729f5`. The exact Pixelmon jar was not copied into that directory.
 
 The provider mutation router now maps transfer credit, refund, compensation, and deposit requests to the native add path, and transfer debit and withdrawal requests to the native take path. This preserves the request identity and durable receipt checks while allowing the coordinator to complete native transfers.
 

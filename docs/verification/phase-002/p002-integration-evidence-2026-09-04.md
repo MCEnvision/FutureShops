@@ -44,7 +44,7 @@ The packaged exact Pixelmon log SHA 256 is `7f7a746717b9ade430ef4a4a2941d3b89f86
 
 The dedicated server stopped and saved its disposable world after the run. The repository test configuration was restored to `provider = "internal"`.
 
-The same headless GameTest launcher was run from a fresh temporary game directory with no Pixelmon jar. The standard NeoForge environment loaded FutureShops, skipped the optional Pixelmon target, reached `FutureShops server starting`, and passed all eighteen required tests. The sanitized absence log SHA 256 is `3b827fd0dcf6b78316956dfd5bc5603183823b6667fa9d07f0cd09fd219ea81d`. The exact Pixelmon jar remained external and was not copied into the temporary absence directory.
+The same headless GameTest launcher was run from a fresh temporary game directory with no Pixelmon jar. The standard NeoForge environment loaded FutureShops, skipped the optional Pixelmon target, reached `FutureShops server starting`, and passed all eighteen required tests. The sanitized absence log SHA 256 is `7e7bdfe540fff8d8759420801da29956dfa200d462176779efe2cc4ba20729f5`. The exact Pixelmon jar remained external and was not copied into the temporary absence directory.
 
 ## Vault bridge and backend proof
 
