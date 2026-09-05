@@ -6,10 +6,10 @@ This record covers the native Pixelmon transaction path, the Vault proof boundar
 
 | Field | Value |
 | --- | --- |
-| Source revision | `1378859c6d8ecf63731e0e7a0ed858c2131ab83a` |
+| Source revision | `c56f79f7a67c2a6c2cf2c3f2264e20e96f646e50` |
 | FutureShops artifact | `build/libs/futureshops-2.3.0.jar` |
-| FutureShops SHA 256 | `93df52f3232a38a5f3007a98a51d551d905aac82e56602c0c657f0bbf836c915` |
-| FutureShops SHA 512 | `bf1e621057a166adf02c761553916b76b31ca28d65fa054e267d96b7929b58b5d26b4aae883553dc670397bfefdbde3ec97021758271c4dec3d501df6a857cbb` |
+| FutureShops SHA 256 | `85c6bfae68020ef98bacf509dd9999bf03f913b2bdd895eb5a082bdf2e62d5f6` |
+| FutureShops SHA 512 | `51775974d3885ea98eb61d25fe9d8d1e3740d99ea94f898f23a3e7140d82c0dd821cd51d946df31bc710713a7f722577e498bafb597c48ab376c6f1d0f2d732b` |
 | Pixelmon artifact | `/tmp/Pixelmon-1.21.1-9.4.0-universal.jar` |
 | Pixelmon SHA 256 | `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2` |
 | Minecraft | `1.21.1` |
@@ -72,7 +72,7 @@ The sanitized evidence SHA 256 is `403e9a9f01ace4d209f4d81a35b01c6dc875d5e509211
 
 The packaged artifact was separately started in a fresh exact Pixelmon dedicated server. It loaded the same mixin target, reached `Done (4.827s)`, logged `FutureShops server starting.`, and stopped cleanly. The sanitized packaged server evidence SHA 256 is `5353736683b24a72305944600ef4030e30258f340dcabdfe11edc3c0e233eced`.
 
-The rebuilt packaged jar was also launched in a fresh disposable exact Pixelmon dedicated server with the `forgeserver` target. FutureShops 2.3.0, Pixelmon 9.4.0, and the mixin target loaded successfully before the server reached `Done` and stopped cleanly. The current artifact-bound packaged server evidence SHA 256 is `98efdd33e10f97f793ccfb129a1acca3c8387a8911c15312f691b516303fdac5`. Existing Pixelmon world warnings about a missing spawning tag and `Not a map: END` were absent from the retained evidence subset and are not FutureShops failures.
+The current packaged jar was launched in a fresh disposable exact Pixelmon dedicated server with the `forgeserver` target. FutureShops 2.3.0, Pixelmon 9.4.0, and the mixin target loaded successfully before the server reached `Done` and stopped cleanly. The current artifact-bound packaged server evidence SHA 256 is `77f85dbac94dc7995566f9e0bb24b5151cd3279f7eb66170bbfa0e4e447cd1ff`. The artifact manifest recorded source revision `c56f79f7a67c2a6c2cf2c3f2264e20e96f646e50`. Existing Pixelmon world warnings about a missing spawning tag and `Not a map: END` were absent from the retained evidence subset and are not FutureShops failures.
 
 The same final artifact then ran in one disposable GameTest world across two fresh server processes. The first process wrote the completed native receipt and a restart marker. After that process shut down, the second process loaded the saved Pixelmon storage, replayed the same request UUID, and confirmed the persisted balance without a second debit.
 
@@ -91,9 +91,28 @@ Game test server shutting down
 
 The sanitized two process evidence SHA 256 is `403e9a9f01ace4d209f4d81a35b01c6dc875d5e5092111a276a3ce8f3f57db57`. The disposable runtime and marker were removed after hashing.
 
+## Artifact bound native GameTest rerun on 2026-09-05
+
+The current production artifact from source revision `c56f79f7a67c2a6c2cf2c3f2264e20e96f646e50` was launched from a fresh temporary game directory with the exact Pixelmon `1.21.1-9.4.0` jar, GeckoLib `4.8.4`, the merged NeoForge `21.1.248` development artifact, and `provider = "pixelmon"`. The launcher verified `eula=true` before startup. This run used the artifact itself rather than a development classes directory.
+
+Sanitized evidence:
+
+```text
+FutureShops Pixelmon mixin target com.pixelmonmod.pixelmon.api.storage.PlayerPartyStorage apply true
+FutureShops server starting.
+futureshops.pixelmon.gametest native mutation confirmed request=d36be9fd-3c1e-462e-8502-a2c0619739f5 balance=75 receipt_nbt=true reload=CONFIRMED reconnect_replay=CONFIRMED reloaded_balance=75 unknown_recovery=RECOVERY_REQUIRED wrong_type_recovery=RECOVERY_REQUIRED wrong_root_recovery=RECOVERY_REQUIRED
+futureshops.pixelmon.gametest process_restart phase=FIRST request=00000000-0000-0000-0000-000000000241 balance=75 receipt=COMPLETED
+All 20 required tests passed :)
+Game test server shutting down
+```
+
+The log SHA 256 is `7ea3e90f198de7529e83870054d3e0e44b20b51ca73cf033bd7f0fcc42e7eb51`. The process exited with code `0`. The run stopped cleanly and its temporary runtime, classpath file, world, and logs were removed after hashing. This rerun binds the native mixin and all twenty tests to the current production jar whose SHA 256 is `85c6bfae68020ef98bacf509dd9999bf03f913b2bdd895eb5a082bdf2e62d5f6`.
+
 ## Vault bridge and backend proof
 
-`EconomyProviderRegistry.registerVault` is the only public registration boundary for the reserved `vault` provider. `VaultTransactionProofTest` registers a separate test provider through that boundary and exercises a durable backend fixture outside the production jar. The fixture writes the new balance and the provider receipt to one forced temporary file, then uses an atomic replacement. A reopened backend confirms the receipt and balance. An injected interruption before replacement leaves the previous balance and no receipt visible, and a retry commits once with the same request identity. Reuse with a conflicting amount, mutation kind, or actor is rejected as `INVALID_REQUEST`. Insufficient funds remains `INSUFFICIENT_FUNDS` across retry, and concurrent identical requests converge on one durable receipt and one balance delta. Receipt lookup scans persisted state before a new mutation, so a request cannot create a second effect under another account state file.
+`EconomyProviderRegistry.registerVault` is the only public registration boundary for the reserved `vault` provider. `VaultTransactionProofTest` registers a separate test provider through that boundary and exercises a durable SQLite backend fixture outside the production jar. The fixture writes the new balance and provider receipt in one forced SQLite transaction. A reopened backend confirms the receipt and balance. Injected interruptions before commit roll back both rows, while an interruption after commit leaves a lookupable receipt and a retry commits no second effect. Reuse with a conflicting amount, mutation kind, or actor is rejected as `INVALID_REQUEST`. Insufficient funds remains `INSUFFICIENT_FUNDS` across retry, and concurrent identical requests converge on one durable receipt and one balance delta. Receipt lookup scans persisted state before a new mutation, so a request cannot create a second effect under another account state.
+
+The proof backend now uses SQLite with `journal_mode=DELETE`, `synchronous=FULL`, a primary key on the request UUID, and one database transaction containing both the balance update and receipt insert. It injects interruption after the balance update, after receipt insertion, before commit, and after commit. A fresh backend instance looks up the committed receipt after the ambiguous post commit result and retry does not debit again. The exact hybrid server also loaded the separately packaged registrant beside the unmodified Pixelmon, Vault, FinalEconomy, EverNifeCore, and PixelmonEconomyBridge jars. The registrant registered `vault` through the public API and executed one precheck, withdraw, lookup, and duplicate retry at server start. See [exact hybrid Vault proof](vault-hybrid-proof-2026-09-05.md) for hashes, sanitized logs, database rows, and cleanup evidence.
 
 Commands:
 
@@ -102,7 +121,7 @@ JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash ./gradlew test --tests com.env
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash ./gradlew build --no-daemon
 ```
 
-The fixture proves the required bridge contract and is not a claim that the reviewed PixelmonEconomyBridge or FinalEconomy stack is transaction aware. That unmodified hybrid stack remains safely refused for `vault` mutation until a separately installed bridge and backend provide the same request receipt and recovery guarantees.
+The fixture proves the required bridge contract and is not a claim that the reviewed PixelmonEconomyBridge or FinalEconomy stack is transaction aware. That unmodified hybrid stack remains safely refused for `vault` mutation until a separately installed bridge and backend provide the same request receipt and recovery guarantees. The exact hybrid proof registrant is a disposable test component and is not part of the FutureShops production jar.
 
 ## Headless debug command evidence
 
