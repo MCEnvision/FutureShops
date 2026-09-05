@@ -58,7 +58,7 @@ gradlew.bat build
 
 Development launch tasks include `runClient`, `runServer`, `runGameTestServer`, and `runData`. Build artifacts are written to `build/libs`.
 
-DanConomy is an optional compile only verification input. Supply the exact unmodified `1.2.1` jar with `-PdanconomyJar=/path/to/danconomy-1.2.1.jar` when compiling or running its exact compatibility profile. The build rejects any other SHA 256 and never packages the dependency.
+DanConomy is an optional compile and local runtime verification input. Supply the exact unmodified `1.2.1` jar with `-PdanconomyJar=/path/to/danconomy-1.2.1.jar` when compiling or running its exact compatibility profile. The property adds the verified jar to the development runtime only, the build rejects any other SHA 256, and the production artifact never packages or publishes the dependency.
 
 The implementation and compatibility decisions are documented in [Porting notes](PORTING_NOTES.md). The original migration inventory and risk analysis are in [Port audit](FutureShopsAudit.md).
 

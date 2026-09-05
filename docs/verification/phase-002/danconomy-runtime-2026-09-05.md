@@ -28,6 +28,8 @@ Command shape:
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash ./gradlew runGameTestServer --no-daemon -PdanconomyJar=/tmp/exact/danconomy-1.2.1.jar -PverificationGameDirectory=/tmp/disposable-runtime
 ```
 
+The `danconomyJar` property is wired to both `compileOnly` and the development only `localRuntime` configuration. The exact jar is therefore available to this run command without becoming a published or packaged dependency. The SHA 256 gate runs before compilation and rejects every artifact except the reviewed 1.2.1 bytes.
+
 Two fresh server processes over the same disposable world each passed all 32 required GameTests. The first process stored request `00000000-0000-0000-0000-000000000322`, resulting balance `10011`, and a completed provider receipt. The second process loaded that receipt, returned `CONFIRMED` for lookup and duplicate retry, and retained balance `10011`. The second process log SHA 256 is `9f059dbdf0f979fc9bc7620248778190b7d165cb8023d43f7b562eeb00f56565`.
 
 The suite proves:
