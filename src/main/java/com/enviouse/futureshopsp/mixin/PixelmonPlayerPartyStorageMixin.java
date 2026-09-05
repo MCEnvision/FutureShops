@@ -41,7 +41,7 @@ public abstract class PixelmonPlayerPartyStorageMixin implements PixelmonNativeE
     @Unique
     private final Map<RequestId, NativeReceipt> futureshopsReceipts = new LinkedHashMap<>();
     @Unique
-    private final List<CompoundTag> futureshopsUnknownReceiptRecords = new ArrayList<>();
+    private final List<Tag> futureshopsUnknownReceiptRecords = new ArrayList<>();
     @Unique
     private boolean futureshopsReceiptIntegrityValid = true;
 
@@ -63,17 +63,29 @@ public abstract class PixelmonPlayerPartyStorageMixin implements PixelmonNativeE
         futureshopsReceipts.clear();
         futureshopsUnknownReceiptRecords.clear();
         futureshopsReceiptIntegrityValid = true;
-        if (!tag.contains(FUTURESHOPS_RECEIPTS, Tag.TAG_COMPOUND)) {
+        Tag rawReceipts = tag.get(FUTURESHOPS_RECEIPTS);
+        if (rawReceipts == null) {
             return;
         }
-        CompoundTag root = tag.getCompound(FUTURESHOPS_RECEIPTS);
-        if (!root.contains(FUTURESHOPS_RECEIPT_ENTRIES, Tag.TAG_LIST)) {
+        if (!(rawReceipts instanceof CompoundTag root)) {
             futureshopsReceiptIntegrityValid = false;
+            futureshopsUnknownReceiptRecords.add(rawReceipts.copy());
             return;
         }
-        ListTag entries = root.getList(FUTURESHOPS_RECEIPT_ENTRIES, Tag.TAG_COMPOUND);
-        for (int index = 0; index < entries.size(); index++) {
-            CompoundTag entry = entries.getCompound(index);
+        Tag rawEntries = root.get(FUTURESHOPS_RECEIPT_ENTRIES);
+        if (!(rawEntries instanceof ListTag entries)) {
+            futureshopsReceiptIntegrityValid = false;
+            if (rawEntries != null) {
+                futureshopsUnknownReceiptRecords.add(rawEntries.copy());
+            }
+            return;
+        }
+        for (Tag rawEntry : entries) {
+            if (!(rawEntry instanceof CompoundTag entry)) {
+                futureshopsReceiptIntegrityValid = false;
+                futureshopsUnknownReceiptRecords.add(rawEntry.copy());
+                continue;
+            }
             try {
                 if (!entry.hasUUID("request_id")) {
                     throw new IllegalArgumentException("request id is missing");
@@ -128,7 +140,7 @@ public abstract class PixelmonPlayerPartyStorageMixin implements PixelmonNativeE
                     entry.putLong("resulting_balance_minor_units", value));
             entries.add(entry);
         }
-        for (CompoundTag unknown : futureshopsUnknownReceiptRecords) {
+        for (Tag unknown : futureshopsUnknownReceiptRecords) {
             entries.add(unknown.copy());
         }
         root.put(FUTURESHOPS_RECEIPT_ENTRIES, entries);
@@ -254,16 +266,16 @@ public abstract class PixelmonPlayerPartyStorageMixin implements PixelmonNativeE
     private boolean futureshopsReceiptIsOnDisk(Path path, RequestId expectedRequestId, boolean expectedCompleted) {
         try {
             CompoundTag persisted = NbtIo.read(path);
-            if (persisted == null || !persisted.contains(FUTURESHOPS_RECEIPTS, Tag.TAG_COMPOUND)) {
+            if (persisted == null || !(persisted.get(FUTURESHOPS_RECEIPTS) instanceof CompoundTag root)) {
                 return false;
             }
-            CompoundTag root = persisted.getCompound(FUTURESHOPS_RECEIPTS);
-            if (!root.contains(FUTURESHOPS_RECEIPT_ENTRIES, Tag.TAG_LIST)) {
+            if (!(root.get(FUTURESHOPS_RECEIPT_ENTRIES) instanceof ListTag entries)) {
                 return false;
             }
-            ListTag entries = root.getList(FUTURESHOPS_RECEIPT_ENTRIES, Tag.TAG_COMPOUND);
-            for (int index = 0; index < entries.size(); index++) {
-                CompoundTag entry = entries.getCompound(index);
+            for (Tag rawEntry : entries) {
+                if (!(rawEntry instanceof CompoundTag entry)) {
+                    return false;
+                }
                 if (entry.hasUUID("request_id") && expectedRequestId.value().equals(entry.getUUID("request_id"))
                         && (expectedCompleted ? "COMPLETED" : "PENDING").equals(entry.getString("state"))) {
                     return true;

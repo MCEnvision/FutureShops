@@ -31,6 +31,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -186,10 +187,23 @@ public final class EconomyGameTests {
                 var corruptedResult = ((PixelmonNativeEconomyAccess) corrupted).futureshopsLookup(request.requestId());
                 helper.assertTrue(corruptedResult.status() == ProviderResultStatus.RECOVERY_REQUIRED,
                         "an unknown native Pixelmon receipt record must force recovery");
-                LOGGER.info("futureshops.pixelmon.gametest native mutation confirmed request={} replay={} balance={} receipt_nbt={} reload={} unknown_recovery={}",
+
+                CompoundTag wrongTypeRecord = saved.copy();
+                ListTag wrongTypeEntries = new ListTag();
+                wrongTypeEntries.add(StringTag.valueOf("unknown receipt type"));
+                wrongTypeRecord.getCompound("FutureShopsReceipts").put("entries", wrongTypeEntries);
+                Object wrongTypeStorage = storage.getClass().getConstructor(UUID.class).newInstance(player.getUUID());
+                Object wrongTypeFuture = storage.getClass()
+                        .getMethod("readFromNBT", CompoundTag.class, HolderLookup.Provider.class)
+                        .invoke(wrongTypeStorage, wrongTypeRecord, helper.getLevel().registryAccess());
+                Object wrongType = ((CompletableFuture<?>) wrongTypeFuture).join();
+                var wrongTypeResult = ((PixelmonNativeEconomyAccess) wrongType).futureshopsLookup(request.requestId());
+                helper.assertTrue(wrongTypeResult.status() == ProviderResultStatus.RECOVERY_REQUIRED,
+                        "a non compound native Pixelmon receipt entry must force recovery");
+                LOGGER.info("futureshops.pixelmon.gametest native mutation confirmed request={} replay={} balance={} receipt_nbt={} reload={} unknown_recovery={} wrong_type_recovery={}",
                         request.requestId().value(), replay.receipt().orElseThrow().requestId().value(),
                         after.value().orElseThrow().balanceMinorUnits(), saved.contains("FutureShopsReceipts"),
-                        restoredReceipt.status(), corruptedResult.status());
+                        restoredReceipt.status(), corruptedResult.status(), wrongTypeResult.status());
             }
         } catch (ReflectiveOperationException | IOException | RuntimeException exception) {
             helper.fail("the exact Pixelmon native account probe failed: " + exception.getClass().getSimpleName());

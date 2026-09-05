@@ -43,6 +43,8 @@ class DebugDiagnosticsTest {
         Path root = projectRoot();
         String command = Files.readString(root.resolve("src/main/java/com/enviouse/futureshopsp/command/DebugCommand.java"));
         String mixin = Files.readString(root.resolve("src/main/resources/futureshops-pixelmon.mixins.json"));
+        String mixinSource = Files.readString(root.resolve(
+                "src/main/java/com/enviouse/futureshopsp/mixin/PixelmonPlayerPartyStorageMixin.java"));
         assertTrue(command.contains("literal(\"futureshops\")"));
         assertTrue(command.contains("literal(\"debug\")"));
         assertTrue(command.contains("literal(\"on\")"));
@@ -50,6 +52,10 @@ class DebugDiagnosticsTest {
         assertTrue(command.contains("literal(\"status\")"));
         assertTrue(mixin.contains("PixelmonPlayerPartyStorageMixin"));
         assertTrue(mixin.contains("\"required\": false"));
+        assertTrue(mixinSource.contains("Tag rawReceipts = tag.get(FUTURESHOPS_RECEIPTS)"));
+        assertTrue(mixinSource.contains("Tag rawEntries = root.get(FUTURESHOPS_RECEIPT_ENTRIES)"));
+        assertTrue(mixinSource.contains("if (!(rawEntry instanceof CompoundTag entry))"));
+        assertTrue(mixinSource.contains("futureshopsUnknownReceiptRecords.add(rawEntry.copy())"));
         String diagnostics = Files.readString(root.resolve(
                 "src/main/java/com/enviouse/futureshopsp/server/debug/DebugDiagnostics.java"));
         assertTrue(diagnostics.contains("LoggerFactory.getLogger(CATEGORY)"));
