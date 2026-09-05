@@ -21,6 +21,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -90,6 +93,49 @@ class VaultTransactionProofTest {
         assertTrue(retry.confirmed());
         assertEquals(90L, reopenedProvider.balance(PLAYER).value().orElseThrow().balanceMinorUnits());
         assertEquals(retry.receipt(), reopenedProvider.lookup(request.requestId()).receipt());
+    }
+
+    @Test
+    void rejectsConflictingIdentityAndDeduplicatesConcurrentRequests() throws Exception {
+        DurableVaultBackend backend = new DurableVaultBackend(directory, 100L);
+        EconomyProvider provider = new DurableVaultProvider(backend);
+        RequestId requestId = RequestId.random();
+        MutationRequest request = MutationRequest.forPlayer(requestId, PLAYER, 25L, MutationKind.WITHDRAW);
+
+        ProviderResult<MutationReceipt> first = provider.withdraw(request);
+        assertTrue(first.confirmed());
+        assertEquals(ProviderError.INVALID_REQUEST, provider.withdraw(
+                MutationRequest.forPlayer(requestId, PLAYER, 30L, MutationKind.WITHDRAW)).error());
+        assertEquals(ProviderError.INVALID_REQUEST, provider.deposit(
+                MutationRequest.forPlayer(requestId, PLAYER, 25L, MutationKind.DEPOSIT)).error());
+        UUID otherPlayer = UUID.fromString("00000000-0000-0000-0000-000000000411");
+        assertEquals(ProviderError.INVALID_REQUEST, provider.withdraw(
+                MutationRequest.forPlayer(requestId, otherPlayer, 25L, MutationKind.WITHDRAW)).error());
+
+        MutationRequest insufficient = MutationRequest.forPlayer(RequestId.random(), PLAYER, 1_000L,
+                MutationKind.WITHDRAW);
+        assertEquals(ProviderError.INSUFFICIENT_FUNDS, provider.withdraw(insufficient).error());
+        assertEquals(ProviderError.INSUFFICIENT_FUNDS, provider.retry(insufficient).error());
+
+        DurableVaultBackend concurrentBackend = new DurableVaultBackend(directory.resolve("concurrent"), 100L);
+        EconomyProvider concurrentProvider = new DurableVaultProvider(concurrentBackend);
+        MutationRequest concurrentRequest = MutationRequest.forPlayer(RequestId.random(), PLAYER, 25L,
+                MutationKind.WITHDRAW);
+        ExecutorService executor = Executors.newFixedThreadPool(4);
+        try {
+            List<Future<ProviderResult<MutationReceipt>>> futures = new ArrayList<>();
+            for (int index = 0; index < 4; index++) {
+                futures.add(executor.submit(() -> concurrentProvider.withdraw(concurrentRequest)));
+            }
+            for (Future<ProviderResult<MutationReceipt>> future : futures) {
+                ProviderResult<MutationReceipt> result = future.get();
+                assertTrue(result.confirmed());
+                assertEquals(concurrentRequest.requestId(), result.receipt().orElseThrow().requestId());
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+        assertEquals(75L, concurrentProvider.balance(PLAYER).value().orElseThrow().balanceMinorUnits());
     }
 
     private static final class DurableVaultProvider implements EconomyProvider {
@@ -193,13 +239,18 @@ class VaultTransactionProofTest {
                 return ProviderResult.rejected(ProviderError.INVALID_REQUEST, "request is invalid");
             }
             State current = read(request.actor());
-            ReceiptRecord prior = current.receipts.get(request.requestId());
+            LocatedReceipt prior = findReceipt(request.requestId());
             if (prior != null) {
-                if (prior.kind != request.kind() || prior.amount != request.amountMinorUnits()) {
+                if (!request.actor().equals(prior.owner())) {
+                    return ProviderResult.rejected(ProviderError.INVALID_REQUEST,
+                            "request identity conflicts with its durable receipt");
+                }
+                ReceiptRecord record = prior.record();
+                if (record.kind != request.kind() || record.amount != request.amountMinorUnits()) {
                     return ProviderResult.rejected(ProviderError.INVALID_REQUEST,
                             "request conflicts with its durable receipt");
                 }
-                return ProviderResult.confirmed(prior.receipt());
+                return ProviderResult.confirmed(record.receipt());
             }
             long next;
             try {
@@ -220,6 +271,31 @@ class VaultTransactionProofTest {
                 return ProviderResult.confirmed(receipt);
             } catch (IOException exception) {
                 return ProviderResult.recoveryRequired("vault transaction commit was interrupted");
+            }
+        }
+
+        private LocatedReceipt findReceipt(RequestId requestId) {
+            try {
+                if (!Files.exists(directory)) {
+                    return null;
+                }
+                try (var paths = Files.list(directory)) {
+                    return paths.filter(path -> path.getFileName().toString().endsWith(".vault-state"))
+                            .map(path -> {
+                                try {
+                                    UUID owner = UUID.fromString(path.getFileName().toString()
+                                            .substring(0, path.getFileName().toString().length() - ".vault-state".length()));
+                                    ReceiptRecord record = readPath(path).receipts.get(requestId);
+                                    return record == null ? null : new LocatedReceipt(owner, record);
+                                } catch (IOException | RuntimeException exception) {
+                                    throw new IllegalStateException(exception);
+                                }
+                            })
+                            .filter(java.util.Objects::nonNull)
+                            .findFirst().orElse(null);
+                }
+            } catch (IOException exception) {
+                throw new IllegalStateException(exception);
             }
         }
 
@@ -349,6 +425,9 @@ class VaultTransactionProofTest {
         }
 
         private record ReceiptRecord(MutationKind kind, long amount, MutationReceipt receipt) {
+        }
+
+        private record LocatedReceipt(UUID owner, ReceiptRecord record) {
         }
     }
 }
