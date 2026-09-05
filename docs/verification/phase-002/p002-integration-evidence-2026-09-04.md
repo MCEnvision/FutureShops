@@ -128,6 +128,10 @@ This rerun binds the native mixin, request replay, receipt reload, wrong root re
 
 The coordinator unit suite also covers provider service loss. Loss before intent returns `UNAVAILABLE` with no journal entry or provider mutation. Loss after intent returns `AMBIGUOUS`, freezes lifecycle, records `UNCERTAIN`, and does not fall back to the internal wallet.
 
+## Exact hybrid refusal without proof bridge
+
+A separate fresh exact hybrid runtime omitted the proof registrant and kept the unmodified PixelmonEconomyBridge, FinalEconomy, EverNifeCore, and Vault stack. With `provider = "vault"`, FutureShops reached `Done` without registering a provider. The bounded debug command reported `provider=none`, `lifecycle=RECOVERING`, and `observed_capabilities=none`, then the server stopped cleanly. No provider mutation was attempted and no proof jar was present in the runtime. The sanitized refusal and debug log SHA 256 is `425463560881196d018416bab76203b1aff786b20e2e05e5769df7d7c75ab41c`.
+
 ## Vault bridge and backend proof
 
 `EconomyProviderRegistry.registerVault` is the only public registration boundary for the reserved `vault` provider. `VaultTransactionProofTest` registers a separate test provider through that boundary and exercises a durable SQLite backend fixture outside the production jar. The fixture writes the new balance and provider receipt in one forced SQLite transaction. A reopened backend confirms the receipt and balance. Injected interruptions before commit roll back both rows, while an interruption after commit leaves a lookupable receipt and a retry commits no second effect. Reuse with a conflicting amount, mutation kind, or actor is rejected as `INVALID_REQUEST`. Insufficient funds remains `INSUFFICIENT_FUNDS` across retry, and concurrent identical requests converge on one durable receipt and one balance delta. Receipt lookup scans persisted state before a new mutation, so a request cannot create a second effect under another account state.

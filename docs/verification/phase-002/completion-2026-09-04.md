@@ -16,6 +16,8 @@ The same source passed the required tests in a fresh temporary standard NeoForge
 
 The current artifact was launched in a fresh exact hybrid Pixelmon dedicated server twice. The mixin target and Pixelmon `9.4.0` loaded, the server reached `Done`, the proof registrant completed all coordinator routes, and the second process replayed them without another balance effect. The first and restart log hashes are `c8c13d5a74eb9e105e398dbb100831fb58abafe7f6e3764812e372154d17f5da` and `3daaf80e46db544254ce6ad84ff24e8b1a1d0236519d422afca844f24fa83915`. Exact hybrid registration and mutation proof with the separate SQLite registrant is recorded in [exact hybrid Vault proof](vault-hybrid-proof-2026-09-05.md).
 
+A second exact hybrid runtime omitted the proof registrant. The unmodified bridge stack did not register `vault`; the server still reached `Done` and the bounded debug log reported `provider=none`, `lifecycle=RECOVERING`, and `observed_capabilities=none`. No provider mutation was attempted. The refusal log SHA 256 is `425463560881196d018416bab76203b1aff786b20e2e05e5769df7d7c75ab41c`.
+
 The provider mutation router now maps transfer credit, refund, compensation, and deposit requests to the native add path, and transfer debit and withdrawal requests to the native take path. This preserves the request identity and durable receipt checks while allowing the coordinator to complete native transfers.
 
 ## New Vault proof evidence

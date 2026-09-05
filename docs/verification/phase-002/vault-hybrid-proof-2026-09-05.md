@@ -75,6 +75,8 @@ The runtime was started a second time without changing its world, provider datab
 
 The current artifact run also preserved the known external stack parser warnings, including `Not a map: END` during restart. They are emitted by the unmodified external stack, not FutureShops, and did not prevent startup, proof completion, or clean shutdown. No FutureShops exception was present.
 
+A separate fresh exact hybrid runtime omitted the proof registrant and kept the unmodified PixelmonEconomyBridge, FinalEconomy, EverNifeCore, and Vault stack. With `provider = "vault"`, FutureShops reached `Done` without registering a provider. The bounded debug command reported `provider=none`, `lifecycle=RECOVERING`, and `observed_capabilities=none`, then the server stopped cleanly. No provider mutation was attempted and no proof jar was present in the runtime. The sanitized refusal and debug log SHA 256 is `425463560881196d018416bab76203b1aff786b20e2e05e5769df7d7c75ab41c`.
+
 ## Boundary proof
 
 `VaultTransactionProofTest` runs against the same public provider contract and SQLite backend. It proves:
