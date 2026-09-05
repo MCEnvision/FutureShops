@@ -10,9 +10,9 @@ This record covers the mutation surface proof for the separately installed Futur
 | Minecraft | `1.21.1` |
 | NeoForge | `21.1.248` |
 | Java | `21.0.11` |
-| FutureShops source commit | `6bbaf9156bcd8d79bee274717f2ae67d4db6f69e` |
-| FutureShops artifact SHA 256 | `945d175c363ec06f6b0e965161cff081c5deebf1b1ed899e605b48890fc69563` |
-| FutureShops artifact SHA 512 | `0e38cc66eaaf739413f5a8b2f193d97aca40ea4e8c5be18c4f9f29999ccbc6a1a8055045028a796183b623bf6e4d49478134683b23dbe31445e0db96fc02bae2` |
+| FutureShops source commit | `995b9f386d5a4edbd6db295e06bdee675e205752` |
+| FutureShops artifact SHA 256 | `a3b3a1bdc1014efcbadf492b20599acb7f7dd35f41b53489de857a104447ac48` |
+| FutureShops artifact SHA 512 | `a4b21001342677af52347c96c6dbbbeaf8a2a9c4f313819cbf2e9dbd9e82d8b112cb6a1679831de806e956ecbcdb71796c50d4dc49d353208442fcbcfbec7a0c` |
 | Vault proof registrant SHA 256 | `ab578f60f8302f304000ee6d0b401ec36bbb93589357ac6dce3f75cc7539bb30` |
 | Pixelmon `9.4.0` SHA 256 | `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2` |
 | GeckoLib `4.8.4` SHA 256 | `a1b6ce25e8627aa7e748672eedb6b71af68e0993462313649c259f38e42bcac9` |
@@ -45,7 +45,7 @@ FutureShops Vault surface route=cart_buy_and_pay provider=vault cart_status=CONF
 FutureShops Vault surface route=server_shop_buy provider=vault status=CONFIRMED amount=500 balance_delta=-500 item_delta=1 custody_incomplete=false
 ```
 
-The complete current artifact log is `/tmp/futureshops-vault-surface-current-log.MekPqH` with SHA 256 `fc96646872f1a0cfcb49af9db3d678a55b1feca5f07ddef6c204eff4fa4947fd`. NeoForge reported `27` registered tests and `All 27 required tests passed`. Six tests cover the enabled surface routes described above, and the companion failure matrix runs in the same exact server process. The process exited with status `0` and the disposable runtime was removed after the log and route diagnostics were recorded.
+The complete current artifact log is `/tmp/futureshops-vault-packaged-final-first-log.aEfL1a` with SHA 256 `be5ab5a210d8e0d32d026ecec7ff36cd8a6b22a02e772c8e78a38c9cf17a1d19`. NeoForge reported `27` registered tests and `All 27 required tests passed`. Six tests cover the enabled surface routes described above, and the companion failure matrix runs in the same exact server process. The process exited with status `0` and the disposable runtime was removed after the log and route diagnostics were recorded.
 
 The companion [Vault failure and recovery matrix](vault-failure-matrix-2026-09-05.md) adds the exact packaged interruption, service loss, lookup, retry, duplicate registration, late registration, and missing provider checks. It ran in the same `27` test process and is recorded in the current log above.
 
