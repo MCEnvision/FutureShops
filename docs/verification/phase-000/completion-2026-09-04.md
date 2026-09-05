@@ -7,20 +7,20 @@ This packet records the current `CORE-PHASE-000` execution state for FutureShops
 | Field | Value |
 | --- | --- |
 | Branch | `envy/phase-002-pixelmon-vault` |
-| Integrated source revision | `84d290f8d8e59217052f3929fd9b68fec7648d53` |
+| Integrated source revision | `afe6c11ba9da699130a531e4d7e508f6e4eab3e5` |
 | Goal | `docs/plan/goal.md`, SHA 256 `4dcfb5f126ce39e6beb88fe12a1f8507c4529dc1f41d261f4f63dcbb6ebbc0e9` |
 | Plan | `docs/general/plan.md`, SHA 256 `eb31dc0f992af73edd1cfc8155983ffcc30067f59a05e1f482c25635b5464cc4` |
 | Plan set | `docs/general/plan.index.json`, SHA 256 `a071ab073bba2af16bbafe6bee375552ffa63205c8f16973b1f7e6a052ddb8d3` |
 | Plan set digest | `95d05512287cc72e460cef6f81f150f4a3ac7ddc40e3c2dccf5c4c8391f5b0a1` |
 | Handoff | `docs/general/plan.handoff.json`, SHA 256 `573b7eba4458634c86bf174cd539fd2e301fd4bec95611aebd32abdedbe2bc7b` |
-| FutureShops jar SHA 256 | `198bc350c072d7731cfd00f9c1d0a0fcdca2d1bf5cda6828ef7b96f640bc6d9d` |
-| FutureShops jar SHA 512 | `87ca13d2689d00f3bc03490eeaa0e71f679df15a632d1c510286f880fb89a4fa0018aadc6716a32547a5d99a4fc75c60d923c3893732c44be836780b77572a57` |
+| FutureShops jar SHA 256 | `f501ad192ed5e79c4d17dce524fe6d6a95ede42e8f1047b48be531b65a52f7f6` |
+| FutureShops jar SHA 512 | `367b053ced95bbb6c7f4486fb39a5681c5295458705587f7f4d7479ec233818e8cd3c50890475543554796c812869a8a4d1bc679ef85436a977a75355bef239a` |
 
 The owner-authorized DEC-021 plan amendment changed the master and all registered phase execution contracts. The saved goal remained unchanged. Issue 66 remains open and was not mutated. A read only `gh issue view 66` lookup during the continuation preflight returned the existing open issue. The active plan reserves live issue verification and update for Phase 003, so this early read is recorded as a timing deviation and keeps the issue gate open. No pull request, tag, release, upload, or publication was performed.
 
 ## Phase outputs
 
-The phase has evidence for tasks `P000-TASK-001` through `P000-TASK-012`, and the local reconciliation for `P000-TASK-013` has been refreshed against the current source and amended plan. `P000-TASK-014` was added by DEC-021 and remains the next unfinished task.
+The phase has evidence for tasks `P000-TASK-001` through `P000-TASK-014`, including the local reconciliation for `P000-TASK-013` and the DEC-021 contract fixture for `P000-TASK-014`.
 
 * The baseline and minimal pin diff establish FutureShops `2.3.0`, Minecraft `1.21.1`, NeoForge `21.1.248`, Java `21`, and preserved unrelated dependency boundaries.
 * The provider API compatibility version is `1`. The registry is deterministic, capability declarations are immutable, values use checked integer minor units, and typed outcomes distinguish unavailable and ambiguous effects.
@@ -30,7 +30,7 @@ The phase has evidence for tasks `P000-TASK-001` through `P000-TASK-012`, and th
 * `runData`, the full test suite, all 16 required GameTests, the current build, the standard dedicated server smoke, and the exact Pixelmon and hybrid server probes passed their applicable gates.
 * The current jar passed archive integrity, metadata inspection, dependency isolation checks, and external byte scans. Pixelmon and plugin implementation bytes are not bundled in the jar.
 * The refreshed P000-TASK-001 archive run passed task discovery, tests, and build with the corrected Gradle invocations. It reproduced the `futureshops-2.3.0.jar` SHA 256 `f501ad192ed5e79c4d17dce524fe6d6a95ede42e8f1047b48be531b65a52f7f6` and SHA 512 `367b053ced95bbb6c7f4486fb39a5681c5295458705587f7f4d7479ec233818e8cd3c50890475543554796c812869a8a4d1bc679ef85436a977a75355bef239a`, and `unzip -tq` passed.
-* The DEC-021 contract is present in the current master and every registered phase. It defines the operator commands, module allowlist, structured fields, redaction, rate bounds, server-log and GameTest priority, and client-only escalation. Implementation and command evidence belong to `P000-TASK-014` and Phase 001.
+* The DEC-021 contract is present in the current master and every registered phase. The `P000-TASK-014` fixture freezes the operator commands, ten module identifiers, twenty five structured fields, eight redaction exclusions, rate bounds, server-log and GameTest priority, evidence bundle labels, recovery immutability, and client-only escalation. The shared recorder and command implementation and runtime command evidence belong to Phase 001.
 * A local Markdown link audit checked 99 repository links across the root and documentation tree with no missing targets. The final diff check and tracked external-payload and secret scans were clean.
 
 ## External prerequisite ledger
@@ -48,7 +48,9 @@ The phase has evidence for tasks `P000-TASK-001` through `P000-TASK-012`, and th
 
 ## Verification disposition
 
-The deterministic API, registry, selection, data generation, GameTest, build, dedicated server, exact Pixelmon, and exact hybrid gates pass. The refreshed task 001 archive also passed task discovery, tests, build, jar metadata, and archive integrity. The current exact runtime probe confirms a live Pixelmon balance of zero for the deterministic test UUID and returns `CAPABILITY_MISSING` for both preflight and mutation. The hybrid bridge stack does not bypass this gate.
+The deterministic API, registry, selection, data generation, GameTest, build, dedicated server, exact Pixelmon, exact hybrid, and DEC-021 contract fixture gates pass. The refreshed task 001 archive also passed task discovery, tests, build, jar metadata, and archive integrity. The current exact runtime probe confirms a live Pixelmon balance of zero for the deterministic test UUID and returns `CAPABILITY_MISSING` for both preflight and mutation. The hybrid bridge stack does not bypass this gate.
+
+The fixture validator ran headlessly on `node-1` and confirmed the exact command grammar, module allowlist, lifecycle flags, required and forbidden fields, bounded logging, client escalation conditions, evidence bundle schema, and recovery invariants. Runtime command and dedicated GameTest assertions remain Phase 001 implementation evidence, as required by the phase boundary.
 
 Graphical client smoke is not claimed. The current execution host is headless `node-1`, and an authorized laptop desktop connection was unavailable. The required client gate must run on the laptop with the same jar bytes. This packet therefore records Phase 000 as not complete rather than implying that server evidence substitutes for client acceptance.
 
@@ -58,4 +60,4 @@ The exact runtime logs also contain external Pixelmon tag and map diagnostics, a
 
 Every disposable workspace created for the current task was removed after its final log hashes were captured. Owned server processes were stopped or bounded by timeout, process absence was checked, and no generated runtime, world, log, probe, external jar, or private data was added to the repository. The repository branch is clean after the packet commit.
 
-Phase 000 may transition only after the DEC-021 debug contract fixture and implementation handoff are recorded, the laptop client smoke gate is completed if the client-only acceptance criterion remains required, the early issue read timing deviation is reconciled against the active plan, the complete diff and documentation links are rechecked, and the phase branch follows the required integration workflow. `P000-TASK-013` local reconciliation is complete. The next unfinished task is `P000-TASK-014`; the next contiguous phase remains `CORE-PHASE-001`, and no Phase 001 implementation is started by this packet.
+Phase 000 may transition only after the laptop client smoke gate is completed if the client-only acceptance criterion remains required, the early issue read timing deviation is reconciled against the active plan, the complete diff and documentation links are rechecked, and the phase branch follows the required integration workflow. `P000-TASK-013` local reconciliation and `P000-TASK-014` contract fixture are complete. The next contiguous phase remains `CORE-PHASE-001`, and no Phase 001 implementation is started by this packet.

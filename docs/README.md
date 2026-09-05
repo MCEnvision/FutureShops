@@ -36,6 +36,7 @@ FutureShops documentation is organized by topic. The phase verification packet r
 * [Phase 000 task 010 platform and server verification](verification/phase-000/p000-task-010-2026-09-04.md)
 * [Phase 000 task 011 exact Pixelmon environment](verification/phase-000/p000-task-011-2026-09-04.md)
 * [Phase 000 task 012 exact hybrid environment](verification/phase-000/p000-task-012-2026-09-04.md)
+* [Phase 000 task 014 debug contract](verification/phase-000/p000-task-014-2026-09-04.md)
 * [Phase 000 completion packet](verification/phase-000/completion-2026-09-04.md)
 * [Phase 001 monetary call graph and persistence inventory](verification/phase-001/call-graph-2026-09-03.md)
 * [Phase 001 custody and claim checkpoint](verification/phase-001/custody-2026-09-03.md)

@@ -1,0 +1,174 @@
+{
+  "schema_version": 1,
+  "task_id": "P000-TASK-014",
+  "decision_id": "DEC-021",
+  "status": "frozen_contract",
+  "commands": {
+    "enable": "/futureshops debug on <module>",
+    "disable": "/futureshops debug off",
+    "status": "/futureshops debug status",
+    "permission": "existing FutureShops operator permission",
+    "selection": "restart_only_provider_selection_is_unchanged"
+  },
+  "modules": [
+    "all",
+    "provider",
+    "lifecycle",
+    "transaction",
+    "receipt",
+    "recovery",
+    "pixelmon",
+    "vault",
+    "network",
+    "surface"
+  ],
+  "lifecycle": {
+    "enabled_by_default": false,
+    "persisted": false,
+    "disabled_on_restart": true,
+    "server_authoritative": true,
+    "client_can_enable": false,
+    "changes_provider_selection": false,
+    "changes_readiness": false,
+    "changes_transaction_outcome": false,
+    "changes_safety_rules": false
+  },
+  "record": {
+    "log_category": "futureshops.debug",
+    "required_fields": [
+      "debug_session_id",
+      "source_commit",
+      "futureshops_artifact_sha256",
+      "minecraft_version",
+      "loader_version",
+      "selected_provider",
+      "lifecycle_state",
+      "surface",
+      "operation",
+      "request_id",
+      "leg_id",
+      "account_classification",
+      "required_capabilities",
+      "observed_capabilities",
+      "validation_decision",
+      "journal_state",
+      "receipt_state",
+      "custody_id",
+      "claim_id",
+      "provider_result",
+      "error_category",
+      "elapsed_millis",
+      "logical_side",
+      "thread",
+      "next_safe_action"
+    ],
+    "amount_rule": "minor_units_only_when_needed_for_reproduction",
+    "actor_identifier_rule": "stable_pseudonym_or_request_identity"
+  },
+  "redaction": {
+    "forbidden_fields": [
+      "player_name",
+      "ip_address",
+      "credential",
+      "access_token",
+      "raw_nbt",
+      "inventory_contents",
+      "chat",
+      "proprietary_external_payload"
+    ],
+    "stack_trace_rule": "actionable_failures_only_and_sanitized_before_retention",
+    "client_authority": "client_records_never_authorize_mutation"
+  },
+  "rate_limits": {
+    "event_based": true,
+    "bounded": true,
+    "rate_limited": true,
+    "forbidden_unbounded_events": [
+      "every_tick",
+      "screen_refresh",
+      "balance_poll",
+      "retry_without_state_change"
+    ],
+    "state_change_required_for_repeat": true
+  },
+  "headless_first": {
+    "primary_evidence": [
+      "focused_tests",
+      "all_tests",
+      "dedicated_server_gametests",
+      "complete_build",
+      "dedicated_server_smoke",
+      "exact_external_runtime_trace"
+    ],
+    "procedure": [
+      "record_source_commit_and_artifact_hashes",
+      "enable_one_bounded_module_on_the_server",
+      "run_the_smallest_reproducible_operation",
+      "capture_sanitized_server_records_and_gametest_report",
+      "record_expected_actual_exit_code_and_log_paths",
+      "stop_owned_processes_and_remove_disposable_outputs"
+    ],
+    "laptop_client_allowed_only_for": [
+      "rendered_output",
+      "real_mouse_or_keyboard_input",
+      "client_only_classloading",
+      "resource_presentation",
+      "unrepresentable_synchronization_result"
+    ],
+    "screenshots": "supplemental_only_when_server_evidence_cannot_answer_the_gate"
+  },
+  "evidence_bundle": {
+    "required_artifacts": [
+      "sanitized_command_transcript",
+      "server_log_excerpt",
+      "optional_correlated_client_log_excerpt",
+      "test_or_gametest_report",
+      "runtime_manifest",
+      "artifact_manifest",
+      "sha256_checksums",
+      "sha512_checksums"
+    ],
+    "must_label": [
+      "server_proven_assertions",
+      "client_proven_assertions",
+      "unverified_assertions",
+      "debug_session_id",
+      "request_ids"
+    ],
+    "retention": "sanitized_evidence_only"
+  },
+  "recovery": {
+    "unknown_or_contradictory_records": "RECOVERING_or_FROZEN_under_normal_recovery_rules",
+    "debug_can_clear_freeze": false,
+    "debug_can_authorize_retry": false,
+    "local_receipt_is_external_proof": false
+  },
+  "fixture_cases": [
+    "disabled_status",
+    "authorized_enable_each_module",
+    "authorized_disable",
+    "invalid_module_rejection",
+    "unauthorized_toggle_rejection",
+    "required_field_presence",
+    "forbidden_field_absence",
+    "bounded_repeat_logging",
+    "headless_server_first_decision",
+    "client_escalation_requires_client_only_gate",
+    "recovery_and_freeze_immutability"
+  ],
+  "downstream_handoff": {
+    "consumer": "P001-TASK-014",
+    "implementation_scope": "shared_recorder_and_command_behavior_only",
+    "must_not_add": "second_transaction_path",
+    "preserve": [
+      "command_forms",
+      "module_allowlist",
+      "required_fields",
+      "redaction_rules",
+      "rate_bounds",
+      "headless_first_decision",
+      "evidence_bundle_labels",
+      "recovery_invariants"
+    ]
+  }
+}
