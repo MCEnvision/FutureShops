@@ -7,6 +7,7 @@ import com.enviouse.futureshopsp.api.economy.MutationReceipt;
 import com.enviouse.futureshopsp.api.economy.MutationRequest;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.api.economy.RegistrationResult;
+import com.enviouse.futureshopsp.server.economy.BalanceManager;
 import com.enviouse.futureshopsp.vaultproof.SqliteVaultProofBackend;
 import com.enviouse.futureshopsp.vaultproof.SqliteVaultProofProvider;
 import com.mojang.logging.LogUtils;
@@ -51,12 +52,13 @@ public final class VaultProofRegistrant {
                 new com.enviouse.futureshopsp.api.economy.RequestId(
                         UUID.fromString("00000000-0000-0000-0000-000000000510")),
                 PROOF_PLAYER, 25L, MutationKind.WITHDRAW);
-        ProviderResult<?> precheck = active.precheck(request);
-        ProviderResult<MutationReceipt> withdrawal = active.withdraw(request);
+        ProviderResult<?> providerPrecheck = active.precheck(request);
+        ProviderResult<?> coordinatorPrecheck = BalanceManager.getCoordinator().preflight(request);
+        ProviderResult<MutationReceipt> withdrawal = BalanceManager.getCoordinator().withdraw(request);
         ProviderResult<MutationReceipt> lookup = active.lookup(request.requestId());
         ProviderResult<MutationReceipt> retry = active.retry(request);
-        LOGGER.info("FutureShops Vault proof transaction precheck={} withdrawal={} lookup={} retry={} balance={} database={}",
-                precheck.status(), withdrawal.status(), lookup.status(), retry.status(),
+        LOGGER.info("FutureShops Vault proof transaction provider_precheck={} coordinator_precheck={} withdrawal={} lookup={} retry={} balance={} database={}",
+                providerPrecheck.status(), coordinatorPrecheck.status(), withdrawal.status(), lookup.status(), retry.status(),
                 active.balance(PROOF_PLAYER).value().orElseThrow().balanceMinorUnits(), databasePath());
     }
 
