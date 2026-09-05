@@ -2,7 +2,7 @@
 
 ## Current status
 
-Phase 002 remains open. The native Pixelmon workflow implementation and headless evidence remain valid. The current exact packaged artifact is `build/libs/futureshops-2.3.0.jar` from source revision `a8523e1e15cf5a4db79812ca6581fba25339ce67`, with SHA 256 `ab1284d23159d4e5fddacc7740ad13db433a8c2d37a67ceac7fcde291ee45247` and SHA 512 `972baa653876716a8f2a1dee5340237687710261299d22b7ed329e773ed4dc0e9aa411c74ee947a01abcf90104b888f30ce64cb6aab0dfffa39fd761c949dae4`.
+Phase 002 remains open. The native Pixelmon workflow implementation and headless evidence remain valid. The current exact packaged artifact is `build/libs/futureshops-2.3.0.jar` from source revision `6bbaf9156bcd8d79bee274717f2ae67d4db6f69e`, with SHA 256 `945d175c363ec06f6b0e965161cff081c5deebf1b1ed899e605b48890fc69563` and SHA 512 `0e38cc66eaaf739413f5a8b2f193d97aca40ea4e8c5be18c4f9f29999ccbc6a1a8055045028a796183b623bf6e4d49478134683b23dbe31445e0db96fc02bae2`.
 
 No pull request, phase integration, tag, release, upload, or issue 66 mutation was performed. Issue 66 remains frozen for Phase 003.
 
@@ -20,7 +20,7 @@ A second exact hybrid runtime omitted the proof registrant. The unmodified bridg
 
 The provider mutation router now maps transfer credit, refund, compensation, and deposit requests to the native add path, and transfer debit and withdrawal requests to the native take path. This preserves the request identity and durable receipt checks while allowing the coordinator to complete native transfers.
 
-The current packaged artifact was revalidated with a pure exact NeoForge Vault surface GameTest. All twenty four tests passed and the route diagnostics confirmed server shop sell, player shop buy, cart buy, pay transfer, and physical money refusal. See [exact Vault surface GameTest](vault-surface-gametest-2026-09-05.md) for the current artifact hash and log.
+The current packaged artifact was revalidated with a pure exact NeoForge Vault surface and failure GameTest matrix. All twenty five required tests passed. Route diagnostics confirmed server shop sell, player shop buy, cart buy, pay transfer, and physical money refusal. Failure diagnostics confirmed typed service loss, every SQLite interruption boundary, durable lookup, retry deduplication, late registration, and missing provider refusal. See [exact Vault surface GameTest](vault-surface-gametest-2026-09-05.md) and [exact Vault failure and recovery matrix](vault-failure-matrix-2026-09-05.md) for current hashes and logs.
 
 ## New Vault proof evidence
 

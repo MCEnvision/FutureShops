@@ -6,10 +6,10 @@ This record covers the native Pixelmon transaction path, the Vault proof boundar
 
 | Field | Value |
 | --- | --- |
-| Source revision | `a8523e1e15cf5a4db79812ca6581fba25339ce67` |
+| Source revision | `6bbaf9156bcd8d79bee274717f2ae67d4db6f69e` |
 | FutureShops artifact | `build/libs/futureshops-2.3.0.jar` |
-| FutureShops SHA 256 | `ab1284d23159d4e5fddacc7740ad13db433a8c2d37a67ceac7fcde291ee45247` |
-| FutureShops SHA 512 | `972baa653876716a8f2a1dee5340237687710261299d22b7ed329e773ed4dc0e9aa411c74ee947a01abcf90104b888f30ce64cb6aab0dfffa39fd761c949dae4` |
+| FutureShops SHA 256 | `945d175c363ec06f6b0e965161cff081c5deebf1b1ed899e605b48890fc69563` |
+| FutureShops SHA 512 | `0e38cc66eaaf739413f5a8b2f193d97aca40ea4e8c5be18c4f9f29999ccbc6a1a8055045028a796183b623bf6e4d49478134683b23dbe31445e0db96fc02bae2` |
 | Pixelmon artifact | `/tmp/Pixelmon-1.21.1-9.4.0-universal.jar` |
 | Pixelmon SHA 256 | `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2` |
 | Minecraft | `1.21.1` |
@@ -132,9 +132,11 @@ The coordinator unit suite also covers provider service loss. Loss before intent
 
 ## Current artifact bound rerun on 2026-09-05
 
-The current packaged artifact from source revision `a8523e1e15cf5a4db79812ca6581fba25339ce67` has SHA 256 `ab1284d23159d4e5fddacc7740ad13db433a8c2d37a67ceac7fcde291ee45247` and SHA 512 `972baa653876716a8f2a1dee5340237687710261299d22b7ed329e773ed4dc0e9aa411c74ee947a01abcf90104b888f30ce64cb6aab0dfffa39fd761c949dae4`. The exact Pixelmon `9.4.0` GameTest passed all twenty tests with log SHA 256 `5bd44830fc864bd78120c2a9500caad8cc2e1f7c916761241f40267d24e083ad`. A separate two process replay run passed all twenty tests in both processes, with first log SHA 256 `6b4696fb9f9a14954d50c038371cf2be9101a8b3bd29fcf5b21b61befaf80564` and restart log SHA 256 `60b5d3e6873c9285f205b7530e75d7774468977f5d1de6d2a6da1546ed05c3e2`. The mixin target applied in each process and both exited with code `0`.
+The current packaged artifact from source revision `6bbaf9156bcd8d79bee274717f2ae67d4db6f69e` has SHA 256 `945d175c363ec06f6b0e965161cff081c5deebf1b1ed899e605b48890fc69563` and SHA 512 `0e38cc66eaaf739413f5a8b2f193d97aca40ea4e8c5be18c4f9f29999ccbc6a1a8055045028a796183b623bf6e4d49478134683b23dbe31445e0db96fc02bae2`. The exact Pixelmon `9.4.0` GameTest passed all twenty tests with log SHA 256 `dcc938fbb0cff3cc487f2f573fc6087023c727da511fadc398b98aa675cfcb4c`. A separate restart process passed all twenty tests with log SHA 256 `d78bbea1e02f0ac119adbcfaaa3d3e208d57d2e432650d108c521a37091d869a`. The mixin target applied and both processes exited with code `0`.
 
 The same current artifact and separately installed proof registrant passed all twenty four exact NeoForge Vault surface tests. The route diagnostic log SHA 256 is `fb6456f6bc72ea47f8c20b7ea97021d0640aba1a55ade645ef0f79fab6c3a96e`. It confirms server shop sell, player shop buy, cart buy, pay transfer, and physical money refusal with no incomplete custody. Full assertions and the provider database hash are recorded in [exact Vault surface GameTest](vault-surface-gametest-2026-09-05.md).
+
+The same current artifact also passed the exact Vault failure and recovery matrix. The packaged log SHA 256 is `1be8a17c1da0ccfaae521b3acaf6e3f0a091b175bd02a11e76cc3fcb07af7567`. All twenty five required tests passed, including typed service loss, each interrupted SQLite boundary, authoritative receipt lookup after a post commit acknowledgement loss, retry deduplication, duplicate and late registration refusal, missing provider resolution, and final balance conservation. See [exact Vault failure and recovery matrix](vault-failure-matrix-2026-09-05.md).
 
 ## Exact hybrid refusal without proof bridge
 

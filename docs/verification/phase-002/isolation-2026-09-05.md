@@ -4,12 +4,12 @@ This report binds the current unpublished FutureShops `2.3.0` artifact to the op
 
 ## artifact
 
-The artifact is `build/libs/futureshops-2.3.0.jar` from source revision `a8523e1e15cf5a4db79812ca6581fba25339ce67`.
+The artifact is `build/libs/futureshops-2.3.0.jar` from source revision `6bbaf9156bcd8d79bee274717f2ae67d4db6f69e`.
 
 | Check | Result |
 | --- | --- |
-| SHA 256 | `ab1284d23159d4e5fddacc7740ad13db433a8c2d37a67ceac7fcde291ee45247` |
-| SHA 512 | `972baa653876716a8f2a1dee5340237687710261299d22b7ed329e773ed4dc0e9aa411c74ee947a01abcf90104b888f30ce64cb6aab0dfffa39fd761c949dae4` |
+| SHA 256 | `945d175c363ec06f6b0e965161cff081c5deebf1b1ed899e605b48890fc69563` |
+| SHA 512 | `0e38cc66eaaf739413f5a8b2f193d97aca40ea4e8c5be18c4f9f29999ccbc6a1a8055045028a796183b623bf6e4d49478134683b23dbe31445e0db96fc02bae2` |
 | `unzip -tq` | passed |
 | forbidden external archive matches | `0` |
 | nested jar entries | `0` |
@@ -31,6 +31,8 @@ The earlier packaged artifact also started in a fresh standard NeoForge server d
 
 The earlier packaged artifact started in the exact hybrid Youer runtime beside the external Pixelmon, GeckoLib, Vault, FinalEconomy, EverNifeCore, and PixelmonEconomyBridge jars. The separate proof registrant registered `vault`, completed the proof routes, and replayed them after restart. The first and restart log hashes are `85da87db12821a1a43676274377aed3d40f53ec5934e87431c5626499b19920a` and `7d2b2245d22f44be8ad9eb12799421b038995b13237fa4f414b7eae82c2d6bbc`. The post restart proof database SHA 256 is `73430219698eb89e8fc8325af954cdf27f229fb1698e1de346fed4165e438de6`.
 
-The current artifact was revalidated with the separate proof registrant in a pure exact NeoForge `21.1.248` GameTest runtime. The Vault surface log SHA 256 is `fb6456f6bc72ea47f8c20b7ea97021d0640aba1a55ade645ef0f79fab6c3a96e`, and all twenty four registered tests passed. The route log covers server shop sell, player shop buy, cart buy, pay transfer, and physical money refusal. The current hybrid proof fixture remains separate from production packaging.
+The current artifact was revalidated with the separate proof registrant in a pure exact NeoForge `21.1.248` GameTest runtime. The Vault surface log SHA 256 is `fb6456f6bc72ea47f8c20b7ea97021d0640aba1a55ade645ef0f79fab6c3a96e`, and all twenty four registered tests passed. The route log covers server shop sell, player shop buy, cart buy, pay transfer, and physical money refusal. The same artifact passed the [Vault failure and recovery matrix](vault-failure-matrix-2026-09-05.md) with log SHA 256 `1be8a17c1da0ccfaae521b3acaf6e3f0a091b175bd02a11e76cc3fcb07af7567` and `All 25 required tests passed`. The current hybrid proof fixture remains separate from production packaging.
+
+The production artifact was rebuilt from source revision `6bbaf9156bcd8d79bee274717f2ae67d4db6f69e` and rerun in fresh exact Pixelmon `9.4.0` GameTest processes. The artifact SHA 256 is `945d175c363ec06f6b0e965161cff081c5deebf1b1ed899e605b48890fc69563`. The first process log SHA 256 is `dcc938fbb0cff3cc487f2f573fc6087023c727da511fadc398b98aa675cfcb4c`, and the restart process log SHA 256 is `d78bbea1e02f0ac119adbcfaaa3d3e208d57d2e432650d108c521a37091d869a`.
 
 All runtimes used Java `21.0.11` on the headless `node-1` Linux host. Every disposable runtime, world, log directory, database, and generated classpath file was removed after hashing. The pre existing external artifacts and shared Gradle cache were not modified.

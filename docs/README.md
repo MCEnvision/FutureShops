@@ -47,6 +47,7 @@ FutureShops documentation is organized by topic. The phase verification packet r
 * [Phase 002 integration evidence](verification/phase-002/p002-integration-evidence-2026-09-04.md)
 * [Phase 002 exact hybrid Vault proof](verification/phase-002/vault-hybrid-proof-2026-09-05.md)
 * [Phase 002 exact Vault surface GameTest](verification/phase-002/vault-surface-gametest-2026-09-05.md)
+* [Phase 002 exact Vault failure and recovery matrix](verification/phase-002/vault-failure-matrix-2026-09-05.md)
 * [Phase 002 isolation and packaging](verification/phase-002/isolation-2026-09-05.md)
 * [Phase 002 completion packet update](verification/phase-002/completion-2026-09-04.md)
 * [Phase 002 bridge review](verification/phase-002/bridge-review-2026-09-03.md)
