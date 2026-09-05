@@ -36,6 +36,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -50,6 +51,9 @@ import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -58,6 +62,7 @@ import java.util.concurrent.CompletableFuture;
 @PrefixGameTestTemplate(false)
 public final class EconomyGameTests {
     private static final UUID FIXTURE_PLAYER = UUID.fromString("00000000-0000-0000-0000-000000000231");
+    private static final UUID RESTART_REQUEST = UUID.fromString("00000000-0000-0000-0000-000000000241");
     private static final Logger LOGGER = LogUtils.getLogger();
 
     private EconomyGameTests() {
@@ -226,6 +231,57 @@ public final class EconomyGameTests {
             }
         } catch (ReflectiveOperationException | IOException | RuntimeException exception) {
             helper.fail("the exact Pixelmon native account probe failed: " + exception.getClass().getSimpleName());
+            return;
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void pixelmonNativeProcessRestart(GameTestHelper helper) {
+        if (!"pixelmon".equals(BalanceManager.getLifecycleSnapshotOrUnresolved().providerId())) {
+            helper.succeed();
+            return;
+        }
+
+        Path marker = helper.getLevel().getServer().getWorldPath(LevelResource.ROOT)
+                .resolve("futureshops-pixelmon-restart.marker");
+        try {
+            if (!Files.exists(marker)) {
+                ServerPlayer player = helper.makeMockServerPlayerInLevel();
+                MutationRequest request = MutationRequest.forPlayer(new RequestId(RESTART_REQUEST), player.getUUID(),
+                        25L, MutationKind.WITHDRAW);
+                Object storage = pixelmonPartyStorage(player);
+                storage.getClass().getMethod("setBalance", BigDecimal.class).invoke(storage, BigDecimal.valueOf(100L));
+                var mutation = BalanceManager.getCoordinator().withdraw(request);
+                helper.assertTrue(mutation.confirmed(), "the first restart pass must confirm native mutation");
+                helper.assertTrue(hasCompletedReceipt(readPixelmonStorageFile(storage), request.requestId()),
+                        "the first restart pass must persist its completed receipt");
+                Files.writeString(marker, player.getUUID() + "\n", StandardCharsets.UTF_8);
+                LOGGER.info("futureshops.pixelmon.gametest process_restart phase=FIRST request={} balance=75 receipt=COMPLETED",
+                        request.requestId().value());
+            } else {
+                UUID playerId = UUID.fromString(Files.readString(marker, StandardCharsets.UTF_8).trim());
+                Class<?> storageType = Class.forName("com.pixelmonmod.pixelmon.api.storage.PlayerPartyStorage");
+                Object storage = storageType.getConstructor(UUID.class).newInstance(playerId);
+                CompoundTag persisted = readPixelmonStorageFile(storage);
+                Object restoredFuture = storage.getClass()
+                        .getMethod("readFromNBT", CompoundTag.class, HolderLookup.Provider.class)
+                        .invoke(storage, persisted.copy(), helper.getLevel().registryAccess());
+                Object restored = ((CompletableFuture<?>) restoredFuture).join();
+                helper.assertTrue(restored instanceof PixelmonNativeEconomyAccess,
+                        "the restarted native Pixelmon account must retain the receipt access hook");
+                var replay = ((PixelmonNativeEconomyAccess) restored).futureshopsMutate(new RequestId(RESTART_REQUEST),
+                        MutationKind.WITHDRAW, 25L, helper.getLevel().registryAccess());
+                helper.assertTrue(replay.confirmed(), "the restarted native Pixelmon request must replay safely");
+                BigDecimal balance = (BigDecimal) storage.getClass().getMethod("getBalance").invoke(storage);
+                helper.assertTrue(balance.longValueExact() == 75L,
+                        "the restarted native Pixelmon balance must remain debited once");
+                LOGGER.info("futureshops.pixelmon.gametest process_restart phase=SECOND request={} replay={} balance={}",
+                        RESTART_REQUEST, replay.status(), balance);
+                Files.deleteIfExists(marker);
+            }
+        } catch (ReflectiveOperationException | IOException | RuntimeException exception) {
+            helper.fail("the native Pixelmon process restart probe failed: " + exception.getClass().getSimpleName());
             return;
         }
         helper.succeed();
