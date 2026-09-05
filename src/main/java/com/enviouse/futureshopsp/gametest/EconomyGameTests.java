@@ -29,6 +29,9 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerPlayer;
@@ -44,6 +47,8 @@ import org.slf4j.Logger;
 import java.util.List;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
+import java.io.File;
+import java.io.IOException;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -156,6 +161,9 @@ public final class EconomyGameTests {
                         .invoke(storage, new CompoundTag(), helper.getLevel().registryAccess());
                 helper.assertTrue(saved.contains("FutureShopsReceipts"),
                         "the native Pixelmon receipt must be stored beside pixelDollars");
+                CompoundTag persisted = readPixelmonStorageFile(storage);
+                helper.assertTrue(hasCompletedReceipt(persisted, request.requestId()),
+                        "the native Pixelmon receipt must be present in the durable storage file");
                 Object restoredStorage = storage.getClass().getConstructor(UUID.class).newInstance(player.getUUID());
                 Object restoredFuture = storage.getClass()
                         .getMethod("readFromNBT", CompoundTag.class, HolderLookup.Provider.class)
@@ -183,7 +191,7 @@ public final class EconomyGameTests {
                         after.value().orElseThrow().balanceMinorUnits(), saved.contains("FutureShopsReceipts"),
                         restoredReceipt.status(), corruptedResult.status());
             }
-        } catch (ReflectiveOperationException | RuntimeException exception) {
+        } catch (ReflectiveOperationException | IOException | RuntimeException exception) {
             helper.fail("the exact Pixelmon native account probe failed: " + exception.getClass().getSimpleName());
             return;
         }
@@ -202,6 +210,40 @@ public final class EconomyGameTests {
             }
         }
         throw new IllegalStateException("Pixelmon party storage is unavailable");
+    }
+
+    private static CompoundTag readPixelmonStorageFile(Object storage)
+            throws ReflectiveOperationException, IOException {
+        Class<?> storageType = Class.forName("com.pixelmonmod.pixelmon.api.storage.PokemonStorage");
+        Object adapter = Class.forName("com.pixelmonmod.pixelmon.api.storage.StorageProxy")
+                .getMethod("getSaveAdapter").invoke(null);
+        if (adapter == null) {
+            throw new IllegalStateException("Pixelmon save adapter is unavailable");
+        }
+        Object fileValue = adapter.getClass().getMethod("getFile", storageType).invoke(adapter, storage);
+        if (!(fileValue instanceof File file)) {
+            throw new IllegalStateException("Pixelmon storage file is unavailable");
+        }
+        return NbtIo.read(file.toPath());
+    }
+
+    private static boolean hasCompletedReceipt(CompoundTag persisted, RequestId requestId) {
+        if (persisted == null || !persisted.contains("FutureShopsReceipts", Tag.TAG_COMPOUND)) {
+            return false;
+        }
+        CompoundTag root = persisted.getCompound("FutureShopsReceipts");
+        if (!root.contains("entries", Tag.TAG_LIST)) {
+            return false;
+        }
+        ListTag entries = root.getList("entries", Tag.TAG_COMPOUND);
+        for (int index = 0; index < entries.size(); index++) {
+            CompoundTag entry = entries.getCompound(index);
+            if (entry.hasUUID("request_id") && requestId.value().equals(entry.getUUID("request_id"))
+                    && "COMPLETED".equals(entry.getString("state"))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void setNativeBalance(ServerPlayer player, long balance) throws ReflectiveOperationException {

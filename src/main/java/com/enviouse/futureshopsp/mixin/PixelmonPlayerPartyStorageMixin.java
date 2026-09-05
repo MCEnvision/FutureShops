@@ -9,6 +9,7 @@ import com.enviouse.futureshopsp.compat.pixelmon.PixelmonNativeEconomyAccess;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerPlayer;
 import org.spongepowered.asm.mixin.Mixin;
@@ -20,6 +21,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.io.File;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -156,7 +163,7 @@ public abstract class PixelmonPlayerPartyStorageMixin implements PixelmonNativeE
         }
         NativeReceipt pending = NativeReceipt.pending(requestId, kind, amountMinorUnits);
         futureshopsReceipts.put(requestId, pending);
-        if (!futureshopsDurableSave(registries)) {
+        if (!futureshopsDurableSave(registries, requestId, false)) {
             futureshopsReceipts.remove(requestId);
             return ProviderResult.recoveryRequired("native Pixelmon pending receipt could not be saved");
         }
@@ -172,7 +179,10 @@ public abstract class PixelmonPlayerPartyStorageMixin implements PixelmonNativeE
         }
         if (!changed) {
             futureshopsReceipts.remove(requestId);
-            futureshopsDurableSave(registries);
+            if (!futureshopsDurableSave(registries, null, false)) {
+                futureshopsReceipts.put(requestId, pending);
+                return ProviderResult.recoveryRequired("native Pixelmon rejection could not be durably saved");
+            }
             return ProviderResult.rejected(ProviderError.INSUFFICIENT_FUNDS,
                     "native Pixelmon account rejected the mutation");
         }
@@ -184,7 +194,7 @@ public abstract class PixelmonPlayerPartyStorageMixin implements PixelmonNativeE
         }
         NativeReceipt completed = pending.completed(resulting);
         futureshopsReceipts.put(requestId, completed);
-        if (!futureshopsDurableSave(registries)) {
+        if (!futureshopsDurableSave(registries, requestId, true)) {
             futureshopsReceipts.put(requestId, pending);
             return ProviderResult.recoveryRequired("native Pixelmon completed effect has no durable receipt");
         }
@@ -210,7 +220,8 @@ public abstract class PixelmonPlayerPartyStorageMixin implements PixelmonNativeE
     }
 
     @Unique
-    private boolean futureshopsDurableSave(HolderLookup.Provider registries) {
+    private boolean futureshopsDurableSave(HolderLookup.Provider registries, RequestId expectedRequestId,
+                                           boolean expectedCompleted) {
         try {
             ClassLoader loader = getClass().getClassLoader();
             Class<?> storage = Class.forName("com.pixelmonmod.pixelmon.api.storage.PokemonStorage", false, loader);
@@ -222,8 +233,44 @@ public abstract class PixelmonPlayerPartyStorageMixin implements PixelmonNativeE
             }
             adapter.getClass().getMethod("save", storage, HolderLookup.Provider.class)
                     .invoke(adapter, this, registries);
-            return true;
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError exception) {
+            Object fileValue = adapter.getClass().getMethod("getFile", storage).invoke(adapter, this);
+            if (!(fileValue instanceof File file)) {
+                return false;
+            }
+            Path path = file.toPath();
+            if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+                return false;
+            }
+            try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+                channel.force(true);
+            }
+            return expectedRequestId == null || futureshopsReceiptIsOnDisk(path, expectedRequestId, expectedCompleted);
+        } catch (java.io.IOException | ReflectiveOperationException | RuntimeException | LinkageError exception) {
+            return false;
+        }
+    }
+
+    @Unique
+    private boolean futureshopsReceiptIsOnDisk(Path path, RequestId expectedRequestId, boolean expectedCompleted) {
+        try {
+            CompoundTag persisted = NbtIo.read(path);
+            if (persisted == null || !persisted.contains(FUTURESHOPS_RECEIPTS, Tag.TAG_COMPOUND)) {
+                return false;
+            }
+            CompoundTag root = persisted.getCompound(FUTURESHOPS_RECEIPTS);
+            if (!root.contains(FUTURESHOPS_RECEIPT_ENTRIES, Tag.TAG_LIST)) {
+                return false;
+            }
+            ListTag entries = root.getList(FUTURESHOPS_RECEIPT_ENTRIES, Tag.TAG_COMPOUND);
+            for (int index = 0; index < entries.size(); index++) {
+                CompoundTag entry = entries.getCompound(index);
+                if (entry.hasUUID("request_id") && expectedRequestId.value().equals(entry.getUUID("request_id"))
+                        && (expectedCompleted ? "COMPLETED" : "PENDING").equals(entry.getString("state"))) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (java.io.IOException | RuntimeException exception) {
             return false;
         }
     }

@@ -21,7 +21,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.UUID;
 
-/** Optional read only Pixelmon adapter. */
+/** Optional Pixelmon adapter. */
 public final class PixelmonEconomyProvider implements com.enviouse.futureshopsp.api.economy.EconomyProvider {
     public static final String PROVIDER_ID = "pixelmon";
     public static final String SUPPORTED_VERSION = "9.4.0";
