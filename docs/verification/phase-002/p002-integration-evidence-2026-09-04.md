@@ -6,10 +6,10 @@ This record covers the native Pixelmon transaction path, the Vault proof boundar
 
 | Field | Value |
 | --- | --- |
-| Source revision | `3b9abd35dceb1171bf98d4015f490dc9dbb282d1` |
+| Source revision | `da4028ca23baf34c4058ea5f32b8e1c0b10051ca` |
 | FutureShops artifact | `build/libs/futureshops-2.3.0.jar` |
-| FutureShops SHA 256 | `dc33fa50171b7df1d749765a111877bc410d0691ea117b7a16245b5dddd30606` |
-| FutureShops SHA 512 | `2e6987b3f7d1e465d8e21f3d2cd93a9610f92c9d5b50dc55f3f6d04c25f1b8f046fcfc0a88cd3f9992feeb4490d66391edd9fdb7902e84a99e5b0a8e60a34274` |
+| FutureShops SHA 256 | `0fd5b2a259d1369a4f1fa751a9eb5391e1c513939c20d3a51757f61b26287d97` |
+| FutureShops SHA 512 | `5a4820d85ae508fde5aa6a0df85dc810dcfaa22a6c9ee70a4e5be9e4b7bdff8cc9351b9437887e83d991803dd45573fabd7c4fe5c4d51abcd3e6fd0ef278ec33` |
 | Pixelmon artifact | `/tmp/Pixelmon-1.21.1-9.4.0-universal.jar` |
 | Pixelmon SHA 256 | `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2` |
 | Minecraft | `1.21.1` |
@@ -35,17 +35,21 @@ Sanitized server evidence:
 futureshops.pixelmon.gametest native cart state diamonds_before=0 diamonds_after=1 balance=500
 futureshops.pixelmon.gametest native pay state same_account=false payer_preflight=NONE recipient_preflight=NONE success=true error=OK payer_result=875 payer_live=875 recipient_live=125
 futureshops.pixelmon.gametest native server sell state items_before=1 items_after=0 balance=25 stock_before=100 stock_after=101
-futureshops.pixelmon.gametest native mutation confirmed request=306070ff-5e7a-4349-afa5-c07eac06eb7f replay=306070ff-5e7a-4349-afa5-c07eac06eb7f balance=75 receipt_nbt=true reload=CONFIRMED unknown_recovery=RECOVERY_REQUIRED
+futureshops.pixelmon.gametest native mutation confirmed request=6a338cfb-6fe0-4631-a4ed-a72b8e7f68a7 replay=6a338cfb-6fe0-4631-a4ed-a72b8e7f68a7 balance=75 receipt_nbt=true reload=CONFIRMED unknown_recovery=RECOVERY_REQUIRED
 futureshops.pixelmon.gametest native admin shop buy state diamonds_before=0 diamonds_after=1 balance=99 escrow_before=0 escrow_after=1
 futureshops.pixelmon.gametest native public mutations withdrawal=true deposit=true refund=CONFIRMED compensation=CONFIRMED balance=185
 All 19 required tests passed :)
 ```
 
-The packaged exact Pixelmon log SHA 256 is `2a08502fc0f47e20dd310af009d121616b0631817da31a1ab953840448ea7e49`. The corresponding sanitized server log SHA 256 is `8dfd6798b4a3fd161dbe17d881580cf32f8b0b3e2f6f427a4ffff94a0084977b`.
+The exact Pixelmon GameTest log SHA 256 is `9efe8de551f6526bf83232c5e05ce284e731257f033c256abf741c47527d4d50`.
+
+The test also reads the Pixelmon save adapter file with `NbtIo.read` after the mutation and asserts that the completed request UUID and state are present on disk. The save boundary forces the file before this check. This is the durable receipt proof for the native mixin path.
 
 The dedicated server stopped and saved its disposable world after the run. The repository test configuration was restored to `provider = "internal"`.
 
-The same headless GameTest launcher was run from a fresh temporary game directory with no Pixelmon jar. The standard NeoForge environment loaded FutureShops, skipped the optional Pixelmon target, reached `FutureShops server starting`, and passed all nineteen required tests. The sanitized absence log SHA 256 is `54e3b3d1cfacc87b32e7680e9d007ba61d288a9098f0ae30885ccec61b6a8455`. The exact Pixelmon jar remained external and was not copied into the temporary absence directory.
+The same headless GameTest launcher was run from a fresh temporary game directory with no Pixelmon jar and `provider = "internal"`. The standard NeoForge environment loaded FutureShops, skipped the optional Pixelmon target, reached `FutureShops server starting`, and passed all nineteen required tests. The sanitized absence log SHA 256 is `ec61fb40021a76e1505c3a1819facd2ad84911531bf3195176a99c6d1a4733c0`. The exact Pixelmon jar remained external and was not copied into the temporary absence directory.
+
+The rebuilt packaged jar was also launched in a disposable exact Pixelmon dedicated server with the `forgeserver` target. FutureShops 2.3.0, Pixelmon 9.4.0, and the mixin target loaded successfully before the server reached `Done` and stopped cleanly. The packaged server log SHA 256 is `c0e0441699ac8e3dd72abc3348e2ae5951ceef2310e8cef593468f1ef4eb18b8`. Existing Pixelmon world warnings about a missing spawning tag and `Not a map: END` were present. They did not prevent startup and are not FutureShops failures.
 
 ## Vault bridge and backend proof
 
@@ -62,7 +66,7 @@ The fixture proves the required bridge contract and is not a claim that the revi
 
 ## Headless debug command evidence
 
-The exact disposable profile had `eula=true`, Pixelmon `9.4.0`, GeckoLib `4.8.4`, NeoForge `21.1.248`, and the candidate artifact installed. The server was launched with no client connection and received:
+The exact disposable profile had `eula=true`, Pixelmon `9.4.0`, GeckoLib `4.8.4`, NeoForge `21.1.248`, and the rebuilt artifact installed. The server was launched with no client connection and received:
 
 ```text
 futureshops debug on pixelmon
@@ -72,7 +76,7 @@ futureshops debug status
 stop
 ```
 
-The sanitized log records used the named `futureshops.debug` category, session correlation, source and artifact fields, Minecraft and loader versions, module, operation, lifecycle, capability, validation, receipt, custody, claim, error, elapsed time, server side, thread, and next action fields. The source commit and artifact SHA were discovered from the packaged manifest and loaded mod file, not supplied by the operator. The session was ephemeral and status returned `debug=off` after disable. Raw profile output was not retained in the repository. The console capture SHA 256 is `c480f1a0574ac63f90aa4a94c1d101948cde13f32e6f40ac8e9f67b042559d95` and the sanitized server log SHA 256 is `93e27cf42ebfca90f1a7209cdd025e62a49532c01717632abe321361129e2327`.
+The sanitized log records used the named `futureshops.debug` category, session correlation, source and artifact fields, Minecraft and loader versions, module, operation, lifecycle, capability, validation, receipt, custody, claim, error, elapsed time, server side, thread, and next action fields. The source commit and artifact SHA were discovered from the packaged manifest and loaded mod file, not supplied by the operator. The session was ephemeral and status returned `debug=off` after disable. Raw profile output was not retained in the repository. The sanitized server debug log SHA 256 is `c8ec4f3d273207598c8ed181cd8077d9d3b7a0ba9c305cc5e67fe0e3f618bcf5`. The log records session `5966a7ce-2021-4a3e-ad8e-de622b8642c6`, source commit `da4028ca23baf34c4058ea5f32b8e1c0b10051ca`, and artifact SHA 256 `0fd5b2a259d1369a4f1fa751a9eb5391e1c513939c20d3a51757f61b26287d97`.
 
 No laptop client run was needed. The phase acceptance criteria exercised server authority, persistence, provider receipts, retry behavior, and recovery, all represented by deterministic tests and dedicated server logs. A laptop remains reserved for a later client only criterion such as rendered UI, real input, client classloading, or visual synchronization.
 
