@@ -11,6 +11,7 @@ import com.enviouse.futureshopsp.init.ModCreativeTabs;
 import com.enviouse.futureshopsp.init.ModItems;
 import com.enviouse.futureshopsp.money.ModDataComponents;
 import com.enviouse.futureshopsp.server.economy.BalanceManager;
+import com.enviouse.futureshopsp.server.debug.DebugDiagnostics;
 import com.enviouse.futureshopsp.server.pricing.DynamicPricingEngine;
 import com.enviouse.futureshopsp.server.session.ShopSessionManager;
 import com.enviouse.futureshopsp.server.shop.ExternalStorageRegistry;
@@ -121,6 +122,7 @@ public class Futureshops {
         DynamicPricingEngine.reset();
         StockRefreshScheduler.reset();
         ShopConfigClipboard.clearAll();
+        DebugDiagnostics.reset();
         LOGGER.info("FutureShops server stopping.");
     }
 

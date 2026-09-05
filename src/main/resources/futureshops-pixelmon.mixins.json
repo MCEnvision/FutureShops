@@ -1,0 +1,16 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.enviouse.futureshopsp.mixin",
+  "plugin": "com.enviouse.futureshopsp.mixin.PixelmonEconomyMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "PixelmonPlayerPartyStorageMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

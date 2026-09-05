@@ -12,6 +12,8 @@ import com.enviouse.futureshopsp.api.economy.ProviderLifecycle;
 import com.enviouse.futureshopsp.api.economy.ProviderResult;
 import com.enviouse.futureshopsp.api.economy.ProviderResultStatus;
 import com.enviouse.futureshopsp.api.economy.RequestId;
+import com.enviouse.futureshopsp.server.debug.DebugDiagnostics;
+import com.enviouse.futureshopsp.server.debug.DebugModule;
 import com.enviouse.futureshopsp.event.BalanceChangeEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
@@ -510,6 +512,9 @@ public final class EconomyTransactionCoordinator {
         if (result == null) {
             return ambiguous(pending, "provider returned no mutation result");
         }
+        DebugDiagnostics.transaction(DebugModule.TRANSACTION, "economy", expectedKind.name().toLowerCase(), request,
+                null, provider.capabilities(), result, pending.state().name(), "provider_result", "unknown", "unknown",
+                result.confirmed() ? "persist confirmed receipt" : "follow the typed provider outcome");
         if (result.confirmed()) {
             MutationReceipt receipt = result.receipt().orElse(result.value().orElse(null));
             if (!validReceipt(request, receipt)) {
@@ -713,6 +718,9 @@ public final class EconomyTransactionCoordinator {
         if (!receiptAudit.flush()) {
             throw new IllegalStateException("receipt audit flush failed");
         }
+        DebugDiagnostics.transaction(DebugModule.RECEIPT, "economy", "journal_replace", updated.request(), null,
+                provider.capabilities(), null, updated.state().name(), updated.resultStatus().name(), "unknown", "unknown",
+                "continue with the recorded state");
     }
 
     private void append(EconomyJournalRecord record) {
@@ -724,6 +732,9 @@ public final class EconomyTransactionCoordinator {
         if (!receiptAudit.flush()) {
             throw new IllegalStateException("receipt audit flush failed");
         }
+        DebugDiagnostics.transaction(DebugModule.RECEIPT, "economy", "journal_append", record.request(), null,
+                provider.capabilities(), null, record.state().name(), record.resultStatus().name(), "unknown", "unknown",
+                "continue with the recorded state");
     }
 
     private static boolean validReceipt(MutationRequest request, MutationReceipt receipt) {

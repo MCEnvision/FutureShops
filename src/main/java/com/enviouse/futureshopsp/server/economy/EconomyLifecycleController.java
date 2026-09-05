@@ -1,6 +1,7 @@
 package com.enviouse.futureshopsp.server.economy;
 
 import com.enviouse.futureshopsp.api.economy.ProviderLifecycle;
+import com.enviouse.futureshopsp.server.debug.DebugDiagnostics;
 
 /**
  * Serializes provider lifecycle transitions on the logical server boundary.
@@ -33,11 +34,13 @@ public final class EconomyLifecycleController {
                 lifecycle = ProviderLifecycle.RECOVERING;
                 diagnostic = sanitize("startup recovery is required");
                 cleanMarkerWritten = false;
+                DebugDiagnostics.lifecycle(providerId, lifecycle.name(), diagnostic);
                 return;
             }
             lifecycle = resolvedLifecycle == null ? ProviderLifecycle.INCOMPATIBLE : resolvedLifecycle;
             diagnostic = sanitize(resolvedDiagnostic);
             cleanMarkerWritten = false;
+            DebugDiagnostics.lifecycle(providerId, lifecycle.name(), diagnostic);
         }
     }
 
@@ -67,6 +70,7 @@ public final class EconomyLifecycleController {
                 lifecycle = ProviderLifecycle.DRAINING;
                 diagnostic = "server shutdown is draining economy work";
                 cleanMarkerWritten = false;
+                DebugDiagnostics.lifecycle(providerId, lifecycle.name(), diagnostic);
             }
         }
     }
@@ -82,6 +86,7 @@ public final class EconomyLifecycleController {
             cleanMarkerWritten = true;
             lifecycle = ProviderLifecycle.STOPPED;
             diagnostic = "clean shutdown marker written";
+            DebugDiagnostics.lifecycle(providerId, lifecycle.name(), diagnostic);
             return true;
         }
     }
@@ -91,6 +96,7 @@ public final class EconomyLifecycleController {
             lifecycle = ProviderLifecycle.RECOVERING;
             diagnostic = "previous shutdown was unclean";
             cleanMarkerWritten = false;
+            DebugDiagnostics.lifecycle(providerId, lifecycle.name(), diagnostic);
         }
     }
 
@@ -99,6 +105,7 @@ public final class EconomyLifecycleController {
             if (lifecycle == ProviderLifecycle.RECOVERING) {
                 lifecycle = ProviderLifecycle.READY;
                 diagnostic = "";
+                DebugDiagnostics.lifecycle(providerId, lifecycle.name(), diagnostic);
             }
         }
     }
@@ -116,6 +123,7 @@ public final class EconomyLifecycleController {
             }
             lifecycle = next;
             diagnostic = sanitize(message);
+            DebugDiagnostics.lifecycle(providerId, lifecycle.name(), diagnostic);
         }
     }
 
