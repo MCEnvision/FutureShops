@@ -6,10 +6,10 @@ This record covers the native Pixelmon transaction path, the Vault proof boundar
 
 | Field | Value |
 | --- | --- |
-| Source revision | `b80bf15bd096c039b32cebeaf511730714463dfd` |
+| Source revision | `e97f04df315ca6886b897e5b43bb1df0fb116062` |
 | FutureShops artifact | `build/libs/futureshops-2.3.0.jar` |
-| FutureShops SHA 256 | `0d43b9bcf47b3eacf69a87cc7facf3ff7f189eb18f4bca8d1e7649adbedef63a` |
-| FutureShops SHA 512 | `2d4afd36ac804150de116efd4cb671abcb8bab799d1cc31071930ff8fec26b5e2eba36ad28e92fba34c2f121bad0687a1f1123b379f65eb1f1cb14701060c942` |
+| FutureShops SHA 256 | `b83c9b22bbb92f872c31ae7329fff4368d2a2efb549e10b8174ce31dc4909ef2` |
+| FutureShops SHA 512 | `f96903d411458a7b04be60752c9a133c99876dd62441588ce5d44c0c43c4fe61144db3c0b8bbb9af359b6c83dce3323f2c3f74a01156cf25c430ed8b06ab9f15` |
 | Pixelmon artifact | `/tmp/Pixelmon-1.21.1-9.4.0-universal.jar` |
 | Pixelmon SHA 256 | `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2` |
 | Minecraft | `1.21.1` |
@@ -51,7 +51,7 @@ The same headless GameTest launcher was run from a fresh temporary game director
 
 ## Wrong root recovery follow up on 2026-09-05
 
-The GameTest was rerun after adding an explicit non compound `FutureShopsReceipts` root case and a native request replay after storage reload. The exact Pixelmon `9.4.0` jar was loaded from `/tmp/Pixelmon-1.21.1-9.4.0-universal.jar` with SHA 256 `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2`. The FutureShops source revision was `b80bf15bd096c039b32cebeaf511730714463dfd`.
+The GameTest was rerun after adding an explicit non compound `FutureShopsReceipts` root case, a native request replay after storage reload, and a two pass process restart probe. The exact Pixelmon `9.4.0` jar was loaded from `/tmp/Pixelmon-1.21.1-9.4.0-universal.jar` with SHA 256 `9020393f98382ae8794ef2694e7bec1984c1a0eca735ea3eea06e0cb151c61f2`. The FutureShops source revision was `e97f04df315ca6886b897e5b43bb1df0fb116062`.
 
 The disposable launcher used the checked in GameTest argument files and the merged NeoForge development artifact. The classpath was derived with:
 
@@ -70,11 +70,28 @@ All 19 required tests passed :)
 Game test server shutting down
 ```
 
-The sanitized evidence SHA 256 is `7ce6bb3a42b1397f4378b4d02b5bce1a4b17a91aee090e178f3110a45908cd30`. The rebuilt artifact SHA 256 is `0d43b9bcf47b3eacf69a87cc7facf3ff7f189eb18f4bca8d1e7649adbedef63a`, and its SHA 512 is `2d4afd36ac804150de116efd4cb671abcb8bab799d1cc31071930ff8fec26b5e2eba36ad28e92fba34c2f121bad0687a1f1123b379f65eb1f1cb14701060c942`. The jar manifest records source revision `b80bf15bd096c039b32cebeaf511730714463dfd`.
+The sanitized evidence SHA 256 is `7232136da6e02d0bd6be34a28208089c55c16f4488742545a7ffde4252f5ce06`. It combines the first and second process logs and proves the same request completed once before restart and replayed as `CONFIRMED` afterward. The rebuilt artifact SHA 256 is `b83c9b22bbb92f872c31ae7329fff4368d2a2efb549e10b8174ce31dc4909ef2`, and its SHA 512 is `f96903d411458a7b04be60752c9a133c99876dd62441588ce5d44c0c43c4fe61144db3c0b8bbb9af359b6c83dce3323f2c3f74a01156cf25c430ed8b06ab9f15`. The jar manifest records source revision `e97f04df315ca6886b897e5b43bb1df0fb116062`.
 
 The packaged artifact was separately started in a fresh exact Pixelmon dedicated server. It loaded the same mixin target, reached `Done (4.827s)`, logged `FutureShops server starting.`, and stopped cleanly. The sanitized packaged server evidence SHA 256 is `5353736683b24a72305944600ef4030e30258f340dcabdfe11edc3c0e233eced`.
 
-The rebuilt packaged jar was also launched in a fresh disposable exact Pixelmon dedicated server with the `forgeserver` target. FutureShops 2.3.0, Pixelmon 9.4.0, and the mixin target loaded successfully before the server reached `Done` and stopped cleanly. The current artifact-bound packaged server evidence SHA 256 is `962a786ffbac992b74ea1f10c47e1b2777989862bfebb8409c5a858fe0fe1248`. Existing Pixelmon world warnings about a missing spawning tag and `Not a map: END` were absent from the retained evidence subset and are not FutureShops failures.
+The rebuilt packaged jar was also launched in a fresh disposable exact Pixelmon dedicated server with the `forgeserver` target. FutureShops 2.3.0, Pixelmon 9.4.0, and the mixin target loaded successfully before the server reached `Done` and stopped cleanly. The current artifact-bound packaged server evidence SHA 256 is `627df50f69243ea97abb8a299e8a714439fc94e440e316f76fdcf5504b185071`. Existing Pixelmon world warnings about a missing spawning tag and `Not a map: END` were absent from the retained evidence subset and are not FutureShops failures.
+
+The same final artifact then ran in one disposable GameTest world across two fresh server processes. The first process wrote the completed native receipt and a restart marker. After that process shut down, the second process loaded the saved Pixelmon storage, replayed the same request UUID, and confirmed the persisted balance without a second debit.
+
+Sanitized process restart evidence:
+
+```text
+FutureShops Pixelmon mixin target com.pixelmonmod.pixelmon.api.storage.PlayerPartyStorage apply true
+futureshops.pixelmon.gametest process_restart phase=FIRST request=00000000-0000-0000-0000-000000000241 balance=75 receipt=COMPLETED
+All 20 required tests passed :)
+Game test server shutting down
+FutureShops Pixelmon mixin target com.pixelmonmod.pixelmon.api.storage.PlayerPartyStorage apply true
+futureshops.pixelmon.gametest process_restart phase=SECOND request=00000000-0000-0000-0000-000000000241 replay=CONFIRMED balance=75
+All 20 required tests passed :)
+Game test server shutting down
+```
+
+The sanitized two process evidence SHA 256 is `7232136da6e02d0bd6be34a28208089c55c16f4488742545a7ffde4252f5ce06`. The disposable runtime and marker were removed after hashing.
 
 ## Vault bridge and backend proof
 
