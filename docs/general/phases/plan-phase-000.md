@@ -9,7 +9,7 @@
 
 ## Purpose and Ownership
 
-This phase establishes the platform, public provider, capability, and restart-only selection contracts consumed by every later phase. It reconfirms the repository baseline, records exact external artifact evidence, applies the FutureShops `2.3.0` and NeoForge `21.1.248` pins, freezes API compatibility version `1`, implements deterministic registration and selection, and proves that unsupported external mutation is refused before transaction intent, custody, or provider mutation.
+This phase establishes the platform, public provider, capability, restart-only selection, and diagnostic command contracts consumed by every later phase. It reconfirms the repository baseline, records exact external artifact evidence, applies the FutureShops `2.3.0` and NeoForge `21.1.248` pins, freezes API compatibility version `1`, defines the opt in headless first debug evidence schema, implements deterministic registration and selection, and proves that unsupported external mutation is refused before transaction intent, custody, or provider mutation.
 
 This phase canonically owns `CORE-REQ-001`, `CORE-REQ-002`, and `CORE-REQ-003`. The master owns product scope, decisions, prerequisites, global phase order, and release boundaries. This file owns only execution detail and evidence gates for `CORE-PHASE-000`. Under `DEC-017` and `DEC-018`, a negative direct Pixelmon capability result is an expected supported result: it becomes deterministic safe refusal, never an unsafe mutation path or an unqualified production-support claim.
 
@@ -57,7 +57,7 @@ This phase canonically owns `CORE-REQ-001`, `CORE-REQ-002`, and `CORE-REQ-003`. 
 
 **Objective:** Produce an integrated `2.3.0` and NeoForge `21.1.248` foundation whose public API verifies capabilities, whose selection freezes once per server lifecycle, and whose exact Pixelmon evidence causes unsupported production mutation to refuse safely.
 **Owner:** FutureShops repository
-**Dependencies:** DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-009, DEC-013, DEC-017, DEC-018, DEC-019, DEC-020, EXT-009, EXT-001, EXT-002, EXT-003, EXT-004, EXT-005, EXT-006, EXT-008
+**Dependencies:** DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-009, DEC-013, DEC-017, DEC-018, DEC-019, DEC-020, DEC-021, EXT-009, EXT-001, EXT-002, EXT-003, EXT-004, EXT-005, EXT-006, EXT-008
 **Canonical requirements:** CORE-REQ-001, CORE-REQ-002, CORE-REQ-003
 **Documentation and release impact:** Update user, maintainer, API, configuration, integration, migration, and verification docs. Produce no release, tag, upload, or issue mutation.
 **Next transition:** `CORE-PHASE-001` after integration and default-branch verification.
@@ -76,6 +76,7 @@ This phase canonically owns `CORE-REQ-001`, `CORE-REQ-002`, and `CORE-REQ-003`. 
 - Implement `CORE-REQ-002` as provider-neutral strict API. It must express unsupported capabilities and ambiguous outcomes and must not imply that a local UUID makes an external boolean call idempotent.
 - Implement `CORE-REQ-003` so selection is resolved once, frozen, observable, and changed only by restart.
 - Convert the exact `EXT-003` negative result into generic capability tests and the direct-Pixelmon safe-refusal contract.
+- Freeze `DEC-021` diagnostic command grammar, module identifiers, required structured fields, redaction rules, rate limits, and the headless-first evidence decision tree. Phase 000 defines the contract and status output; Phase 001 implements the shared recorder and command behavior.
 - Classify EXT-001 through EXT-006 and EXT-009 using the acquisition procedures. Exact unavailable inputs block dependent use, not independent work. The native mixin and separate bridge and backend proof are Phase 002 build outputs, not supplied prerequisites. EXT-008 is authorized; do not substitute candidates or lower-fidelity evidence for proof.
 
 **Execution order**
@@ -93,6 +94,7 @@ This phase canonically owns `CORE-REQ-001`, `CORE-REQ-002`, and `CORE-REQ-003`. 
 11. `P000-TASK-011` assembles and fingerprints the Pixelmon environment. Before full launch, apply DEC-020 and verify `eula=true`; resolve any separate required third party permission under EXT-009.
 12. `P000-TASK-012` assembles and fingerprints the hybrid environment. Before full launch, apply DEC-020 and verify `eula=true`; resolve any separate required third party permission under EXT-009.
 13. `P000-TASK-013` reconciles CORE-REQ-001, CORE-REQ-002, and CORE-REQ-003 documentation and evidence, reruns invalidated checks, inspects the diff and jar, and assembles the completion packet.
+14. `P000-TASK-014` records the DEC-021 debug contract and headless-first verification fixture, including the exact `/futureshops debug` command forms, module allowlist, structured fields, redaction, rate-limit, server-log, GameTest, and client-escalation assertions without implementing a second transaction path.
 
 Tasks `P000-TASK-002`, `P000-TASK-004`, and artifact discovery in `P000-TASK-005` may proceed in parallel after `P000-TASK-001`. `P000-TASK-003` depends on exact runtime and API evidence, not an unsafe mutation experiment. `P000-TASK-006` depends on the call graph and capability classification. Environment assembly may proceed after artifact review, and full launch applies EXT-008 and EXT-009. No later phase compensates for an unresolved Phase 000 defect.
 
@@ -101,6 +103,7 @@ Tasks `P000-TASK-002`, `P000-TASK-004`, and artifact discovery in `P000-TASK-005
 - Baseline and post-change manifests, economy call graph, dependency reports, build logs, API report, config schema, fixtures, standard client and server logs, and candidate contents and hashes.
 - Exact Pixelmon identity, archive integrity, economy signatures, bytecode and class inventory, official sources and terms, development-artifact conclusion, and security review.
 - A capability matrix proving which Pixelmon operations are query, precheck, or mutation and proving that missing receipt and retry capabilities refuse before intent, custody, or mutation.
+- A frozen DEC-021 debug contract and headless-first fixture proving debug is off by default, module names and command forms are validated, records contain the required correlation and state fields, sensitive data is excluded, and client evidence is requested only for a client-only acceptance gate.
 - Exact bridge and hybrid provenance, compatibility, license, dependency, and security conclusions without generic claims.
 - Environment manifests, installed hashes, DEC-020 authorization and `eula=true` readback, and applicable EXT-009 review. Missing runtime evidence stays unverified without revoking existing Minecraft EULA authorization.
 - Final evidence that no external bytes, secrets, private data, caches, worlds, unrelated changes, publication metadata, or issue mutation entered the output.
@@ -114,6 +117,7 @@ Tasks `P000-TASK-002`, `P000-TASK-004`, and artifact discovery in `P000-TASK-005
 - Independent fixtures integrate without internal packages. Duplicate, malformed, incompatible, reserved, late, throwing, capability-deficient, and ambiguous providers return deterministic typed outcomes.
 - Missing or failed external selection keeps the server online, disables monetary readiness, and never falls back to `internal`.
 - Reload changes only staged selection and restart status. It never changes the active provider.
+- The debug command contract is deterministic, server-authoritative, off by default, non persistent, and unable to change provider selection, readiness, or transaction behavior.
 - Same-byte standard client and server smoke checks pass without optional integration classes.
 - No known mandatory phase-owned defect remains. External blockers remain explicit for downstream and plan-wide gates.
 
@@ -159,6 +163,7 @@ Tasks `P000-TASK-002`, `P000-TASK-004`, and artifact discovery in `P000-TASK-005
 | `P000-TASK-011` | `EXT-002`, `EXT-008`, `CORE-REQ-017` contributor | Assemble exact Pixelmon environment. Apply DEC-020 and EXT-009, verify `eula=true`, then run requested startup, safe query, refusal, restart, and recovery prerequisites. | Tasks 002, 003, 010; `EXT-008` for launch | Manifest, exact unresolved external input or verified logs, hashes, recreation | Disposable Pixelmon and public boundary | Hash, isolation, terms gate, exact startup, safe query and refusal under standing authorization |
 | `P000-TASK-012` | `EXT-006`, `EXT-008`, `CORE-REQ-018` contributor | Assemble exact hybrid environment. Apply DEC-020 and EXT-009, verify `eula=true`, then run requested registration, isolation, capability, restart, and recovery prerequisites. | Tasks 004, 005, 010; `EXT-008` for launch | Manifest, exact unresolved external input or verified logs, hashes, recreation | Disposable hybrid, bridge, public boundary | Hash, isolation, terms gate, registration and removal cases under standing authorization |
 | `P000-TASK-013` | `CORE-REQ-001`, `CORE-REQ-002`, `CORE-REQ-003`, `EXT-001` through `EXT-006`, `EXT-008`, `EXT-009` | Reconcile docs and evidence, rerun invalidated gates, inspect diff and jar, assemble packet, and integrate after honest classification. | All prior tasks | Completion packet and Phase 001 handoff | User, maintainer, index, API, config, integration, verification docs and integration state | Docs and links, full rerun, secret and external-byte scan, jar, diff, integration verification |
+| `P000-TASK-014` | `DEC-021`, `CORE-REQ-013`, `CORE-REQ-019` contributor | Freeze the debug command grammar, module allowlist, structured fields, redaction, rate limits, headless-first decision tree, and evidence-bundle schema without adding a second transaction path. | `DEC-021`, `P000-TASK-001`, `P000-TASK-006` | Debug contract fixture and Phase 001 handoff | Command contract, diagnostic schema, test and verification procedures | Command, field, unauthorized, privacy, rate-limit, and client-escalation fixture checks |
 
 Task failure preserves reviewed inputs and blocks dependent work. Repeating a task reuses its stable ID and marks stale evidence explicitly. A task never closes a predecessor by weakening strict capabilities or selecting a substitute artifact.
 
@@ -205,6 +210,7 @@ P000-TASK-004 and P000-TASK-005 inventory candidate source and release provenanc
 | Invalid provider response | Validation or exception | Typed failure and one sanitized log, never zero or success | Correct provider and restart if required | Throwing and malformed fixtures |
 | Invalid amount or metadata | Checked validation | Reject before provider call or state change | Correct input or metadata | Bounds, overflow, precision, locale, nonfinite tests |
 | Optional class links in standard stack | Startup or scan | Block exit and restore isolation | Rebuild and rerun clean smoke | No-Pixelmon and no-Vault startup scans |
+| Debug contract or evidence fixture is incomplete | Command, module, field, redaction, or headless-first decision differs from DEC-021 | Keep diagnostic implementation closed and do not use screenshots as a substitute for server proof | Correct the contract fixture and rerun the affected API and verification checks | Debug command, logging, security, and phase handoff evidence | `P000-TASK-014` and the Phase 001 diagnostic tests |
 | Candidate bytes differ | Installed digest mismatch | Discard runtime result | Reinstall and recreate | Before and after hashes |
 | Public API changes after review | Surface digest changes | Invalidate fixtures and downstream evidence | Repeat API review and affected integrations | API digest and fixture rerun |
 
@@ -219,6 +225,7 @@ P000-TASK-004 and P000-TASK-005 inventory candidate source and release provenanc
 | `CORE-REQ-001` | Versions, dependencies, client isolation | Compile applicable source sets | Same-byte client and server smoke | Old pin, unrelated upgrade, linkage, mismatch | Build, dependency, jar hashes |
 | `CORE-REQ-002` | API, identifiers, metadata, capabilities, outcomes, threads | Independent fixtures | Registration and safe query on logical server | Duplicate, reserved, late, malformed, incompatible, lying, deficient, ambiguous | API and fixture reports |
 | `CORE-REQ-003` | Config, default, validation, active and staged values | Registry resolution | First install, reload, shutdown, restart | Unknown, missing, late, deficient, duplicate, fallback | Config tests and server logs |
+| `DEC-021` | Command grammar, module allowlist, field schema, redaction, and rate limits | Contract fixture and registration boundary | Status and toggle command on a dedicated server, with GameTest evidence preferred | Unauthorized toggle, invalid module, state mutation, sensitive field, or client escalation without a client-only gate | Debug contract fixture and sanitized command record |
 | `EXT-002` | Manifest and installed hashes | Safe query and refusal after `EXT-008` | Recreated Pixelmon environment | Wrong version, absence, missing capability, terms block | Manifest and logs or blocker |
 | `EXT-006` | Manifest, hashes, isolation | Bridge registration after `EXT-008` | Recreated hybrid environment | Remove each external component | Manifest and logs or blocker |
 | `P000-TASK-013` | Docs, links, API digest, schema, traceability | Rebuild documented fixtures | Operator restart and environment procedure | Secret, external byte, issue mutation, unrelated diff | Completion packet |
@@ -236,6 +243,7 @@ After the last implementation change, rerun task discovery, focused tests, all t
 - Record exact Pixelmon provenance, hashes, bytecode, API, terms, development access, and safe refusal. Query evidence is not a mutation claim.
 - Record exact bridge and hybrid candidate evidence and gaps without generic compatibility claims.
 - Record environment manifests, DEC-020 standing authorization, `eula=true` readback, and operation-specific EXT-009 conclusions. Do not claim full runtime proof from archive inspection or an earlier stop probe.
+- Record the DEC-021 debug command contract, module status, structured server-log fields, sanitization and rate limits, headless GameTest procedure, evidence bundle format, and the exact client-only conditions that justify a laptop run.
 - Document missing, incompatible, deficient, failed, and late provider behavior and restart correction.
 - Keep external bytes, credentials, account data, player data, raw proprietary logs, caches, and worlds untracked.
 - Do not publish, tag, upload, announce, or mutate issue 66.
@@ -267,6 +275,7 @@ The packet, stored outside the protected plan set, contains:
 - Exact Pixelmon identity, hashes, archive, metadata, API and bytecode, class inventory, terms, access status, security, and capability conclusion.
 - Exact bridge and hybrid identities, hashes, compatibility, provenance, terms, dependency, security, and blockers.
 - API version `1` report and independent fixture results for current, malformed, duplicate, reserved, late, incompatible, throwing, lying, capability-deficient, and ambiguous providers.
+- DEC-021 debug contract fixture, command status and toggle results, structured field and redaction review, log-volume bounds, headless GameTest procedure, and client-escalation decision record.
 - Config and runtime results for absent key, `internal`, fixture external, unknown, malformed, missing, late, staged reload, restart, and no fallback.
 - Disposable environment manifests, hashes, isolation, and verified runtime logs or an exact remaining EXT-009, artifact, or environment gap. Include DEC-020 and `eula=true` readback for launched runtimes.
 - Focused and full tests, data and GameTest disposition, build, dependency report, standard client and server logs, candidate hashes and contents, classpath, secret and external-byte scan, generated-output review, and diff inspection.

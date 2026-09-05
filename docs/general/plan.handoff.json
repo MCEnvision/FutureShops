@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "planId": "PLAN-MASTER",
-  "planSetSha256": "6fac49c5c2541eda3c722b0610aad0d5dc35c87655a59edbbf397c1d66ea20b8",
+  "planSetSha256": "95d05512287cc72e460cef6f81f150f4a3ac7ddc40e3c2dccf5c4c8391f5b0a1",
   "planningSubject": {
     "name": "FutureShops 2.3.0 strict external economy safety for Minecraft 1.21.1 NeoForge, with capability gated Pixelmon 9.4.0 and Vault bridge interoperability",
     "requestedArtifact": "authoritative_plan",
@@ -83,6 +83,13 @@
         "subject": "durable embedded transaction proof inputs",
         "source": "https://sqlite.org/atomiccommit.html and https://github.com/xerial/sqlite-jdbc",
         "use": "separately built backend proof, version and license review, and crash tests against one authoritative database"
+      },
+      {
+        "id": "SRC-012",
+        "role": "owner_request",
+        "subject": "opt in debug mode and headless first evidence procedure",
+        "source": "current owner request and accepted debugging workflow",
+        "use": "binding debug toggle, structured log fields, sanitization, server log and GameTest priority, and laptop client escalation rules"
       }
     ]
   },
@@ -383,7 +390,8 @@
       "contributors": "`CORE-PHASE-002`, `CORE-PHASE-003`",
       "dependencies": [
         "CORE-REQ-004",
-        "CORE-REQ-007"
+        "CORE-REQ-007",
+        "DEC-021"
       ],
       "lifecycleStage": "continuous",
       "productionVerification": "nondestructive",
@@ -400,7 +408,8 @@
         "CORE-REQ-002",
         "CORE-REQ-004",
         "CORE-REQ-009",
-        "DEC-014"
+        "DEC-014",
+        "DEC-021"
       ],
       "lifecycleStage": "continuous",
       "productionVerification": "nondestructive",
@@ -418,6 +427,7 @@
         "CORE-REQ-004",
         "CORE-REQ-005",
         "CORE-REQ-007",
+        "DEC-021",
         "EXT-001",
         "EXT-004",
         "EXT-005"
@@ -528,6 +538,7 @@
         "CORE-REQ-016",
         "CORE-REQ-017",
         "CORE-REQ-018",
+        "DEC-021",
         "EXT-001",
         "EXT-002",
         "EXT-003",
@@ -565,7 +576,8 @@
         "CORE-REQ-016",
         "CORE-REQ-017",
         "CORE-REQ-018",
-        "CORE-REQ-019"
+        "CORE-REQ-019",
+        "DEC-021"
       ],
       "lifecycleStage": "post_change",
       "productionVerification": "nondestructive",
@@ -581,7 +593,8 @@
       "dependencies": [
         "CORE-REQ-019",
         "CORE-REQ-020",
-        "DEC-016"
+        "DEC-016",
+        "DEC-021"
       ],
       "lifecycleStage": "post_change",
       "productionVerification": "nondestructive",
@@ -945,6 +958,21 @@
         "CORE-REQ-021"
       ],
       "supersedes": []
+    },
+    {
+      "id": "DEC-021",
+      "question": "Headless first diagnostics and debug mode",
+      "selectedChoice": "Add an opt in, server authoritative FutureShops debug mode that is off by default, enabled by an operator at runtime with `/futureshops debug on <module>` and disabled with `/futureshops debug off`, and automatically disabled on restart. It emits bounded structured diagnostics to the server log, emits only a bounded correlated snapshot to an opted in client when client evidence is required, and never changes provider selection, readiness, transaction outcomes, or safety rules.",
+      "rationale": "Server logs, dedicated server GameTests, deterministic tests, and headless runtime traces provide the required evidence without requiring EnVy to join or consume laptop rendering resources. A laptop client is used only when rendering, input, client classloading, or an interaction that cannot be represented by a headless test is the acceptance gate.",
+      "affectedRequirements": [
+        "CORE-REQ-013",
+        "CORE-REQ-014",
+        "CORE-REQ-015",
+        "CORE-REQ-019",
+        "CORE-REQ-020",
+        "CORE-REQ-021"
+      ],
+      "supersedes": []
     }
   ],
   "externalPrerequisites": [
@@ -1150,6 +1178,7 @@
         "DEC-018",
         "DEC-019",
         "DEC-020",
+        "DEC-021",
         "EXT-001",
         "EXT-002",
         "EXT-003",
@@ -1185,6 +1214,7 @@
         "DEC-014",
         "DEC-017",
         "DEC-018",
+        "DEC-021",
         "EXT-003"
       ],
       "canonicalRequirements": [
@@ -1221,6 +1251,7 @@
         "DEC-018",
         "DEC-019",
         "DEC-020",
+        "DEC-021",
         "EXT-001",
         "EXT-002",
         "EXT-003",
@@ -1264,6 +1295,7 @@
         "DEC-018",
         "DEC-019",
         "DEC-020",
+        "DEC-021",
         "EXT-001",
         "EXT-002",
         "EXT-003",
@@ -1286,11 +1318,11 @@
   "goalCreator": {
     "mandatoryBoundary": "CORE-REQ-001 through CORE-REQ-022 across CORE-PHASE-000 through CORE-PHASE-003, including the native Pixelmon transaction-mixin path, separate Vault bridge boundary, exact external integration evidence, the unpublished artifact, and the two-stage open issue lifecycle.",
     "optionalFutureDisposition": "excluded",
-    "lockedOwnerDecisions": "DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018, DEC-019, DEC-020",
+    "lockedOwnerDecisions": "DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018, DEC-019, DEC-020, DEC-021",
     "activePhase": "CORE-PHASE-000",
     "nextExecutableAction": "Execute P000-TASK-001 to reconfirm repository identity, toolchain, product metadata, economy ownership, and the complete provider call graph before implementation.",
     "knownFailingChecks": "none at validated plan handoff; execution checks have not yet run.",
     "knownExternalBlockers": "Third party artifact and development-use terms review under EXT-009 remains unresolved. Exact Pixelmon runtime and development inputs, disposable Pixelmon runtime, bridge candidate, reviewed hybrid stack, and disposable hybrid environment are available under EXT-001, EXT-002, EXT-004, EXT-005, and EXT-006. P002-TASK-013 and P002-TASK-014 record and consume those inputs; P002-TASK-006 obtains or builds the separate bridge and durable backend proof. Native mixin implementation, proof construction, and provisioning are executable work, not prerequisites to start themselves. EXT-008 is already authorized; set and verify eula=true under DEC-020 without another consent request.",
-    "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, classify EXT-001 through EXT-006 with exact evidence, inspect the Pixelmon 9.4.0 classes and save path, implement and prove the native PlayerPartyStorage receipt, deduplication, account classification, and durable-save path, execute the Phase 002 Vault bridge or backend transaction proof, apply EXT-008 and DEC-020 before launch and review exact third party operations under EXT-009, obtain and compile the public Pixelmon inputs, build the separate bridge and durable backend proof when needed, pass journal, escrow, draining, recovery, frozen, capability, deterministic, and runtime matrices, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation."
+    "requiredEvidenceGates": "Complete every requirement acceptance criterion and phase exit gate, freeze and exercise the DEC-021 debug command and evidence contract, classify EXT-001 through EXT-006 with exact evidence, inspect the Pixelmon 9.4.0 classes and save path, implement and prove the native PlayerPartyStorage receipt, deduplication, account classification, and durable-save path, execute the Phase 002 Vault bridge or backend transaction proof, apply EXT-008 and DEC-020 before launch and review exact third party operations under EXT-009, obtain and compile the public Pixelmon inputs, build the separate bridge and durable backend proof when needed, pass journal, escrow, draining, recovery, frozen, capability, deterministic, headless GameTest, server-log, and runtime matrices, use a laptop client only for a justified client-only gate, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation."
   }
 }

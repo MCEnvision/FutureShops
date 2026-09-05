@@ -40,6 +40,7 @@ The planning subject is the FutureShops 2.3.0 product change and its validation 
 | SRC-009 | reference | officially linked Pixelmon development dependency recipe | https://github.com/EnvyWare/Pixelmon-MDK/blob/4309ac5fc79b6a167edfc922f055d1b4d2d56744/build.gradle | universal jar and interface injection dependency pattern, with exact 9.4.0 inputs verified independently of the template version |
 | SRC-010 | reference | candidate hybrid and legacy economy sources | https://github.com/ElainAwa/PRTS-SERVER/releases/tag/v1.21.1-1.0.30 and https://github.com/EverNife/PixelmonEconomyBridge and https://github.com/EverNife/FinalEconomy | exact candidate acquisition and upstream provenance review, not a compatibility or atomicity claim |
 | SRC-011 | reference | durable embedded transaction proof inputs | https://sqlite.org/atomiccommit.html and https://github.com/xerial/sqlite-jdbc | separately built backend proof, version and license review, and crash tests against one authoritative database |
+| SRC-012 | owner_request | opt in debug mode and headless first evidence procedure | current owner request and accepted debugging workflow | binding debug toggle, structured log fields, sanitization, server log and GameTest priority, and laptop client escalation rules |
 
 After validation, the master owns global product scope and each registered phase plan owns only its detailed execution. Repository and runtime evidence may correct current-state claims but cannot weaken the target contract. `docs/plan/goal.md` remains untouched.
 
@@ -275,6 +276,14 @@ All locked future scope is excluded from implementation and remains non-blocking
 **Affected requirements:** CORE-REQ-017, CORE-REQ-018, CORE-REQ-019, CORE-REQ-021
 **Supersedes:** none
 
+### DEC-021 — Headless first diagnostics and debug mode
+
+**Status:** RESOLVED
+**Selected choice:** Add an opt in, server authoritative FutureShops debug mode that is off by default, enabled by an operator at runtime with `/futureshops debug on <module>` and disabled with `/futureshops debug off`, and automatically disabled on restart. It emits bounded structured diagnostics to the server log, emits only a bounded correlated snapshot to an opted in client when client evidence is required, and never changes provider selection, readiness, transaction outcomes, or safety rules.
+**Rationale:** Server logs, dedicated server GameTests, deterministic tests, and headless runtime traces provide the required evidence without requiring EnVy to join or consume laptop rendering resources. A laptop client is used only when rendering, input, client classloading, or an interaction that cannot be represented by a headless test is the acceptance gate.
+**Affected requirements:** CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-019, CORE-REQ-020, CORE-REQ-021
+**Supersedes:** none
+
 ## 10. External Prerequisites
 
 | ID | Prerequisite | Affected requirements | Availability | Authorization | Required external action |
@@ -464,6 +473,18 @@ Provider identifiers, metadata, values, outcomes, receipts, configuration, packe
 No credentials, access tokens, private raw player data, or proprietary logs may enter source, tests, documentation, artifacts, GitHub issues, or validation evidence. Artifact review records hashes and public provenance only. Logs use stable error categories, provider identifier, safe request identifier, and lifecycle state while omitting sensitive balance details when unnecessary.
 
 Registration order, provider selection, request identity, checked arithmetic, state transitions, and recovery outcomes must be deterministic. Map iteration, mod load order, timing races, locale, client state, or provider discovery timing must not select a different provider or change transaction outcome.
+
+### Debug and evidence contract
+
+Debug mode is an operator diagnostic surface, not a second transaction path. It is disabled by default, is not persisted in world data, and is not enabled by provider selection or a client request. The canonical FutureShops commands are `/futureshops debug on <module>`, `/futureshops debug off`, and `/futureshops debug status`; the implementation may expose a documented alias only when that alias is already registered by the mod. The command requires the existing operator permission boundary and accepts `all`, `provider`, `lifecycle`, `transaction`, `receipt`, `recovery`, `pixelmon`, `vault`, `network`, or `surface` modules. Invalid modules and non operators receive a typed rejection and produce one bounded diagnostic.
+
+Each enabled module writes structured, correlated records to the standard server log with a stable `futureshops.debug` category. Records include the debug session identifier, source commit and FutureShops artifact hash when known, Minecraft and loader versions, selected provider and lifecycle state, surface and operation, server owned request and leg identifiers, account classification, required and observed capabilities, validation decision, journal and receipt state, custody or claim identity, provider result or error category, elapsed time, logical side, thread, and the next safe action. Amounts may be recorded in minor units in the operator server log when needed for reproduction. Player names, IP addresses, credentials, raw NBT, inventory contents, chat, and proprietary external log payloads are never recorded. Actor identifiers in retained evidence are stable pseudonyms or request identities.
+
+Diagnostics are event based, bounded, and rate limited. They must not log every tick, screen refresh, balance poll, or retry attempt without a state change. Stack traces are included only for an actionable failure and are sanitized before evidence retention. Client diagnostics are sent only as a bounded server correlated snapshot when the server side evidence cannot distinguish a rendering, input, client classloading, or synchronization failure. Client logs never authorize a mutation and never replace server evidence.
+
+The debugging procedure is headless first. Run focused tests, all tests, applicable dedicated server GameTests, the complete build, and a dedicated server smoke or exact external runtime with the relevant debug module enabled. Capture the exact command, source revision, artifact hashes, host, runtime manifest, expected result, actual result, exit code, server log path, GameTest report, and sanitized diagnostic records. Use a disposable world and remove test owned processes and files after the final consumer. Connect the verified laptop client only when the acceptance criterion specifically requires rendered output, real mouse or keyboard input, client only classloading, resource presentation, or a synchronization result that the server harness cannot represent. Screenshots and recordings supplement the correlated logs and are never the primary proof when logs or GameTests can answer the question.
+
+A debug evidence bundle is a sanitized command transcript, relevant server and optional client log excerpts, GameTest or test report, runtime and artifact manifest, and checksums. It must identify which assertions are server proven, which are client proven, and which remain unverified. Unknown, contradictory, or missing transaction evidence still follows the normal `RECOVERING` or `FROZEN` rules; debug mode cannot clear a freeze or justify a retry.
 
 ## Required behavior by surface
 
@@ -710,17 +731,17 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 ### CORE-REQ-013 — diagnostics and support evidence
 
-**Behavior:** Emit concise structured diagnostics for provider selection, compatibility, readiness, state transitions, rejected mutation categories, ambiguous outcomes, recovery, and compensation. Provide operator visible status without exposing secrets or unnecessary private balance data. Avoid repeated hot path log spam.
+**Behavior:** Emit concise structured diagnostics for provider selection, compatibility, readiness, state transitions, rejected mutation categories, ambiguous outcomes, recovery, and compensation. Provide an opt in server authoritative debug mode with `/futureshops debug on <module>`, `/futureshops debug off`, and `/futureshops debug status`, structured request correlation, bounded module selection, rate limits, sanitized operator logs, and optional bounded client snapshots for client only evidence. Provide operator visible status without exposing secrets or unnecessary private balance data. Avoid repeated hot path log spam and never let debug mode change transaction behavior.
 **Owner:** `CORE-PHASE-001`
 **Contributors:** `CORE-PHASE-002`, `CORE-PHASE-003`
-**Dependencies:** CORE-REQ-004, CORE-REQ-007
+**Dependencies:** CORE-REQ-004, CORE-REQ-007, DEC-021
 **Lifecycle stage:** continuous
 **Production verification:** nondestructive
 **Release impact:** stable release
 
 **Acceptance criteria**
 
-- An operator can identify selected provider, state, safe next action, and correlated request without reading private data; repeated rejected ticks or screen refreshes do not spam logs; exceptions retain actionable context.
+- An operator can identify selected provider, state, safe next action, and correlated request without reading private data; debug mode is off by default and can be enabled or disabled by an authorized operator; selected modules emit the documented fields and no secrets or raw private data; repeated rejected ticks or screen refreshes do not spam logs; exceptions retain actionable context.
 
 **Required evidence**
 
@@ -728,17 +749,17 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 ### CORE-REQ-014 — bounded integration cost
 
-**Behavior:** Keep provider lookup outside hot paths, use the frozen selected service, avoid filesystem or network access during gameplay mutation, avoid full balance scans and balance shadow synchronization, and require bounded provider calls on the server execution model.
+**Behavior:** Keep provider lookup outside hot paths, use the frozen selected service, avoid filesystem or network access during gameplay mutation, avoid full balance scans and balance shadow synchronization, require bounded provider calls on the server execution model, and bound debug event volume, retention, and client snapshots.
 **Owner:** `CORE-PHASE-001`
 **Contributors:** `CORE-PHASE-002`, `CORE-PHASE-003`
-**Dependencies:** CORE-REQ-002, CORE-REQ-004, CORE-REQ-009, DEC-014
+**Dependencies:** CORE-REQ-002, CORE-REQ-004, CORE-REQ-009, DEC-014, DEC-021
 **Lifecycle stage:** continuous
 **Production verification:** nondestructive
 **Release impact:** stable release
 
 **Acceptance criteria**
 
-- No per tick provider discovery, disk scan, registry scan, or external balance synchronization exists; ordinary requests do work proportional to their transaction legs; an unavailable provider does not create a retry storm.
+- No per tick provider discovery, disk scan, registry scan, external balance synchronization, or debug log flood exists; ordinary requests do work proportional to their transaction legs; an unavailable provider does not create a retry storm; debug status and module changes do not mutate economy state.
 
 **Required evidence**
 
@@ -746,10 +767,10 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 ### CORE-REQ-015 — provider and artifact security
 
-**Behavior:** Validate all API, packet, command, config, metadata, value, receipt, and persistence inputs. Contain provider exceptions. Preserve server permissions and identity. Review every external artifact for provenance, hashes, license, archive contents, dependency risks, and known security concerns before use. Keep optional implementation classes isolated.
+**Behavior:** Validate all API, packet, command, config, metadata, value, receipt, debug-module, and persistence inputs. Contain provider exceptions. Preserve server permissions and identity. Sanitize and rate limit debug output, prohibit secrets, private raw player data, credentials, IP addresses, raw NBT, and proprietary external payloads, and keep client diagnostics non authoritative. Review every external artifact for provenance, hashes, license, archive contents, dependency risks, and known security concerns before use. Keep optional implementation classes isolated.
 **Owner:** `CORE-PHASE-001`
 **Contributors:** `CORE-PHASE-002`, `CORE-PHASE-003`
-**Dependencies:** CORE-REQ-002, CORE-REQ-004, CORE-REQ-005, CORE-REQ-007, EXT-001, EXT-004, EXT-005
+**Dependencies:** CORE-REQ-002, CORE-REQ-004, CORE-REQ-005, CORE-REQ-007, DEC-021, EXT-001, EXT-004, EXT-005
 **Lifecycle stage:** continuous
 **Production verification:** nondestructive
 **Release impact:** stable release
@@ -818,17 +839,17 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 ### CORE-REQ-019 — complete production validation
 
-**Behavior:** Execute the complete deterministic and runtime matrix after all implementation and phase-owned documentation are integrated. Prove clean draining, receipt audit journal integrity under `world/data/futureshops/receipts`, unclean-start recovery, unknown-record classification, frozen ambiguity, escrow and claim conservation, no unsafe retries or balance restoration, and exact provider capability gating. Resolve failures through the owning phase requirement, rerun invalidated checks, and preserve sanitized evidence tied to the source commit and exact external artifacts.
+**Behavior:** Execute the complete deterministic and runtime matrix after all implementation and phase-owned documentation are integrated. Prove clean draining, receipt audit journal integrity under `world/data/futureshops/receipts`, unclean-start recovery, unknown-record classification, frozen ambiguity, escrow and claim conservation, no unsafe retries or balance restoration, exact provider capability gating, and the headless first debug evidence procedure. Resolve failures through the owning phase requirement, rerun invalidated checks, and preserve a sanitized debug evidence bundle tied to the source commit and exact external artifacts.
 **Owner:** `CORE-PHASE-003`
 **Contributors:** `CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`
-**Dependencies:** CORE-REQ-001, CORE-REQ-002, CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-006, CORE-REQ-007, CORE-REQ-008, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, EXT-001, EXT-002, EXT-003, EXT-004, EXT-005, EXT-006
+**Dependencies:** CORE-REQ-001, CORE-REQ-002, CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-006, CORE-REQ-007, CORE-REQ-008, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, DEC-021, EXT-001, EXT-002, EXT-003, EXT-004, EXT-005, EXT-006
 **Lifecycle stage:** post_change
 **Production verification:** nondestructive
 **Release impact:** stable release
 
 **Acceptance criteria**
 
-- Every mandatory requirement has passing evidence; no required command fails; external environments use exact reviewed artifacts; no unverified behavior is described as working; results are reproducible from the recorded commit and manifests.
+- Every mandatory requirement has passing evidence; no required command fails; external environments use exact reviewed artifacts; no unverified behavior is described as working; headless tests, server logs, and GameTest reports are the primary evidence; any laptop client run is justified by a client only acceptance criterion and is correlated to the server evidence; results are reproducible from the recorded commit and manifests.
 
 **Required evidence**
 
@@ -836,17 +857,17 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 
 ### CORE-REQ-020 — user, API, maintainer, and operator documentation
 
-**Behavior:** Update the root user documentation, maintainer documentation, documentation index, provider API reference, configuration guide, integration guides, migration guide, recovery runbook, compatibility matrix, and validation record to match implemented behavior only, including strict capabilities, lifecycle states, journal and escrow ordering, the `world/data/futureshops/receipts` receipt audit journal, clean marker, backup contents, unknown-record recovery, frozen operator workflow, the native Pixelmon receipt and durable-save contract, direct Pixelmon's mutation limitation, and the separate transaction-aware Vault bridge boundary.
+**Behavior:** Update the root user documentation, maintainer documentation, documentation index, provider API reference, configuration guide, integration guides, migration guide, recovery runbook, compatibility matrix, debug and support runbook, and validation record to match implemented behavior only, including strict capabilities, lifecycle states, journal and escrow ordering, the `world/data/futureshops/receipts` receipt audit journal, clean marker, backup contents, unknown-record recovery, frozen operator workflow, the native Pixelmon receipt and durable-save contract, direct Pixelmon's mutation limitation, the separate transaction-aware Vault bridge boundary, the opt in debug commands and module fields, sanitization and rate limits, headless GameTest procedures, and the client escalation gate.
 **Owner:** `CORE-PHASE-003`
 **Contributors:** `CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`
-**Dependencies:** CORE-REQ-001, CORE-REQ-002, CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-006, CORE-REQ-007, CORE-REQ-008, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, CORE-REQ-019
+**Dependencies:** CORE-REQ-001, CORE-REQ-002, CORE-REQ-003, CORE-REQ-004, CORE-REQ-005, CORE-REQ-006, CORE-REQ-007, CORE-REQ-008, CORE-REQ-009, CORE-REQ-010, CORE-REQ-011, CORE-REQ-012, CORE-REQ-013, CORE-REQ-014, CORE-REQ-015, CORE-REQ-016, CORE-REQ-017, CORE-REQ-018, CORE-REQ-019, DEC-021
 **Lifecycle stage:** post_change
 **Production verification:** nondestructive
 **Release impact:** stable release
 
 **Acceptance criteria**
 
-- A user can select `internal`, Pixelmon, or the separately installed `vault` provider correctly and can tell whether each surface is capability-enabled or safely refused; an integrator can implement the public API; an operator can drain, back up, diagnose, recover, or preserve a frozen request and an unknown receipt record without deleting data or restoring external balances; documentation clearly states the receipt audit path, its local-evidence limit, native Pixelmon receipt and durable-save rules, transaction-aware Vault bridge requirement, unknown-record recovery, no migration, restart-only selection, direct API limitation, external money item behavior, exact compatibility, and no ATM or publication.
+- A user can select `internal`, Pixelmon, or the separately installed `vault` provider correctly and can tell whether each surface is capability-enabled or safely refused; an integrator can implement the public API; an operator can enable debug mode, select a module, capture a sanitized correlated server log and GameTest evidence bundle, and disable it without changing economy state; an operator can drain, back up, diagnose, recover, or preserve a frozen request and an unknown receipt record without deleting data or restoring external balances; documentation clearly states the receipt audit path, its local-evidence limit, native Pixelmon receipt and durable-save rules, transaction-aware Vault bridge requirement, unknown-record recovery, no migration, restart-only selection, direct API limitation, external money item behavior, exact compatibility, and no ATM or publication.
 
 **Required evidence**
 
@@ -857,14 +878,14 @@ No direct call site, legacy API, command, event handler, packet handler, GUI act
 **Behavior:** Build one release candidate jar from the verified source commit, inspect its metadata and contents, calculate SHA 256 and SHA 512, associate strict safety and exact-stack validation evidence, and keep it unpublished.
 **Owner:** `CORE-PHASE-003`
 **Contributors:** `CORE-PHASE-000`, `CORE-PHASE-001`, `CORE-PHASE-002`
-**Dependencies:** CORE-REQ-019, CORE-REQ-020, DEC-016
+**Dependencies:** CORE-REQ-019, CORE-REQ-020, DEC-016, DEC-021
 **Lifecycle stage:** post_change
 **Production verification:** nondestructive
 **Release impact:** stable release
 
 **Acceptance criteria**
 
-- One artifact identifies FutureShops `2.3.0`, targets the locked platform, contains the public API and native-account capability-gated Pixelmon adapter, excludes Pixelmon, Bukkit, Vault, and bridge artifacts, passes internal behavior plus native Pixelmon receipt and exact-stack capability or safe-refusal matrices, and is not published or tagged as a release.
+- One artifact identifies FutureShops `2.3.0`, targets the locked platform, contains the public API and native-account capability-gated Pixelmon adapter, excludes Pixelmon, Bukkit, Vault, and bridge artifacts, passes internal behavior plus native Pixelmon receipt and exact-stack capability or safe-refusal matrices, includes no test-only debug dependency or retained debug output, defaults debug mode off, and is not published or tagged as a release.
 
 **Required evidence**
 
@@ -923,10 +944,10 @@ Phases are sequential. A phase starts from the approved result of its predecesso
 
 | Phase ID | Future execution blueprint | Outcome | Owned requirements | Entry gate | Exit gate |
 | --- | --- | --- | --- | --- | --- |
-| `CORE-PHASE-000` | [`phases/plan-phase-000.md`](phases/plan-phase-000.md) | Verified external prerequisites, pinned platform, frozen capability-aware public API, and restart-only selection contract | `CORE-REQ-001`, `CORE-REQ-002`, `CORE-REQ-003` | Master and complete registered plan set accepted, repository baseline reconfirmed | `EXT-001` through `EXT-006` are classified with exact evidence, EXT-008 applies standing DEC-020 authorization and EXT-009 separates third party permissions, the direct Pixelmon API's missing mutation capabilities produce a frozen safe-refusal contract, and the platform and public API acceptance gates pass |
-| `CORE-PHASE-001` | [`phases/plan-phase-001.md`](phases/plan-phase-001.md) | Complete strict economy gate, lifecycle draining and recovery, write-ahead journal, escrow and claims, capability routing, migration safety, presentation, backup, and frozen recovery | `CORE-REQ-004`, `CORE-REQ-005`, `CORE-REQ-006`, `CORE-REQ-007`, `CORE-REQ-008`, `CORE-REQ-009`, `CORE-REQ-010`, `CORE-REQ-011`, `CORE-REQ-012`, `CORE-REQ-013`, `CORE-REQ-014`, `CORE-REQ-015`, `CORE-REQ-016` | `CORE-PHASE-000` integrated and its public contract stable | Every owned requirement passes deterministic, persistence, clean and unclean shutdown, escrow conservation, failure, server, client, multiplayer, backup, recovery, and frozen-state gates with internal and fixture external providers |
-| `CORE-PHASE-002` | [`phases/plan-phase-002.md`](phases/plan-phase-002.md) | Native-account capability-gated Pixelmon `9.4.0` adapter and exact separate `vault` bridge interoperability | `CORE-REQ-017`, `CORE-REQ-018` | `CORE-PHASE-001` integrated; acquisition and construction start in P002-TASK-001, P002-TASK-013, P002-TASK-014, and P002-TASK-006 without requiring their outputs at entry; reviewed inputs and EXT-008 and EXT-009 apply before dependent use | The native Pixelmon account path proves request receipts, retry deduplication, and durable saves or refuses safely; the separate Vault stack proves one-transaction provider receipts or remains refused; both exact stacks pass lifecycle, journal, escrow, restart, recovery, isolation, and packaging matrices; standard NeoForge remains clean |
-| `CORE-PHASE-003` | [`phases/plan-phase-003.md`](phases/plan-phase-003.md) | Final strict-safety validation, accurate documentation, validated unpublished artifact, and post-artifact verification and update of open issue 66 | `CORE-REQ-019`, `CORE-REQ-020`, `CORE-REQ-021`, `CORE-REQ-022` | `CORE-PHASE-002` integrated with complete external evidence and issue 66 identified by the authoring `EVD-GH-001` record | Plan-wide definition of done passes, exact artifact remains unpublished, and issue 66 is updated only after artifact validation with the 3.0.0 design, verified by URL and readback, and remains open |
+| `CORE-PHASE-000` | [`phases/plan-phase-000.md`](phases/plan-phase-000.md) | Verified external prerequisites, pinned platform, frozen capability-aware public API, restart-only selection contract, and debug command contract | `CORE-REQ-001`, `CORE-REQ-002`, `CORE-REQ-003` | Master and complete registered plan set accepted, repository baseline reconfirmed | `EXT-001` through `EXT-006` are classified with exact evidence, EXT-008 applies standing DEC-020 authorization and EXT-009 separates third party permissions, the direct Pixelmon API's missing mutation capabilities produce a frozen safe-refusal contract, the debug command and evidence fields are frozen, and the platform and public API acceptance gates pass |
+| `CORE-PHASE-001` | [`phases/plan-phase-001.md`](phases/plan-phase-001.md) | Complete strict economy gate, lifecycle draining and recovery, write-ahead journal, escrow and claims, capability routing, migration safety, presentation, bounded debug diagnostics, backup, and frozen recovery | `CORE-REQ-004`, `CORE-REQ-005`, `CORE-REQ-006`, `CORE-REQ-007`, `CORE-REQ-008`, `CORE-REQ-009`, `CORE-REQ-010`, `CORE-REQ-011`, `CORE-REQ-012`, `CORE-REQ-013`, `CORE-REQ-014`, `CORE-REQ-015`, `CORE-REQ-016` | `CORE-PHASE-000` integrated and its public contract stable | Every owned requirement passes deterministic, persistence, clean and unclean shutdown, escrow conservation, failure, server, client, multiplayer, backup, recovery, frozen-state, and headless debug evidence gates with internal and fixture external providers |
+| `CORE-PHASE-002` | [`phases/plan-phase-002.md`](phases/plan-phase-002.md) | Native-account capability-gated Pixelmon `9.4.0` adapter, exact separate `vault` bridge interoperability, and integration debug traces | `CORE-REQ-017`, `CORE-REQ-018` | `CORE-PHASE-001` integrated; acquisition and construction start in P002-TASK-001, P002-TASK-013, P002-TASK-014, and P002-TASK-006 without requiring their outputs at entry; reviewed inputs and EXT-008 and EXT-009 apply before dependent use | The native Pixelmon account path proves request receipts, retry deduplication, durable saves, and correlated debug traces or refuses safely; the separate Vault stack proves one-transaction provider receipts or remains refused; both exact stacks pass lifecycle, journal, escrow, restart, recovery, isolation, packaging, and headless diagnostics matrices; standard NeoForge remains clean |
+| `CORE-PHASE-003` | [`phases/plan-phase-003.md`](phases/plan-phase-003.md) | Final strict-safety validation, headless-first debug evidence audit, accurate documentation, validated unpublished artifact, and post-artifact verification and update of open issue 66 | `CORE-REQ-019`, `CORE-REQ-020`, `CORE-REQ-021`, `CORE-REQ-022` | `CORE-PHASE-002` integrated with complete external evidence and issue 66 identified by the authoring `EVD-GH-001` record | Plan-wide definition of done passes with server logs and GameTest evidence primary, client runs justified by client-only gates, exact artifact remains unpublished, and issue 66 is updated only after artifact validation with the 3.0.0 design, verified by URL and readback, and remains open |
 
 No future phase may start early. A failure in an earlier owned requirement returns work to that requirement's phase scope and invalidates affected downstream evidence.
 
@@ -948,6 +969,12 @@ No future phase may start early. A failure in an earlier owned requirement retur
 12. Inspect dependency graphs, runtime classpaths, the final jar, generated output, secrets, debug output, and the complete diff.
 13. Reinstall the exact hashed candidate in every production validation environment.
 14. Only after all prior product gates pass, search again, update, and read back authoring-created GitHub issue 66, and keep it open without creating a replacement or duplicate.
+
+### Headless first debug evidence procedure
+
+Use the smallest evidence source that can prove the requirement. Run focused tests, all tests, applicable dedicated server GameTests, the complete build, and server smoke or exact external runtime checks first. Enable the relevant debug module only for the bounded reproduction window. Prefer structured server log records and GameTest assertions over screenshots. Each record and retained bundle must include the source revision, FutureShops artifact hash, exact external hashes when relevant, host, Java and loader versions, command or test name, expected and actual result, exit code, lifecycle and provider state, request and leg identities, capability and validation result, journal and receipt state, custody or claim state, error category, and sanitized log or report path.
+
+Use a laptop client only when the acceptance criterion requires rendering, real input, client-only classloading, resource presentation, or a synchronization result that cannot be represented by a dedicated server or headless client harness. Correlate the client log to the server session and request identity. Do not treat client screenshots, a human joining, or a client-side balance as proof of server authority or external transaction safety. Stop owned processes, retain only the sanitized bundle, and remove disposable worlds, logs, reports, and runtime output after their final consumer.
 
 ### Required test matrices
 
@@ -972,9 +999,19 @@ Each multi-leg flow is interrupted before intent persistence, after each write-a
 
 The final jar is scanned for Pixelmon artifacts, Bukkit and Vault classes, bridge classes, compile time Bukkit or Vault dependencies, reflection strings targeting Bukkit or Vault, accidental embedded jars, credentials, private paths, caches, logs, test worlds, and debug output. Bundled Pixelmon adapter classes are expected, but the Pixelmon runtime and development artifacts are excluded.
 
+#### Debug diagnostics matrix
+
+| Debug case | Required evidence |
+| --- | --- |
+| Debug disabled | Startup and command status show debug is off, no diagnostic flood occurs, and transaction behavior is unchanged. |
+| Module enabled | Authorized operator enables one module, records the session identifier, reproduces one bounded operation, and receives structured server log records with the required correlation and state fields. |
+| Invalid or unauthorized toggle | Invalid module and non operator commands are rejected without changing state and produce one sanitized category record. |
+| Recovery and ambiguity | Journal, provider receipt, custody, claim, `RECOVERING`, and `FROZEN` diagnostics explain the next safe action without clearing a freeze or authorizing a retry. |
+| Client escalation | A client run exists only for a client-only acceptance criterion and its log is correlated to the server evidence; otherwise the row is explicitly marked not needed. |
+
 ### Evidence quality
 
-Evidence must identify the source commit, exact command or procedure, date, environment manifest, relevant artifact hashes, expected result, actual result, and sanitized log location. A passed test against an unrecorded external artifact is not valid production evidence. Manual evidence supplements but never replaces deterministic checks.
+Evidence must identify the source commit, exact command or procedure, date, host, environment manifest, relevant artifact hashes, debug session and request identities when applicable, expected result, actual result, exit code, and sanitized log or report location. A passed test against an unrecorded external artifact is not valid production evidence. Server logs and dedicated GameTests are primary evidence for server behavior. Manual evidence, screenshots, and recordings supplement but never replace deterministic checks or a correlated server record.
 
 ## 15. Compatibility, Migration, Rollout, and Recovery
 
@@ -1030,7 +1067,7 @@ Tracked documentation remains canonical. At minimum, the final documentation set
 * Currency precision, price interpretation, overflow rejection, and absence of automatic balance migration.
 * Physical bill behavior under internal and external providers.
 * Complete surface behavior for shops, carts, player shops, offline proceeds, claims, pay, administration, analytics, events, and rollback.
-* Operator status, logs, the durable receipt audit journal at `world/data/futureshops/receipts`, backup, provider failure, unknown-record recovery, recovery required, restore, and selection rollback procedures.
+* Operator status, opt in debug commands and module selection, structured server and optional client logs, sanitization and rate limits, headless GameTest procedure, the durable receipt audit journal at `world/data/futureshops/receipts`, backup, provider failure, unknown-record recovery, recovery required, restore, and selection rollback procedures.
 * Security assumptions, artifact provenance, hashes, license conclusions, and optional dependency isolation.
 * Verification commands, environment manifests, expected results, known limitations, and the unpublished artifact identity.
 * The absence of an ATM interface or command and the exclusion of publication.
@@ -1092,13 +1129,13 @@ After the master, all four phase plans, plan index, and deterministic handoff pa
 ```text
 Mandatory boundary: CORE-REQ-001 through CORE-REQ-022 across CORE-PHASE-000 through CORE-PHASE-003, including the native Pixelmon transaction-mixin path, separate Vault bridge boundary, exact external integration evidence, the unpublished artifact, and the two-stage open issue lifecycle.
 Optional/future disposition: excluded
-Locked owner decisions: DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018, DEC-019, DEC-020
+Locked owner decisions: DEC-001, DEC-002, DEC-003, DEC-004, DEC-005, DEC-006, DEC-007, DEC-008, DEC-009, DEC-010, DEC-011, DEC-012 resolved and refined by DEC-018, DEC-013, DEC-014, DEC-015, DEC-016, DEC-017, DEC-018, DEC-019, DEC-020, DEC-021
 Active phase: CORE-PHASE-000
 Next executable action: Execute P000-TASK-001 to reconfirm repository identity, toolchain, product metadata, economy ownership, and the complete provider call graph before implementation.
 Known failing checks: none at validated plan handoff; execution checks have not yet run.
 Known external blockers: Third party artifact and development-use terms review under EXT-009 remains unresolved. Exact Pixelmon runtime and development inputs, disposable Pixelmon runtime, bridge candidate, reviewed hybrid stack, and disposable hybrid environment are available under EXT-001, EXT-002, EXT-004, EXT-005, and EXT-006. P002-TASK-013 and P002-TASK-014 record and consume those inputs; P002-TASK-006 obtains or builds the separate bridge and durable backend proof. Native mixin implementation, proof construction, and provisioning are executable work, not prerequisites to start themselves. EXT-008 is already authorized; set and verify eula=true under DEC-020 without another consent request.
 Completion endpoint: One fully validated and inspected unpublished FutureShops 2.3.0 jar for Minecraft 1.21.1 and NeoForge 21.1.248, proven for full internal behavior, a native exact Pixelmon 9.4.0 `PlayerPartyStorage` transaction-mixin path, and separate `vault` registration with mutation enabled only when a bridge and backend provide one durable balance and receipt transaction, otherwise refusing safely, plus the existing read-back GitHub issue 66 updated with implementation guidance for 3.0.0 Forge 1.20.1 and its future 1.21.1 port.
-Required evidence gates: Complete every requirement acceptance criterion and phase exit gate, classify EXT-001 through EXT-006 with exact evidence, inspect the Pixelmon 9.4.0 classes and save path, implement and prove the native PlayerPartyStorage receipt, deduplication, account classification, and durable-save path, execute the Phase 002 Vault bridge or backend transaction proof, apply EXT-008 and DEC-020 before launch and review exact third party operations under EXT-009, obtain and compile the public Pixelmon inputs, build the separate bridge and durable backend proof when needed, pass journal, escrow, draining, recovery, frozen, capability, deterministic, and runtime matrices, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation.
+Required evidence gates: Complete every requirement acceptance criterion and phase exit gate, freeze and exercise the DEC-021 debug command and evidence contract, classify EXT-001 through EXT-006 with exact evidence, inspect the Pixelmon 9.4.0 classes and save path, implement and prove the native PlayerPartyStorage receipt, deduplication, account classification, and durable-save path, execute the Phase 002 Vault bridge or backend transaction proof, apply EXT-008 and DEC-020 before launch and review exact third party operations under EXT-009, obtain and compile the public Pixelmon inputs, build the separate bridge and durable backend proof when needed, pass journal, escrow, draining, recovery, frozen, capability, deterministic, headless GameTest, server-log, and runtime matrices, use a laptop client only for a justified client-only gate, inspect and hash the unpublished jar, preserve the EVD-GH-001 authoring creation and readback for issue 66 through phases 000 through 002, and perform the Phase 003 search, update, and readback for that same open issue only after artifact validation.
 ```
 
 Execution advances one phase at a time. It does not stack future phase work, rewrite the master as status, alter the immutable goal, or declare success before the plan-wide Definition of Done and exact endpoint are satisfied.
