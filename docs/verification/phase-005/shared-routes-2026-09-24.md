@@ -4,9 +4,9 @@
 
 The candidate is the Forge 1.20.1 phase branch at commit `5bdb4b1`.
 The current packaged jar is `build/libs/futureshops-3.0.0-beta.2.jar`.
-Its SHA-256 is `4242543ea9b3233b1a8ec77b9ab21e0e5aa4ec7c756a6d2c2763bc6b07befbee`.
+Its SHA-256 is `bb94b8a1985976f47a215a3b9d1dfcb00a9b259313e0be6f8bf8a5f4c12cd3cc`.
 Its SHA-512 is
-`da2f37f9ef13ccee910bf9bcb39293676c2bdda5e746d915190702efa9117b65a8698c53da496c4c33e77f7ba2d19fac2add823c668fd0f7b3831513b80824f4`.
+`deb3fe3ebf5726ef28e730a15a18a9823ba2860c58501d3f36fd39828d97f7aa1f2bc52cb01da88ba7e32393ea4d6928f9995ab17850b9030caaf661d87ae033`.
 
 ## Route disposition
 
@@ -25,6 +25,11 @@ account mutations retain the caller request UUID and use the provider receipt pa
 operation is copied into the internal wallet. Multi account operations remain explicitly refused
 until an atomic provider contract is available.
 
+Unadapted server shop, player shop, Bazaar, and Auction House money routes now refuse fresh
+external-provider mutations before inventory, escrow, or ledger work. Existing replay and
+cancellation paths remain readable so stored internal liabilities can be resolved without creating
+new external or internal value.
+
 ## Static bypass audit
 
 The production source inventory found the four direct `BalanceManager` mutation call sites in
@@ -34,7 +39,9 @@ commit. Physical route checks exist at the command, ATM access and mutation, cas
 recovery, withdrawal, money claim, and cash claim boundaries. A dedicated Forge 1.20.1 server
 started successfully from the candidate source on Java 17, reached `Done`, loaded FutureShops,
 and generated its disposable world and server configuration under the phase runtime. The server
-was stopped after readiness and the exact runtime was removed.
+was stopped after readiness and the exact runtime was removed. Fresh unadapted shop and market
+money admission checks are covered by `PaymentSourceRegressionTest` and the direct service guard
+tests.
 
 ## Verification
 

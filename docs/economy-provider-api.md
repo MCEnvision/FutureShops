@@ -60,4 +60,5 @@ list that could be mistaken for no accounts.
 No Bukkit, Vault, Spigot, reflection, service lookup, bundled bridge, or third party provider binary
 is included in this API. A separately installed provider must supply its own implementation and
 durable receipt proof. Browse and pure barter remain available when a selected monetary provider is
-unavailable.
+unavailable. Fresh server shop, player shop, Bazaar, and Auction House money routes remain refused
+until their later settlement phases provide the selected provider's durable multi account contract.
