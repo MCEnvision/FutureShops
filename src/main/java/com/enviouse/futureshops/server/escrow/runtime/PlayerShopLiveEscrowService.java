@@ -77,7 +77,10 @@ public final class PlayerShopLiveEscrowService {
             throw new IllegalArgumentException(
                     "Player shop actor does not match the intent");
         }
-        if (!BalanceManager.isInternalProviderSelected()
+        Optional<PlayerShopEscrowIntent> storedIntent = existingIntent(actor,
+                intent.requestId());
+        if (storedIntent.isEmpty()
+                && !BalanceManager.isInternalProviderSelected()
                 && (intent.paymentSource()
                 != com.enviouse.futureshops.server.escrow.playershop.PlayerShopPaymentSource.NONE
                 || !intent.moneyTransfers().isEmpty())) {

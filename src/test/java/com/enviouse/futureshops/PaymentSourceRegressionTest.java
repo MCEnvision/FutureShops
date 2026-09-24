@@ -135,6 +135,8 @@ class PaymentSourceRegressionTest {
                 "src/main/java/com/enviouse/futureshops/server/shop/BulkSellService.java");
         String playerBulk = read(
                 "src/main/java/com/enviouse/futureshops/server/shop/PlayerShopEscrowTransactionService.java");
+        String live = read(
+                "src/main/java/com/enviouse/futureshops/server/escrow/runtime/PlayerShopLiveEscrowService.java");
         assertTrue(sell.contains("BalanceManager.isInternalProviderSelected()"));
         assertTrue(legacySell.contains("backend instanceof LiveBackend"));
         assertTrue(offer.contains("requiresMoney(request"));
@@ -144,5 +146,8 @@ class PaymentSourceRegressionTest {
                 "!BalanceManager.isInternalProviderSelected()"));
         assertTrue(offer.contains(
                 "!prepared.intent().moneyTransfers().isEmpty()"));
+        assertTrue(live.contains("Optional<PlayerShopEscrowIntent> storedIntent"));
+        assertTrue(live.indexOf("existingIntent(actor,")
+                < live.indexOf("Selected economy provider is not admitted"));
     }
 }
