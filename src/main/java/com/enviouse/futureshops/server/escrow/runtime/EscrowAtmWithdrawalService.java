@@ -44,6 +44,9 @@ public final class EscrowAtmWithdrawalService {
             catalog = AtmCurrencyCatalog.capture(
                     CurrencyManager.get(), BalanceManager.getProvider());
         }
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return unavailable(catalog, "EXTERNAL_PROVIDER");
+        }
         EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
         if (LegacyBalanceMigrationManager.isFailed()) {
             return unavailable(catalog, "MIGRATION_FAILED");
