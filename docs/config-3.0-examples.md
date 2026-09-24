@@ -43,7 +43,7 @@ of setting:
   created. A reload changes the rules for *new* listings and orders only; every live contract
   keeps the exact rules it was accepted under. Nothing you change here retroactively edits an
   active auction or an open Bazaar order.
-- **Restart or migration required** — currency decimals, product identity semantics,
+- **Restart or migration required** — currency decimals, provider selection, product identity semantics,
   `bazaar_control` catalog reconciliation, and persistent key or journal formats. The control
   value is enforced immediately for new Browse Items selections, but switching back to admin mode
   reconciles the JSON catalog on server start.
@@ -67,6 +67,9 @@ valid settings snapshot stays active and the server log reports the rejected fie
 	default_module = "shop"
 
 [economy]
+	# Registered server side provider id. "internal" is the default. Reloading this value
+	# stages the next provider and reports restart required.
+	provider = "internal"
 	currency_name = "Coins"
 	# Decimal places for displayed balances (0-6). Changing this changes what one minor unit
 	# means everywhere — treat it as a migration, not a live tweak.

@@ -487,6 +487,7 @@ public class WireRoundTripTest {
         assertEquals(in, out, "S2CShopDataPacket must round-trip all 12 fields incl. trailing canEdit");
         assertTrue(out.canEdit());
         assertFalse(out.forceOpen());
+        assertEquals("internal", out.providerId());
         assertEquals(0, b.readableBytes(), "canEdit must be the LAST field on the wire");
     }
 

@@ -30,6 +30,9 @@ import java.util.function.Supplier;
  * <p>Protocol version 26 — trailing {@code canEdit}: whether the receiving player may use the
  * in-GUI admin shop editor (server fills {@code player.hasPermissions(2)}). Trailing so all
  * earlier fields keep their wire positions; backward-compat constructors default it to false.
+ *
+ * <p>Protocol version 59 — trailing {@code providerId}: the active server-owned provider
+ * projection. Compatibility constructors default to the internal provider.
  */
 public record S2CShopDataPacket(
         String shopId,
@@ -44,7 +47,8 @@ public record S2CShopDataPacket(
         List<NearbyShopEntry> nearbyShops,
         boolean forceOpen,
         boolean canEdit,
-        List<ServerShopOfferListing> offers) {
+        List<ServerShopOfferListing> offers,
+        String providerId) {
 
     public S2CShopDataPacket {
         categories = List.copyOf(categories);
@@ -53,6 +57,9 @@ public record S2CShopDataPacket(
         barterRecipes = List.copyOf(barterRecipes);
         nearbyShops = List.copyOf(nearbyShops);
         offers = List.copyOf(offers);
+        if (providerId == null || !providerId.matches("[a-z][a-z0-9_]{1,63}")) {
+            throw new IllegalArgumentException("providerId is invalid");
+        }
     }
 
     /** Backward-compat constructor without nearby shops / admin toggle / forceOpen flag / canEdit. */
@@ -61,7 +68,7 @@ public record S2CShopDataPacket(
                              List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes) {
         this(shopId, balanceMinorUnits, currencyName, currencyDecimals,
                 categories, items, promos, barterRecipes, true, List.of(),
-                true, false, List.of());
+                true, false, List.of(), "internal");
     }
 
     /** Backward-compat constructor without forceOpen (defaults to true — preserves legacy open behavior) / canEdit. */
@@ -71,7 +78,7 @@ public record S2CShopDataPacket(
                              boolean adminShopEnabled, List<NearbyShopEntry> nearbyShops) {
         this(shopId, balanceMinorUnits, currencyName, currencyDecimals,
                 categories, items, promos, barterRecipes, adminShopEnabled,
-                nearbyShops, true, false, List.of());
+                nearbyShops, true, false, List.of(), "internal");
     }
 
     /** Backward-compat constructor without canEdit (defaults to false — viewer-only). */
@@ -81,7 +88,7 @@ public record S2CShopDataPacket(
                              boolean adminShopEnabled, List<NearbyShopEntry> nearbyShops, boolean forceOpen) {
         this(shopId, balanceMinorUnits, currencyName, currencyDecimals,
                 categories, items, promos, barterRecipes, adminShopEnabled,
-                nearbyShops, forceOpen, false, List.of());
+                nearbyShops, forceOpen, false, List.of(), "internal");
     }
 
     /** compatibility constructor without normalized offers. */
@@ -92,7 +99,19 @@ public record S2CShopDataPacket(
                              boolean forceOpen, boolean canEdit) {
         this(shopId, balanceMinorUnits, currencyName, currencyDecimals,
                 categories, items, promos, barterRecipes, adminShopEnabled,
-                nearbyShops, forceOpen, canEdit, List.of());
+                nearbyShops, forceOpen, canEdit, List.of(), "internal");
+    }
+
+    /** Compatibility constructor for callers that provide normalized offers but no provider id. */
+    public S2CShopDataPacket(String shopId, long balanceMinorUnits, String currencyName, int currencyDecimals,
+                             List<CatalogCategory> categories, List<CatalogItem> items,
+                             List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes,
+                             boolean adminShopEnabled, List<NearbyShopEntry> nearbyShops,
+                             boolean forceOpen, boolean canEdit,
+                             List<ServerShopOfferListing> offers) {
+        this(shopId, balanceMinorUnits, currencyName, currencyDecimals,
+                categories, items, promos, barterRecipes, adminShopEnabled,
+                nearbyShops, forceOpen, canEdit, offers, "internal");
     }
 
     public static void encode(S2CShopDataPacket packet, FriendlyByteBuf buffer) {
@@ -118,6 +137,7 @@ public record S2CShopDataPacket(
         buffer.writeBoolean(packet.forceOpen);
         buffer.writeBoolean(packet.canEdit);
         ServerShopOfferNetworkCodec.encodeListings(buffer, packet.offers);
+        buffer.writeUtf(packet.providerId);
     }
 
     public static S2CShopDataPacket decode(FriendlyByteBuf buffer) {
@@ -146,9 +166,11 @@ public record S2CShopDataPacket(
         boolean canEdit = buffer.readBoolean();
         List<ServerShopOfferListing> offers =
                 ServerShopOfferNetworkCodec.decodeListings(buffer);
+        String providerId = buffer.readUtf();
         return new S2CShopDataPacket(shopId, balance, currencyName,
                 decimals, categories, items, promos, barterRecipes,
-                adminShopEnabled, nearbyShops, forceOpen, canEdit, offers);
+                adminShopEnabled, nearbyShops, forceOpen, canEdit, offers,
+                providerId);
     }
 
     public static void handle(S2CShopDataPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

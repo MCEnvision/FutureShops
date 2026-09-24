@@ -47,6 +47,11 @@ final class UnavailableEconomyProvider implements EconomyProvider {
         return 0;
     }
 
+    @Override
+    public String getProviderId() {
+        return providerId;
+    }
+
     private TransactionResult unavailable() {
         return TransactionResult.error(ShopResultCode.SERVER_ERROR, 0L);
     }

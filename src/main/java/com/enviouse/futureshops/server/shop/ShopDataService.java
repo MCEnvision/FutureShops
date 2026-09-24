@@ -97,7 +97,8 @@ public final class ShopDataService {
                 adminEnabled
                         ? ShopCatalog.get(shopId)
                         .map(ShopDefinition::offers).orElse(List.of())
-                        : List.of()));
+                        : List.of(),
+                provider.getProviderId()));
     }
 
     public static void resendActiveSessions(MinecraftServer server) {
