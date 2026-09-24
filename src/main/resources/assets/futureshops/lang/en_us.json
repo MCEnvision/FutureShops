@@ -672,6 +672,7 @@
   "command.futureshops.baltop.header": "=== Top Balances (Page %s) ===",
   "command.futureshops.baltop.entry": "#%s %s: %s %s",
   "command.futureshops.baltop.empty": "No balance entries found for page %s.",
+  "command.futureshops.baltop.unavailable": "Leaderboard unavailable: %s",
   "command.futureshops.buy.success.single": "Purchased %s item(s) for %s %s.",
   "command.futureshops.buy.success.cart": "Checked out %s item(s) for %s %s.",
   "command.futureshops.buy.success.single.client": "Purchase complete.",

@@ -3,6 +3,8 @@ package com.enviouse.futureshops.server.economy;
 import com.enviouse.futureshops.Config;
 import com.enviouse.futureshops.api.economy.EconomyApi;
 import com.enviouse.futureshops.api.economy.EconomyProviderRegistry;
+import com.enviouse.futureshops.api.economy.BalanceSnapshot;
+import com.enviouse.futureshops.api.economy.QueryResult;
 import com.enviouse.futureshops.api.economy.ProviderLifecycle;
 import com.enviouse.futureshops.api.economy.ProviderResolution;
 import net.minecraft.server.MinecraftServer;
@@ -138,7 +140,17 @@ public final class BalanceManager {
     }
 
     public static List<BalanceEntry> getTopBalances(int page, int pageSize) {
+        if (!usesInternalProvider()) {
+            throw new EconomyUnavailableException(selection.activeProviderId(),
+                    selection.diagnostic().isBlank() ? "UNAVAILABLE" : selection.diagnostic(),
+                    "leaderboard is unavailable for the selected provider");
+        }
         return getProvider().getTopBalances(page, pageSize);
+    }
+
+    /** Returns the selected provider leaderboard without converting refusal to an empty list. */
+    public static QueryResult<List<BalanceSnapshot>> getTopBalancesResult(int page, int pageSize) {
+        return getPublicProvider().leaderboard(page, pageSize);
     }
 
     private static InternalEconomyProvider getInternalProvider() {

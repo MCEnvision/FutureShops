@@ -1,9 +1,10 @@
 package com.enviouse.futureshops.command;
 
-import com.enviouse.futureshops.server.economy.BalanceEntry;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
 import com.enviouse.futureshops.server.shop.MarketplaceAnalyticsService;
+import com.enviouse.futureshops.api.economy.BalanceSnapshot;
+import com.enviouse.futureshops.api.economy.QueryResult;
 import com.enviouse.futureshops.server.util.PageBounds;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -49,7 +50,14 @@ public final class BalTopCommand {
 
         EconomyProvider provider = BalanceManager.getProvider();
         int safePage = PageBounds.normalizePage(page);
-        List<BalanceEntry> entries = BalanceManager.getTopBalances(safePage, PAGE_SIZE);
+        QueryResult<List<BalanceSnapshot>> leaderboard =
+                BalanceManager.getTopBalancesResult(safePage, PAGE_SIZE);
+        if (!leaderboard.confirmed()) {
+            player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable(
+                    "command.futureshops.baltop.unavailable", leaderboard.diagnostic())));
+            return 1;
+        }
+        List<BalanceSnapshot> entries = leaderboard.value().orElseThrow();
         if (entries.isEmpty()) {
             player.sendSystemMessage(EconomyCommandUtil.warning(Component.translatable("command.futureshops.baltop.empty", safePage)));
             return 1;
@@ -57,8 +65,8 @@ public final class BalTopCommand {
 
         player.sendSystemMessage(EconomyCommandUtil.info(Component.translatable("command.futureshops.baltop.header", safePage)));
         long rank = ((long) (safePage - 1) * PAGE_SIZE) + 1L;
-        for (BalanceEntry entry : entries) {
-            String name = resolvePlayerName(player, entry.playerUUID());
+        for (BalanceSnapshot entry : entries) {
+            String name = resolvePlayerName(player, entry.playerId());
             String balanceText = EconomyCommandUtil.formatMinorUnits(entry.balanceMinorUnits(), provider.getDecimalPlaces());
             player.sendSystemMessage(EconomyCommandUtil.success(Component.translatable("command.futureshops.baltop.entry", rank, name, balanceText, provider.getCurrencyName())));
             rank++;

@@ -62,7 +62,34 @@ class ApiV1AliasContractTest {
                 .receipt().isEmpty());
     }
 
+    @Test
+    void fixtureBindingQueryAndUnsupportedLeaderboardRemainExplicit() {
+        EconomyProvider provider = new ProjectionProvider();
+        AccountRef account = new AccountRef(
+                UUID.fromString("00000000-0000-0000-0000-000000000002"));
+        CurrencyV1 currency = new CurrencyV1("coins", "Coin", "Coins", 2);
+        BindingV1 binding = provider.bind(account, currency);
+
+        assertEquals("fixture", binding.providerId());
+        assertEquals(account.accountUuid(), binding.accountUuid());
+        assertEquals(100L, provider.query(binding).value().orElseThrow().balanceMinorUnits());
+        assertEquals(ProviderError.CAPABILITY_MISSING,
+                provider.leaderboard(1, 10).error());
+        assertEquals(ProviderError.INVALID_REQUEST,
+                provider.leaderboard(0, 10).error());
+    }
+
     private static final class ProjectionProvider implements EconomyProvider {
+        @Override
+        public BindingV1 bind(AccountRef account, CurrencyV1 currency) {
+            return new BindingV1(
+                    providerId(), compatibilityVersion(), "fixture_adapter", "v1",
+                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                    "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+                    "fixture lineage", account.accountUuid(), currency.id(), currency.precision(),
+                    "fixture manager", 1L, 1);
+        }
+
         @Override
         public String providerId() {
             return "fixture";

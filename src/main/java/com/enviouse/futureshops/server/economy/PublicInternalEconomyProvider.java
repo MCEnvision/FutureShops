@@ -14,6 +14,7 @@ import com.enviouse.futureshops.api.economy.ProviderResult;
 import com.enviouse.futureshops.api.economy.RequestId;
 
 import java.util.Map;
+import java.util.List;
 import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -60,6 +61,24 @@ final class PublicInternalEconomyProvider implements com.enviouse.futureshops.ap
         } catch (RuntimeException exception) {
             return ProviderResult.unavailable(ProviderError.PROVIDER_EXCEPTION,
                     "internal balance query failed");
+        }
+    }
+
+    @Override
+    public com.enviouse.futureshops.api.economy.QueryResult<List<BalanceSnapshot>> leaderboard(
+            int page, int pageSize) {
+        if (page < 1 || pageSize < 1 || pageSize > 100) {
+            return com.enviouse.futureshops.api.economy.QueryResult.unavailable(
+                    ProviderError.INVALID_REQUEST, "leaderboard page bounds are invalid");
+        }
+        try {
+            List<BalanceSnapshot> entries = oldProvider.getTopBalances(page, pageSize).stream()
+                    .map(entry -> new BalanceSnapshot(entry.playerUUID(), entry.balanceMinorUnits()))
+                    .toList();
+            return com.enviouse.futureshops.api.economy.QueryResult.confirmed(entries);
+        } catch (RuntimeException exception) {
+            return com.enviouse.futureshops.api.economy.QueryResult.unavailable(
+                    ProviderError.PROVIDER_EXCEPTION, "internal leaderboard query failed");
         }
     }
 

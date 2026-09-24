@@ -47,4 +47,16 @@ class EconomyProviderRegistryTest {
                 EconomyProviderRegistry.register("valid", 1, null).status());
         assertTrue(EconomyProviderRegistry.snapshot().isEmpty());
     }
+
+    @Test
+    void acceptsTheVersionedProviderAndFactoryAliases() {
+        ProviderId providerId = new ProviderId("fixture");
+        FactoryV1 factory = context -> null;
+
+        RegistrationResult result = EconomyProviderRegistry.register(providerId, factory);
+
+        assertEquals(RegistrationStatus.ACCEPTED, result.status());
+        assertEquals("fixture", result.providerId());
+        assertTrue(EconomyProviderRegistry.snapshot().containsKey("fixture"));
+    }
 }

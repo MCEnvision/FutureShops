@@ -32,8 +32,10 @@ payload fingerprint. Changed identity or payload is refused before any effect.
 
 The frozen v1 method projections are `bind`, `query`, `precheck`, `mutate`, and `lookup`. The
 default mutation projection remains closed until the durable coordinator and a verified adapter
-are available in later releases. Implementing the API or advertising capabilities does not by
-itself prove an adapter or permit external value movement.
+are available in later releases. `leaderboard(page, pageSize)` returns a typed query result. The
+default implementation reports `CAPABILITY_MISSING`; it never returns an empty list to represent
+an unsupported leaderboard. Implementing the API or advertising capabilities does not by itself
+prove an adapter or permit external value movement.
 
 ## Selection and restart behavior
 
@@ -46,6 +48,9 @@ not fall back to the internal wallet, copy balances, convert currencies, or reco
 
 The active provider id and currency metadata are sent through the existing shop data packet. The
 client treats those fields as server owned display metadata and never selects a provider locally.
+Leaderboard queries use the same selected provider. Internal mode returns the existing ranked
+balances, while an unavailable or unsupported provider returns a typed refusal instead of an empty
+list that could be mistaken for no accounts.
 
 ## Compatibility boundary
 

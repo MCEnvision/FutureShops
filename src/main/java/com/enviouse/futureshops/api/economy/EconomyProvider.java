@@ -2,6 +2,7 @@ package com.enviouse.futureshops.api.economy;
 
 import java.util.UUID;
 import java.util.Locale;
+import java.util.List;
 
 /**
  * Public provider contract for server authoritative economy integrations.
@@ -69,6 +70,16 @@ public interface EconomyProvider {
         return result.confirmed()
                 ? QueryResult.confirmed(result.value().orElseThrow())
                 : QueryResult.unavailable(result.error(), result.diagnostic());
+    }
+
+    /** Returns a provider leaderboard or an explicit unsupported result. */
+    default QueryResult<List<BalanceSnapshot>> leaderboard(int page, int pageSize) {
+        if (page < 1 || pageSize < 1 || pageSize > 100) {
+            return QueryResult.unavailable(ProviderError.INVALID_REQUEST,
+                    "leaderboard page bounds are invalid");
+        }
+        return QueryResult.unavailable(ProviderError.CAPABILITY_MISSING,
+                "leaderboard is unavailable for this provider");
     }
 
     /** Performs readiness and capability admission without dispatching a mutation. */
