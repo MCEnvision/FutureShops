@@ -2,7 +2,7 @@
 
 ## Candidate
 
-The candidate is the Forge 1.20.1 phase branch at commit `5bdb4b1`.
+The candidate is the Forge 1.20.1 phase branch at commit `2d573f2`.
 The current packaged jar is `build/libs/futureshops-3.0.0-beta.2.jar`.
 Its SHA-256 is `bb94b8a1985976f47a215a3b9d1dfcb00a9b259313e0be6f8bf8a5f4c12cd3cc`.
 Its SHA-512 is
