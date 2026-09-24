@@ -27,17 +27,22 @@ abstract class PixelmonPlayerPartyStorageMixin {
     @Unique
     private CompoundTag futureshops$loadedReceipt;
 
+    @Unique
+    private boolean futureshops$invalidReceipt;
+
     @Inject(method = "readFromNBT(Lnet/minecraft/nbt/CompoundTag;)Ljava/util/concurrent/CompletableFuture;",
             at = @At("HEAD"), remap = false)
     private void futureshops$readReceipt(CompoundTag tag, CallbackInfoReturnable<?> callback) {
         futureshops$loadedReceipt = null;
+        futureshops$invalidReceipt = false;
         if (tag.contains("futureshopsReceipt", 10)) {
             try {
                 PixelmonNativeReceiptCodec.read(tag)
                         .ifPresent(ignored -> futureshops$loadedReceipt =
                                 tag.copy());
             } catch (IllegalArgumentException ignored) {
-                // Invalid receipts are intentionally not carried into a new save image.
+                futureshops$loadedReceipt = tag.copy();
+                futureshops$invalidReceipt = true;
             }
         }
     }
@@ -45,6 +50,11 @@ abstract class PixelmonPlayerPartyStorageMixin {
     @Inject(method = "setBalance(Ljava/math/BigDecimal;)V", at = @At("HEAD"),
             cancellable = true, remap = false)
     private void futureshops$setBalance(BigDecimal amount, CallbackInfo callback) {
+        if (futureshops$invalidReceipt
+                && PixelmonNativeGate.refuseCurrentRequest("malformed_receipt")) {
+            callback.cancel();
+            return;
+        }
         if (PixelmonNativeGate.applySetBalance(this, amount, pokeDollars)) {
             PixelmonNativeRequestContext.current().flatMap(Request::resultingBalance)
                     .ifPresent(balance -> pokeDollars = balance);
@@ -56,6 +66,11 @@ abstract class PixelmonPlayerPartyStorageMixin {
     @Inject(method = "add(Ljava/math/BigDecimal;)Z", at = @At("HEAD"),
             cancellable = true, remap = false)
     private void futureshops$add(BigDecimal amount, CallbackInfoReturnable<Boolean> callback) {
+        if (futureshops$invalidReceipt
+                && PixelmonNativeGate.refuseCurrentRequest("malformed_receipt")) {
+            callback.setReturnValue(false);
+            return;
+        }
         if (PixelmonNativeGate.applyDelta(this, pokeDollars, amount, false)) {
             PixelmonNativeRequestContext.current().flatMap(Request::resultingBalance)
                     .ifPresent(balance -> pokeDollars = balance);
@@ -68,6 +83,11 @@ abstract class PixelmonPlayerPartyStorageMixin {
     @Inject(method = "take(Ljava/math/BigDecimal;)Z", at = @At("HEAD"),
             cancellable = true, remap = false)
     private void futureshops$take(BigDecimal amount, CallbackInfoReturnable<Boolean> callback) {
+        if (futureshops$invalidReceipt
+                && PixelmonNativeGate.refuseCurrentRequest("malformed_receipt")) {
+            callback.setReturnValue(false);
+            return;
+        }
         if (PixelmonNativeGate.applyDelta(this, pokeDollars, amount, true)) {
             PixelmonNativeRequestContext.current().flatMap(Request::resultingBalance)
                     .ifPresent(balance -> pokeDollars = balance);
@@ -88,8 +108,13 @@ abstract class PixelmonPlayerPartyStorageMixin {
         });
         if (futureshops$loadedReceipt != null
                 && !callback.getReturnValue().contains("futureshopsReceipt", 10)) {
-            PixelmonNativeReceiptCodec.preserve(callback.getReturnValue(),
-                    futureshops$loadedReceipt);
+            if (futureshops$invalidReceipt) {
+                callback.getReturnValue().put("futureshopsReceipt",
+                        futureshops$loadedReceipt.getCompound("futureshopsReceipt").copy());
+            } else {
+                PixelmonNativeReceiptCodec.preserve(callback.getReturnValue(),
+                        futureshops$loadedReceipt);
+            }
         }
     }
 

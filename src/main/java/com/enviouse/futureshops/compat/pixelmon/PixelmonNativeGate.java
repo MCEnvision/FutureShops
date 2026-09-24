@@ -50,6 +50,12 @@ public final class PixelmonNativeGate {
         return PixelmonNativeRequestContext.current();
     }
 
+    public static boolean refuseCurrentRequest(String reason) {
+        Optional<PixelmonNativeRequestContext.Request> request = currentRequest();
+        request.ifPresent(value -> value.recordFailure(reason));
+        return request.isPresent();
+    }
+
     public static boolean isSupportedVersionLoaded() {
         try {
             if (ModList.get() != null) {

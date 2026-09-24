@@ -75,4 +75,16 @@ class PixelmonNativeReceiptCodecTest {
                     PixelmonNativeReceiptCodec.read(rewritten).orElseThrow());
         }
     }
+
+    @Test
+    void malformedReceiptRemainsAvailableForRecoveryInspection() {
+        CompoundTag source = new CompoundTag();
+        CompoundTag receipt = new CompoundTag();
+        receipt.putInt("schema", 99);
+        source.put("futureshopsReceipt", receipt);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> PixelmonNativeReceiptCodec.read(source));
+        assertEquals(99, source.getCompound("futureshopsReceipt").getInt("schema"));
+    }
 }
