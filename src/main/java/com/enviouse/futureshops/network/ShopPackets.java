@@ -137,7 +137,8 @@ public final class ShopPackets {
     // protocol 53 adds normalized server shop offers.
     // protocol 57 adds the recovering market module capability.
     // protocol 58 adds the server authoritative admin bulk catalog preview and commit.
-    public static final String PROTOCOL_VERSION = "58";
+    // protocol 59 adds the active provider id to the existing shop metadata projection.
+    public static final String PROTOCOL_VERSION = "59";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
         .named(ResourceLocation.parse(Futureshops.MODID + ":main"))

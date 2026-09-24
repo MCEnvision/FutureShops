@@ -14,11 +14,14 @@ import com.enviouse.futureshops.network.packets.S2CBalanceUiPacket;
 import com.enviouse.futureshops.server.economy.BalanceEntry;
 import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.EconomyProvider;
+import com.enviouse.futureshops.api.economy.BalanceSnapshot;
+import com.enviouse.futureshops.api.economy.QueryResult;
 import com.enviouse.futureshops.server.transaction.TransactionHistorySavedData;
 import com.enviouse.futureshops.server.util.PageBounds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -92,8 +95,15 @@ public final class MarketplaceAnalyticsService {
             return;
         }
         int safePage = page;
-        List<BalanceTopEntry> topBalances = BalanceManager.getTopBalances(safePage, BALTOP_PAGE_SIZE).stream()
-                .map(entry -> new BalanceTopEntry(entry.playerUUID(), resolvePlayerName(server, entry.playerUUID()), entry.balanceMinorUnits()))
+        QueryResult<List<BalanceSnapshot>> leaderboard =
+                BalanceManager.getTopBalancesResult(safePage, BALTOP_PAGE_SIZE);
+        if (!leaderboard.confirmed()) {
+            player.sendSystemMessage(Component.translatable(
+                    "command.futureshops.baltop.unavailable", leaderboard.diagnostic()));
+            return;
+        }
+        List<BalanceTopEntry> topBalances = leaderboard.value().orElseThrow().stream()
+                .map(entry -> new BalanceTopEntry(entry.playerId(), resolvePlayerName(server, entry.playerId()), entry.balanceMinorUnits()))
                 .toList();
         int totalPages = topBalances.isEmpty() && safePage > 1 ? safePage : Math.max(1, safePage + (topBalances.size() == BALTOP_PAGE_SIZE ? 1 : 0));
 

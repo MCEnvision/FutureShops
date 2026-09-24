@@ -732,7 +732,8 @@ public final class ShopClientPacketHandler {
                     packet.adminShopEnabled(),
                     packet.nearbyShops(),
                     packet.canEdit(),
-                    packet.offers());
+                    packet.offers(),
+                    packet.providerId());
             ShopPackets.CHANNEL.sendToServer(new com.enviouse.futureshops.network.packets.C2SInventorySyncPacket(packet.shopId()));
             if (shopMainOpen) {
                 // Update in-place — preserves nearbyMode, scroll, tabs.

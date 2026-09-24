@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.Set;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.config.ModConfigEvent;
+import com.enviouse.futureshops.server.economy.ProviderSelectionManager;
 
 @Mod.EventBusSubscriber(modid = Futureshops.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
 public class Config {
@@ -49,6 +50,11 @@ public class Config {
     private static final ForgeConfigSpec.LongValue ECONOMY_MAX_BALANCE_MINOR_UNITS = BUILDER
         .comment("Maximum allowed balance in minor units")
         .defineInRange("economy.max_balance_minor_units", 99999999999L, 0L, Long.MAX_VALUE);
+
+    private static final ForgeConfigSpec.ConfigValue<String> ECONOMY_PROVIDER = BUILDER
+        .comment("Server economy provider identifier. Missing values use internal. Changes apply after restart.")
+        .define("economy.provider", "internal", value -> value instanceof String text
+            && text.length() <= 64 && !text.contains("\n") && !text.contains("\r"));
 
     private static final ForgeConfigSpec.IntValue PERMISSIONS_MARKET_USE_OP_LEVEL = BUILDER
         .comment("Operator fallback level for market browsing and trading when no permission plugin overrides FutureShops nodes.")
@@ -201,6 +207,7 @@ public class Config {
     public static int economyCurrencyDecimals = 2;
     public static long economyStartingBalanceMinorUnits = 100000L;
     public static long economyMaxBalanceMinorUnits = 99999999999L;
+    public static String economyProviderId = "internal";
     public static boolean economyAllowNegative = false;
     public static int permissionsMarketUseOpLevel = 0;
     public static int permissionsMarketAdminOpLevel = 2;
@@ -277,6 +284,7 @@ public class Config {
                     economyCurrencyDecimals = ECONOMY_DECIMALS.get();
                     economyStartingBalanceMinorUnits = ECONOMY_STARTING_BALANCE_MINOR_UNITS.get();
                     economyMaxBalanceMinorUnits = ECONOMY_MAX_BALANCE_MINOR_UNITS.get();
+                    economyProviderId = ECONOMY_PROVIDER.get();
                     economyAllowNegative = ECONOMY_ALLOW_NEGATIVE.get();
                     permissionsMarketUseOpLevel =
                             PERMISSIONS_MARKET_USE_OP_LEVEL.get();
@@ -316,6 +324,10 @@ public class Config {
                     if (event instanceof ModConfigEvent.Reloading
                             && com.enviouse.futureshops.money.CurrencyManager.getOrNull() != null) {
                         com.enviouse.futureshops.money.CurrencyManager.initialize();
+                    }
+                    if (event instanceof ModConfigEvent.Reloading
+                            && ProviderSelectionManager.isResolved()) {
+                        ProviderSelectionManager.stageReload(economyProviderId);
                     }
                 });
     }

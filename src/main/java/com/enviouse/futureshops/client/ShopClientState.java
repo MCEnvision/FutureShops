@@ -31,6 +31,7 @@ public final class ShopClientState {
     private static volatile boolean currentBalanceKnown;
     private static volatile String currencyName = "Coins";
     private static volatile int currencyDecimals = 2;
+    private static volatile String providerId = "internal";
 
     // Catalog data — set by S2CShopDataPacket.
     private static volatile List<CatalogCategory> catalogCategories = List.of();
@@ -74,11 +75,21 @@ public final class ShopClientState {
                                      List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes,
                                      boolean adminEnabled, List<NearbyShopEntry> nearby, boolean canEdit,
                                      List<ServerShopOfferListing> offers) {
+        applyShopData(shopId, balanceMinorUnits, currency, decimals, categories, items,
+                promos, barterRecipes, adminEnabled, nearby, canEdit, offers, "internal");
+    }
+
+    public static void applyShopData(String shopId, long balanceMinorUnits, String currency, int decimals,
+                                     List<CatalogCategory> categories, List<CatalogItem> items,
+                                     List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes,
+                                     boolean adminEnabled, List<NearbyShopEntry> nearby, boolean canEdit,
+                                     List<ServerShopOfferListing> offers, String activeProviderId) {
         activeShopId = shopId;
         currentBalanceMinorUnits = balanceMinorUnits;
         currentBalanceKnown = true;
         currencyName = currency;
         currencyDecimals = decimals;
+        providerId = validateProviderId(activeProviderId);
         catalogCategories = List.copyOf(categories);
         catalogItems = List.copyOf(items);
         catalogPromos = List.copyOf(promos);
@@ -166,6 +177,7 @@ public final class ShopClientState {
         currentBalanceKnown = false;
         currencyName = "Coins";
         currencyDecimals = 2;
+        providerId = "internal";
     }
 
     private static boolean validCurrencyName(String name) {
@@ -471,6 +483,17 @@ public final class ShopClientState {
 
     public static String getCurrencyName() {
         return currencyName;
+    }
+
+    public static String getProviderId() {
+        return providerId;
+    }
+
+    private static String validateProviderId(String value) {
+        if (value == null || !value.matches("[a-z][a-z0-9_]{1,63}")) {
+            throw new IllegalArgumentException("provider id is invalid");
+        }
+        return value;
     }
 
     public static int getCurrencyDecimals() {

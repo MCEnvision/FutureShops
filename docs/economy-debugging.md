@@ -18,6 +18,25 @@ The module must be `economy`, `escrow`, `shop`, `market`, `cash`, `network`, `pe
 
 Each capture expires after 60 seconds. It accepts at most 100 events per second, 2,000 events, 4 KiB per event, and 5 MiB total. Events are queued for the server logger with bounded backpressure. The status line reports the capture id, selector, remaining time, counters, limits, and the `server.log` output location. Turning diagnostics off more than once is safe.
 
+## Provider selection capture
+
+For provider API support, capture one normal internal query, one rejected registration, one staged
+reload, and one unavailable provider refusal. Start a fresh capture after every reload or restart
+because captures are intentionally reset:
+
+```text
+/futureshops debug status
+/futureshops debug on economy
+/futureshops debug status
+```
+
+The sanitized lines should show `registration_result`, `binding_validation`,
+`selection_resolution`, `selection_staged`, `query_result`, `mutation_refusal`, and
+`metadata_projection`. Confirm that desired and active provider ids are distinct during staged
+reload, that an unavailable query is not a numeric zero, and that the internal wallet has no delta
+when an external mutation is refused. Browse and pure barter may remain available in this state.
+Do not claim external mutation support from a capability declaration alone.
+
 ## Privacy and support
 
 Diagnostic events use schema version 2 and capture scoped pseudonyms for request, leg, and actor references. Do not paste raw logs into a public issue. A support packet should contain the mod version, Minecraft and Forge versions, the selected module, capture id, command window, sanitized decisive lines, expected and actual result, and the cleanup result. Remove balances, NBT, chat, credentials, raw UUIDs, private paths, and private addresses before sharing.

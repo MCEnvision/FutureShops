@@ -40,4 +40,9 @@ public interface EconomyProvider {
     String getCurrencyName();
 
     int getDecimalPlaces();
+
+    /** Stable identifier in the server owned provider metadata projection. */
+    default String getProviderId() {
+        return "internal";
+    }
 }
