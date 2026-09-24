@@ -49,3 +49,11 @@ server reached `Done`, loaded FutureShops 3.0.0-beta.2, initialized the internal
 catalog paths, and logged the FutureShops server start and stop lifecycle. The server process,
 world, generated configs, logs, crash output, and exact `run` directory were stopped and removed
 after the gate. `eula=true` was written and read back before launch.
+
+## boundary scans
+
+The production archive contained 45 public API economy entries and no `bukkit`, `vault`, `spigot`,
+`sqlite`, `pixelmon`, or `danconomy` archive entries. The resolved runtime dependency report had
+no matching optional provider or SQLite dependency. The public API source package had no Bukkit,
+Vault, Spigot, SQLite, reflection, or service lookup references. Existing Refined Storage 2
+reflection remains outside the provider API package and is an unrelated optional integration.
