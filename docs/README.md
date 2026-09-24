@@ -8,6 +8,7 @@
 * [Physical currency and ATM](physical-currency-atm.md)
 * [Backup and restore](backup-restore.md)
 * [Persistence and database audit](persistence-database-audit.md)
+* [Economy diagnostics](economy-debugging.md)
 
 ## Configuration
 
