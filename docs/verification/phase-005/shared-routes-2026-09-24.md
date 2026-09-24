@@ -4,9 +4,9 @@
 
 The candidate is the Forge 1.20.1 phase branch at commit `5bdb4b1`.
 The current packaged jar is `build/libs/futureshops-3.0.0-beta.2.jar`.
-Its SHA-256 is `5d4cc96dc39351169e257f9e43011fac9b257c42ebb1b23dfad730e84f408f21`.
+Its SHA-256 is `4242543ea9b3233b1a8ec77b9ab21e0e5aa4ec7c756a6d2c2763bc6b07befbee`.
 Its SHA-512 is
-`c911912fde3bae1edbc6c09ea5f5284527dc782fa97a7d5c5e187692081a66d50da6e326c609a5778cbd7745c1a601bec59db377e96e234e96f46762cbef149c`.
+`da2f37f9ef13ccee910bf9bcb39293676c2bdda5e746d915190702efa9117b65a8698c53da496c4c33e77f7ba2d19fac2add823c668fd0f7b3831513b80824f4`.
 
 ## Route disposition
 
