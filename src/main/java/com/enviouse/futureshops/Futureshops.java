@@ -14,6 +14,7 @@ import com.enviouse.futureshops.init.ModItems;
 import com.enviouse.futureshops.money.SpentMintsSavedData;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.server.economy.BalanceManager;
+import com.enviouse.futureshops.api.economy.EconomyProviderRegistry;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeManager;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeState;
@@ -134,6 +135,7 @@ public class Futureshops {
             LOGGER.warn("FutureShops escrow is recovering before value mutations become available.");
         }
         LegacyBalanceMigrationManager.initialize(event.getServer());
+        EconomyProviderRegistry.freeze();
         BalanceManager.initialize(event.getServer());
         // Resolve the configured physical-currency adapter (built-in money item
         // or a foreign mod's items, e.g. Apocalypse Now cash).
