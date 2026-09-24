@@ -1,26 +1,42 @@
 package com.enviouse.futureshops.compat.pixelmon;
 
 import com.mojang.logging.LogUtils;
+import com.enviouse.futureshops.api.economy.EconomyApi;
+import com.enviouse.futureshops.api.economy.EconomyProviderRegistry;
+import com.enviouse.futureshops.api.economy.BindingV1;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.loading.FMLLoader;
 import net.minecraftforge.fml.loading.moddiscovery.ModFileInfo;
 import net.minecraftforge.forgespi.language.IModInfo;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.Map;
+import java.util.UUID;
 import java.util.WeakHashMap;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Exact and fail closed gate for Pixelmon Forge 1.20.1 9.2.3. */
 public final class PixelmonNativeGate {
     public static final String MOD_ID = "pixelmon";
     public static final String SUPPORTED_VERSION = "9.2.3";
     public static final String MIXIN_CONFIG = "futureshops.pixelmon.mixins.json";
+    public static final String EXPECTED_ARTIFACT_SHA512 =
+            "3a9c6f375214c6d93c6cce8235e8a206e8f9731be8e168a254e78539087080796d97f0b22cb9a6db09d901c72e2e1ae53b9f2484761fb310479ce9f84ac9b145";
     private static final Logger LOGGER = LogUtils.getLogger();
     private static volatile State state = State.UNRESOLVED;
     private static final Map<Object, PixelmonNativeRequestContext.Request> PENDING =
             new WeakHashMap<>();
+    private static final Map<UUID, PixelmonNativeEconomyAccess> ACCOUNTS =
+            new ConcurrentHashMap<>();
+    private static volatile String artifactFingerprint = "";
 
     private PixelmonNativeGate() {
     }
@@ -33,12 +49,16 @@ public final class PixelmonNativeGate {
         String version = ModList.get().getModContainerById(MOD_ID)
                 .map(container -> container.getModInfo().getVersion().toString())
                 .orElse("");
-        if (!SUPPORTED_VERSION.equals(version)) {
+        artifactFingerprint = discoverArtifactFingerprint();
+        if (!SUPPORTED_VERSION.equals(version) || !EXPECTED_ARTIFACT_SHA512.equals(artifactFingerprint)
+                || !targetSurfacePresent()) {
             state = State.UNSUPPORTED_VERSION;
             LOGGER.warn("Pixelmon native economy integration disabled for unsupported version {}.", version);
             return;
         }
         state = State.ENABLED;
+        EconomyProviderRegistry.registerPixelmon(EconomyApi.COMPATIBILITY_VERSION,
+                context -> new PixelmonNativeProvider(context.server()));
         LOGGER.info("Pixelmon native economy integration enabled for {}.", SUPPORTED_VERSION);
     }
 
@@ -57,12 +77,17 @@ public final class PixelmonNativeGate {
     }
 
     public static boolean isSupportedVersionLoaded() {
+        if (state == State.ENABLED) {
+            return true;
+        }
         try {
             if (ModList.get() != null) {
                 return ModList.get().isLoaded(MOD_ID)
                         && ModList.get().getModContainerById(MOD_ID)
                         .map(container -> SUPPORTED_VERSION.equals(
-                                container.getModInfo().getVersion().toString()))
+                                container.getModInfo().getVersion().toString())
+                                && EXPECTED_ARTIFACT_SHA512.equals(discoverArtifactFingerprint())
+                                && targetSurfacePresent())
                         .orElse(false);
             }
         } catch (RuntimeException ignored) {
@@ -75,7 +100,9 @@ public final class PixelmonNativeGate {
             for (ModFileInfo file : FMLLoader.getLoadingModList().getModFiles()) {
                 for (IModInfo mod : file.getMods()) {
                     if (MOD_ID.equals(mod.getModId())) {
-                        return SUPPORTED_VERSION.equals(mod.getVersion().toString());
+                        return SUPPORTED_VERSION.equals(mod.getVersion().toString())
+                                && EXPECTED_ARTIFACT_SHA512.equals(sha512(file.getFile().getFilePath()))
+                                && targetSurfacePresent(file.getFile());
                     }
                 }
             }
@@ -83,6 +110,32 @@ public final class PixelmonNativeGate {
             return false;
         }
         return false;
+    }
+
+    public static String artifactFingerprint() {
+        return artifactFingerprint.isBlank() ? EXPECTED_ARTIFACT_SHA512 : artifactFingerprint;
+    }
+
+    public static BindingV1 bindingFor(UUID accountId) {
+        String fingerprint = artifactFingerprint();
+        return new BindingV1(EconomyApi.PIXELMON_PROVIDER_ID, EconomyApi.COMPATIBILITY_VERSION,
+                "pixelmon-native-mixin", "pixelmon-native-coordinator-v1", fingerprint,
+                fingerprint, "pixelmon:9.2.3:native", accountId, "poke_dollars", 0,
+                "pixelmon-native-storage", 1L, 1);
+    }
+
+    public static void registerAccount(UUID accountId, PixelmonNativeEconomyAccess account) {
+        if (accountId != null && account != null) {
+            ACCOUNTS.put(accountId, account);
+        }
+    }
+
+    public static PixelmonNativeEconomyAccess account(UUID accountId) {
+        return accountId == null ? null : ACCOUNTS.get(accountId);
+    }
+
+    public static java.util.Collection<PixelmonNativeEconomyAccess> accounts() {
+        return java.util.List.copyOf(ACCOUNTS.values());
     }
 
     public static boolean applySetBalance(Object account, BigDecimal nextBalance,
@@ -110,7 +163,10 @@ public final class PixelmonNativeGate {
         }
         request.get().recordResult(nextBalance);
         synchronized (PENDING) {
-            PENDING.put(account, request.get());
+            PixelmonNativeRequestContext.Request previous = PENDING.putIfAbsent(account, request.get());
+            if (previous != null && previous != request.get()) {
+                request.get().recordFailure("pending_save");
+            }
         }
         return true;
     }
@@ -139,7 +195,10 @@ public final class PixelmonNativeGate {
         }
         request.recordResult(next);
         synchronized (PENDING) {
-            PENDING.put(account, request);
+            PixelmonNativeRequestContext.Request previous = PENDING.putIfAbsent(account, request);
+            if (previous != null && previous != request) {
+                request.recordFailure("pending_save");
+            }
         }
         return true;
     }
@@ -161,5 +220,49 @@ public final class PixelmonNativeGate {
         ABSENT,
         UNSUPPORTED_VERSION,
         ENABLED
+    }
+
+    private static boolean targetSurfacePresent() {
+        try {
+            return targetSurfacePresent(ModList.get().getModContainerById(MOD_ID)
+                    .map(container -> container.getModInfo().getOwningFile().getFile())
+                    .orElse(null));
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private static boolean targetSurfacePresent(net.minecraftforge.forgespi.locating.IModFile file) {
+        return file != null && file.findResource(
+                "com/pixelmonmod/pixelmon/api/storage/PlayerPartyStorage.class") != null;
+    }
+
+    private static String discoverArtifactFingerprint() {
+        try {
+            return ModList.get().getModContainerById(MOD_ID)
+                    .map(container -> sha512(container.getModInfo().getOwningFile().getFile().getFilePath()))
+                    .orElse("");
+        } catch (RuntimeException ignored) {
+            return "";
+        }
+    }
+
+    private static String sha512(Path path) {
+        if (path == null || !Files.isRegularFile(path)) {
+            return "";
+        }
+        try (java.io.InputStream input = Files.newInputStream(path)) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-512");
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = input.read(buffer)) >= 0) {
+                if (count > 0) {
+                    digest.update(buffer, 0, count);
+                }
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (IOException | NoSuchAlgorithmException ignored) {
+            return "";
+        }
     }
 }
