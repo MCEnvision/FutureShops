@@ -21,6 +21,17 @@ public final class EconomyProviderRegistry {
     private EconomyProviderRegistry() {
     }
 
+    /** Registers an addon through the API v1 identifier and factory aliases. */
+    public static RegistrationResult register(ProviderId providerId, FactoryV1 factory) {
+        if (providerId == null || factory == null) {
+            return new RegistrationResult(RegistrationStatus.INVALID_ARGUMENT,
+                    providerId == null ? "null" : providerId.value(),
+                    "registration arguments are invalid");
+        }
+        return register(providerId.value(), EconomyApi.COMPATIBILITY_VERSION,
+                factory::create);
+    }
+
     public static RegistrationResult register(
             String providerId, int compatibilityVersion, EconomyProviderFactory factory) {
         if (!EconomyApi.isValidProviderId(providerId)) {
