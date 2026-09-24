@@ -2,7 +2,7 @@
 
 ## Candidate
 
-The candidate is the Forge 1.20.1 phase branch at commit `42ad5d4`.
+The candidate is the Forge 1.20.1 phase branch at commit `5bdb4b1`.
 The current packaged jar is `build/libs/futureshops-3.0.0-beta.2.jar`.
 Its SHA-256 is `5d4cc96dc39351169e257f9e43011fac9b257c42ebb1b23dfad730e84f408f21`.
 Its SHA-512 is
@@ -30,8 +30,11 @@ until an atomic provider contract is available.
 The production source inventory found the four direct `BalanceManager` mutation call sites in
 `LiveAdministrativeBalanceBackend`. No other production source directly calls the internal wallet
 credit, debit, transfer, or set methods. Payment now checks the selected provider before escrow
-commit. Physical route checks exist at the command, ATM, cash deposit, recovery, withdrawal, and
-claim boundaries.
+commit. Physical route checks exist at the command, ATM access and mutation, cash deposit,
+recovery, withdrawal, money claim, and cash claim boundaries. A dedicated Forge 1.20.1 server
+started successfully from the candidate source on Java 17, reached `Done`, loaded FutureShops,
+and generated its disposable world and server configuration under the phase runtime. The server
+was stopped after readiness and the exact runtime was removed.
 
 ## Verification
 
@@ -48,5 +51,6 @@ BUILD SUCCESSFUL
 
 The focused adapter tests prove selected provider balance ownership, request based debit and
 credit, and fail closed cross account transfer. The complete Forge unit suite and packaged build
-also pass. No dedicated server or client was started by this route task. The phase still requires
-the remaining payment, physical matrix, and dedicated server evidence before integration.
+also pass. The dedicated server smoke proves the Forge 1.20.1 runtime reaches readiness with the
+candidate code and no startup crash. No graphical client was started because this phase owns only
+server authoritative routes. The remaining phase gate is the final cumulative matrix and review.
