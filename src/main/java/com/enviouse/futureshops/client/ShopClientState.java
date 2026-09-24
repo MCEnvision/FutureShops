@@ -33,6 +33,7 @@ public final class ShopClientState {
     private static volatile int currencyDecimals = 2;
     private static volatile String providerId = "internal";
     private static volatile long snapshotRevision = 0L;
+    private static volatile UUID sessionId = new UUID(0L, 0L);
 
     // Catalog data — set by S2CShopDataPacket.
     private static volatile List<CatalogCategory> catalogCategories = List.of();
@@ -87,7 +88,7 @@ public final class ShopClientState {
                                      List<ServerShopOfferListing> offers, String activeProviderId) {
         applyShopData(shopId, balanceMinorUnits, currency, decimals, categories,
                 items, promos, barterRecipes, adminEnabled, nearby, canEdit,
-                offers, activeProviderId, 0L);
+                offers, activeProviderId, 0L, new UUID(0L, 0L));
     }
 
     public static void applyShopData(String shopId, long balanceMinorUnits,
@@ -102,10 +103,31 @@ public final class ShopClientState {
                                      List<ServerShopOfferListing> offers,
                                      String activeProviderId,
                                      long revision) {
-        if (shopId.equals(activeShopId) && revision < snapshotRevision) {
+        applyShopData(shopId, balanceMinorUnits, currency, decimals, categories,
+                items, promos, barterRecipes, adminEnabled, nearby, canEdit,
+                offers, activeProviderId, revision, new UUID(0L, 0L));
+    }
+
+    public static void applyShopData(String shopId, long balanceMinorUnits,
+                                     String currency, int decimals,
+                                     List<CatalogCategory> categories,
+                                     List<CatalogItem> items,
+                                     List<CatalogPromo> promos,
+                                     List<CatalogBarterRecipe> barterRecipes,
+                                     boolean adminEnabled,
+                                     List<NearbyShopEntry> nearby,
+                                     boolean canEdit,
+                                     List<ServerShopOfferListing> offers,
+                                     String activeProviderId,
+                                     long revision,
+                                     UUID activeSessionId) {
+        activeSessionId = activeSessionId == null ? new UUID(0L, 0L) : activeSessionId;
+        if (shopId.equals(activeShopId) && activeSessionId.equals(sessionId)
+                && revision < snapshotRevision) {
             return;
         }
         activeShopId = shopId;
+        sessionId = activeSessionId;
         snapshotRevision = revision;
         currentBalanceMinorUnits = balanceMinorUnits;
         currentBalanceKnown = true;
@@ -145,6 +167,7 @@ public final class ShopClientState {
         currentBalanceMinorUnits = 0L;
         currentBalanceKnown = false;
         snapshotRevision = 0L;
+        sessionId = new UUID(0L, 0L);
         catalogCategories = List.of();
         catalogItems = List.of();
         catalogPromos = List.of();
@@ -498,6 +521,10 @@ public final class ShopClientState {
 
     public static long getSnapshotRevision() {
         return snapshotRevision;
+    }
+
+    public static UUID getSessionId() {
+        return sessionId;
     }
 
     public static long getCurrentBalanceMinorUnits() {

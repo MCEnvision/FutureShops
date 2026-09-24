@@ -16,7 +16,7 @@ class ShopSnapshotAdmissionSourceTest {
     void buyRejectsStaleSnapshotBeforeProviderOrFundingAdmission() throws Exception {
         String source = read(
                 "src/main/java/com/enviouse/futureshops/server/transaction/ShopBuyService.java");
-        int stale = source.indexOf("packet.snapshotRevision() != session.snapshotRevision()");
+        int stale = source.indexOf("!packet.sessionId().equals(session.sessionId())");
         int provider = source.indexOf("BalanceManager.isInternalProviderSelected()", stale);
         int funding = source.indexOf("ServerShopFundingReleaseService.resolvePurchase", stale);
         assertTrue(stale >= 0);
@@ -29,7 +29,7 @@ class ShopSnapshotAdmissionSourceTest {
     void sellRejectsStaleSnapshotBeforeProviderOrQuoteAdmission() throws Exception {
         String source = read(
                 "src/main/java/com/enviouse/futureshops/server/transaction/ShopSellService.java");
-        int stale = source.indexOf("packet.snapshotRevision() != session.snapshotRevision()");
+        int stale = source.indexOf("!packet.sessionId().equals(session.sessionId())");
         int provider = source.indexOf("BalanceManager.isInternalProviderSelected()", stale);
         int quote = source.indexOf("prepareQuote(shopId", stale);
         assertTrue(stale >= 0);

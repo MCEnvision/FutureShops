@@ -4,12 +4,12 @@ Observation date: 2026-09-24
 Phase: CORE-PHASE-008
 Task: P008-TASK-004
 Artifact: `build/libs/futureshops-3.0.0-beta.2.jar`
-Artifact sha256: `ea55acd511083e440df584eb586710a38d54e08e4186f2877196ba4125125e9a`
+Artifact sha256: `90de004da0f098adb96ccbdb814578c7fc4edab9a880ffde9a409306ffa021d5`
 
 ## deterministic matrix
 
 The complete Forge test suite was run with Java 17 through `./gradlew test build`.
-It reported 2,022 tests with zero failures or errors. The suite includes the
+It reported 2,024 tests with zero failures or errors. The suite includes the
 existing preservation coverage for shop arithmetic and bounds, packet and cart
 limits, NBT and deep identity matching, duplicate identifiers, atomic delivery,
 barter rollback, quantity and payment entitlements, protected coin rescue and

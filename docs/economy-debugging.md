@@ -20,11 +20,13 @@ Each capture expires after 60 seconds. It accepts at most 100 events per second,
 
 ## Shop snapshot stale requests
 
-Forge shop sessions carry a monotonic snapshot revision. Buy and sell requests retain
-their request identity, payment source, and observed revision. If the catalog changed or
-the session was replaced, the server returns `stale_request` with `stale_snapshot` before
+Forge shop sessions carry a monotonic snapshot revision and a unique session identity. Buy
+and sell requests retain their request identity, payment source, observed revision, and
+session identity. If the catalog changed or the session was replaced, the server returns
+`stale_request` with `stale_snapshot` before
 provider, inventory, custody, or balance effects, then sends a silent authoritative refresh.
-The client ignores an older same shop revision and keeps newer cart state. Reopen, forced
+The client ignores an older revision from the same shop and session and accepts the first
+snapshot for a newly opened session. Reopen, forced
 close, shop switching, and reconnect create a new session boundary. Capture `shop` or
 `network` diagnostics when investigating a stale action, and compare the request revision
 with the authoritative refresh rather than retrying blindly.

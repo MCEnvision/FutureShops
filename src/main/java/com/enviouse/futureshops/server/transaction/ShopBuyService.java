@@ -151,7 +151,8 @@ public final class ShopBuyService {
             return BuyResult.error(shopId, safeBalance(player),
                     ShopResultCode.SHOP_CLOSED);
         }
-        if (packet.snapshotRevision() != session.snapshotRevision()) {
+        if (!packet.sessionId().equals(session.sessionId())
+                || packet.snapshotRevision() != session.snapshotRevision()) {
             return BuyResult.error(shopId, safeBalance(player),
                     ShopResultCode.STALE_REQUEST);
         }

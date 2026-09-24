@@ -35,7 +35,8 @@ public final class ShopSessionManager {
 
     /** Opens a session anchored to a specific shop block (for distance auto-close). */
     public static ShopSession open(UUID playerUUID, String shopId, BlockPos shopBlockPos) {
-        ShopSession session = new ShopSession(playerUUID, shopId, shopBlockPos, System.currentTimeMillis());
+        ShopSession session = new ShopSession(playerUUID, UUID.randomUUID(), shopId,
+                shopBlockPos, System.currentTimeMillis(), 0L);
         SESSIONS.put(playerUUID, session);
         return session;
     }

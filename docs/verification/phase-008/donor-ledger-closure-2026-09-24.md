@@ -21,7 +21,7 @@ Rows with a Forge only preservation disposition remain owned by the existing For
 
 ## verification
 
-Focused protocol, admission ordering, client state, codec, session, and ledger tests passed after the phase 008 changes. The full `./gradlew test build` suite passed with 2,022 tests and zero failures or errors. The current candidate artifact is `build/libs/futureshops-3.0.0-beta.2.jar` with sha256 `ea55acd511083e440df584eb586710a38d54e08e4186f2877196ba4125125e9a`.
+Focused protocol, admission ordering, client state, codec, session, and ledger tests passed after the phase 008 changes. The full `./gradlew test build` suite passed with 2,024 tests and zero failures or errors. The current candidate artifact is `build/libs/futureshops-3.0.0-beta.2.jar` with sha256 `90de004da0f098adb96ccbdb814578c7fc4edab9a880ffde9a409306ffa021d5`.
 
 This evidence proves ledger closure and static or unit equivalence coverage. The isolated Forge startup attempt is recorded separately, but dedicated server stale ordering, split host reconnect behavior, and laptop rendering and input evidence remain P008-TASK-002 and later phase gates. No claim is made for those gates here.
 
