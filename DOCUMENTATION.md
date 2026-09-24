@@ -15,6 +15,7 @@ The `3.0.0-beta.1` implementation is the published CurseForge and Modrinth beta 
 * [Physical currency and ATM](docs/physical-currency-atm.md)
 * [Advanced trade offer configuration](docs/config-3.1-offers.md)
 * [3.0.0 beta release notes](docs/release-notes-3.0-beta.md)
+* [Economy coordinator recovery](docs/economy-recovery.md)
 
 ## Runtime and toolchain
 
