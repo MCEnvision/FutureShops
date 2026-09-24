@@ -45,6 +45,12 @@ public final class DepositCommand {
 
     private static int deposit(ServerPlayer player,
                                String requestedAmount) {
+        if (!BalanceManager.isInternalProviderSelected()) {
+            player.sendSystemMessage(EconomyCommandUtil.warning(
+                    Component.translatable(
+                            "command.futureshops.physical.external_unavailable")));
+            return 0;
+        }
         int decimalPlaces;
         String currencyName;
         PhysicalCurrencyAdapter currency;

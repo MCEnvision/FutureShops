@@ -64,6 +64,10 @@ public final class EscrowCashDepositService {
             ServerPlayer player,
             DepositRequest request
     ) {
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return failure(Status.ESCROW_UNAVAILABLE, request,
+                    Optional.empty(), Optional.empty());
+        }
         return depositInternal(player, request,
                 CashDepositMode.PUBLIC_WALLET);
     }
@@ -72,6 +76,10 @@ public final class EscrowCashDepositService {
             ServerPlayer player,
             DepositRequest request
     ) {
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return failure(Status.ESCROW_UNAVAILABLE, request,
+                    Optional.empty(), Optional.empty());
+        }
         return depositInternal(player, request,
                 CashDepositMode.INTERNAL_ESCROW);
     }
@@ -154,6 +162,10 @@ public final class EscrowCashDepositService {
         Objects.requireNonNull(transactionId, "transactionId");
         EscrowRuntimeService runtime = runtimeFor(player);
         DepositRequest request = recoveryRequest(requestId);
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return failure(Status.ESCROW_UNAVAILABLE, request,
+                    Optional.of(transactionId), Optional.empty());
+        }
         if (!transactionIdForRequest(
                 player.getUUID(), requestId).equals(transactionId)) {
             return failure(Status.REQUEST_CONFLICT, request,

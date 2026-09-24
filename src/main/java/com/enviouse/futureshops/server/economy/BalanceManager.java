@@ -99,6 +99,11 @@ public final class BalanceManager {
         return selection;
     }
 
+    /** Returns whether physical cash routes may use the internal wallet. */
+    public static boolean isInternalProviderSelected() {
+        return usesInternalProvider();
+    }
+
     public static TransactionResult transfer(UUID fromPlayerUUID, UUID toPlayerUUID, long amountMinorUnits) {
         return getProvider().transfer(fromPlayerUUID, toPlayerUUID, amountMinorUnits);
     }

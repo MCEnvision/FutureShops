@@ -34,6 +34,11 @@ public final class AtmService {
     }
 
     public static void requestData(ServerPlayer player, boolean openScreen) {
+        if (!BalanceManager.isInternalProviderSelected()) {
+            player.sendSystemMessage(Component.translatable(
+                    "command.futureshops.physical.external_unavailable"));
+            return;
+        }
         ServerRequestSecurityManager.GateDecision gate =
                 ServerRequestSecurityManager.tryAcquire(
                         player, ServerRequestAction.ATM_DATA);
@@ -212,6 +217,11 @@ public final class AtmService {
             String signature,
             Supplier<AtmWithdrawalOutcome> operation
     ) {
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return AtmWithdrawalOutcome.failure(
+                    requestId, AtmWithdrawalStatus.ESCROW_UNAVAILABLE,
+                    false, false, false, 0L, 0L, 0, signature, 0L);
+        }
         ServerRequestSecurityManager.GateDecision gate =
                 ServerRequestSecurityManager.tryAcquire(
                         player, ServerRequestAction.ATM_WITHDRAWAL);

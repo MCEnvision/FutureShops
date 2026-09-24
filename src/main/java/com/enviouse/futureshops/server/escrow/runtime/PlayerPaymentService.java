@@ -66,6 +66,10 @@ public final class PlayerPaymentService {
             return failure(Status.ESCROW_UNAVAILABLE, request, 0L,
                     Optional.empty());
         }
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return failure(Status.ESCROW_UNAVAILABLE, request, 0L,
+                    Optional.empty());
+        }
         ServerRequestSecurityManager.GateDecision gate =
                 ServerRequestSecurityManager.tryAcquire(
                         payer, ServerRequestAction.PAY);

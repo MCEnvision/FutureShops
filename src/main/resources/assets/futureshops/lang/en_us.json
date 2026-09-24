@@ -630,6 +630,7 @@
   "command.futureshops.withdraw.whole_dollars_only": "Withdrawal amount must be a whole dollar amount (no cents).",
   "command.futureshops.withdraw.not_representable": "Amount must be a combination of the available denominations (%s).",
   "command.futureshops.deposit.wrong_currency": "FutureShops bills are disabled on this server (currency provider: %s).",
+  "command.futureshops.physical.external_unavailable": "Physical currency is unavailable with the selected economy provider. No state changed.",
   "command.futureshops.deposit.creative_blocked": "Creative-mode items cannot be deposited as currency.",
   "command.futureshops.deposit.protected_requires_escrow": "This protected bill was preserved. Deposit it through the escrow deposit flow.",
   "command.futureshops.deposit.no_currency_accepted": "You are not carrying any accepted currency. This server accepts: %s",
