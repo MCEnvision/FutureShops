@@ -123,6 +123,7 @@ public class ItemDetailScreen extends AbstractShopScreen implements ShopScreenMa
                         long effectivePrice = item.hasPromo() ? item.promoPrice() : item.buyPrice();
                         int qty = getQuantity();
                         String totalStr = ShopUiUtil.formatMinorUnits(saturatingMultiply(effectivePrice, qty));
+                        long quotedRevision = ShopClientState.getSnapshotRevision();
                         confirmationModal = new ConfirmationModal(
                                 I18n.get("gui.futureshops.item_detail.confirm_buy_title"),
                                 java.util.List.of(
@@ -133,7 +134,7 @@ public class ItemDetailScreen extends AbstractShopScreen implements ShopScreenMa
                                     modal.setProcessing();
                                     ShopPackets.sendToServer(C2SBuyRequestPacket.single(
                                             ShopClientState.getActiveShopId(), item.listingId(), qty,
-                                            ShopClientState.getSnapshotRevision()));
+                                            quotedRevision));
                                 },
                                 () -> confirmationModal = null
                         );
@@ -148,6 +149,7 @@ public class ItemDetailScreen extends AbstractShopScreen implements ShopScreenMa
                     if (item != null) {
                         int qty = getQuantity();
                         String totalStr = ShopUiUtil.formatMinorUnits(saturatingMultiply(item.sellPrice(), qty));
+                        long quotedRevision = ShopClientState.getSnapshotRevision();
                         confirmationModal = new ConfirmationModal(
                                 I18n.get("gui.futureshops.item_detail.confirm_sell_title"),
                                 java.util.List.of(
@@ -159,7 +161,7 @@ public class ItemDetailScreen extends AbstractShopScreen implements ShopScreenMa
                                     modal.setProcessing();
                                     ShopPackets.sendToServer(new C2SSellRequestPacket(
                                             ShopClientState.getActiveShopId(), item.listingId(), qty,
-                                            ShopClientState.getSnapshotRevision()));
+                                            quotedRevision));
                                 },
                                 () -> confirmationModal = null
                         );

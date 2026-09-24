@@ -11,6 +11,7 @@ class DynamicPricingSavedDataTest {
     void recordsRoundTripWithVersionedState() {
         DynamicPricingSavedData data = new DynamicPricingSavedData();
         data.recordBuy("default", "diamond", 3);
+        data.getState("default", "diamond").currentPriceMinor = 150L;
 
         DynamicPricingSavedData loaded = DynamicPricingSavedData.load(
                 data.save(new CompoundTag(), null), null);
@@ -18,6 +19,16 @@ class DynamicPricingSavedDataTest {
         assertTrue(loaded.integrityValid());
         assertTrue(loaded.allStates().containsKey("default:diamond"));
         assertTrue(loaded.getState("default", "diamond").buysSinceLastCalc == 3);
+        assertTrue(loaded.getCurrentPriceMinor("default", "diamond") == 150L);
+    }
+
+    @Test
+    void browsingDoesNotCreateActivityOrMutateSavedData() {
+        DynamicPricingSavedData data = new DynamicPricingSavedData();
+        assertTrue(data.getCurrentPriceMinor("default", "minecraft:iron_ingot") == 0L);
+        assertTrue(data.getCurrentPriceMinor(null, "minecraft:iron_ingot") == 0L);
+        assertTrue(data.allStates().isEmpty());
+        assertFalse(data.isDirty());
     }
 
     @Test

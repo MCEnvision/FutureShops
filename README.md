@@ -8,14 +8,14 @@ This branch targets the following runtime.
 
 | Component | Version |
 | --- | --- |
-| FutureShops | 2.4.1 |
+| FutureShops | 2.5.0 |
 | Minecraft | 1.21.1 |
 | NeoForge | 21.1.248 |
 | Java | 21 |
 | Parchment | 2024.11.17 |
 | GeckoLib | 4.8.4 |
 
-Client and server should use the same FutureShops build. This `2.4.1` NeoForge candidate is prepared locally and remains unpublished while Phase 006 final validation is open. The provider API, deterministic registry, restart only selection contract, checksummed transaction journal, durable receipt audit directory, durable custody and claims, lifecycle gate, clean marker handling, and exact Pixelmon 9.4.0 and DanConomy 1.2.1 adapters are present. Native Pixelmon `PlayerPartyStorage` accounts and exact DanConomy `LEDGER` accounts use request aware mixin receipt paths with retry deduplication and durable saves. The exact hybrid account route uses the separately installed `FutureShopsFinalEconomyBridge` for the pinned FinalEconomy, EverNifeCore, PixelmonEconomyBridge, and Vault versions. The candidate has fresh server and connected client buy and sell evidence on that route. Unsupported, unmodified, custom, and mirrored account paths remain refused. Back up the complete world and configuration before replacing an older installation. The runtime mod identifier and all resource namespaces remain `futureshops`, while the Java package for this port is `com.enviouse.futureshopsp`.
+Client and server should use the same FutureShops build. This `2.5.0` candidate repairs dynamic pricing and remains unmerged and unpublished pending local client acceptance. See the [pricing guide](docs/features/dynamic-pricing.md) and [testing procedure](docs/test/dynamic-pricing-2.5.0.md). The provider API, deterministic registry, restart only selection contract, checksummed transaction journal, durable receipt audit directory, durable custody and claims, lifecycle gate, clean marker handling, and exact Pixelmon 9.4.0 and DanConomy 1.2.1 adapters are present. Native Pixelmon `PlayerPartyStorage` accounts and exact DanConomy `LEDGER` accounts use request aware mixin receipt paths with retry deduplication and durable saves. The exact hybrid account route uses the separately installed `FutureShopsFinalEconomyBridge` for the pinned FinalEconomy, EverNifeCore, PixelmonEconomyBridge, and Vault versions. The 2.4.1 baseline has recorded server and connected client buy and sell evidence on that route; those integrations have not been revalidated for this pricing candidate. Unsupported, unmodified, custom, and mirrored account paths remain refused. Back up the complete world and configuration before replacing an older installation. The runtime mod identifier and all resource namespaces remain `futureshops`, while the Java package for this port is `com.enviouse.futureshopsp`.
 
 ## Installation
 

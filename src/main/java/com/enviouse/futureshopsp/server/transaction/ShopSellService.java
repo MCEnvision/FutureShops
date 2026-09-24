@@ -142,9 +142,14 @@ public final class ShopSellService {
 
             long totalValue;
             try {
-                totalValue = Math.multiplyExact(itemDef.sellPriceMinorUnits(), quantity);
+                totalValue = Math.multiplyExact(
+                        ShopCatalog.getEffectiveSellPrice(shopId, packet.listingId(), player.getServer()), quantity);
             } catch (ArithmeticException ex) {
                 return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.SERVER_ERROR);
+            }
+
+            if (totalValue <= 0L) {
+                return SellResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_AMOUNT);
             }
 
             // Fire cancellable ShopTransactionEvent.Pre (spec §33) — registry itemId for API consumers.

@@ -7,6 +7,7 @@ import com.enviouse.futureshopsp.network.packets.C2SVerifyAdminCartPacket;
 import com.enviouse.futureshopsp.network.packets.S2CVerifyCartResponsePacket;
 import com.enviouse.futureshopsp.network.packets.S2CVerifyCartResponsePacket.CartWarning;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +20,11 @@ public final class AdminCartVerificationService {
     private AdminCartVerificationService() {}
 
     public static void verify(ServerPlayer player, String shopId, List<C2SVerifyAdminCartPacket.AdminCartLine> lines) {
+        ShopPackets.sendToPlayer(player, evaluate(player.getServer(), shopId, lines));
+    }
+
+    public static S2CVerifyCartResponsePacket evaluate(MinecraftServer server, String shopId,
+                                                       List<C2SVerifyAdminCartPacket.AdminCartLine> lines) {
         List<CartWarning> warnings = new ArrayList<>();
 
         for (int i = 0; i < lines.size(); i++) {
@@ -34,7 +40,7 @@ public final class AdminCartVerificationService {
             ItemDef item = itemOpt.get();
 
             // Check price changed — use effective buy price (includes promos)
-            long currentPrice = ShopCatalog.getEffectiveBuyPrice(shopId, line.listingId());
+            long currentPrice = ShopCatalog.getEffectiveBuyPrice(shopId, line.listingId(), server);
             if (line.expectedPriceMinor() > 0 && currentPrice != line.expectedPriceMinor()) {
                 warnings.add(new CartWarning(i, "PRICE_CHANGED", "Price changed"));
             }
@@ -50,7 +56,6 @@ public final class AdminCartVerificationService {
         }
 
         boolean allOk = warnings.isEmpty();
-        ShopPackets.sendToPlayer(player, new S2CVerifyCartResponsePacket(allOk, warnings));
+        return new S2CVerifyCartResponsePacket(allOk, warnings);
     }
 }
-

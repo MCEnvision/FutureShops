@@ -152,7 +152,7 @@ public final class ShopBuyService {
                     return BuyResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_ITEM);
                 }
 
-                long lineCost = ShopCatalog.calculateLineCost(shopId, listingId, quantity);
+                long lineCost = ShopCatalog.calculateLineCost(shopId, listingId, quantity, player.getServer());
                 if (lineCost <= 0L) {
                     return BuyResult.error(shopId, balanceView(player.getUUID()), ShopResultCode.INVALID_ITEM);
                 }
