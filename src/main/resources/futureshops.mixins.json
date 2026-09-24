@@ -2,11 +2,14 @@
   "required": true,
   "minVersion": "0.8",
   "package": "com.enviouse.futureshops.mixin",
+  "plugin": "com.enviouse.futureshops.mixin.FutureshopsMixinPlugin",
   "compatibilityLevel": "JAVA_8",
   "refmap": "futureshops.refmap.json",
   "mixins": [
     "HandshakeHandlerMixin",
-    "PlayerListInvoker"
+    "PlayerListInvoker",
+    "PixelmonPokemonStorageMixin",
+    "PixelmonPlayerPartyStorageMixin"
   ],
   "client": [
   ],

@@ -2,6 +2,7 @@ package com.enviouse.futureshops;
 
 import com.enviouse.futureshops.catalog.ShopCatalog;
 import com.enviouse.futureshops.catalog.ShopDefinitionLoader;
+import com.enviouse.futureshops.compat.pixelmon.PixelmonNativeGate;
 import com.enviouse.futureshops.compat.rs2.RefinedStorage2Compat;
 import com.enviouse.futureshops.config.AuctionHouseConfig;
 import com.enviouse.futureshops.config.BazaarConfig;
@@ -64,6 +65,7 @@ public class Futureshops {
     private long nextBazaarInitializationAttemptNanos;
 
     public Futureshops() {
+        PixelmonNativeGate.bootstrap();
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
 
         // Register the commonSetup method for modloading
