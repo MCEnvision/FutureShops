@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.server.escrow.runtime;
 
 import com.enviouse.futureshops.money.PaymentSource;
+import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.escrow.claim.ClaimKind;
 import com.enviouse.futureshops.server.escrow.claim.ClaimAttemptResult;
 import com.enviouse.futureshops.server.escrow.claim.ClaimStatus;
@@ -65,6 +66,10 @@ public final class ServerShopPurchaseService {
                 return replay.orElseThrow();
             }
             if (!runtime.isReady()) {
+                return Result.failure(Status.ESCROW_UNAVAILABLE,
+                        request.identity().requestId());
+            }
+            if (!BalanceManager.isInternalProviderSelected()) {
                 return Result.failure(Status.ESCROW_UNAVAILABLE,
                         request.identity().requestId());
             }

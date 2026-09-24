@@ -14,6 +14,12 @@ counts. Hold Shift while clicking a denomination stepper to move by 10. The serv
 submitted denomination list, current balance, live provider configuration, arithmetic, and
 inventory space before minting anything.
 
+Physical currency and ATM mutation routes are available only with the internal FutureShops
+economy provider. If `economy.provider` selects an external provider, the ATM, money items,
+deposits, withdrawals, recovery release, and physical shop funding refuse before custody or
+account effects. This prevents an internal wallet shadow balance while the selected provider owns
+the authoritative account.
+
 The ATM advertises up to 32 denominations from a custom provider (largest first), which keeps the
 network request bounded while still allowing far more bill types than a practical currency needs.
 
@@ -78,7 +84,8 @@ ATM withdrawals and command withdrawals both use this protected mint path.
 
 ## Foreign currency warning
 
-Any provider other than `futureshops` is intentionally unprotected. FutureShops creates the
+When the internal economy provider is selected, any currency provider other than `futureshops` is
+intentionally unprotected. FutureShops creates the
 configured source-mod item as a plain `ItemStack` so it continues to stack with that mod's loot and
 recipes. It does not attach a FutureShops checksum or mint ID and does not add it to the spent-mint
 ledger.

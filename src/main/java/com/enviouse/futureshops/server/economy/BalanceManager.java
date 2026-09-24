@@ -15,6 +15,7 @@ import java.util.UUID;
 public final class BalanceManager {
     private static InternalEconomyProvider internalProvider;
     private static EconomyProvider provider;
+    private static SelectedEconomyProvider selectedProvider;
     private static com.enviouse.futureshops.api.economy.EconomyProvider publicProvider;
     private static ProviderSelectionSnapshot selection =
             new ProviderSelectionSnapshot("", "", false, false, "");
@@ -24,6 +25,7 @@ public final class BalanceManager {
 
     public static void initialize(MinecraftServer server) {
         internalProvider = new InternalEconomyProvider(server);
+        selectedProvider = null;
         selection = ProviderSelectionManager.resolveAtStartup(Config.economyProviderId);
         if (EconomyApi.INTERNAL_PROVIDER_ID.equals(selection.activeProviderId())) {
             provider = internalProvider;
@@ -36,6 +38,14 @@ public final class BalanceManager {
         ProviderLifecycle lifecycle = resolution.lifecycle();
         String diagnostic = resolution.diagnostic().isBlank()
                 ? "external mutation coordinator is not ready" : resolution.diagnostic();
+        if (resolution.ready()) {
+            selectedProvider = new SelectedEconomyProvider(
+                    resolution.provider().orElseThrow(),
+                    resolution.currency().orElseThrow());
+            provider = selectedProvider;
+            publicProvider = resolution.provider().orElseThrow();
+            return;
+        }
         provider = new UnavailableEconomyProvider(
                 selection.activeProviderId(), lifecycle.name(), diagnostic);
         publicProvider = new UnavailablePublicEconomyProvider(
@@ -47,6 +57,7 @@ public final class BalanceManager {
     public static void clear() {
         internalProvider = null;
         provider = null;
+        selectedProvider = null;
         publicProvider = null;
         selection = new ProviderSelectionSnapshot("", "", false, false, "");
     }
@@ -88,6 +99,11 @@ public final class BalanceManager {
         return selection;
     }
 
+    /** Returns whether physical cash routes may use the internal wallet. */
+    public static boolean isInternalProviderSelected() {
+        return usesInternalProvider();
+    }
+
     public static TransactionResult transfer(UUID fromPlayerUUID, UUID toPlayerUUID, long amountMinorUnits) {
         return getProvider().transfer(fromPlayerUUID, toPlayerUUID, amountMinorUnits);
     }
@@ -104,6 +120,10 @@ public final class BalanceManager {
 
     public static TransactionResult withdraw(UUID requestId, UUID playerUUID,
                                              long amountMinorUnits, String reason) {
+        if (selectedProvider != null) {
+            return selectedProvider.mutate(new com.enviouse.futureshops.api.economy.RequestId(requestId), playerUUID, amountMinorUnits,
+                    com.enviouse.futureshops.api.economy.MutationKind.WITHDRAW);
+        }
         if (!usesInternalProvider()) {
             return unavailableMutation();
         }
@@ -113,6 +133,10 @@ public final class BalanceManager {
 
     public static TransactionResult deposit(UUID requestId, UUID playerUUID,
                                             long amountMinorUnits, String reason) {
+        if (selectedProvider != null) {
+            return selectedProvider.mutate(new com.enviouse.futureshops.api.economy.RequestId(requestId), playerUUID, amountMinorUnits,
+                    com.enviouse.futureshops.api.economy.MutationKind.DEPOSIT);
+        }
         if (!usesInternalProvider()) {
             return unavailableMutation();
         }

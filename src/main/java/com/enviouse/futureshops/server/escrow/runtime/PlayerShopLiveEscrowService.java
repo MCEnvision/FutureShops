@@ -77,6 +77,13 @@ public final class PlayerShopLiveEscrowService {
             throw new IllegalArgumentException(
                     "Player shop actor does not match the intent");
         }
+        if (intent.paymentSource()
+                != com.enviouse.futureshops.server.escrow.playershop.PlayerShopPaymentSource.NONE
+                && !BalanceManager.isInternalProviderSelected()) {
+            throw new PlayerShopBackendException(
+                    PlayerShopBackendException.Kind.REJECTED,
+                    "Selected economy provider is not admitted for player shop money");
+        }
         EscrowRuntimeService runtime = EscrowRuntimeManager.requireReady();
         LiveDriver driver = new LiveDriver(runtime, actor, storage);
         RuntimePlayerShopEscrowBackend backend =

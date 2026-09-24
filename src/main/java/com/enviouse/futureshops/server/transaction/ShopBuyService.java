@@ -131,6 +131,10 @@ public final class ShopBuyService {
             return mapResult(player, candidateShopId,
                     replay.orElseThrow());
         }
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return BuyResult.error(candidateShopId, safeBalance(player),
+                    ShopResultCode.SERVER_ERROR);
+        }
         if (paymentSource == PaymentSource.PHYSICAL
                 && ServerShopFundingReleaseService.resolvePurchase(
                 player.getUUID(), packet.requestId()).isPresent()) {

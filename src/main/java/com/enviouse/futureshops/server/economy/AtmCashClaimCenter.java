@@ -50,6 +50,11 @@ public final class AtmCashClaimCenter {
         Objects.requireNonNull(requestId, "requestId");
         List<UUID> claimIds = List.copyOf(Objects.requireNonNull(
                 suppliedClaimIds, "claimIds"));
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return new S2CAtmCollectCashResultPacket(
+                    requestId, "UNAVAILABLE", true, false, 0,
+                    0, List.of(), 0L);
+        }
         new C2SAtmCollectCashPacket(requestId, claimIds);
         if (!validRequestIdentity(player.getUUID(), requestId, claimIds)) {
             return conflict(player, requestId);

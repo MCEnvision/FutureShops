@@ -3,6 +3,7 @@ package com.enviouse.futureshops.server.escrow.runtime;
 import com.enviouse.futureshops.Config;
 import com.enviouse.futureshops.event.BalanceChangeEvent;
 import com.enviouse.futureshops.money.CurrencyManager;
+import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.economy.WalletMutationGuard;
 import com.enviouse.futureshops.server.escrow.claim.ClaimKind;
 import com.enviouse.futureshops.server.escrow.claim.ClaimAttemptResult;
@@ -40,6 +41,10 @@ public final class EscrowMoneyClaimService {
         if (ZERO_UUID.equals(claimId) || ZERO_UUID.equals(requestId)) {
             throw new IllegalArgumentException(
                     "Money claim collection identity cannot be zero");
+        }
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return result(Status.ESCROW_UNAVAILABLE, requestId, claimId,
+                    0L, 0L, false);
         }
         MinecraftServer server = player.getServer();
         if (server == null) {
@@ -158,7 +163,8 @@ public final class EscrowMoneyClaimService {
 
     public static List<EscrowClaim> pending(ServerPlayer player, int limit) {
         Objects.requireNonNull(player, "player");
-        if (limit <= 0 || limit > 1024 || player.getServer() == null) {
+        if (limit <= 0 || limit > 1024 || player.getServer() == null
+                || !BalanceManager.isInternalProviderSelected()) {
             return List.of();
         }
         return ClaimSavedData.get(player.getServer())

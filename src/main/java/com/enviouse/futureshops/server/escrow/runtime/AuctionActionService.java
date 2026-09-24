@@ -12,6 +12,7 @@ import com.enviouse.futureshops.network.packets.C2SAuctionCancelPacket;
 import com.enviouse.futureshops.network.packets.C2SAuctionCreatePacket;
 import com.enviouse.futureshops.network.packets.S2CMarketActionResponsePacket;
 import com.enviouse.futureshops.server.escrow.item.ExactItemClaimPayload;
+import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.escrow.item.ItemInputMatcher;
 import com.enviouse.futureshops.server.escrow.item.ItemInventoryBatchEntry;
 import com.enviouse.futureshops.server.escrow.item.ItemInventoryBatchPlanner;
@@ -154,6 +155,11 @@ public final class AuctionActionService {
             Optional<AuctionEscrowCommit> replayed = runtime.auctionEscrowCommit(requestId);
             if (replayed.isPresent()) {
                 respondFromCommit(player, requestId, "CREATE", replayed.orElseThrow());
+                return;
+            }
+            if (!BalanceManager.isInternalProviderSelected()) {
+                respond(player, requestId, "CREATE", "ECONOMY_UNAVAILABLE",
+                        null, 0L, "provider");
                 return;
             }
             // An unfinished intent means a crash window is being recovered; fail closed rather
@@ -408,6 +414,11 @@ public final class AuctionActionService {
             if (respondIfReplayed(player, runtime, requestId, "BID")) {
                 return;
             }
+            if (!BalanceManager.isInternalProviderSelected()) {
+                respond(player, requestId, "BID", "ECONOMY_UNAVAILABLE",
+                        null, 0L, "provider");
+                return;
+            }
             if (routeInvalid(player, packet.routeNonce())) {
                 respond(player, requestId, "BID", "INVALID_REQUEST", null, 0L, "route");
                 return;
@@ -497,6 +508,11 @@ public final class AuctionActionService {
         try {
             // Replay before the module gate — duplicates return the stored result always.
             if (respondIfReplayed(player, runtime, requestId, "BUY_NOW")) {
+                return;
+            }
+            if (!BalanceManager.isInternalProviderSelected()) {
+                respond(player, requestId, "BUY_NOW", "ECONOMY_UNAVAILABLE",
+                        null, 0L, "provider");
                 return;
             }
             if (routeInvalid(player, packet.routeNonce())) {

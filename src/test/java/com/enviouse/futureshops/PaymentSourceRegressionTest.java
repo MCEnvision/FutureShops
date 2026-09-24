@@ -85,11 +85,15 @@ class PaymentSourceRegressionTest {
     @Test
     void bothServerPurchaseEnginesHonorTheChosenSource() throws Exception {
         String admin = read("src/main/java/com/enviouse/futureshops/server/transaction/ShopBuyService.java");
+        String purchase = read("src/main/java/com/enviouse/futureshops/server/escrow/runtime/ServerShopPurchaseService.java");
         String bridge = read("src/main/java/com/enviouse/futureshops/server/transaction/ServerShopPhysicalFundingBridge.java");
         String commit = read("src/main/java/com/enviouse/futureshops/server/escrow/runtime/ServerShopPurchaseCommit.java");
         String player = read("src/main/java/com/enviouse/futureshops/server/shop/PlayerShopBlockService.java");
         String live = read("src/main/java/com/enviouse/futureshops/server/shop/PlayerShopEscrowTransactionService.java");
+        String liveEscrow = read("src/main/java/com/enviouse/futureshops/server/escrow/runtime/PlayerShopLiveEscrowService.java");
         assertTrue(admin.contains("ServerShopPurchaseService.purchase"));
+        assertTrue(admin.contains("BalanceManager.isInternalProviderSelected()"));
+        assertTrue(purchase.contains("BalanceManager.isInternalProviderSelected()"));
         assertTrue(admin.contains("ServerShopPhysicalFundingBridge.fund"));
         assertTrue(admin.indexOf("ServerShopPurchaseService.resolveReplay")
                 < admin.indexOf("ServerShopPhysicalFundingBridge.fund"));
@@ -104,5 +108,16 @@ class PaymentSourceRegressionTest {
         assertTrue(live.contains("PlayerShopPaymentSource.INVENTORY_CASH"));
         assertFalse(player.contains("PurchasePaymentService.charge"));
         assertFalse(player.contains("PurchasePaymentService.refund"));
+        assertTrue(liveEscrow.contains("Selected economy provider is not admitted for player shop money"));
+    }
+
+    @Test
+    void unadapted_market_money_routes_fail_closed() throws Exception {
+        String bazaar = read("src/main/java/com/enviouse/futureshops/server/escrow/runtime/BazaarActionService.java");
+        String auction = read("src/main/java/com/enviouse/futureshops/server/escrow/runtime/AuctionActionService.java");
+        assertTrue(bazaar.contains("\"ORDER\", \"ECONOMY_UNAVAILABLE\""));
+        assertTrue(auction.contains("\"CREATE\", \"ECONOMY_UNAVAILABLE\""));
+        assertTrue(auction.contains("\"BID\", \"ECONOMY_UNAVAILABLE\""));
+        assertTrue(auction.contains("\"BUY_NOW\", \"ECONOMY_UNAVAILABLE\""));
     }
 }

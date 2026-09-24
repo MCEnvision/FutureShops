@@ -44,6 +44,9 @@ public final class EscrowAtmWithdrawalService {
             catalog = AtmCurrencyCatalog.capture(
                     CurrencyManager.get(), BalanceManager.getProvider());
         }
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return unavailable(catalog, "EXTERNAL_PROVIDER");
+        }
         EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
         if (LegacyBalanceMigrationManager.isFailed()) {
             return unavailable(catalog, "MIGRATION_FAILED");
@@ -80,6 +83,12 @@ public final class EscrowAtmWithdrawalService {
             List<Integer> denominationCounts
     ) {
         Objects.requireNonNull(player, "player");
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return AtmWithdrawalOutcome.failure(
+                    requestId, AtmWithdrawalStatus.ESCROW_UNAVAILABLE,
+                    false, false, false, 0L, 0L, 0,
+                    safeSignature(currencySignature));
+        }
         EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
         LiveBackend backend = new LiveBackend(runtime);
         AtmWithdrawalOrchestrator orchestrator =
@@ -104,6 +113,12 @@ public final class EscrowAtmWithdrawalService {
             boolean multipleBills
     ) {
         Objects.requireNonNull(player, "player");
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return AtmWithdrawalOutcome.failure(
+                    requestId, AtmWithdrawalStatus.ESCROW_UNAVAILABLE,
+                    false, false, false, 0L, 0L, 0,
+                    safeSignature(null));
+        }
         AtmCurrencyCatalog catalog;
         AutomaticPlan automatic;
         List<Integer> counts;
@@ -125,6 +140,11 @@ public final class EscrowAtmWithdrawalService {
                 multipleBills, catalog.signature(), counts);
     }
 
+    private static String safeSignature(String value) {
+        return value != null && value.matches("[0-9a-f]{64}")
+                ? value : "0".repeat(64);
+    }
+
     public static AtmWithdrawalOutcome withdrawAutomatic(
             ServerPlayer player,
             UUID requestId,
@@ -136,6 +156,12 @@ public final class EscrowAtmWithdrawalService {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(requestId, "requestId");
         Objects.requireNonNull(currencySignature, "currencySignature");
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return AtmWithdrawalOutcome.failure(
+                    requestId, AtmWithdrawalStatus.ESCROW_UNAVAILABLE,
+                    false, false, false, 0L, 0L, 0,
+                    safeSignature(currencySignature));
+        }
         List<Integer> counts = List.copyOf(Objects.requireNonNull(
                 denominationCounts, "denominationCounts"));
         EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();

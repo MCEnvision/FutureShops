@@ -44,6 +44,10 @@ class AtmCashClaimCenterPolicyTest {
             throws Exception {
         String claimCenter = Files.readString(CLAIM_CENTER_SOURCE);
         String atmService = Files.readString(ATM_SERVICE_SOURCE);
+        String withdrawal = Files.readString(Path.of(
+                "src/main/java/com/enviouse/futureshops/server/escrow/runtime/EscrowAtmWithdrawalService.java"));
+        String moneyClaims = Files.readString(Path.of(
+                "src/main/java/com/enviouse/futureshops/server/escrow/runtime/EscrowMoneyClaimService.java"));
         String coordinator = Files.readString(COORDINATOR_SOURCE);
 
         assertFalse(claimCenter.contains(
@@ -54,6 +58,10 @@ class AtmCashClaimCenterPolicyTest {
                 "ATM cash claim delivery failed"));
         assertTrue(atmService.contains(
                 "ATM cash collection was rejected by the request gate"));
+        assertTrue(withdrawal.contains(
+                "return unavailable(catalog, \"EXTERNAL_PROVIDER\")"));
+        assertTrue(moneyClaims.contains(
+                "if (!BalanceManager.isInternalProviderSelected())"));
         assertTrue(coordinator.contains(
                 "Escrow runtime entered maintenance"));
     }
