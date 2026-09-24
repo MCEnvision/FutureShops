@@ -488,7 +488,7 @@ public class WireRoundTripTest {
         assertTrue(out.canEdit());
         assertFalse(out.forceOpen());
         assertEquals("internal", out.providerId());
-        assertEquals(0, b.readableBytes(), "canEdit must be the LAST field on the wire");
+        assertEquals(0, b.readableBytes(), "providerId must be the LAST field on the wire");
     }
 
     @Test
