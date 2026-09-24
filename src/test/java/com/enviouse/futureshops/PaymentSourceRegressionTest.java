@@ -126,8 +126,12 @@ class PaymentSourceRegressionTest {
         assertTrue(auction.contains("\"CANCEL\", \"ECONOMY_UNAVAILABLE\""));
         assertTrue(bazaarExpiry.contains("MarketSettlementPolicy.internalProviderReady()"));
         assertTrue(auctionExpiry.contains("MarketSettlementPolicy.internalProviderReady()"));
-        assertTrue(claims.indexOf("replay(")
-                < claims.indexOf("BalanceManager.isInternalProviderSelected()"));
+        int replayIndex = claims.indexOf("replay(");
+        int providerIndex = claims.indexOf(
+                "BalanceManager.isInternalProviderSelected()");
+        assertTrue(replayIndex >= 0);
+        assertTrue(providerIndex >= 0);
+        assertTrue(replayIndex < providerIndex);
     }
 
     @Test
