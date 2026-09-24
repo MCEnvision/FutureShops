@@ -43,10 +43,20 @@ public final class ShopSellService {
             C2SSellRequestPacket packet
     ) {
         SellResult result = execute(player, packet);
+        long snapshotRevision = ShopSessionManager.get(player.getUUID())
+                .map(ShopSession::snapshotRevision).orElse(0L);
         ShopPackets.sendToPlayer(player, new S2CSellResponsePacket(
                 result.success(), result.shopId(), result.itemId(),
                 result.errorCode(), result.resultingBalance(),
-                packet.quantity(), result.totalValue(), packet.requestId()));
+                packet.quantity(), result.totalValue(), packet.requestId(),
+                snapshotRevision,
+                result.errorCode() == ShopResultCode.STALE_REQUEST
+                        ? "stale_snapshot" : result.success()
+                        ? "accepted" : "rejected"));
+        if (result.errorCode() == ShopResultCode.STALE_REQUEST
+                && player.getServer() != null) {
+            ShopDataService.sendShopData(player, result.shopId(), false, false);
+        }
         if (!result.success() || player.getServer() == null) {
             return;
         }
@@ -87,14 +97,24 @@ public final class ShopSellService {
             return mapResult(candidateShop, safeBalance(player),
                     replay.orElseThrow());
         }
-        if (!BalanceManager.isInternalProviderSelected()) {
-            return SellResult.error(candidateShop, safeBalance(player),
-                    ShopResultCode.SERVER_ERROR);
-        }
         String shopId = ShopDataService.resolveShopId(candidateShop);
         if (!shopId.equals(candidateShop)) {
             return SellResult.error(shopId, safeBalance(player),
                     ShopResultCode.INVALID_REQUEST);
+        }
+        ShopSession session = ShopSessionManager.get(player.getUUID())
+                .orElse(null);
+        if (session == null || !session.shopId().equals(shopId)) {
+            return SellResult.error(shopId, safeBalance(player),
+                    ShopResultCode.SHOP_CLOSED);
+        }
+        if (packet.snapshotRevision() != session.snapshotRevision()) {
+            return SellResult.error(shopId, safeBalance(player),
+                    ShopResultCode.STALE_REQUEST);
+        }
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return SellResult.error(candidateShop, safeBalance(player),
+                    ShopResultCode.SERVER_ERROR);
         }
         if (!freshAccessAllowed(player, shopId)) {
             return SellResult.error(shopId, safeBalance(player),

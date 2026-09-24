@@ -733,7 +733,8 @@ public final class ShopClientPacketHandler {
                     packet.nearbyShops(),
                     packet.canEdit(),
                     packet.offers(),
-                    packet.providerId());
+                    packet.providerId(),
+                    packet.snapshotRevision());
             ShopPackets.CHANNEL.sendToServer(new com.enviouse.futureshops.network.packets.C2SInventorySyncPacket(packet.shopId()));
             if (shopMainOpen) {
                 // Update in-place — preserves nearbyMode, scroll, tabs.
@@ -995,8 +996,12 @@ public final class ShopClientPacketHandler {
                     return;
                 }
             }
-            ShopClientState.setCurrentBalanceMinorUnits(packet.resultingBalanceMinorUnits());
-            ShopClientState.setStatus(buildBuyMessage(packet), packet.success());
+            if (packet.responseReason().equals("stale_snapshot")) {
+                ShopClientState.setStatus(buildBuyMessage(packet), false);
+            } else {
+                ShopClientState.setCurrentBalanceMinorUnits(packet.resultingBalanceMinorUnits());
+                ShopClientState.setStatus(buildBuyMessage(packet), packet.success());
+            }
 
             if (packet.success()) {
                 // Refresh owned counts so the Sell button lights up immediately after buying,
@@ -1016,8 +1021,12 @@ public final class ShopClientPacketHandler {
     public static void handleSellResponse(S2CSellResponsePacket packet) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
-            ShopClientState.setCurrentBalanceMinorUnits(packet.resultingBalanceMinorUnits());
-            ShopClientState.setStatus(buildSellMessage(packet), packet.success());
+            if (packet.responseReason().equals("stale_snapshot")) {
+                ShopClientState.setStatus(buildSellMessage(packet), false);
+            } else {
+                ShopClientState.setCurrentBalanceMinorUnits(packet.resultingBalanceMinorUnits());
+                ShopClientState.setStatus(buildSellMessage(packet), packet.success());
+            }
 
             if (packet.success()) {
                 ShopPackets.CHANNEL.sendToServer(new com.enviouse.futureshops.network.packets.C2SInventorySyncPacket(
@@ -1329,6 +1338,9 @@ public final class ShopClientPacketHandler {
     }
 
     private static Component buildBuyMessage(S2CBuyResponsePacket packet) {
+        if (packet.responseReason().equals("stale_snapshot")) {
+            return Component.translatable("gui.futureshops.status.shop.stale_snapshot");
+        }
         if (packet.success()) {
             return Component.translatable(
                     packet.cartCheckout()
@@ -1341,6 +1353,9 @@ public final class ShopClientPacketHandler {
     }
 
     private static Component buildSellMessage(S2CSellResponsePacket packet) {
+        if (packet.responseReason().equals("stale_snapshot")) {
+            return Component.translatable("gui.futureshops.status.shop.stale_snapshot");
+        }
         if (packet.success()) {
             return Component.translatable(
                     "gui.futureshops.status.sell.success",
@@ -1389,7 +1404,8 @@ public final class ShopClientPacketHandler {
                  NO_LINK, BAD_LINK_TARGET, RS_NOT_CONTROLLER, STORAGE_FULL,
                  MISSING_BARTER_ITEMS, ROLLBACK, NOTHING_TO_CLAIM, CLAIM_FAILED,
                  PROMO_FAILED, NO_CLIPBOARD, INVALID_REQUEST, INVALID_TARGET, SERVER_ERROR,
-                 CANCELLED_BY_EVENT, SHOP_OUT_OF_MONEY, BUYBACK_CAP_REACHED
+                 CANCELLED_BY_EVENT, SHOP_OUT_OF_MONEY, BUYBACK_CAP_REACHED,
+                 STALE_REQUEST
                     -> "command.futureshops.error.server";
         };
     }

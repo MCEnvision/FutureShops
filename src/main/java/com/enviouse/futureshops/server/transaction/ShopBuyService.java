@@ -62,11 +62,20 @@ public final class ShopBuyService {
             C2SBuyRequestPacket packet
     ) {
         BuyResult result = execute(player, packet);
+        long snapshotRevision = ShopSessionManager.get(player.getUUID())
+                .map(ShopSession::snapshotRevision).orElse(0L);
         ShopPackets.sendToPlayer(player, new S2CBuyResponsePacket(
                 result.success(), packet.cartCheckout(), result.shopId(),
                 result.errorCode(), result.resultingBalance(),
-                result.totalQuantity(), result.totalCost(),
-                packet.requestId()));
+                result.totalQuantity(), result.totalCost(), packet.requestId(),
+                snapshotRevision,
+                result.errorCode() == ShopResultCode.STALE_REQUEST
+                        ? "stale_snapshot" : result.success()
+                        ? "accepted" : "rejected"));
+        if (result.errorCode() == ShopResultCode.STALE_REQUEST
+                && player.getServer() != null) {
+            ShopDataService.sendShopData(player, result.shopId(), false, false);
+        }
         if (!result.success() || player.getServer() == null) {
             return;
         }
@@ -131,6 +140,21 @@ public final class ShopBuyService {
             return mapResult(player, candidateShopId,
                     replay.orElseThrow());
         }
+        String shopId = ShopDataService.resolveShopId(candidateShopId);
+        if (!shopId.equals(candidateShopId)) {
+            return BuyResult.error(shopId, safeBalance(player),
+                    ShopResultCode.INVALID_REQUEST);
+        }
+        ShopSession session = ShopSessionManager.get(player.getUUID())
+                .orElse(null);
+        if (session == null || !session.shopId().equals(shopId)) {
+            return BuyResult.error(shopId, safeBalance(player),
+                    ShopResultCode.SHOP_CLOSED);
+        }
+        if (packet.snapshotRevision() != session.snapshotRevision()) {
+            return BuyResult.error(shopId, safeBalance(player),
+                    ShopResultCode.STALE_REQUEST);
+        }
         if (!BalanceManager.isInternalProviderSelected()) {
             return BuyResult.error(candidateShopId, safeBalance(player),
                     ShopResultCode.SERVER_ERROR);
@@ -140,11 +164,6 @@ public final class ShopBuyService {
                 player.getUUID(), packet.requestId()).isPresent()) {
             return BuyResult.error(candidateShopId, safeBalance(player),
                     ShopResultCode.SERVER_ERROR);
-        }
-        String shopId = ShopDataService.resolveShopId(candidateShopId);
-        if (!shopId.equals(candidateShopId)) {
-            return BuyResult.error(shopId, safeBalance(player),
-                    ShopResultCode.INVALID_REQUEST);
         }
         if (!freshAccessAllowed(player, shopId)) {
             return BuyResult.error(shopId, safeBalance(player),

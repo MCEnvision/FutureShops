@@ -18,7 +18,8 @@ public record C2SSellRequestPacket(
         String shopId,
         String listingId,
         int quantity,
-        UUID requestId
+        UUID requestId,
+        long snapshotRevision
 ) {
     private static final int MAX_IDENTIFIER_LENGTH = 128;
     public C2SSellRequestPacket {
@@ -29,6 +30,9 @@ public record C2SSellRequestPacket(
             throw new IllegalArgumentException(
                     "Sell request identity is invalid");
         }
+        if (snapshotRevision < 0L) {
+            throw new IllegalArgumentException("snapshotRevision is invalid");
+        }
     }
 
     public C2SSellRequestPacket(
@@ -36,7 +40,16 @@ public record C2SSellRequestPacket(
             String listingId,
             int quantity
     ) {
-        this(shopId, listingId, quantity, UUID.randomUUID());
+        this(shopId, listingId, quantity, UUID.randomUUID(), 0L);
+    }
+
+    public C2SSellRequestPacket(
+            String shopId,
+            String listingId,
+            int quantity,
+            UUID requestId
+    ) {
+        this(shopId, listingId, quantity, requestId, 0L);
     }
 
     public static void encode(C2SSellRequestPacket packet, FriendlyByteBuf buffer) {
@@ -44,13 +57,14 @@ public record C2SSellRequestPacket(
         buffer.writeUtf(packet.listingId);
         buffer.writeVarInt(packet.quantity);
         buffer.writeUUID(packet.requestId);
+        buffer.writeLong(packet.snapshotRevision);
     }
 
     public static C2SSellRequestPacket decode(FriendlyByteBuf buffer) {
         return new C2SSellRequestPacket(
                 buffer.readUtf(MAX_IDENTIFIER_LENGTH),
                 buffer.readUtf(MAX_IDENTIFIER_LENGTH),
-                buffer.readVarInt(), buffer.readUUID());
+                buffer.readVarInt(), buffer.readUUID(), buffer.readLong());
     }
 
     public static void handle(C2SSellRequestPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

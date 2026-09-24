@@ -32,6 +32,7 @@ public final class ShopClientState {
     private static volatile String currencyName = "Coins";
     private static volatile int currencyDecimals = 2;
     private static volatile String providerId = "internal";
+    private static volatile long snapshotRevision = 0L;
 
     // Catalog data — set by S2CShopDataPacket.
     private static volatile List<CatalogCategory> catalogCategories = List.of();
@@ -84,7 +85,28 @@ public final class ShopClientState {
                                      List<CatalogPromo> promos, List<CatalogBarterRecipe> barterRecipes,
                                      boolean adminEnabled, List<NearbyShopEntry> nearby, boolean canEdit,
                                      List<ServerShopOfferListing> offers, String activeProviderId) {
+        applyShopData(shopId, balanceMinorUnits, currency, decimals, categories,
+                items, promos, barterRecipes, adminEnabled, nearby, canEdit,
+                offers, activeProviderId, 0L);
+    }
+
+    public static void applyShopData(String shopId, long balanceMinorUnits,
+                                     String currency, int decimals,
+                                     List<CatalogCategory> categories,
+                                     List<CatalogItem> items,
+                                     List<CatalogPromo> promos,
+                                     List<CatalogBarterRecipe> barterRecipes,
+                                     boolean adminEnabled,
+                                     List<NearbyShopEntry> nearby,
+                                     boolean canEdit,
+                                     List<ServerShopOfferListing> offers,
+                                     String activeProviderId,
+                                     long revision) {
+        if (shopId.equals(activeShopId) && revision < snapshotRevision) {
+            return;
+        }
         activeShopId = shopId;
+        snapshotRevision = revision;
         currentBalanceMinorUnits = balanceMinorUnits;
         currentBalanceKnown = true;
         currencyName = currency;
@@ -122,6 +144,7 @@ public final class ShopClientState {
         activeShopId = "";
         currentBalanceMinorUnits = 0L;
         currentBalanceKnown = false;
+        snapshotRevision = 0L;
         catalogCategories = List.of();
         catalogItems = List.of();
         catalogPromos = List.of();
@@ -471,6 +494,10 @@ public final class ShopClientState {
 
     public static String getActiveShopId() {
         return activeShopId;
+    }
+
+    public static long getSnapshotRevision() {
+        return snapshotRevision;
     }
 
     public static long getCurrentBalanceMinorUnits() {

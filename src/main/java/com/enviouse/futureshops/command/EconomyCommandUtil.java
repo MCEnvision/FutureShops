@@ -72,6 +72,7 @@ public final class EconomyCommandUtil {
                  MISSING_INGREDIENTS, MISSING_ITEMS, INVALID_RECIPE, ROLLBACK,
                  NOTHING_TO_CLAIM, CLAIM_FAILED, PROMO_FAILED, NO_CLIPBOARD, INVALID_REQUEST,
                  SERVER_ERROR, CANCELLED_BY_EVENT, COOLDOWN, SHOP_CLOSED,
+                 STALE_REQUEST,
                  SHOP_OUT_OF_MONEY, BUYBACK_CAP_REACHED
                     -> "command.futureshops.error.server";
         };
