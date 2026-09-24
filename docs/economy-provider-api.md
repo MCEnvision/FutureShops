@@ -43,8 +43,11 @@ The default provider is `internal`. Set `economy.provider` in
 `config/futureshops/futureshops-common.toml` to request a registered provider. A valid reload only
 stages the requested provider and reports that a restart is required. The active provider remains
 unchanged until the server restarts. Missing, invalid, incompatible, or unavailable providers keep
-the server online but refuse monetary operations with a typed unavailable result. FutureShops does
-not fall back to the internal wallet, copy balances, convert currencies, or reconcile accounts.
+the server online but refuse monetary operations with a typed unavailable result. A provider that
+resolves ready owns balance queries and single account monetary mutations through its own durable
+request identity. FutureShops does not fall back to the internal wallet, copy balances, convert
+currencies, or reconcile accounts. Cross account transfers remain refused unless a provider exposes
+an atomic transfer contract.
 
 The active provider id and currency metadata are sent through the existing shop data packet. The
 client treats those fields as server owned display metadata and never selects a provider locally.
