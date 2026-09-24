@@ -37,6 +37,26 @@ reload, that an unavailable query is not a numeric zero, and that the internal w
 when an external mutation is refused. Browse and pure barter may remain available in this state.
 Do not claim external mutation support from a capability declaration alone.
 
+## Native and external provider capture
+
+Provider conformance is exact. For Pixelmon, record the unmodified Forge 1.20.1
+9.2.3 artifact hashes, the target class and method descriptors, the save image,
+and the original root and leg references. Capture a clean save, a process cut
+before save, a fresh process lookup, an identical retry, and a changed payload.
+Missing Pixelmon, a wrong version, an altered descriptor, a custom account, or a
+contradictory receipt must refuse before another effect.
+
+For an independently registered provider, record the API compatibility version,
+provider id, backend identity projection, transaction commit boundary, receipt
+lookup, and a fresh process lookup. A boolean bridge, a missing receipt, an
+unavailable backend, or a changed account or currency binding is refused. Do not
+include raw account ids, balances, NBT, backend paths, or provider jars in a
+support packet.
+
+After each capture, run `debug off`, confirm `debug status` reports capture off,
+stop only the owned fixture process, and remove the exact disposable runtime,
+database, logs, and reports after their final evidence consumer.
+
 ## Privacy and support
 
 Diagnostic events use schema version 2 and capture scoped pseudonyms for request, leg, and actor references. Do not paste raw logs into a public issue. A support packet should contain the mod version, Minecraft and Forge versions, the selected module, capture id, command window, sanitized decisive lines, expected and actual result, and the cleanup result. Remove balances, NBT, chat, credentials, raw UUIDs, private paths, and private addresses before sharing.
