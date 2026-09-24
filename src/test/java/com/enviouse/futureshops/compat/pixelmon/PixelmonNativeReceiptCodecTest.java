@@ -77,6 +77,34 @@ class PixelmonNativeReceiptCodecTest {
     }
 
     @Test
+    void receiptHistoryKeepsEarlierRequestIdentities() {
+        BindingV1 binding = new BindingV1("pixelmon", 1, "pixelmon-native", "pixelmon-9.2.3",
+                FINGERPRINT, FINGERPRINT, "pixelmon", UUID.randomUUID(), "poke_dollars", 2,
+                "pixelmon-native-store", 1L, 1);
+        CompoundTag account = new CompoundTag();
+        LegId first = LegId.random();
+        try (PixelmonNativeRequestContext.Scope ignored = PixelmonNativeRequestContext.open(
+                binding, RootId.random(), first, "deposit", 100L, false, FINGERPRINT)) {
+            PixelmonNativeRequestContext.current().orElseThrow()
+                    .recordResult(new BigDecimal("1.00"));
+            PixelmonNativeReceiptCodec.write(account,
+                    PixelmonNativeRequestContext.current().orElseThrow());
+        }
+        LegId second = LegId.random();
+        try (PixelmonNativeRequestContext.Scope ignored = PixelmonNativeRequestContext.open(
+                binding, RootId.random(), second, "deposit", 200L, false, FINGERPRINT)) {
+            PixelmonNativeRequestContext.current().orElseThrow()
+                    .recordResult(new BigDecimal("3.00"));
+            PixelmonNativeReceiptCodec.write(account,
+                    PixelmonNativeRequestContext.current().orElseThrow());
+        }
+        assertEquals(100L, PixelmonNativeReceiptCodec.read(account, first.value())
+                .orElseThrow().amountMinorUnits());
+        assertEquals(200L, PixelmonNativeReceiptCodec.read(account, second.value())
+                .orElseThrow().amountMinorUnits());
+    }
+
+    @Test
     void malformedReceiptRemainsAvailableForRecoveryInspection() {
         CompoundTag source = new CompoundTag();
         CompoundTag receipt = new CompoundTag();

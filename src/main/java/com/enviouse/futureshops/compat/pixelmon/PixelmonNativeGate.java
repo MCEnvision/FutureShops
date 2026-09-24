@@ -30,6 +30,8 @@ public final class PixelmonNativeGate {
     public static final String MIXIN_CONFIG = "futureshops.pixelmon.mixins.json";
     public static final String EXPECTED_ARTIFACT_SHA512 =
             "3a9c6f375214c6d93c6cce8235e8a206e8f9731be8e168a254e78539087080796d97f0b22cb9a6db09d901c72e2e1ae53b9f2484761fb310479ce9f84ac9b145";
+    public static final String EXPECTED_ARTIFACT_SHA256 =
+            "8f2777f5a7cd2b5fc48ac3f5531d434af4120c7d40adc9929d5a3737c404246a";
     private static final Logger LOGGER = LogUtils.getLogger();
     private static volatile State state = State.UNRESOLVED;
     private static final Map<Object, PixelmonNativeRequestContext.Request> PENDING =
@@ -51,6 +53,7 @@ public final class PixelmonNativeGate {
                 .orElse("");
         artifactFingerprint = discoverArtifactFingerprint();
         if (!SUPPORTED_VERSION.equals(version) || !EXPECTED_ARTIFACT_SHA512.equals(artifactFingerprint)
+                || !EXPECTED_ARTIFACT_SHA256.equals(discoverArtifactDigest("SHA-256"))
                 || !targetSurfacePresent()) {
             state = State.UNSUPPORTED_VERSION;
             LOGGER.warn("Pixelmon native economy integration disabled for unsupported version {}.", version);
@@ -87,6 +90,7 @@ public final class PixelmonNativeGate {
                         .map(container -> SUPPORTED_VERSION.equals(
                                 container.getModInfo().getVersion().toString())
                                 && EXPECTED_ARTIFACT_SHA512.equals(discoverArtifactFingerprint())
+                                && EXPECTED_ARTIFACT_SHA256.equals(discoverArtifactDigest("SHA-256"))
                                 && targetSurfacePresent())
                         .orElse(false);
             }
@@ -102,6 +106,7 @@ public final class PixelmonNativeGate {
                     if (MOD_ID.equals(mod.getModId())) {
                         return SUPPORTED_VERSION.equals(mod.getVersion().toString())
                                 && EXPECTED_ARTIFACT_SHA512.equals(sha512(file.getFile().getFilePath()))
+                                && EXPECTED_ARTIFACT_SHA256.equals(digest(file.getFile().getFilePath(), "SHA-256"))
                                 && targetSurfacePresent(file.getFile());
                     }
                 }
@@ -130,6 +135,12 @@ public final class PixelmonNativeGate {
         }
     }
 
+    public static boolean isExactAccount(Object account) {
+        return account != null
+                && "com.pixelmonmod.pixelmon.api.storage.PlayerPartyStorage"
+                .equals(account.getClass().getName());
+    }
+
     public static PixelmonNativeEconomyAccess account(UUID accountId) {
         return accountId == null ? null : ACCOUNTS.get(accountId);
     }
@@ -143,6 +154,10 @@ public final class PixelmonNativeGate {
         Optional<PixelmonNativeRequestContext.Request> request = currentRequest();
         if (request.isEmpty()) {
             return false;
+        }
+        if (!isExactAccount(account)) {
+            request.get().recordFailure("unsupported_account");
+            return true;
         }
         if (nextBalance == null || currentBalance == null) {
             request.get().recordFailure("invalid_balance");
@@ -178,6 +193,10 @@ public final class PixelmonNativeGate {
             return false;
         }
         PixelmonNativeRequestContext.Request request = optional.get();
+        if (!isExactAccount(account)) {
+            request.recordFailure("unsupported_account");
+            return true;
+        }
         if (amount == null || currentBalance == null || amount.signum() <= 0) {
             request.recordFailure("invalid_delta");
             return true;
@@ -247,12 +266,26 @@ public final class PixelmonNativeGate {
         }
     }
 
+    private static String discoverArtifactDigest(String algorithm) {
+        try {
+            return ModList.get().getModContainerById(MOD_ID)
+                    .map(container -> digest(container.getModInfo().getOwningFile().getFile().getFilePath(), algorithm))
+                    .orElse("");
+        } catch (RuntimeException ignored) {
+            return "";
+        }
+    }
+
     private static String sha512(Path path) {
+        return digest(path, "SHA-512");
+    }
+
+    private static String digest(Path path, String algorithm) {
         if (path == null || !Files.isRegularFile(path)) {
             return "";
         }
         try (java.io.InputStream input = Files.newInputStream(path)) {
-            MessageDigest digest = MessageDigest.getInstance("SHA-512");
+            MessageDigest digest = MessageDigest.getInstance(algorithm);
             byte[] buffer = new byte[8192];
             int count;
             while ((count = input.read(buffer)) >= 0) {

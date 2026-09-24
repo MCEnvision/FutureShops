@@ -157,6 +157,9 @@ abstract class PixelmonPlayerPartyStorageMixin
     private void futureshops$writeReceipt(CompoundTag tag,
                                            CallbackInfoReturnable<CompoundTag> callback) {
         PixelmonNativeGate.pendingRequest(this).ifPresent(request -> {
+            if (futureshops$loadedReceipt != null) {
+                PixelmonNativeReceiptCodec.preserve(callback.getReturnValue(), futureshops$loadedReceipt);
+            }
             PixelmonNativeReceiptCodec.write(callback.getReturnValue(), request);
         });
         if (futureshops$loadedReceipt != null
@@ -206,7 +209,7 @@ abstract class PixelmonPlayerPartyStorageMixin
         if (futureshops$invalidReceipt) {
             return ProviderResult.recoveryRequired("pixelmon account has a malformed receipt");
         }
-        Optional<PixelmonNativeReceiptCodec.Receipt> existing = futureshops$receipt();
+        Optional<PixelmonNativeReceiptCodec.Receipt> existing = futureshops$receipt(requestId.value());
         if (existing.isPresent()) {
             PixelmonNativeReceiptCodec.Receipt receipt = existing.orElseThrow();
             if (receipt.legId().equals(requestId.value())) {
@@ -234,7 +237,8 @@ abstract class PixelmonPlayerPartyStorageMixin
                         current.flatMap(Request::failure).orElse("pixelmon mutation was refused"));
             }
             CompoundTag written = writeToNBT(new CompoundTag());
-            Optional<PixelmonNativeReceiptCodec.Receipt> persisted = PixelmonNativeReceiptCodec.read(written);
+            Optional<PixelmonNativeReceiptCodec.Receipt> persisted =
+                    PixelmonNativeReceiptCodec.read(written, requestId.value());
             if (persisted.isEmpty() || !persisted.orElseThrow().legId().equals(requestId.value())
                     || !futureshops$saveAtomically(written)) {
                 return ProviderResult.recoveryRequired(
@@ -255,7 +259,7 @@ abstract class PixelmonPlayerPartyStorageMixin
             return ProviderResult.rejected(ProviderError.INVALID_REQUEST,
                     "pixelmon receipt request is required");
         }
-        Optional<PixelmonNativeReceiptCodec.Receipt> receipt = futureshops$receipt();
+        Optional<PixelmonNativeReceiptCodec.Receipt> receipt = futureshops$receipt(requestId.value());
         if (receipt.isEmpty()) {
             return futureshops$invalidReceipt
                     ? ProviderResult.recoveryRequired("pixelmon account has a malformed receipt")
@@ -268,12 +272,12 @@ abstract class PixelmonPlayerPartyStorageMixin
                 "pixelmon receipt was not found");
     }
 
-    private Optional<PixelmonNativeReceiptCodec.Receipt> futureshops$receipt() {
+    private Optional<PixelmonNativeReceiptCodec.Receipt> futureshops$receipt(UUID legId) {
         if (futureshops$loadedReceipt == null) {
             return Optional.empty();
         }
         try {
-            return PixelmonNativeReceiptCodec.read(futureshops$loadedReceipt);
+            return PixelmonNativeReceiptCodec.read(futureshops$loadedReceipt, legId);
         } catch (IllegalArgumentException exception) {
             return Optional.empty();
         }
