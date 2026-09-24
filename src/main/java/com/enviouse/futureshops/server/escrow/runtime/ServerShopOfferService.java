@@ -38,6 +38,7 @@ import com.enviouse.futureshops.server.pricing.DynamicPricingEngine;
 import com.enviouse.futureshops.server.security.ServerRequestAction;
 import com.enviouse.futureshops.server.security.ServerRequestSecurityManager;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
+import com.enviouse.futureshops.server.debug.DebugDiagnostics;
 import com.enviouse.futureshops.server.shop.AdminShopToggleSavedData;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -76,7 +77,9 @@ public final class ServerShopOfferService {
             ServerPlayer player,
             Request request
     ) {
-        return executeInternal(player, request, true, 0L);
+        Result result = executeInternal(player, request, true, 0L);
+        recordDiagnostic(player, request, result, "execute");
+        return result;
     }
 
     public static Result executeBulkLine(
@@ -85,11 +88,40 @@ public final class ServerShopOfferService {
             long minimumPayoutMinorUnits
     ) {
         if (minimumPayoutMinorUnits < 1L) {
-            return Result.failure(
+            Result result = Result.failure(
                     Status.INVALID_REQUEST, request.requestId());
+            recordDiagnostic(player, request, result, "execute_bulk");
+            return result;
         }
-        return executeInternal(
+        Result result = executeInternal(
                 player, request, false, minimumPayoutMinorUnits);
+        recordDiagnostic(player, request, result, "execute_bulk");
+        return result;
+    }
+
+    private static void recordDiagnostic(
+            ServerPlayer player,
+            Request request,
+            Result result,
+            String operation
+    ) {
+        DebugDiagnostics.record(
+                com.enviouse.futureshops.server.debug.DebugModule.SHOP,
+                operation,
+                request.requestId().toString(),
+                request.listingId(),
+                player.getUUID(),
+                request.action().name().toLowerCase(java.util.Locale.ROOT),
+                "settlement",
+                "accepted",
+                result.status().name().toLowerCase(java.util.Locale.ROOT),
+                result.status().name().toLowerCase(java.util.Locale.ROOT),
+                "none",
+                "unknown",
+                "unknown",
+                "none",
+                result.status().success() ? "complete" : "none",
+                result.status().success() ? "none" : "inspect_status");
     }
 
     public static boolean canExecuteBulkLine(

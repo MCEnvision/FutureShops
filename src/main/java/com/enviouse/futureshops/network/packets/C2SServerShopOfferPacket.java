@@ -4,6 +4,8 @@ import com.enviouse.futureshops.catalog.offer.OfferAction;
 import com.enviouse.futureshops.money.PaymentSource;
 import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.server.economy.BalanceManager;
+import com.enviouse.futureshops.server.debug.DebugDiagnostics;
+import com.enviouse.futureshops.server.debug.DebugModule;
 import com.enviouse.futureshops.server.escrow.runtime.ServerShopOfferService;
 import com.enviouse.futureshops.server.shop.InventorySyncService;
 import com.enviouse.futureshops.server.shop.ShopDataService;
@@ -100,6 +102,23 @@ public record C2SServerShopOfferPacket(
             if (player == null) {
                 return;
             }
+            DebugDiagnostics.record(
+                    DebugModule.NETWORK,
+                    "packet_received",
+                    packet.requestId.toString(),
+                    packet.listingId,
+                    player.getUUID(),
+                    packet.action.name().toLowerCase(Locale.ROOT),
+                    "received",
+                    "accepted",
+                    "received",
+                    "none",
+                    "none",
+                    "none",
+                    "none",
+                    "none",
+                    "none",
+                    "dispatch");
             ServerShopOfferService.Result result =
                     ServerShopOfferService.execute(player,
                             new ServerShopOfferService.Request(
