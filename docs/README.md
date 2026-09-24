@@ -10,6 +10,7 @@
 * [Persistence and database audit](persistence-database-audit.md)
 * [Economy diagnostics](economy-debugging.md)
 * [Economy provider API v1](economy-provider-api.md)
+* [Economy coordinator recovery](economy-recovery.md)
 
 ## Configuration
 
@@ -43,6 +44,8 @@
 * [Phase 000 completion packet](verification/phase-000/completion-2026-09-01.md)
 * [Phase 002 baseline and runtime evidence](verification/phase-002/baseline-2026-09-02.md)
 * [Issue 25 catalog migration matrix](verification/phase-002/issue-25-catalog-matrix-2026-09-02.md)
+* [Phase 003 source locators](verification/phase-003/source-locators.md)
+* [Phase 003 coordinator crash matrix](verification/phase-003/crash-matrix.md)
 * [Issue 32 player state corpus](verification/phase-002/issue-32-player-state-2026-09-02.md)
 * [Issue 34 finite stock matrix](verification/phase-002/issue-34-finite-stock-2026-09-02.md)
 * [Phase 004 entry point inventory](verification/phase-004/entry-point-inventory-2026-09-02.md)
