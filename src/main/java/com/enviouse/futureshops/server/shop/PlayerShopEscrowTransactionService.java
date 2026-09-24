@@ -237,6 +237,10 @@ final class PlayerShopEscrowTransactionService {
             return BulkOfferResult.failure(
                     ShopResultCode.INVALID_REQUEST);
         }
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return BulkOfferResult.failure(
+                    ShopResultCode.SERVER_ERROR);
+        }
         ReentrantLock lock = PlayerShopBlockService.transactionLock(
                 packet.shopPos());
         lock.lock();
@@ -315,7 +319,8 @@ final class PlayerShopEscrowTransactionService {
     ) {
         if (actor.getServer() == null
                 || ZERO_UUID.equals(packet.requestId())
-                || packet.action() != OfferAction.SELL_TO_SHOP) {
+                || packet.action() != OfferAction.SELL_TO_SHOP
+                || !BalanceManager.isInternalProviderSelected()) {
             return false;
         }
         ReentrantLock lock = PlayerShopBlockService.transactionLock(

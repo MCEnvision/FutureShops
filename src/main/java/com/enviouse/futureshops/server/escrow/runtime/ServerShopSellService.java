@@ -3,6 +3,7 @@ package com.enviouse.futureshops.server.escrow.runtime;
 import com.enviouse.futureshops.Config;
 import com.enviouse.futureshops.money.CurrencyManager;
 import com.enviouse.futureshops.money.ItemStackSnapshotCodec;
+import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.escrow.claim.ClaimKind;
 import com.enviouse.futureshops.server.escrow.claim.ClaimStatus;
 import com.enviouse.futureshops.server.escrow.claim.EscrowClaim;
@@ -106,6 +107,11 @@ public final class ServerShopSellService {
                 }
                 return resume(storedIntent.orElseThrow(), backend,
                         custody);
+            }
+            if (backend instanceof LiveBackend
+                    && !BalanceManager.isInternalProviderSelected()) {
+                return Result.failure(Status.ESCROW_UNAVAILABLE,
+                        request.identity().requestId());
             }
             if (!backend.ready()) {
                 return Result.failure(Status.ESCROW_UNAVAILABLE,

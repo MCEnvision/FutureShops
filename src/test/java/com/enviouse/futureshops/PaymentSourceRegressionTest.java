@@ -120,4 +120,29 @@ class PaymentSourceRegressionTest {
         assertTrue(auction.contains("\"BID\", \"ECONOMY_UNAVAILABLE\""));
         assertTrue(auction.contains("\"BUY_NOW\", \"ECONOMY_UNAVAILABLE\""));
     }
+
+    @Test
+    void shop_money_routes_fail_closed_before_custody() throws Exception {
+        String sell = read(
+                "src/main/java/com/enviouse/futureshops/server/transaction/ShopSellService.java");
+        String legacySell = read(
+                "src/main/java/com/enviouse/futureshops/server/escrow/runtime/ServerShopSellService.java");
+        String offer = read(
+                "src/main/java/com/enviouse/futureshops/server/escrow/runtime/ServerShopOfferService.java");
+        String cart = read(
+                "src/main/java/com/enviouse/futureshops/server/escrow/runtime/ServerShopOfferCartService.java");
+        String bulk = read(
+                "src/main/java/com/enviouse/futureshops/server/shop/BulkSellService.java");
+        String playerBulk = read(
+                "src/main/java/com/enviouse/futureshops/server/shop/PlayerShopEscrowTransactionService.java");
+        assertTrue(sell.contains("BalanceManager.isInternalProviderSelected()"));
+        assertTrue(legacySell.contains("backend instanceof LiveBackend"));
+        assertTrue(offer.contains("requiresMoney(request"));
+        assertTrue(cart.contains("line.moneyTotalMinorUnits() > 0L"));
+        assertTrue(bulk.contains("BalanceManager.isInternalProviderSelected()"));
+        assertTrue(playerBulk.contains(
+                "!BalanceManager.isInternalProviderSelected()"));
+        assertTrue(offer.contains(
+                "!prepared.intent().moneyTransfers().isEmpty()"));
+    }
 }

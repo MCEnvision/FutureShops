@@ -87,6 +87,10 @@ public final class ShopSellService {
             return mapResult(candidateShop, safeBalance(player),
                     replay.orElseThrow());
         }
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return SellResult.error(candidateShop, safeBalance(player),
+                    ShopResultCode.SERVER_ERROR);
+        }
         String shopId = ShopDataService.resolveShopId(candidateShop);
         if (!shopId.equals(candidateShop)) {
             return SellResult.error(shopId, safeBalance(player),

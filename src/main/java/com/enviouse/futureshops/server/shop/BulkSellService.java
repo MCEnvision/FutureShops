@@ -75,6 +75,9 @@ public final class BulkSellService {
         if (server == null) {
             return QuoteResult.failure(Status.UNAVAILABLE);
         }
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return QuoteResult.failure(Status.UNAVAILABLE);
+        }
         String shopId = target == BulkSellTarget.ADMIN_SHOP
                 ? ShopDataService.resolveShopId(requestedShopId)
                 : "playershops";
@@ -129,6 +132,9 @@ public final class BulkSellService {
         }
         MinecraftServer server = player.getServer();
         if (server == null) {
+            return CommitResult.failure(quoteId, Status.UNAVAILABLE);
+        }
+        if (!BalanceManager.isInternalProviderSelected()) {
             return CommitResult.failure(quoteId, Status.UNAVAILABLE);
         }
         StoredQuote stored;

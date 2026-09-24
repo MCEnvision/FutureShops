@@ -295,6 +295,14 @@ public final class ServerShopOfferCartService {
                 return failAcceptedRequest(
                         player, request, quote.failure());
             }
+            if (!BalanceManager.isInternalProviderSelected()
+                    && (request.paymentSource().isPresent()
+                    || quote.lines().stream().anyMatch(line ->
+                    line.moneyTotalMinorUnits() > 0L))) {
+                return Result.failure(
+                        ServerShopOfferService.Status.UNAVAILABLE,
+                        request.requestId());
+            }
             List<QuotedLine> authorizedLines = new ArrayList<>(
                     quote.lines().size());
             for (QuotedLine line : quote.lines()) {
@@ -548,6 +556,15 @@ public final class ServerShopOfferCartService {
             EscrowRuntimeService runtime,
             boolean trustedRecovery
     ) {
+        if (!BalanceManager.isInternalProviderSelected()
+                && (request.paymentSource().isPresent()
+                || lines.stream().anyMatch(line ->
+                line.moneyTotalMinorUnits() > 0L)
+                || !intent.moneyTransfers().isEmpty())) {
+            return Result.failure(
+                    ServerShopOfferService.Status.UNAVAILABLE,
+                    request.requestId());
+        }
         try {
             StockCommandResult result =
                     runtime.commitStockMutation(reserve);

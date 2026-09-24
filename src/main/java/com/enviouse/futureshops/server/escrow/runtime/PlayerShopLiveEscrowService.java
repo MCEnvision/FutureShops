@@ -77,9 +77,10 @@ public final class PlayerShopLiveEscrowService {
             throw new IllegalArgumentException(
                     "Player shop actor does not match the intent");
         }
-        if (intent.paymentSource()
+        if (!BalanceManager.isInternalProviderSelected()
+                && (intent.paymentSource()
                 != com.enviouse.futureshops.server.escrow.playershop.PlayerShopPaymentSource.NONE
-                && !BalanceManager.isInternalProviderSelected()) {
+                || !intent.moneyTransfers().isEmpty())) {
             throw new PlayerShopBackendException(
                     PlayerShopBackendException.Kind.REJECTED,
                     "Selected economy provider is not admitted for player shop money");
