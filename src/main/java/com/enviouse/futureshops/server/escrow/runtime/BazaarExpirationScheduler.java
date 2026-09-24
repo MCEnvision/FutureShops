@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.server.escrow.runtime;
 
 import com.enviouse.futureshops.server.market.bazaar.BazaarIds;
+import com.enviouse.futureshops.server.market.MarketSettlementPolicy;
 import com.enviouse.futureshops.server.market.bazaar.BazaarOperationResult;
 import com.enviouse.futureshops.server.market.bazaar.BazaarOperationStatus;
 import com.enviouse.futureshops.server.market.bazaar.BazaarOperationType;
@@ -74,7 +75,8 @@ public final class BazaarExpirationScheduler {
 
     static void sweep(MinecraftServer server) {
         EscrowRuntimeService runtime = BazaarActionService.readyRuntime();
-        if (runtime == null || server == null) {
+        if (runtime == null || server == null
+                || !MarketSettlementPolicy.internalProviderReady()) {
             return;
         }
         try {

@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.server.escrow.runtime;
 
 import com.enviouse.futureshops.server.market.auction.AuctionHouseBook;
+import com.enviouse.futureshops.server.market.MarketSettlementPolicy;
 import com.enviouse.futureshops.server.market.auction.AuctionHouseSnapshot;
 import com.enviouse.futureshops.server.market.auction.AuctionListing;
 import com.enviouse.futureshops.server.market.auction.AuctionListingState;
@@ -68,7 +69,8 @@ public final class AuctionExpirationScheduler {
 
     static void sweep(MinecraftServer server) {
         EscrowRuntimeService runtime = AuctionActionService.readyRuntime();
-        if (runtime == null || server == null) {
+        if (runtime == null || server == null
+                || !MarketSettlementPolicy.internalProviderReady()) {
             return;
         }
         try {

@@ -42,10 +42,6 @@ public final class EscrowMoneyClaimService {
             throw new IllegalArgumentException(
                     "Money claim collection identity cannot be zero");
         }
-        if (!BalanceManager.isInternalProviderSelected()) {
-            return result(Status.ESCROW_UNAVAILABLE, requestId, claimId,
-                    0L, 0L, false);
-        }
         MinecraftServer server = player.getServer();
         if (server == null) {
             return result(Status.ESCROW_UNAVAILABLE, requestId, claimId,
@@ -77,6 +73,10 @@ public final class EscrowMoneyClaimService {
                 runtime, player.getUUID(), claimId, requestId);
         if (replay.isPresent()) {
             return replay.orElseThrow();
+        }
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return result(Status.ESCROW_UNAVAILABLE, requestId, claimId,
+                    0L, 0L, false);
         }
         EscrowClaim claim = ClaimSavedData.get(server).getClaim(claimId);
         if (!publiclyCollectible(claim, player.getUUID())) {

@@ -115,10 +115,34 @@ class PaymentSourceRegressionTest {
     void unadapted_market_money_routes_fail_closed() throws Exception {
         String bazaar = read("src/main/java/com/enviouse/futureshops/server/escrow/runtime/BazaarActionService.java");
         String auction = read("src/main/java/com/enviouse/futureshops/server/escrow/runtime/AuctionActionService.java");
+        String bazaarExpiry = read("src/main/java/com/enviouse/futureshops/server/escrow/runtime/BazaarExpirationScheduler.java");
+        String auctionExpiry = read("src/main/java/com/enviouse/futureshops/server/escrow/runtime/AuctionExpirationScheduler.java");
+        String claims = read("src/main/java/com/enviouse/futureshops/server/escrow/runtime/EscrowMoneyClaimService.java");
         assertTrue(bazaar.contains("\"ORDER\", \"ECONOMY_UNAVAILABLE\""));
+        assertTrue(bazaar.contains("\"CANCEL\", \"ECONOMY_UNAVAILABLE\""));
         assertTrue(auction.contains("\"CREATE\", \"ECONOMY_UNAVAILABLE\""));
         assertTrue(auction.contains("\"BID\", \"ECONOMY_UNAVAILABLE\""));
         assertTrue(auction.contains("\"BUY_NOW\", \"ECONOMY_UNAVAILABLE\""));
+        assertTrue(auction.contains("\"CANCEL\", \"ECONOMY_UNAVAILABLE\""));
+        assertTrue(bazaarExpiry.contains("MarketSettlementPolicy.internalProviderReady()"));
+        assertTrue(auctionExpiry.contains("MarketSettlementPolicy.internalProviderReady()"));
+        int replayIndex = claims.indexOf("replay(");
+        int providerIndex = claims.indexOf(
+                "BalanceManager.isInternalProviderSelected()");
+        assertTrue(replayIndex >= 0);
+        assertTrue(providerIndex >= 0);
+        assertTrue(replayIndex < providerIndex);
+    }
+
+    @Test
+    void market_capabilities_fail_closed_for_external_provider_without_throwing() throws Exception {
+        String projection = read(
+                "src/main/java/com/enviouse/futureshops/server/market/MarketCapabilityProjectionService.java");
+        String module = read(
+                "src/main/java/com/enviouse/futureshops/server/market/MarketModuleService.java");
+        assertTrue(projection.contains("MarketSettlementPolicy.internalProviderReady()"));
+        assertTrue(projection.contains("walletBalance, internalProvider"));
+        assertTrue(module.contains("MarketSettlementPolicy.ready(runtime)"));
     }
 
     @Test

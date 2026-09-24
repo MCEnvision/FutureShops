@@ -215,6 +215,12 @@ config reload never silently mass-cancels contracts.
 
 An enabled module that is waiting for escrow or lifecycle control recovery is different from a disabled module. It remains in the top navigation, keeps claims available, and reports recovery while new market mutations are blocked. Bazaar and Auction House enable flags live only in `config/futureshops/futureshops-common.toml`. Their module specific TOML files configure rules but do not enable the module.
 
+Selecting an external economy provider also places Bazaar and Auction House in a read only
+availability state on Forge 1.20.1. API v1 providers do not yet expose the atomic multi account
+market contract, so money operations refuse before custody or market mutation. The original
+request result still replays, and existing liabilities remain visible without being converted or
+redirected. Restore the internal provider before resolving those liabilities.
+
 ## Administration
 
 ### What exists in this build

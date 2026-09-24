@@ -8,7 +8,6 @@ import com.enviouse.futureshops.network.ShopPackets;
 import com.enviouse.futureshops.network.packets.S2COpenMarketModulePacket;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeManager;
 import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeService;
-import com.enviouse.futureshops.server.escrow.runtime.EscrowRuntimeState;
 import com.enviouse.futureshops.server.market.control.MarketControlModule;
 import com.enviouse.futureshops.server.market.control.MarketControlSavedData;
 import com.enviouse.futureshops.server.market.control.MarketModuleControl;
@@ -68,8 +67,7 @@ public final class MarketModuleService {
             accent = branding.accentColor();
         }
         EscrowRuntimeService runtime = EscrowRuntimeManager.getOrNull();
-        boolean escrowReady = runtime != null
-                && runtime.state() == EscrowRuntimeState.READY;
+        boolean escrowReady = MarketSettlementPolicy.ready(runtime);
         Optional<MarketModuleControl> control = control(player, module);
         MarketModuleAccessPolicy.PageAccess access =
                 MarketModuleAccessPolicy.pageAccess(module, view,
