@@ -141,6 +141,9 @@ public final class ServerShopOfferService {
         if (runtime == null || !runtime.isReady()) {
             return false;
         }
+        if (!BalanceManager.isInternalProviderSelected()) {
+            return false;
+        }
         try {
             return quote(player, request, runtime).failure() == null;
         } catch (RuntimeException exception) {
@@ -388,6 +391,11 @@ public final class ServerShopOfferService {
                 return failAcceptedRequest(
                         player, request, quote.failure());
             }
+            if (requiresMoney(request, quote.moneyTotalMinorUnits())
+                    && !BalanceManager.isInternalProviderSelected()) {
+                return Result.failure(Status.UNAVAILABLE,
+                        request.requestId());
+            }
             NormalizedOfferTransactionEvents.Decision event =
                     firePreEvent(player, request, quote);
             if (event.status()
@@ -581,6 +589,13 @@ public final class ServerShopOfferService {
             EscrowRuntimeService runtime,
             boolean trustedRecovery
     ) {
+        if (!BalanceManager.isInternalProviderSelected()
+                && (requiresMoney(request,
+                quote.moneyTotalMinorUnits())
+                || !prepared.intent().moneyTransfers().isEmpty())) {
+            return Result.failure(Status.UNAVAILABLE,
+                    request.requestId());
+        }
         if (request.action() == OfferAction.SELL_TO_SHOP
                 && !ServerShopOfferUsageSavedData.get(
                 player.getServer()).reserveCapacity(
@@ -703,6 +718,14 @@ public final class ServerShopOfferService {
         return Result.success(status, commit,
                 valueResult.status()
                         == PlayerShopEscrowOrchestrator.Status.REPLAYED);
+    }
+
+    private static boolean requiresMoney(
+            Request request,
+            long quotedMoneyMinorUnits
+    ) {
+        return request.paymentSource().isPresent()
+                || quotedMoneyMinorUnits > 0L;
     }
 
     static boolean preCommit(

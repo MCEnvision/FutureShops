@@ -15,6 +15,8 @@ FutureShops can quote and sell several eligible inventory items through the same
 
 The existing Sell filter remains the one item at a time workflow.
 
+Bulk selling is available only when the selected economy is the internal wallet. With an external provider selected, quote and commit refuse before inventory extraction because sellall creates a monetary payout for each accepted line. This avoids partial custody or an internal shadow balance. Free and pure barter offers remain governed by their normal offer route rather than sellall.
+
 ## Quote behavior
 
 The server scans the main inventory and offhand. Worn armor is excluded. Each line shows the item or required input bundle, quantity, destination, unit payout, and total payout. Lines without an accepted destination remain visible but disabled. Players may tick or untick eligible lines before confirming.
