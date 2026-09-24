@@ -107,6 +107,8 @@ Common commands include:
 
 See [Bulk inventory selling](docs/bulk-selling.md) and the [Auction House and Bazaar guide](docs/markets-guide.md) for player and administrator workflows.
 
+For a bounded, sanitized server troubleshooting capture, see [Economy diagnostics](docs/economy-debugging.md).
+
 ## Configuration
 
 FutureShops creates these files:

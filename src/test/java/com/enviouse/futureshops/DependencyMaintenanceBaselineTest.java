@@ -36,4 +36,13 @@ class DependencyMaintenanceBaselineTest {
         assertTrue(build.contains("org/apache/logging/log4j/"));
         assertTrue(build.contains("org/codehaus/plexus/"));
     }
+
+    @Test
+    void qualityPushTargetsTheVersionedForgeBaseAndWrapperIsExecutable()
+            throws Exception {
+        String workflow = Files.readString(Path.of(
+                ".github/workflows/quality.yml"));
+        assertTrue(workflow.contains("1.20.1/3.0.0-beta.2"));
+        assertTrue(Files.isExecutable(Path.of("gradlew")));
+    }
 }

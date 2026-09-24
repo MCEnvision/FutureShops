@@ -25,6 +25,9 @@ import com.enviouse.futureshops.server.escrow.stock.StockMutationCommand;
 import com.enviouse.futureshops.server.escrow.stock.StockKey;
 import com.enviouse.futureshops.server.escrow.stock.migration.CatalogStockSeedCapture;
 import com.enviouse.futureshops.server.escrow.stock.migration.CatalogStockSeedSnapshot;
+import com.enviouse.futureshops.server.debug.DebugDiagnostics;
+import com.enviouse.futureshops.server.debug.DebugModule;
+import com.enviouse.futureshops.server.debug.DebugSelector;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
 import com.mojang.authlib.GameProfile;
 import io.netty.channel.embedded.EmbeddedChannel;
@@ -142,6 +145,46 @@ public final class ServerShopOfferGameTests {
                     "Changed replay mutated the inventory");
             helper.succeed();
         } finally {
+            disconnect(helper, connected);
+        }
+    }
+
+    @GameTest(
+            templateNamespace = "minecraft",
+            template = "bastion/mobs/empty",
+            batch = BATCH,
+            timeoutTicks = 100
+    )
+    public static void diagnosticsCaptureTheRealOfferServiceRoute(
+            GameTestHelper helper
+    ) {
+        ConnectedPlayer connected = connectPlayer(helper, "diagnostics_offer");
+        UUID requestId = UUID.randomUUID();
+        try {
+            ServerPlayer player = connected.player();
+            ShopSessionManager.open(player.getUUID(), SHOP_ID);
+            ServerShopOfferListing listing = ShopCatalog.getOffer(
+                    SHOP_ID, FREE_LISTING).orElseThrow();
+            ServerShopOfferService.Request request =
+                    new ServerShopOfferService.Request(
+                            requestId, player.getUUID(), SHOP_ID,
+                            FREE_LISTING, FREE_OPTION,
+                            OfferAction.ACQUIRE_FROM_SHOP, 1,
+                            listing.revision(), Optional.empty(), 1);
+            DebugDiagnostics.enable(DebugModule.SHOP,
+                    DebugSelector.request(requestId.toString()));
+            ServerShopOfferService.Result result =
+                    ServerShopOfferService.execute(player, request);
+            helper.assertTrue(result.status() == ServerShopOfferService.Status.SUCCESS,
+                    "diagnostic fixture offer did not succeed");
+            helper.assertTrue(DebugDiagnostics.snapshot().stream().anyMatch(
+                    event -> event.operation().equals("execute")
+                            && event.module() == DebugModule.SHOP
+                            && !event.rootRef().equals(requestId.toString())),
+                    "real offer route did not produce a scoped diagnostic event");
+            helper.succeed();
+        } finally {
+            DebugDiagnostics.reset();
             disconnect(helper, connected);
         }
     }

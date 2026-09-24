@@ -14,8 +14,12 @@ class DependencyAlertRecordTest {
     @Test
     void recordClassifiesEveryOpenAdvisory() throws Exception {
         String record = Files.readString(Path.of(
-                "docs/security/dependency-alerts-3.0-beta.5.md"));
+                "docs/security/dependency-alerts-3.0-beta.3.md"));
         List<String> advisories = List.of(
+                "GHSA-5q95-hrpc-m3w3",
+                "GHSA-c4c3-7fpv-j4q5",
+                "GHSA-fccg-mwvh-qqg4",
+                "GHSA-qv9r-c865-cp47",
                 "GHSA-558v-64gr-wgg4",
                 "GHSA-c653-97m9-rcg9",
                 "GHSA-w573-9ffj-6ff9",
@@ -42,7 +46,7 @@ class DependencyAlertRecordTest {
                 "GHSA-7hfm-57qf-j43q",
                 "GHSA-53x6-4x5p-rrvv");
 
-        assertEquals(25, record.lines()
+        assertEquals(29, record.lines()
                 .filter(line -> line.matches(
                         "\\| [0-9]+ \\| GHSA-[^|]+ \\|.*"))
                 .count());
@@ -53,8 +57,7 @@ class DependencyAlertRecordTest {
         assertTrue(record.lines()
                 .filter(line -> line.matches(
                         "\\| [0-9]+ \\| GHSA-[^|]+ \\|.*"))
-                .allMatch(line -> line.contains("Tolerable risk")
-                        && (line.contains("Runtime")
-                        || line.contains("Build time"))));
+                .allMatch(line -> line.contains("platform owned")
+                        || line.contains("Forge tooling owned")));
     }
 }

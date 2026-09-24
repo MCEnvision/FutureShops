@@ -290,6 +290,8 @@ Do not log credentials, tokens, private configuration, full player inventories, 
 
 The current transitive dependency review is recorded in
 [Dependency alert disposition for 3.0.0 beta 5](docs/security/dependency-alerts-3.0-beta.5.md).
+
+[Dependency alert disposition for 3.0.0 beta 3](docs/security/dependency-alerts-3.0-beta.3.md).
 FutureShops does not bundle the reported Minecraft, Forge, or ForgeGradle libraries. Platform
 owned alerts must be resolved through a compatible platform upgrade, not a development only
 constraint that leaves player launchers unchanged.
