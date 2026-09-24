@@ -40,3 +40,12 @@ No graphical client was required for this phase. The client proof is the existin
 packet and handler path, with the provider id validated before it enters client state. The exact
 Gradle owned report paths were removed after the final test consumer and verified absent:
 `build/reports/tests/test`, `build/test-results/test`, and `build/reports/problems`.
+
+## dedicated server gate
+
+The Forge `runServer` task was run on `node-1` with Java 17 and a disposable `run` directory.
+After moving the owned server to port `25566` to avoid an unrelated listener on `25565`, the
+server reached `Done`, loaded FutureShops 3.0.0-beta.2, initialized the internal economy and
+catalog paths, and logged the FutureShops server start and stop lifecycle. The server process,
+world, generated configs, logs, crash output, and exact `run` directory were stopped and removed
+after the gate. `eula=true` was written and read back before launch.
