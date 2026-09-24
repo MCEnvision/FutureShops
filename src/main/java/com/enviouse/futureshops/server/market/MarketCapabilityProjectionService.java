@@ -66,7 +66,9 @@ public final class MarketCapabilityProjectionService {
                         AUCTION_CLAIM_PREFIX));
         EscrowRuntimeService runtime =
                 EscrowRuntimeManager.getOrNull();
-        long walletBalance = BalanceManager.getDisplayBalance(ownerId);
+        boolean internalProvider = MarketSettlementPolicy.internalProviderReady();
+        long walletBalance = internalProvider
+                ? BalanceManager.getDisplayBalance(ownerId) : 0L;
         Optional<MarketControlState> marketControl =
                 marketControl(server);
         BazaarConfig.Branding bazaar =
@@ -76,9 +78,9 @@ public final class MarketCapabilityProjectionService {
         Projection projection = new Projection(requestId, ownerId,
                 Config.showModuleNavigation(),
                 MarketModule.fromId(Config.defaultModule()),
-                runtime != null && runtime.isReady(),
+                MarketSettlementPolicy.ready(runtime),
                 Config.bazaarEnabled(), Config.auctionHouseEnabled(),
-                walletBalance, true,
+                walletBalance, internalProvider,
                 configuredCurrencyName(),
                 Config.economyCurrencyDecimals,
                 auctionDurationPresetSeconds(),

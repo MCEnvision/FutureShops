@@ -11,7 +11,6 @@ import com.enviouse.futureshops.network.packets.C2SBazaarOrderPacket;
 import com.enviouse.futureshops.network.packets.C2SBazaarRegisterProductPacket;
 import com.enviouse.futureshops.network.packets.S2CMarketActionResponsePacket;
 import com.enviouse.futureshops.server.escrow.item.ExactItemClaimPayload;
-import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.escrow.item.ItemInputMatcher;
 import com.enviouse.futureshops.server.escrow.item.ItemInventoryAllocation;
 import com.enviouse.futureshops.server.escrow.item.ItemInventoryBatchEntry;
@@ -25,6 +24,7 @@ import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryMutation
 import com.enviouse.futureshops.server.escrow.item.runtime.ServerPlayerItemInventoryAccess;
 import com.enviouse.futureshops.server.market.MarketModuleAccessPolicy;
 import com.enviouse.futureshops.server.market.MarketPermissions;
+import com.enviouse.futureshops.server.market.MarketSettlementPolicy;
 import com.enviouse.futureshops.server.market.bazaar.BazaarLifecycleCommand;
 import com.enviouse.futureshops.server.market.bazaar.BazaarMutation;
 import com.enviouse.futureshops.server.market.bazaar.BazaarOperationResult;
@@ -257,7 +257,7 @@ public final class BazaarActionService {
             if (respondIfReplayed(player, runtime, requestId, "ORDER")) {
                 return;
             }
-            if (!BalanceManager.isInternalProviderSelected()) {
+            if (!MarketSettlementPolicy.internalProviderReady()) {
                 respond(player, requestId, "ORDER", "ECONOMY_UNAVAILABLE",
                         null, 0L, 0L, "provider");
                 return;
@@ -619,6 +619,11 @@ public final class BazaarActionService {
         // gate. Rate limiting still applies (plan §9 cancellation rate limits).
         try {
             if (respondIfReplayed(player, runtime, requestId, "CANCEL")) {
+                return;
+            }
+            if (!MarketSettlementPolicy.internalProviderReady()) {
+                respond(player, requestId, "CANCEL", "ECONOMY_UNAVAILABLE",
+                        null, 0L, 0L, "provider");
                 return;
             }
             if (routeInvalid(player, packet.routeNonce())) {

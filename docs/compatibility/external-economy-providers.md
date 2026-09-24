@@ -17,4 +17,12 @@ Mutation admission remains in the FutureShops coordinator. The native account im
 
 The Forge 1.20.1 shop settlement path is intentionally conservative for API v1. Internal wallet mode supports server shops, player shops, buyback, normalized offers, carts, bundles, and sellall. When an external provider is selected, every shop route that would debit or credit money is refused before stock reservation or item custody. Pure free and pure barter routes remain available when they do not create a monetary leg. Existing internal claims remain readable and recoverable, but the active provider is never used as a fallback or shadow wallet.
 
+The same boundary applies to Bazaar and Auction House money routes. New orders, listings,
+bids, buyouts, cancellations, expiry, settlement, and automatic claim delivery require the
+internal durable wallet until a provider proves the atomic multi account market contract. An
+external provider therefore leaves these routes read only and returns a typed economy unavailable
+result before money, item custody, or market state changes. Replaying an already recorded request
+still returns its stored result before the provider gate. Existing liabilities remain readable and
+are not redirected to the selected external provider.
+
 An addon may register a provider through the public API v1 registry. The addon owns its backend and must commit the balance effect and immutable receipt atomically before returning confirmed. API v1 does not expose the atomic multi account contract required by shop settlement, so a ready provider alone does not enable those routes. FutureShops does not discover providers through reflection, service lookup, Bukkit, Vault, Spigot, or a bundled bridge. See [economy debugging](../economy-debugging.md) for the bounded support packet and recovery procedure.

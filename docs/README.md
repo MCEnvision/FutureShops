@@ -57,6 +57,7 @@
 * [Phase 005 persistence and database audit](persistence-database-audit.md)
 * [Phase 005 persistence and recovery evidence](verification/phase-005/persistence-recovery-2026-09-01.md)
 * [Phase 006 backend integration evidence](verification/phase-006/backend-integration-2026-09-01.md)
+* [Phase 007 market route inventory](verification/phase-007/bazaar-auction-route-inventory-2026-09-24.md)
 * [Phase 004 provider conformance](verification/phase-004/)
 * [Phase 004 provider conformance evidence](verification/phase-004/provider-conformance-2026-09-24.md)
 * [Phase 004 bridge conformance evidence](verification/phase-004/bridge-conformance-2026-09-24.md)

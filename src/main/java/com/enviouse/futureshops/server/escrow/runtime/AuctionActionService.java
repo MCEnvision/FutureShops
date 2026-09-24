@@ -12,7 +12,6 @@ import com.enviouse.futureshops.network.packets.C2SAuctionCancelPacket;
 import com.enviouse.futureshops.network.packets.C2SAuctionCreatePacket;
 import com.enviouse.futureshops.network.packets.S2CMarketActionResponsePacket;
 import com.enviouse.futureshops.server.escrow.item.ExactItemClaimPayload;
-import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.escrow.item.ItemInputMatcher;
 import com.enviouse.futureshops.server.escrow.item.ItemInventoryBatchEntry;
 import com.enviouse.futureshops.server.escrow.item.ItemInventoryBatchPlanner;
@@ -26,6 +25,7 @@ import com.enviouse.futureshops.server.escrow.item.runtime.ItemInventoryMutation
 import com.enviouse.futureshops.server.escrow.item.runtime.ServerPlayerItemInventoryAccess;
 import com.enviouse.futureshops.server.market.MarketModuleAccessPolicy;
 import com.enviouse.futureshops.server.market.MarketPermissions;
+import com.enviouse.futureshops.server.market.MarketSettlementPolicy;
 import com.enviouse.futureshops.server.market.auction.AuctionBuyNowCommand;
 import com.enviouse.futureshops.server.market.auction.AuctionHouseBook;
 import com.enviouse.futureshops.server.market.auction.AuctionHouseSnapshot;
@@ -157,7 +157,7 @@ public final class AuctionActionService {
                 respondFromCommit(player, requestId, "CREATE", replayed.orElseThrow());
                 return;
             }
-            if (!BalanceManager.isInternalProviderSelected()) {
+            if (!MarketSettlementPolicy.internalProviderReady()) {
                 respond(player, requestId, "CREATE", "ECONOMY_UNAVAILABLE",
                         null, 0L, "provider");
                 return;
@@ -414,7 +414,7 @@ public final class AuctionActionService {
             if (respondIfReplayed(player, runtime, requestId, "BID")) {
                 return;
             }
-            if (!BalanceManager.isInternalProviderSelected()) {
+            if (!MarketSettlementPolicy.internalProviderReady()) {
                 respond(player, requestId, "BID", "ECONOMY_UNAVAILABLE",
                         null, 0L, "provider");
                 return;
@@ -510,7 +510,7 @@ public final class AuctionActionService {
             if (respondIfReplayed(player, runtime, requestId, "BUY_NOW")) {
                 return;
             }
-            if (!BalanceManager.isInternalProviderSelected()) {
+            if (!MarketSettlementPolicy.internalProviderReady()) {
                 respond(player, requestId, "BUY_NOW", "ECONOMY_UNAVAILABLE",
                         null, 0L, "provider");
                 return;
@@ -612,6 +612,11 @@ public final class AuctionActionService {
         // Cancellation stays available while the module is disabled (plan §1) — no module gate.
         try {
             if (respondIfReplayed(player, runtime, requestId, "CANCEL")) {
+                return;
+            }
+            if (!MarketSettlementPolicy.internalProviderReady()) {
+                respond(player, requestId, "CANCEL", "ECONOMY_UNAVAILABLE",
+                        null, 0L, "provider");
                 return;
             }
             if (routeInvalid(player, packet.routeNonce())) {
