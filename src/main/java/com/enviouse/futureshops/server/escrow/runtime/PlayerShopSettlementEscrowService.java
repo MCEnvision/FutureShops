@@ -1,6 +1,7 @@
 package com.enviouse.futureshops.server.escrow.runtime;
 
 import com.enviouse.futureshops.block.ShopBlockEntity;
+import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.escrow.claim.ClaimKind;
 import com.enviouse.futureshops.server.escrow.claim.ClaimStatus;
 import com.enviouse.futureshops.server.escrow.claim.EscrowClaim;
@@ -62,6 +63,11 @@ public final class PlayerShopSettlementEscrowService {
         if (ZERO_UUID.equals(requestId)) {
             throw new IllegalArgumentException(
                     "Player shop settlement request cannot be zero");
+        }
+        if (!BalanceManager.isInternalProviderSelected()) {
+            throw new PlayerShopBackendException(
+                    PlayerShopBackendException.Kind.REJECTED,
+                    "Selected economy provider is not admitted for settlement money");
         }
         if (player.getServer() == null) {
             throw new PlayerShopBackendException(

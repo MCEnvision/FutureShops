@@ -11,6 +11,7 @@ import com.enviouse.futureshops.network.packets.C2SBazaarOrderPacket;
 import com.enviouse.futureshops.network.packets.C2SBazaarRegisterProductPacket;
 import com.enviouse.futureshops.network.packets.S2CMarketActionResponsePacket;
 import com.enviouse.futureshops.server.escrow.item.ExactItemClaimPayload;
+import com.enviouse.futureshops.server.economy.BalanceManager;
 import com.enviouse.futureshops.server.escrow.item.ItemInputMatcher;
 import com.enviouse.futureshops.server.escrow.item.ItemInventoryAllocation;
 import com.enviouse.futureshops.server.escrow.item.ItemInventoryBatchEntry;
@@ -254,6 +255,11 @@ public final class BazaarActionService {
             // Duplicate packet returns the original result before any gate can change it
             // (plan §15) — replays must not depend on current module state or rate budget.
             if (respondIfReplayed(player, runtime, requestId, "ORDER")) {
+                return;
+            }
+            if (!BalanceManager.isInternalProviderSelected()) {
+                respond(player, requestId, "ORDER", "ECONOMY_UNAVAILABLE",
+                        null, 0L, 0L, "provider");
                 return;
             }
             if (!actionAllowed(player.getServer())) {
