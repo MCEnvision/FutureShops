@@ -46,6 +46,8 @@ The Pixelmon candidate hash matched the prerequisite SHA-512. The current Modrin
 
 The node task graph identified server, GameTest, data, and client tasks. Current node Java is 25, while Java 17 is available on the authorized laptop. No Minecraft client, server, GameTest, renderer, world, audio stream, or watcher was launched. The laptop project candidate was empty; the mirrored checkout path requires refresh before Phase 010 and was not modified.
 
+The required headless Gradle test gate was run after the evidence commit with `JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64 bash ./gradlew --no-daemon --console=plain test`. It completed successfully in 45 seconds. The generated test report and build outputs were removed after the result was consumed. The project Gradle cache remains preserved as pre-existing shared project state.
+
 ## Preservation and cleanup result
 
 The nineteen pre-existing tracked dirty entries remain unstaged and outside phase ownership. Only the phase 000 evidence files are new phase-owned files. Pixelmon and isolated Gradle scratch files were deleted after their final consumers. The exact Gradle problems report created during task graph discovery was deleted. No owned process remains. Existing ignored `.gradle` and `build` directories were preserved because ownership predated this bounded discovery and broad deletion is not authorized.
