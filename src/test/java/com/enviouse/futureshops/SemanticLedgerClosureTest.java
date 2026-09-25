@@ -110,12 +110,35 @@ class SemanticLedgerClosureTest {
 
     private static boolean existsInPinnedForgeTree(String path) throws Exception {
         Process process = new ProcessBuilder(
-                "git", "cat-file", "-e", FORGE_COMMIT + ":" + path)
+                gitExecutable(), "cat-file", "-e", FORGE_COMMIT + ":" + path)
                 .redirectErrorStream(true)
                 .start();
         if (process.waitFor() == 0) {
             return true;
         }
         return Files.exists(Path.of(path));
+    }
+
+    private static String gitExecutable() {
+        String configured = System.getenv("GIT_EXECUTABLE");
+        if (configured != null && !configured.isBlank()) {
+            Path configuredPath = Path.of(configured);
+            if (configuredPath.isAbsolute() && Files.isExecutable(configuredPath)) {
+                return configuredPath.toString();
+            }
+        }
+        String path = System.getenv("PATH");
+        if (path != null) {
+            for (String entry : path.split(java.io.File.pathSeparator)) {
+                if (entry.isBlank()) {
+                    continue;
+                }
+                Path candidate = Path.of(entry, "git");
+                if (candidate.isAbsolute() && Files.isExecutable(candidate)) {
+                    return candidate.toString();
+                }
+            }
+        }
+        throw new IllegalStateException("git executable was not found on PATH");
     }
 }
