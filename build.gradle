@@ -215,15 +215,15 @@ tasks.named('test', Test) {
     useJUnitPlatform()
 }
 
-tasks.register('verifyBetaReleaseIdentity') {
+tasks.register('verifyReleaseIdentity') {
     group = 'verification'
-    description = 'Verifies the FutureShops beta release line and artifact name.'
+    description = 'Verifies the FutureShops 3.0.0 release line and artifact name.'
 
     doLast {
         String currentVersion = mod_version.toString()
-        if (!(currentVersion ==~ /3\.0\.0-beta\.[1-9][0-9]*/)) {
+        if (!(currentVersion == '3.0.0' || currentVersion ==~ /3\.0\.0-beta\.[1-9][0-9]*/)) {
             throw new GradleException(
-                    "FutureShops beta builds must use 3.0.0-beta.<positive integer>, found ${currentVersion}")
+                    "FutureShops 3.0.0 builds must use the stable version or a beta with a positive integer, found ${currentVersion}")
         }
 
         String expectedArtifact = "${mod_id}-${currentVersion}.jar"
@@ -270,7 +270,7 @@ tasks.register('verifyPackagedDependencyBoundary') {
 }
 
 tasks.named('check') {
-    dependsOn tasks.named('verifyBetaReleaseIdentity')
+    dependsOn tasks.named('verifyReleaseIdentity')
     dependsOn tasks.named('verifyPackagedDependencyBoundary')
 }
 
