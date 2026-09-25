@@ -60,6 +60,12 @@ public class DynamicPricingSavedData extends SavedData {
         return Map.copyOf(states);
     }
 
+    public long getCurrentPriceMinor(String shopId, String itemId) {
+        String compositeKey = key(shopId, itemId);
+        ItemPricingState state = compositeKey == null ? null : states.get(compositeKey);
+        return state == null ? 0L : state.currentPriceMinor;
+    }
+
     public void markDirtyExplicit() {
         setDirty();
     }

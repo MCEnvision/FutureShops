@@ -392,21 +392,6 @@ public final class ShopCatalog {
 
         ShopDefinition def = defOpt.get();
         String resolvedShopId = def.shopId();
-        Map<String, PromoDef> promoByItem = def.promos().stream()
-                .filter(promo -> !promo.isExpired())
-                .filter(promo -> promo.targetItemId() != null && !promo.targetItemId().isBlank())
-                .collect(java.util.stream.Collectors.toMap(PromoDef::targetItemId, promo -> promo, (left, right) -> left));
-        ConcurrentHashMap<String, PromoDef> runtimePromos = RUNTIME_PROMOS.get(resolvedShopId);
-        if (runtimePromos != null && !runtimePromos.isEmpty()) {
-            ConcurrentHashMap<String, RuntimePromoConfig> runtimeConfigs = RUNTIME_PROMO_CONFIGS.get(resolvedShopId);
-            long now = nowEpochSeconds();
-            runtimePromos.forEach((itemId, promo) -> {
-                RuntimePromoConfig config = runtimeConfigs == null ? null : runtimeConfigs.get(itemId);
-                if (config == null || config.isActive(now)) {
-                    promoByItem.put(itemId, promo);
-                }
-            });
-        }
 
         // Load admin category assignments if server is available
         final Map<String, String> adminAssignments;
@@ -425,19 +410,20 @@ public final class ShopCatalog {
                 // Hide listings whose availability window has elapsed (expiresAtEpoch > 0 && now >= it).
                 .filter(item -> !item.isExpired(now))
                 .map(item -> {
-                    // A promo may target the listingId (a runtime sale on one specific variant) or the
-                    // registry itemId (a static JSON promo). For legacy entries resolutionKey()==itemId
-                    // so both coincide; the dual lookup keeps static JSON promos applying.
-                    PromoDef promo = promoByItem.get(item.resolutionKey());
-                    if (promo == null) promo = promoByItem.get(item.itemId());
+                    PromoDef promo = findEffectivePromo(resolvedShopId, item.resolutionKey());
                     boolean hasPromo = promo != null;
-                    long promoPrice = hasPromo ? applyPromo(item.buyPriceMinorUnits(), promo) : 0L;
+                    long buyPrice = getAdjustedBuyPrice(resolvedShopId, item, server);
+                    long sellPrice = getEffectiveSellPrice(resolvedShopId, item.resolutionKey(), server);
+                    long promoPrice = hasPromo ? getEffectiveBuyPrice(resolvedShopId, item.resolutionKey(), server) : 0L;
                     // Barter targets are registry ids — keep itemId here.
                     boolean hasBarterRecipes = barterTargets.contains(item.itemId());
                     int stock = item.isUnlimited()
                             ? -1
                             : (stockMap == null ? item.stock() : stockMap.getOrDefault(item.resolutionKey(), item.stock()));
-                    CatalogItem catalogItem = item.toCatalogItem(stock, hasPromo, promoPrice, hasBarterRecipes);
+                    CatalogItem original = item.toCatalogItem(stock, hasPromo, promoPrice, hasBarterRecipes);
+                    CatalogItem catalogItem = new CatalogItem(original.listingId(), original.itemId(), original.displayName(),
+                            buyPrice, sellPrice, original.stock(), original.unlimited(), original.barterEnabled(),
+                            original.categoryId(), hasPromo, promoPrice, hasBarterRecipes, original.nbtJson());
 
                     // Override category from admin assignments if the item has no explicit category.
                     // AdminCategorySavedData is keyed by registry itemId (not rekeyed), so look up by itemId.
@@ -461,11 +447,28 @@ public final class ShopCatalog {
     }
 
     public static long getEffectiveBuyPrice(String shopId, String itemId) {
+        return getEffectiveBuyPrice(shopId, itemId, null);
+    }
+
+    public static long getEffectiveBuyPrice(String shopId, String itemId,
+                                            @javax.annotation.Nullable MinecraftServer server) {
+        return calculateLineCost(shopId, itemId, 1, server);
+    }
+
+    public static long getEffectiveSellPrice(String shopId, String itemId,
+                                             @javax.annotation.Nullable MinecraftServer server) {
         ItemDef itemDef = getItem(shopId, itemId).orElse(null);
         if (itemDef == null) return 0L;
-        long basePrice = itemDef.buyPriceMinorUnits();
-        PromoDef promo = findEffectivePromo(shopId, itemId);
-        return promo == null ? basePrice : applyPromo(basePrice, promo);
+        if (server == null) return itemDef.sellPriceMinorUnits();
+        return com.enviouse.futureshopsp.server.pricing.DynamicPricingEngine.getAdjustedSellPrice(
+                server, resolveShopId(shopId), itemId, itemDef.buyPriceMinorUnits(), itemDef.sellPriceMinorUnits());
+    }
+
+    private static long getAdjustedBuyPrice(String shopId, ItemDef item,
+                                            @javax.annotation.Nullable MinecraftServer server) {
+        return server == null ? item.buyPriceMinorUnits()
+                : com.enviouse.futureshopsp.server.pricing.DynamicPricingEngine.getAdjustedPrice(
+                        server, shopId, item.resolutionKey(), item.buyPriceMinorUnits());
     }
 
     /**
@@ -487,15 +490,20 @@ public final class ShopCatalog {
             }
         }
         ShopDefinition def = CATALOG.get(resolvedShopId);
+        ItemDef item = getItem(resolvedShopId, itemId).orElse(null);
+        PromoDef registryPromo = null;
         if (def != null) {
             for (PromoDef promo : def.promos()) {
                 if (promo.isExpired()) continue;
                 if (promo.targetItemId() != null && promo.targetItemId().equals(itemId)) {
                     return promo;
                 }
+                if (registryPromo == null && item != null && item.itemId().equals(promo.targetItemId())) {
+                    registryPromo = promo;
+                }
             }
         }
-        return null;
+        return registryPromo;
     }
 
     public static long calculateLineCost(String shopId, String itemId, int quantity) {
@@ -517,26 +525,13 @@ public final class ShopCatalog {
 
         String resolvedShopId = resolveShopId(shopId);
 
-        // Apply dynamic pricing adjustment if enabled (spec §30)
-        long basePrice = itemDef.buyPriceMinorUnits();
-        if (server != null) {
-            basePrice = com.enviouse.futureshopsp.server.pricing.DynamicPricingEngine
-                    .getAdjustedPrice(server, resolvedShopId, itemId, basePrice);
-        }
+        long basePrice = getAdjustedBuyPrice(resolvedShopId, itemDef, server);
 
         RuntimePromoConfig config = RUNTIME_PROMO_CONFIGS.getOrDefault(resolvedShopId, new ConcurrentHashMap<>()).get(itemId);
         long now = nowEpochSeconds();
         if (config == null || !config.isActive(now)) {
-            long unit = getEffectiveBuyPrice(shopId, itemId);
-            // If dynamic pricing is active and there's no promo, use the adjusted base
-            if (server != null && com.enviouse.futureshopsp.Config.dynamicPricingEnabled) {
-                unit = basePrice;
-                PromoDef staticPromo = findEffectivePromo(shopId, itemId);
-                if (staticPromo != null) {
-                    long promoPrice = applyPromo(itemDef.buyPriceMinorUnits(), staticPromo);
-                    if (promoPrice > 0) unit = promoPrice;
-                }
-            }
+            PromoDef promo = findEffectivePromo(shopId, itemId);
+            long unit = promo == null ? basePrice : applyPromo(basePrice, promo);
             return unit <= 0L ? 0L : checkedMultiply(unit, quantity);
         }
 

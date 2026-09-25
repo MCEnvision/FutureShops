@@ -1,6 +1,7 @@
 package com.enviouse.futureshopsp.network.packets;
 
 import com.enviouse.futureshopsp.server.shop.ShopResultCode;
+import com.enviouse.futureshopsp.data.CatalogItem;
 import net.minecraft.network.FriendlyByteBuf;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.Test;
@@ -68,6 +69,23 @@ class ShopSnapshotRevisionCodecTest {
             S2CShopDataPacket decoded = S2CShopDataPacket.decode(buffer);
             assertEquals(17L, decoded.snapshotRevision());
             assertEquals("pixelmon", decoded.providerId());
+        } finally {
+            buffer.release();
+        }
+    }
+
+    @Test
+    void adjustedCatalogPricesSurviveTheWireTogether() {
+        CatalogItem item = new CatalogItem("minecraft:iron_ingot", "minecraft:iron_ingot", "Iron Ingot",
+                150L, 75L, -1, true, false, "all", true, 120L, false, "");
+        S2CShopDataPacket packet = new S2CShopDataPacket("default", 10_000L, "Credits", 2,
+                List.of(), List.of(item), List.of(), List.of(), true, List.of(), false, true,
+                "internal", "READY", "", 18L);
+        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        try {
+            S2CShopDataPacket.encode(packet, buffer);
+            S2CShopDataPacket decoded = S2CShopDataPacket.decode(buffer);
+            assertEquals(packet, decoded);
         } finally {
             buffer.release();
         }

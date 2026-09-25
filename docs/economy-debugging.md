@@ -4,6 +4,8 @@ FutureShops diagnostics are server side, default off, and intended for a bounded
 
 ## Commands
 
+For prices that do not change, use the [dynamic pricing support procedure](features/dynamic-pricing.md#support-evidence). The `surface` and `all` captures include recalculation counters and old and new minor unit prices. Do not include MoneyItem checksum salts in reports.
+
 Operators with permission level 2 can run:
 
 ```text

@@ -1,6 +1,6 @@
 # Documentation index
 
-FutureShops documentation is organized by topic. The phase verification packets record repository controlled evidence for the NeoForge 1.21.1 line. The current 2.4.1 candidate remains unpublished while Phase 006 completes its remaining stale snapshot, support, and integration gates. Exact hybrid server and connected client buy and sell evidence is recorded in the Phase 006 packet.
+FutureShops documentation is organized by topic. Version 2.5.0 adds dynamic pricing for admin shops. Historical phase packets describe the earlier external economy implementation and do not provide new provider compatibility evidence for this release.
 
 ## General
 
@@ -19,11 +19,15 @@ FutureShops documentation is organized by topic. The phase verification packets 
 
 ## Operations
 
+* [Dynamic pricing](features/dynamic-pricing.md)
+* [Dynamic pricing regression and local acceptance](test/dynamic-pricing-2.5.0.md)
 * [Backup and restore runbook](operations/backup-restore.md)
 * [Economy debugging](economy-debugging.md)
 
 ## Verification
 
+* [2.5.0 release changes](release/2.5.0.md)
+* [2.5.0 pricing verification](verification/dynamic-pricing-2.5.0.md)
 * [Phase 000 API and selection verification](verification/phase-000/api-selection-2026-09-02.md)
 * [Phase 000 baseline evidence](verification/phase-000/baseline-2026-09-02.md)
 * [Phase 000 task 001 baseline verification](verification/phase-000/p000-task-001-2026-09-04.md)

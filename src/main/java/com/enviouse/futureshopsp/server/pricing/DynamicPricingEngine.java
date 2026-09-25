@@ -1,17 +1,19 @@
 package com.enviouse.futureshopsp.server.pricing;
 
 import com.enviouse.futureshopsp.Config;
-import com.enviouse.futureshopsp.catalog.ItemDef;
 import com.enviouse.futureshopsp.catalog.ShopCatalog;
-import com.enviouse.futureshopsp.catalog.ShopDefinition;
+import com.enviouse.futureshopsp.server.debug.DebugDiagnostics;
+import com.enviouse.futureshopsp.server.shop.ShopDataService;
 import com.mojang.logging.LogUtils;
 import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.OptionalLong;
+import java.util.Set;
 
 /**
  * Implements the spec §30 dynamic pricing formula.
@@ -61,11 +63,29 @@ public final class DynamicPricingEngine {
             return basePriceMinor;
         }
         DynamicPricingSavedData data = DynamicPricingSavedData.get(server);
-        DynamicPricingSavedData.ItemPricingState state = data.getState(shopId, itemId);
-        if (state.currentPriceMinor <= 0) {
+        long currentPrice = data.getCurrentPriceMinor(shopId, itemId);
+        if (currentPrice <= 0) {
             return basePriceMinor;
         }
-        return state.currentPriceMinor;
+        return currentPrice;
+    }
+
+    public static long getAdjustedSellPrice(MinecraftServer server, String shopId, String itemId,
+                                            long baseBuyPrice, long baseSellPrice) {
+        if (!Config.dynamicPricingEnabled || baseSellPrice <= 0L) return baseSellPrice;
+        long referencePrice = baseBuyPrice > 0L ? baseBuyPrice : baseSellPrice;
+        long adjusted = getAdjustedPrice(server, shopId, itemId, referencePrice);
+        return scaleSellPrice(baseSellPrice, referencePrice, adjusted);
+    }
+
+    static long scaleSellPrice(long baseSellPrice, long referencePrice, long adjustedPrice) {
+        if (baseSellPrice <= 0L || referencePrice <= 0L || adjustedPrice <= 0L) return 0L;
+        try {
+            return Math.max(1L, BigDecimal.valueOf(baseSellPrice).multiply(BigDecimal.valueOf(adjustedPrice))
+                    .divide(BigDecimal.valueOf(referencePrice), 0, RoundingMode.HALF_UP).longValueExact());
+        } catch (ArithmeticException exception) {
+            return 0L;
+        }
     }
 
     // ---- Tick scheduler ----
@@ -96,6 +116,7 @@ public final class DynamicPricingEngine {
         double maxDecreasePct = Config.dynamicPricingMaxDecreasePct;
 
         int updated = 0;
+        Set<String> changedShops = new HashSet<>();
         for (Map.Entry<String, DynamicPricingSavedData.ItemPricingState> entry : data.allStates().entrySet()) {
             String compositeKey = entry.getKey();
             DynamicPricingSavedData.ItemPricingState state = entry.getValue();
@@ -110,7 +131,7 @@ public final class DynamicPricingEngine {
 
             // Resolve base price from catalog (getItem resolves by listingId).
             long basePrice = ShopCatalog.getItem(shopId, listingId)
-                    .map(ItemDef::buyPriceMinorUnits)
+                    .map(item -> item.buyPriceMinorUnits() > 0L ? item.buyPriceMinorUnits() : item.sellPriceMinorUnits())
                     .orElse(0L);
             if (basePrice <= 0) continue;
 
@@ -121,7 +142,11 @@ public final class DynamicPricingEngine {
                 LOGGER.warn("Dynamic pricing skipped invalid state for {}.", compositeKey);
                 continue;
             }
+            long previousPrice = state.currentPriceMinor > 0L ? state.currentPriceMinor : basePrice;
             state.currentPriceMinor = newPrice.getAsLong();
+            DebugDiagnostics.pricing(shopId, listingId, basePrice, previousPrice, state.currentPriceMinor,
+                    state.buysSinceLastCalc, state.sellsSinceLastCalc);
+            if (state.currentPriceMinor != previousPrice) changedShops.add(shopId);
             state.resetCounters();
             updated++;
         }
@@ -129,6 +154,9 @@ public final class DynamicPricingEngine {
         if (updated > 0) {
             data.markDirtyExplicit();
             LOGGER.debug("Dynamic pricing recalculated {} item(s).", updated);
+        }
+        for (String shopId : changedShops) {
+            ShopDataService.resendSessionsViewingShop(server, shopId);
         }
     }
 

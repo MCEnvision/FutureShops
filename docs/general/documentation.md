@@ -1,6 +1,6 @@
 # FutureShops technical documentation
 
-This document is the maintainer overview for the FutureShops 2.4.1 NeoForge 1.21.1 candidate line. The active product contract is [the strict external economy plan](plan.md). The public provider details are in [the economy provider API guide](../api/economy-provider.md), and phase evidence is indexed from [the documentation index](../README.md). The candidate remains unpublished while Phase 006 completes its remaining stale snapshot, support, and integration gates. Exact hybrid server and connected client buy and sell evidence is recorded in the Phase 006 packet.
+This document is the maintainer overview for FutureShops 2.5.0 on NeoForge 1.21.1. This release repairs dynamic pricing. The public provider details are in [the economy provider API guide](../api/economy-provider.md), and historical phase evidence is indexed from [the documentation index](../README.md). Previous external economy work is recorded in [the external economy plan](plan.md). Its compatibility evidence does not establish new provider validation for 2.5.0.
 
 ## Runtime and build
 
@@ -39,6 +39,12 @@ The public provider contract requires balance query, precheck, withdraw, deposit
 All server price, barter, bundle, buyback, and physical money value totals use checked integer arithmetic. Catalog or listing overflow returns an invalid result before a provider or item effect. Transaction event listeners may adjust a price, but every override is revalidated and buy cart totals are recomputed with checked addition before debit admission.
 
 Shop payload protocol version 26 carries a monotonic catalog `snapshot_revision`. Clients echo that value on buy, cart, and sell requests. The server rejects stale revisions before mutation with typed `STALE_REQUEST` and `response_reason=stale_snapshot`, then sends a silent authoritative refresh. Older catalog payloads are ignored on the client. Support evidence records the received revision, request revision, response reason, and refreshed revision.
+
+## Dynamic pricing
+
+The server context is passed from detail and cart purchases to `ShopCatalog.calculateLineCost`. Sale payouts use `getEffectiveSellPrice`, which applies the same reference adjustment to the configured sell price. Catalog construction and cart verification share those effective pricing methods. Static and runtime buy promotions apply to adjusted prices. A changed recalculation refreshes affected shop sessions through `ShopDataService`, advancing snapshot revisions without forcing screens open. Client confirmations retain their displayed revision rather than adopting a later refresh at submission time.
+
+The existing calculation and pricing saved data schema remain unchanged. Sell only listings use their sell price as the reference. Read queries do not create activity records, and disabled dynamic pricing bypasses existing saved adjustments. See [dynamic pricing](../features/dynamic-pricing.md) for formulas, rounding, configuration, upgrade effects, the retained decay semantics, and bounded diagnostic fields. The [regression and local acceptance procedure](../test/dynamic-pricing-2.5.0.md) separates server proof from the required client merge gate.
 
 ## Durable records
 

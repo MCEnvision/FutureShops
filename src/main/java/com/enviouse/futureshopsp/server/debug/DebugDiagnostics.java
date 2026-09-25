@@ -218,6 +218,16 @@ public final class DebugDiagnostics {
         }
     }
 
+    public static void pricing(String shopId, String listingId, long base, long previous, long current,
+                               int buys, int sells) {
+        if (!enabled(DebugModule.SURFACE)) return;
+        emit(DebugModule.SURFACE, "none", "dynamic_pricing", "recalculate", null, null, "none",
+                "none", "none", "accepted", "none", "none", "none", "none", "none", "none",
+                "shop=" + sanitize(shopId) + " listing=" + sanitize(listingId) + " base_minor=" + base
+                        + " previous_minor=" + previous + " current_minor=" + current
+                        + " buys=" + buys + " sells=" + sells);
+    }
+
     private static String validation(ProviderResult<?> result) {
         if (result == null) {
             return "not_run";

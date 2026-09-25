@@ -31,4 +31,12 @@ class DynamicPricingEngineTest {
                 Long.MAX_VALUE, Long.MAX_VALUE, Integer.MAX_VALUE, 0,
                 Double.MAX_VALUE, 0.0D, Double.MAX_VALUE, 100.0D, 0.0D).isEmpty());
     }
+
+    @Test
+    void reportedConfigurationClampsBothDemandAndSupply() {
+        assertEquals(300L, DynamicPricingEngine.calculatePrice(
+                100L, 100L, 1_000, 0, 0.6D, 0.4D, 0.98D, 200D, 40D).orElseThrow());
+        assertEquals(60L, DynamicPricingEngine.calculatePrice(
+                100L, 100L, 0, 1_000, 0.6D, 0.4D, 0.98D, 200D, 40D).orElseThrow());
+    }
 }

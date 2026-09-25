@@ -66,7 +66,9 @@ public class CartScreen extends AbstractShopScreen implements ShopScreenMarker {
     }
 
     private void showCheckoutModal() {
-        List<ShopClientState.CartEntry> entries = ShopClientState.getCartEntries();
+        List<ShopClientState.CartEntry> entries = List.copyOf(ShopClientState.getCartEntries());
+        String shopId = ShopClientState.getActiveShopId();
+        long quotedRevision = ShopClientState.getSnapshotRevision();
         List<ConfirmationModal.SummaryLine> lines = new java.util.ArrayList<>();
         for (ShopClientState.CartEntry entry : entries) {
             CatalogItem item = ShopClientState.getCatalogItem(entry.listingId()).orElse(null);
@@ -83,7 +85,7 @@ public class CartScreen extends AbstractShopScreen implements ShopScreenMarker {
                 "Total: " + totalStr + " " + ShopClientState.getCurrencyName(),
                 modal -> {
                     modal.setProcessing();
-                    sendCheckout();
+                    sendCheckout(shopId, entries, quotedRevision);
                 },
                 () -> confirmationModal = null
         );
@@ -225,10 +227,10 @@ public class CartScreen extends AbstractShopScreen implements ShopScreenMarker {
         List<ShopClientState.CartEntry> entries = ShopClientState.getCartEntries();
         if (entries.isEmpty()) return;
 
-        // If we already have warnings (user saw them), force checkout on second click
+        // Show the refreshed quote before accepting the reviewed warnings.
         if (!ShopClientState.getCartWarnings().isEmpty()) {
             ShopClientState.clearCartVerification();
-            sendCheckout();
+            showCheckoutModal();
             return;
         }
 
@@ -249,13 +251,12 @@ public class CartScreen extends AbstractShopScreen implements ShopScreenMarker {
         ShopPackets.sendToServer(new C2SVerifyAdminCartPacket(shopId, lines));
     }
 
-    private void sendCheckout() {
-        List<C2SBuyRequestPacket.LineItem> lines = ShopClientState.getCartEntries().stream()
+    private void sendCheckout(String shopId, List<ShopClientState.CartEntry> entries, long quotedRevision) {
+        List<C2SBuyRequestPacket.LineItem> lines = entries.stream()
                 .map(entry -> new C2SBuyRequestPacket.LineItem(entry.listingId(), entry.quantity()))
                 .toList();
         if (!lines.isEmpty()) {
-            ShopPackets.sendToServer(C2SBuyRequestPacket.cart(ShopClientState.getActiveShopId(), lines,
-                    ShopClientState.getSnapshotRevision()));
+            ShopPackets.sendToServer(C2SBuyRequestPacket.cart(shopId, lines, quotedRevision));
         }
     }
 
