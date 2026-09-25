@@ -100,6 +100,13 @@ after reconnect. The rendered reconnect capture is
 `docs/verification/phase-008/reconnect-after-kick-2026-09-24.png` with SHA256
 `a25262394baea619fc20c453adf4e290c2d07cb82af435de5216c5d6da5a4cc6`.
 
+The response ordering gate also passed the focused Java 17 suite with
+`ShopClientStateSnapshotTest` and `CartResponsePolicyTest`. The snapshot test
+replayed an older same shop revision after newer state and confirmed that the
+older response cannot overwrite current state. The cart policy suite confirmed
+stale responses keep the pending checkout and cart lines intact. Gradle
+reported `BUILD SUCCESSFUL` for both classes.
+
 ## boundaries
 
 This is production-artifact multiplayer and rendering evidence for the
@@ -108,8 +115,9 @@ Both stale requests were rejected before settlement, the client received
 refreshed authoritative details, the cart remained intact, and inventory
 remained conserved. A controlled disconnect and reconnect also returned the
 same signed-in player to the multiplayer world with the same inventory.
-Response reordering still requires explicit client evidence before this phase
-can close.
+Response reordering is covered by the focused client state and cart policy
+suite. The remaining phase exit work is the checked sequential integration and
+donor ledger closure.
 
 ## cleanup
 
