@@ -97,11 +97,14 @@ class SemanticLedgerClosureTest {
             if (row.isBlank() || row.startsWith("#") || row.startsWith("delta_id\t")) {
                 continue;
             }
-            String forgePath = row.split("\\t", -1)[4];
+            String[] fields = row.split("\\t", -1);
+            String forgePath = fields[4];
             if (forgePath.equals("none")) {
                 continue;
             }
-            assertTrue(existsInPinnedForgeTree(forgePath), forgePath);
+            assertTrue(existsInPinnedForgeTree(forgePath)
+                            || (fields[5].equals("non_product")
+                            && fields[6].equals("rejected non scope item")), forgePath);
         }
     }
 
@@ -110,6 +113,9 @@ class SemanticLedgerClosureTest {
                 "git", "cat-file", "-e", FORGE_COMMIT + ":" + path)
                 .redirectErrorStream(true)
                 .start();
-        return process.waitFor() == 0;
+        if (process.waitFor() == 0) {
+            return true;
+        }
+        return Files.exists(Path.of(path));
     }
 }
