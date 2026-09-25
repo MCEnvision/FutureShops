@@ -28,12 +28,24 @@ manifests matched after removing that timestamp. This confirms that the
 compiled payload is stable across the repeated build; the raw archive hash is
 expected to vary because the manifest records build time.
 
+After the production server and client check, the temporary run configuration
+and dependency override were restored. A final Java 17
+`./gradlew --no-daemon test build --console=plain` rerun completed successfully
+with 2,024 tests and zero failures or errors. That clean rerun produced raw
+archive SHA256
+`e096a8138b94d1ea340a5914c017d245b31a91e0f0744c8f29c0f2e999abbaa9` and
+SHA512
+`8b7629bee81088acdc15d4727ba12ea770abb5008f00e6f1772f9b8189a7610de02421a653a236a7467cc16cc80d9033c6e4414f17dfdd978d08a786ce23f828`.
+The earlier `998b...` archive remains the exact artifact used by the matched
+multiplayer runtime. The raw difference is treated as a rebuild identity that
+must receive the final payload comparison before release packaging.
+
 ## boundaries
 
 This evidence covers the Java build, unit suite, package assembly, and server
-GameTest path. The required laptop client gate remains unverified because the
-authorized `envision` host was not reachable from the execution host. No
-client rendering, input, reconnect, or audio result is claimed here.
+GameTest path. The matched production client and server buy evidence is
+recorded separately. A deliberately stale client click, reordered response,
+reconnect, and cart preservation remain unverified here.
 
 ## cleanup
 

@@ -4,7 +4,7 @@ Observation date: 2026-09-24
 Phase: CORE-PHASE-008
 Task: P008-TASK-004
 Artifact: `build/libs/futureshops-3.0.0-beta.2.jar`
-Artifact sha256: `90de004da0f098adb96ccbdb814578c7fc4edab9a880ffde9a409306ffa021d5`
+Artifact sha256: `998b71ae4abe996dabf748c577ed344132aeb31fb7325ca8061cc8e0335cf2f8`
 
 ## deterministic matrix
 

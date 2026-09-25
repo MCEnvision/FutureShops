@@ -24,7 +24,7 @@ before they are decoded or projected into client status.
 Focused and complete Forge tests passed with Java 17. The complete suite reported 2,024
 tests with zero failures, and `./gradlew test build` passed. The candidate artifact is
 `build/libs/futureshops-3.0.0-beta.2.jar` with SHA256
-`90de004da0f098adb96ccbdb814578c7fc4edab9a880ffde9a409306ffa021d5`. Tests cover buy
+`998b71ae4abe996dabf748c577ed344132aeb31fb7325ca8061cc8e0335cf2f8`. Tests cover buy
 and sell codec preservation, stale reason, revision and session identity fields, session
 revision advancement, older snapshot rejection, new session acceptance, wire round trips,
 and the existing payment and market regressions. The full suite reports 2,024 tests with
