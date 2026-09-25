@@ -199,7 +199,7 @@ dependencies {
 
     // GeckoLib for animated block rendering. Pulled from ./libs via flatDir
     // (drop the jar in libs/ and resync gradle).
-    implementation fg.deobf("blank:geckolib-forge-1.20.1:4.8.3")
+    implementation fg.deobf("blank:geckolib-forge-1.20.1:4.8.4")
     implementation("com.eliotlash.mclib:mclib:20")
 
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
