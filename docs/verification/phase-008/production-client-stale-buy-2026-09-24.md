@@ -23,8 +23,9 @@ verified test endpoint, and the server log recorded the matching player join.
 
 The laptop rendered with an NVIDIA GeForce RTX 5090 Laptop GPU. Minecraft's
 master volume was zero before launch. The exact playback node was correlated
-to client process 2369220 and read back as `Volume: 0.00 [MUTED]` before the
-test and after the shop reload.
+to client process 2369220 and read back as `Volume: 0.00 [MUTED]` before each
+capture and after the shop reload. The stream was recreated once during the
+session and node 148 was muted again before continuing.
 
 ## real workflow
 
@@ -52,6 +53,14 @@ The client log recorded the shop opens without a disconnect, protocol error,
 or stale response. The server log recorded the join, both catalog refreshes,
 and no exception or recovery-required result for the completed buy.
 
+After the detail screen was captured at 5.02 coins, a further controlled
+reload changed the listing to 5.03 coins. The owner clicked the still-open
+Buy control before the reload command completed, so this was another normal
+current buy rather than a stale request. The screen then refreshed to 5.04
+coins and showed three owned diamonds. The server log contains the reload and
+the client remains connected. This timing attempt is retained as negative
+evidence and is not counted as stale-click proof.
+
 For the ordering check, the client detail initially displayed 5.01 coins while
 the server catalog was reloaded to 5.02. The active screen then updated itself
 to 5.02 and continued to show the existing diamond without closing the screen,
@@ -65,8 +74,9 @@ buy after authoritative refresh. The completed click was intentionally made
 after the refreshed 5.02 price was visible, so it does not by itself prove a
 deliberately stale click, response reordering, reconnect, or cart preservation.
 Those negative and ordering cases remain covered by the server GameTest and
-focused client-state tests. The remaining client gate requires an explicit
-stale input scenario.
+focused client-state tests. A deliberately stale input scenario, response
+reordering, reconnect, and cart preservation still require explicit client
+evidence before this phase can close.
 
 ## cleanup
 
