@@ -1,6 +1,6 @@
 # final beta 3 packaging and runtime receipt
 
-Date: 2026-09-24
+Date: 2026-09-25
 
 ## source and merge
 
@@ -54,10 +54,13 @@ NVIDIA RTX 5090 Laptop GPU, loaded FutureShops client setup, connected to the pr
 server, and received the modded server handshake. The server log recorded the authenticated
 profile joining the intended world.
 
-The retained client and server pair did not execute the scripted stale buy scenario from core
-requirement 015 during this acceptance window. The matching client join and handshake prove the
-pair is runnable, but the stale buy transaction remains a required follow up before core
-requirement 015 can be marked passed.
+The exact retained client and server pair executed the scripted stale buy scenario from core
+requirement 015 after the post merge evidence rerun. The client opened a 5.00 coin diamond
+confirmation, the server price changed to 5.01 while that confirmation remained open, and the
+server and client catalogs were reloaded. Confirming the stale 5.00 snapshot was refused with
+`The offer changed. Review the refreshed details.`. No additional wallet debit or diamond
+delivery occurred. The targeted visual receipt is `final-stale-buy-rejection.png` and the full
+runtime record is `final-runtime-acceptance-2026-09-25.md`.
 
 The client window was identified through `hyprctl clients -j` by its exact Minecraft class,
 title, workspace, and process id. Its PipeWire stream was correlated to that process and read
