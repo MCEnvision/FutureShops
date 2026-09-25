@@ -4,19 +4,17 @@ FutureShops is a Minecraft Forge economy and marketplace mod for server shops, p
 
 ## Status
 
-The `3.0.0-beta.1` build is the published beta baseline for live validation on [CurseForge](https://www.curseforge.com/minecraft/mc-mods/future-shops/files/8651722) and [Modrinth](https://modrinth.com/mod/future-shops/version/mordTCRQ). It is not a stable release. The `3.0.0-beta.2` Forge candidate is prepared locally and remains unpublished. Use matching FutureShops builds on the client and server, preserve a complete backup before upgrading, and report multiplayer, reconnect, restart, migration, or recovery failures with the relevant logs and recovery handles.
+The `3.0.0-beta.1` build is the published beta baseline for live validation on [CurseForge](https://www.curseforge.com/minecraft/mc-mods/future-shops/files/8651722) and [Modrinth](https://modrinth.com/mod/future-shops/version/mordTCRQ). It is not a stable release. The `3.0.0-beta.3` Forge candidate is prepared locally and remains unpublished. Use matching FutureShops builds on the client and server, preserve a complete backup before upgrading, and report multiplayer, reconnect, restart, migration, or recovery failures with the relevant logs and recovery handles.
 
 The repository default branch is `1.20.1`, which is the canonical Forge 1.20.1 integration line.
 The separate `1.21.1` branch contains the NeoForge line. Forge 1.20.1 fixes and releases target
 `1.20.1`, not the historical `master` branch.
 
-The active repository polish and defect closure contract is the [authoritative plan](plan.md). The earlier [3.0 implementation plan](FutureShops3-0Plan.MD) and [advanced trade offers plan](FutureShops3-1TradeOffersPlan.MD) are retained as historical implementation records.
-
 Supported runtime:
 
 | Component | Version |
 | --- | --- |
-| FutureShops | 3.0.0 beta 2 candidate |
+| FutureShops | 3.0.0 beta 3 candidate |
 | Minecraft | 1.20.1 |
 | Forge | 47.4.20 |
 | Java | 17 |
@@ -52,7 +50,7 @@ The Bazaar and Auction House are disabled on a new installation. Enable either m
 
 For 3.0 beta upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
 
-The prepared local candidate artifact is `futureshops-3.0.0-beta.2.jar`. It includes the historical beta 11 ATM and
+The prepared local candidate artifact is `futureshops-3.0.0-beta.3.jar`. It includes the historical beta 11 ATM and
 catalog recovery work and repairs startup compatibility for legacy exact item inventory intents. This candidate is
 not published and must not be treated as a download or stable release.
 Persisted slot proofs are validated from their original serialized evidence, while live item
