@@ -1,6 +1,6 @@
 # External economy provider compatibility
 
-FutureShops 3.0.0 beta 3 on Forge 1.20.1 accepts only provider paths that preserve the server owned coordinator contract. A provider must expose an immutable account binding, minor unit precision, a durable effect and receipt in one commit, and lookup by the original request identity after a fresh process.
+FutureShops 3.0.0 on Forge 1.20.1 accepts only provider paths that preserve the server owned coordinator contract. A provider must expose an immutable account binding, minor unit precision, a durable effect and receipt in one commit, and lookup by the original request identity after a fresh process.
 
 | provider path | state | exact boundary |
 | --- | --- | --- |

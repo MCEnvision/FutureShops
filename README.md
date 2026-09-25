@@ -1,20 +1,19 @@
 # FutureShops
 
-FutureShops is a Minecraft Forge economy and marketplace mod for server shops, player owned shop blocks, physical currency, barter trades, an Auction House, and a Bazaar order book. The current 3.0.0 beta includes one server authoritative trade offer model for free, money, barter, compound, alternative, Sell to Shop, and bundle exchanges. Value movement remains protected by the durable 3.0 escrow foundation.
+FutureShops is a Minecraft Forge economy and marketplace mod for server shops, player owned shop blocks, physical currency, barter trades, an Auction House, and a Bazaar order book. Version 3.0.0 includes one server authoritative trade offer model for free, money, barter, compound, alternative, Sell to Shop, and bundle exchanges. Value movement remains protected by the durable 3.0 escrow foundation.
 
 ## Status
 
-The `3.0.0-beta.1` build is the published beta baseline for live validation on [CurseForge](https://www.curseforge.com/minecraft/mc-mods/future-shops/files/8651722) and [Modrinth](https://modrinth.com/mod/future-shops/version/mordTCRQ). It is not a stable release. The `3.0.0-beta.3` Forge candidate is prepared locally and remains unpublished. Use matching FutureShops builds on the client and server, preserve a complete backup before upgrading, and report multiplayer, reconnect, restart, migration, or recovery failures with the relevant logs and recovery handles.
+The Forge 1.20.1 source branch is prepared as stable version `3.0.0`. The published builds on [CurseForge](https://www.curseforge.com/minecraft/mc-mods/future-shops/files/8651722) and [Modrinth](https://modrinth.com/mod/future-shops/version/mordTCRQ) are still `3.0.0-beta.1`; the stable artifact has not been uploaded to either platform. Use matching FutureShops builds on the client and server, preserve a complete backup before upgrading, and report multiplayer, reconnect, restart, migration, or recovery failures with the relevant logs and recovery handles.
 
-The repository default branch is `1.20.1`, which is the canonical Forge 1.20.1 integration line.
-The separate `1.21.1` branch contains the NeoForge line. Forge 1.20.1 fixes and releases target
-`1.20.1`, not the historical `master` branch.
+The repository default branch is `forge-1.20.1/3.0.0`, the Forge 1.20.1 release line.
+The separate `neoforge-1.21.1/2.5.0` branch contains the NeoForge release line. Older version branches remain available for their respective releases.
 
 Supported runtime:
 
 | Component | Version |
 | --- | --- |
-| FutureShops | 3.0.0 beta 3 candidate |
+| FutureShops | 3.0.0 |
 | Minecraft | 1.20.1 |
 | Forge | 47.4.20 |
 | Java | 17 |
@@ -48,21 +47,17 @@ FutureShops currently assumes one authoritative server and world. It does not pr
 
 The Bazaar and Auction House are disabled on a new installation. Enable either module in `config/futureshops/futureshops-common.toml` after reviewing its rules. Existing configuration files keep their configured values. Disabled modules are omitted from the marketplace header. An enabled module remains visible while escrow or its lifecycle control is recovering and shows a recovery state instead of claiming that the module is disabled. An accepted server configuration change appears on an open marketplace screen within five seconds without requiring a reconnect.
 
-For 3.0 beta upgrades, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
+For upgrades to 3.0.0, follow [Backup and restore](docs/backup-restore.md). Do not delete escrow files to resolve a recovery failure.
 
-The prepared local candidate artifact is `futureshops-3.0.0-beta.3.jar`. It includes the historical beta 11 ATM and
-catalog recovery work and repairs startup compatibility for legacy exact item inventory intents. This candidate is
-not published and must not be treated as a download or stable release.
+The 3.0.0 source includes the historical beta 11 ATM and catalog recovery work and repairs startup compatibility for legacy exact item inventory intents. No stable 3.0.0 artifact is published on the mod platforms yet.
 Persisted slot proofs are validated from their original serialized evidence, while live item
 comparisons use complete semantic NBT including Forge capabilities. New plans derive their hashes
 and evidence from one owned snapshot per slot. The repair does not clear maintenance state or
 discard escrow evidence. A world that recorded maintenance during beta 10 can use the verified
-maintenance resume command after the candidate loads and aligns the journal. This remains a beta
-candidate until the complete release workflow is separately authorized. The published 3.0.0 beta
-baseline remains available on the project pages for live validation and is not a stable release.
+maintenance resume command after version 3.0.0 loads and aligns the journal. The published 3.0.0 beta baseline remains available on the project pages for live validation.
 
 Worlds previously opened with the incorrectly labeled `3.1.0-beta.1` build can report a Forge
-version difference when first opened with `3.0.0-beta.3`. This corrects the public artifact label
+version difference when first opened with `3.0.0`. This corrects the public artifact label
 and does not roll back the FutureShops data schema. Keep the normal complete backup before opening
 the world.
 
@@ -154,7 +149,7 @@ Useful run tasks are `runClient`, `runServer`, `runGameTestServer`, and `runData
 
 ## Compatibility and support
 
-Read [Compatibility matrix](docs/compatibility-matrix.md) before using custom currency, permission plugins, external storage, advanced trade offers, or restored world data. The player and administrator changes for this beta are summarized in [3.0.0 beta release notes](docs/release-notes-3.0-beta.md).
+Read [Compatibility matrix](docs/compatibility-matrix.md) before using custom currency, permission plugins, external storage, advanced trade offers, or restored world data. The changes introduced during the beta series are summarized in [3.0.0 beta release notes](docs/release-notes-3.0-beta.md).
 
 When reporting a problem, include the FutureShops jar version, Minecraft and Forge versions, client and server logs, relevant sanitized TOML files, the command or screen involved, and whether the world was new or upgraded. For market availability failures, include the output of `/marketadmin status`. For a deposit recovery, copy the complete ATM recovery handle and include `/marketadmin inspect <transactionId>`.
 
