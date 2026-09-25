@@ -10,19 +10,20 @@ Java: 17.0.19
 
 The server only `runGameTestServer` task ran in the disposable
 `.phase008-gametest-runtime` directory with `eula=true`. The test batch
-`futureshops.offer_service:1` completed seven required tests with all seven
+`futureshops.offer_service:1` completed nine required tests with all nine
 passing.
 
-The `staleBuyPacketIsRefusedBeforeValueEffects` test created a real connected
-`ServerPlayer` and `EmbeddedChannel`, constructed the Forge
-`NetworkEvent.Context`, and invoked `C2SBuyRequestPacket.handle`. The packet used
-the prior session revision after the server advanced the authoritative revision.
-The handler marked the packet handled, returned before provider or custody work,
-and left both the finite stock quantity and player inventory unchanged.
+The stale buy, cart, and sell tests created real connected `ServerPlayer`
+instances and `EmbeddedChannel` connections, constructed Forge
+`NetworkEvent.Context` values, and invoked the actual packet handlers. Each
+request used the prior session revision after the server advanced the
+authoritative revision. The handlers marked the packets handled, returned
+before provider or custody work, and preserved the finite stock and player
+inventory values.
 
-This proves the server packet handler and zero value delta for a stale buy. It
-does not claim stale sell or cart handler coverage, or laptop client rendering,
-input, reconnect, or audio evidence.
+This proves server packet handler refusal and zero value deltas for stale buy,
+cart, and sell requests. It does not claim laptop client rendering, input,
+reconnect, or audio evidence.
 
 ## cleanup
 

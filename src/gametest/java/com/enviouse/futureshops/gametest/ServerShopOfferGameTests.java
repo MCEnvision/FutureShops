@@ -31,6 +31,7 @@ import com.enviouse.futureshops.server.debug.DebugSelector;
 import com.enviouse.futureshops.server.session.ShopSession;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
 import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
+import com.enviouse.futureshops.network.packets.C2SSellRequestPacket;
 import com.enviouse.futureshops.money.PaymentSource;
 import com.mojang.authlib.GameProfile;
 import io.netty.channel.embedded.EmbeddedChannel;
@@ -458,12 +459,7 @@ public final class ServerShopOfferGameTests {
             C2SBuyRequestPacket packet = C2SBuyRequestPacket.single(
                     SHOP_ID, STALE_LISTING, 1, PaymentSource.WALLET,
                     session.snapshotRevision(), session.sessionId());
-            Constructor<NetworkEvent.Context> constructor =
-                    NetworkEvent.Context.class.getDeclaredConstructor(
-                            Connection.class, NetworkDirection.class, int.class);
-            constructor.setAccessible(true);
-            NetworkEvent.Context context = constructor.newInstance(
-                    connected.connection(), NetworkDirection.PLAY_TO_SERVER, 0);
+            NetworkEvent.Context context = packetContext(connected);
             C2SBuyRequestPacket.handle(packet, () -> context);
 
             long stockAfter = EscrowRuntimeManager.requireReady()
@@ -476,6 +472,86 @@ public final class ServerShopOfferGameTests {
             helper.assertTrue(player.getInventory().countItem(Items.APPLE)
                             == inventoryBefore,
                     "stale buy packet changed inventory before refusal");
+            helper.succeed();
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("could not construct packet context",
+                    exception);
+        } finally {
+            disconnect(helper, connected);
+        }
+    }
+
+    @GameTest(
+            templateNamespace = "minecraft",
+            template = "bastion/mobs/empty",
+            batch = BATCH,
+            timeoutTicks = 100
+    )
+    public static void staleCartPacketIsRefusedBeforeValueEffects(
+            GameTestHelper helper
+    ) {
+        ConnectedPlayer connected = connectPlayer(helper, "stale_cart");
+        try {
+            ServerPlayer player = connected.player();
+            ShopSession session = ShopSessionManager.open(
+                    player.getUUID(), SHOP_ID);
+            ShopSessionManager.advanceSnapshotRevision(
+                    player.getUUID(), SHOP_ID);
+            long stockBefore = EscrowRuntimeManager.requireReady()
+                    .stockListing(new StockKey(SHOP_ID, STALE_LISTING))
+                    .orElseThrow().availableQuantity();
+            C2SBuyRequestPacket packet = C2SBuyRequestPacket.cart(
+                    SHOP_ID,
+                    List.of(new C2SBuyRequestPacket.LineItem(
+                            STALE_LISTING, 1)),
+                    PaymentSource.WALLET, UUID.randomUUID(),
+                    session.snapshotRevision(), session.sessionId());
+            NetworkEvent.Context context = packetContext(connected);
+            C2SBuyRequestPacket.handle(packet, () -> context);
+            long stockAfter = EscrowRuntimeManager.requireReady()
+                    .stockListing(new StockKey(SHOP_ID, STALE_LISTING))
+                    .orElseThrow().availableQuantity();
+            helper.assertTrue(context.getPacketHandled(),
+                    "stale cart packet was not marked handled");
+            helper.assertTrue(stockAfter == stockBefore,
+                    "stale cart packet changed stock before refusal");
+            helper.succeed();
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("could not construct packet context",
+                    exception);
+        } finally {
+            disconnect(helper, connected);
+        }
+    }
+
+    @GameTest(
+            templateNamespace = "minecraft",
+            template = "bastion/mobs/empty",
+            batch = BATCH,
+            timeoutTicks = 100
+    )
+    public static void staleSellPacketIsRefusedBeforeValueEffects(
+            GameTestHelper helper
+    ) {
+        ConnectedPlayer connected = connectPlayer(helper, "stale_sell");
+        try {
+            ServerPlayer player = connected.player();
+            player.getInventory().items.set(0,
+                    new ItemStack(Items.APPLE, 1));
+            ShopSession session = ShopSessionManager.open(
+                    player.getUUID(), SHOP_ID);
+            ShopSessionManager.advanceSnapshotRevision(
+                    player.getUUID(), SHOP_ID);
+            C2SSellRequestPacket packet = new C2SSellRequestPacket(
+                    SHOP_ID, STALE_LISTING, 1, UUID.randomUUID(),
+                    session.snapshotRevision(), session.sessionId());
+            NetworkEvent.Context context = packetContext(connected);
+            C2SSellRequestPacket.handle(packet, () -> context);
+            helper.assertTrue(context.getPacketHandled(),
+                    "stale sell packet was not marked handled");
+            helper.assertTrue(player.getInventory().countItem(Items.APPLE)
+                            == 1,
+                    "stale sell packet removed inventory before refusal");
             helper.succeed();
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError("could not construct packet context",
@@ -608,6 +684,17 @@ public final class ServerShopOfferGameTests {
                 UUID.randomUUID(), target.definitions(),
                 target.fingerprint(), nextMutationTime(runtime)));
         ShopCatalog.publishDurableDefinitions(server, definitions);
+    }
+
+    private static NetworkEvent.Context packetContext(
+            ConnectedPlayer connected
+    ) throws ReflectiveOperationException {
+        Constructor<NetworkEvent.Context> constructor =
+                NetworkEvent.Context.class.getDeclaredConstructor(
+                        Connection.class, NetworkDirection.class, int.class);
+        constructor.setAccessible(true);
+        return constructor.newInstance(
+                connected.connection(), NetworkDirection.PLAY_TO_SERVER, 0);
     }
 
     private static Instant nextMutationTime(EscrowRuntimeService runtime) {
