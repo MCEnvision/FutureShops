@@ -4,7 +4,7 @@
 
 FutureShops is a Forge 1.20.1 mod that owns a server authoritative economy, shop catalogs, player shop blocks, physical currency, an escrow protected Auction House, and a Bazaar order book.
 
-The `3.0.0-beta.1` implementation is the published CurseForge and Modrinth beta baseline for live validation. The local Forge `3.0.0-beta.2` candidate is prepared and unpublished. Its advanced trade offer work extends the durable 3.0 market foundation with one normalized offer contract for Server Shops and Player Shops. The [authoritative polish plan](plan.md) is the source of truth for unfinished defect closure and candidate readiness work. The earlier [3.0 implementation plan](FutureShops3-0Plan.MD) and [advanced trade offers plan](FutureShops3-1TradeOffersPlan.MD) remain unchanged historical records. Current code and tests establish implemented behavior. Stable release approval still requires the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, recovery, security, command, persistence, and integration acceptance run. Focused operator documentation is available in:
+The `3.0.0-beta.1` implementation is the published CurseForge and Modrinth beta baseline for live validation. The local Forge `3.0.0-beta.3` candidate is prepared and unpublished. Its advanced trade offer work extends the durable 3.0 market foundation with one normalized offer contract for Server Shops and Player Shops. Current code and tests establish implemented behavior. Stable release approval still requires the complete automated, client, dedicated server, multiplayer, reconnect, restart, migration, recovery, security, command, persistence, and integration acceptance run. Focused operator documentation is available in:
 
 * [Auction House and Bazaar guide](docs/markets-guide.md)
 * [Configuration examples](docs/config-3.0-examples.md)
@@ -16,12 +16,13 @@ The `3.0.0-beta.1` implementation is the published CurseForge and Modrinth beta 
 * [Advanced trade offer configuration](docs/config-3.1-offers.md)
 * [3.0.0 beta release notes](docs/release-notes-3.0-beta.md)
 * [Economy coordinator recovery](docs/economy-recovery.md)
+* [External economy provider compatibility](docs/compatibility/external-economy-providers.md)
 
 ## Runtime and toolchain
 
 | Component | Pinned value |
 | --- | --- |
-| FutureShops | 3.0.0 beta 2 candidate |
+| FutureShops | 3.0.0 beta 3 candidate |
 | Java | 17 |
 | Gradle Wrapper | 8.14.4 |
 | Minecraft | 1.20.1 |
@@ -316,7 +317,7 @@ Also run:
 
 For readiness changes, verify both the recovery window and the ready transition. A screen opened during recovery must refresh without reconnecting. Navigation requests must remain server authorized. Currency and profile reads may use the safe display balance, while mutations remain blocked until ready.
 
-After packaging, inspect the manifest, expanded `META-INF/mods.toml`, mixin configuration and refmap, assets, data, dependency metadata, and the complete Git diff. Version `3.0.0-beta.2` must expand into the mod metadata, and `logoFile = "futureshops.png"` must resolve to the 400 by 400 project logo at the jar root. Run `verifyPackagedDependencyBoundary` and confirm the JAR contains no launcher supplied Netty, Apache Commons, Guava, Log4j, or Plexus classes and no Forge Jar in Jar metadata. Calculate candidate checksums only after the final Forge reobfuscation and packaging pass. The published `3.0.0-beta.1` build remains the public baseline, while `3.0.0-beta.2` is a prepared unpublished candidate. Build output, run directories, logs, crash reports, local configs, caches, IDE files, and `AGENTS.md` must not be committed.
+After packaging, inspect the manifest, expanded `META-INF/mods.toml`, mixin configuration and refmap, assets, data, dependency metadata, and the complete Git diff. Version `3.0.0-beta.3` must expand into the mod metadata, and `logoFile = "futureshops.png"` must resolve to the 400 by 400 project logo at the jar root. Run `verifyPackagedDependencyBoundary` and confirm the JAR contains no launcher supplied Netty, Apache Commons, Guava, Log4j, or Plexus classes and no Forge Jar in Jar metadata. Calculate candidate checksums only after the final Forge reobfuscation and packaging pass. The published `3.0.0-beta.1` build remains the public baseline, while `3.0.0-beta.3` is a prepared unpublished candidate. Build output, run directories, logs, crash reports, local configs, caches, IDE files, and `AGENTS.md` must not be committed.
 
 ## Troubleshooting
 
