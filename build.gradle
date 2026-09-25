@@ -20,6 +20,9 @@ apply plugin: 'org.spongepowered.mixin'
 group = mod_group_id
 version = mod_version
 
+// keep headless verification runs in a disposable directory when requested
+def verificationGameDirectory = findProperty('verificationGameDirectory') ?: 'run'
+
 base {
     archivesName = mod_id
 }
@@ -86,7 +89,7 @@ minecraft {
     runs {
         // applies to all the run configs below
         configureEach {
-            workingDirectory project.file('run')
+            workingDirectory project.file(verificationGameDirectory)
 
             // Recommended logging data for a userdev environment
             // The markers can be added/remove as needed separated by commas.
