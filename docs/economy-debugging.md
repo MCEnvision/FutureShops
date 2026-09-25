@@ -18,6 +18,19 @@ The module must be `economy`, `escrow`, `shop`, `market`, `cash`, `network`, `pe
 
 Each capture expires after 60 seconds. It accepts at most 100 events per second, 2,000 events, 4 KiB per event, and 5 MiB total. Events are queued for the server logger with bounded backpressure. The status line reports the capture id, selector, remaining time, counters, limits, and the `server.log` output location. Turning diagnostics off more than once is safe.
 
+## Shop snapshot stale requests
+
+Forge shop sessions carry a monotonic snapshot revision and a unique session identity. Buy
+and sell requests retain their request identity, payment source, observed revision, and
+session identity. If the catalog changed or the session was replaced, the server returns
+`stale_request` with `stale_snapshot` before
+provider, inventory, custody, or balance effects, then sends a silent authoritative refresh.
+The client ignores an older revision from the same shop and session and accepts the first
+snapshot for a newly opened session. Reopen, forced
+close, shop switching, and reconnect create a new session boundary. Capture `shop` or
+`network` diagnostics when investigating a stale action, and compare the request revision
+with the authoritative refresh rather than retrying blindly.
+
 ## Provider selection capture
 
 For provider API support, capture one normal internal query, one rejected registration, one staged

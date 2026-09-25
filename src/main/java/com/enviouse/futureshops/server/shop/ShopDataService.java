@@ -68,6 +68,12 @@ public final class ShopDataService {
      */
     public static void sendShopData(ServerPlayer player, String requestedShopId, boolean includeNearbyShops, boolean forceOpen) {
         String shopId = resolveShopId(requestedShopId);
+        long snapshotRevision = ShopSessionManager.advanceSnapshotRevision(
+                player.getUUID(), shopId);
+        UUID sessionId = ShopSessionManager.get(player.getUUID())
+                .filter(session -> session.shopId().equals(shopId))
+                .map(ShopSession::sessionId)
+                .orElse(new UUID(0L, 0L));
         EconomyProvider provider = BalanceManager.getProvider();
         long balance = BalanceManager.getDisplayBalance(player.getUUID());
 
@@ -98,7 +104,7 @@ public final class ShopDataService {
                         ? ShopCatalog.get(shopId)
                         .map(ShopDefinition::offers).orElse(List.of())
                         : List.of(),
-                provider.getProviderId()));
+                provider.getProviderId(), snapshotRevision, sessionId));
     }
 
     public static void resendActiveSessions(MinecraftServer server) {

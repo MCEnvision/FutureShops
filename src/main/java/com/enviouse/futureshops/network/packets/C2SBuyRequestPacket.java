@@ -15,19 +15,38 @@ import java.util.function.Supplier;
  * Supports both single-item buys (detail screen) and cart checkout.
  */
 public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<LineItem> lineItems,
-                                  String paymentSource, UUID requestId) {
+                                  String paymentSource, UUID requestId,
+                                  long snapshotRevision, UUID sessionId) {
     private static final int MAX_IDENTIFIER_LENGTH = 128;
     private static final int MAX_PAYMENT_SOURCE_LENGTH = 32;
     private static final UUID UNCORRELATED_REQUEST_ID = new UUID(0L, 0L);
+    private static final UUID UNCORRELATED_SESSION_ID = new UUID(0L, 0L);
 
     public C2SBuyRequestPacket {
         lineItems = List.copyOf(lineItems);
         requestId = requestId == null ? UNCORRELATED_REQUEST_ID : requestId;
+        sessionId = sessionId == null ? UNCORRELATED_SESSION_ID : sessionId;
+        if (snapshotRevision < 0L) {
+            throw new IllegalArgumentException("snapshotRevision is invalid");
+        }
     }
 
     public C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<LineItem> lineItems,
                                String paymentSource) {
-        this(shopId, cartCheckout, lineItems, paymentSource, UNCORRELATED_REQUEST_ID);
+        this(shopId, cartCheckout, lineItems, paymentSource,
+                UNCORRELATED_REQUEST_ID, 0L, UNCORRELATED_SESSION_ID);
+    }
+
+    public C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<LineItem> lineItems,
+                               String paymentSource, UUID requestId) {
+        this(shopId, cartCheckout, lineItems, paymentSource, requestId, 0L,
+                UNCORRELATED_SESSION_ID);
+    }
+
+    public C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<LineItem> lineItems,
+                               String paymentSource, UUID requestId, long snapshotRevision) {
+        this(shopId, cartCheckout, lineItems, paymentSource, requestId,
+                snapshotRevision, UNCORRELATED_SESSION_ID);
     }
 
     /**
@@ -48,19 +67,51 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
 
     public static C2SBuyRequestPacket single(String shopId, String listingId, int quantity,
                                              PaymentSource paymentSource) {
-        return new C2SBuyRequestPacket(shopId, false, List.of(new LineItem(listingId, quantity)),
-                paymentSource.wire(), UUID.randomUUID());
+        return single(shopId, listingId, quantity, paymentSource, 0L);
+    }
+
+    public static C2SBuyRequestPacket single(String shopId, String listingId, int quantity,
+                                             PaymentSource paymentSource,
+                                             long snapshotRevision) {
+        return new C2SBuyRequestPacket(shopId, false,
+                List.of(new LineItem(listingId, quantity)), paymentSource.wire(),
+                UUID.randomUUID(), snapshotRevision, UNCORRELATED_SESSION_ID);
+    }
+
+    public static C2SBuyRequestPacket single(String shopId, String listingId, int quantity,
+                                             PaymentSource paymentSource,
+                                             long snapshotRevision, UUID sessionId) {
+        return new C2SBuyRequestPacket(shopId, false,
+                List.of(new LineItem(listingId, quantity)), paymentSource.wire(),
+                UUID.randomUUID(), snapshotRevision, sessionId);
     }
 
     public static C2SBuyRequestPacket cart(String shopId, List<LineItem> lineItems,
                                            PaymentSource paymentSource) {
-        return cart(shopId, lineItems, paymentSource, UUID.randomUUID());
+        return cart(shopId, lineItems, paymentSource, UUID.randomUUID(), 0L);
     }
 
     public static C2SBuyRequestPacket cart(String shopId, List<LineItem> lineItems,
                                            PaymentSource paymentSource, UUID requestId) {
         return new C2SBuyRequestPacket(
-                shopId, true, List.copyOf(lineItems), paymentSource.wire(), requestId);
+                shopId, true, List.copyOf(lineItems), paymentSource.wire(), requestId, 0L,
+                UNCORRELATED_SESSION_ID);
+    }
+
+    public static C2SBuyRequestPacket cart(String shopId, List<LineItem> lineItems,
+                                           PaymentSource paymentSource, UUID requestId,
+                                           long snapshotRevision) {
+        return new C2SBuyRequestPacket(
+                shopId, true, List.copyOf(lineItems), paymentSource.wire(), requestId,
+                snapshotRevision, UNCORRELATED_SESSION_ID);
+    }
+
+    public static C2SBuyRequestPacket cart(String shopId, List<LineItem> lineItems,
+                                           PaymentSource paymentSource, UUID requestId,
+                                           long snapshotRevision, UUID sessionId) {
+        return new C2SBuyRequestPacket(
+                shopId, true, List.copyOf(lineItems), paymentSource.wire(), requestId,
+                snapshotRevision, sessionId);
     }
 
     public static void encode(C2SBuyRequestPacket packet, FriendlyByteBuf buffer) {
@@ -69,6 +120,8 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
         buffer.writeCollection(packet.lineItems, LineItem::encode);
         buffer.writeUtf(packet.paymentSource);
         buffer.writeUUID(packet.requestId);
+        buffer.writeLong(packet.snapshotRevision);
+        buffer.writeUUID(packet.sessionId);
     }
 
     /** Hard cap on cart line count. A real cart never exceeds a few dozen;
@@ -89,7 +142,8 @@ public record C2SBuyRequestPacket(String shopId, boolean cartCheckout, List<Line
         }
         return new C2SBuyRequestPacket(
                 shopId, cartCheckout, lines,
-                buffer.readUtf(MAX_PAYMENT_SOURCE_LENGTH), buffer.readUUID());
+                buffer.readUtf(MAX_PAYMENT_SOURCE_LENGTH), buffer.readUUID(),
+                buffer.readLong(), buffer.readUUID());
     }
 
     public static void handle(C2SBuyRequestPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {

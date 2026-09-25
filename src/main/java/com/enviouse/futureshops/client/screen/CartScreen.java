@@ -572,7 +572,8 @@ public class CartScreen extends Screen implements ShopScreenMarker {
                 .toList();
         ShopPackets.CHANNEL.sendToServer(new C2SBuyRequestPacket(
                 submission.shopId(), true, lines,
-                submission.paymentSource(), submission.requestId()));
+                submission.paymentSource(), submission.requestId(),
+                ShopClientState.getSnapshotRevision(), ShopClientState.getSessionId()));
     }
 
     private boolean requiresMoney(ShopClientState.CartEntry entry) {

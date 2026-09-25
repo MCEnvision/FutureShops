@@ -484,11 +484,11 @@ public class WireRoundTripTest {
         FriendlyByteBuf b = buf();
         S2CShopDataPacket.encode(in, b);
         S2CShopDataPacket out = S2CShopDataPacket.decode(b);
-        assertEquals(in, out, "S2CShopDataPacket must round-trip all 12 fields incl. trailing canEdit");
+        assertEquals(in, out, "S2CShopDataPacket must round-trip all fields incl. revision and session identity");
         assertTrue(out.canEdit());
         assertFalse(out.forceOpen());
         assertEquals("internal", out.providerId());
-        assertEquals(0, b.readableBytes(), "providerId must be the LAST field on the wire");
+        assertEquals(0, b.readableBytes(), "session identity must be the last field on the wire");
     }
 
     @Test

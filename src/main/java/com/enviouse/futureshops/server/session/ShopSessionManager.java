@@ -35,7 +35,8 @@ public final class ShopSessionManager {
 
     /** Opens a session anchored to a specific shop block (for distance auto-close). */
     public static ShopSession open(UUID playerUUID, String shopId, BlockPos shopBlockPos) {
-        ShopSession session = new ShopSession(playerUUID, shopId, shopBlockPos, System.currentTimeMillis());
+        ShopSession session = new ShopSession(playerUUID, UUID.randomUUID(), shopId,
+                shopBlockPos, System.currentTimeMillis(), 0L);
         SESSIONS.put(playerUUID, session);
         return session;
     }
@@ -61,6 +62,22 @@ public final class ShopSessionManager {
 
     public static Optional<ShopSession> get(UUID playerUUID) {
         return Optional.ofNullable(SESSIONS.get(playerUUID));
+    }
+
+    /** Advances the authoritative catalog revision for an active shop session. */
+    public static long advanceSnapshotRevision(UUID playerUUID, String shopId) {
+        final long[] result = {0L};
+        SESSIONS.computeIfPresent(playerUUID, (uuid, current) -> {
+            if (!current.shopId().equals(shopId)) {
+                result[0] = current.snapshotRevision();
+                return current;
+            }
+            long next = current.snapshotRevision() == Long.MAX_VALUE
+                    ? Long.MAX_VALUE : current.snapshotRevision() + 1L;
+            result[0] = next;
+            return current.withSnapshotRevision(next);
+        });
+        return result[0];
     }
 
     public static Map<UUID, ShopSession> snapshotSessions() {

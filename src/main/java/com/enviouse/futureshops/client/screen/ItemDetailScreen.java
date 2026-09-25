@@ -113,7 +113,9 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                 (modal, paymentSource) -> {
                     modal.setProcessing();
                     ShopPackets.CHANNEL.sendToServer(C2SBuyRequestPacket.single(
-                            ShopClientState.getActiveShopId(), item.listingId(), qty, paymentSource));
+                            ShopClientState.getActiveShopId(), item.listingId(), qty,
+                            paymentSource, ShopClientState.getSnapshotRevision(),
+                            ShopClientState.getSessionId()));
                 },
                 () -> confirmationModal = null
         );
@@ -137,7 +139,9 @@ public class ItemDetailScreen extends Screen implements ShopScreenMarker {
                     pendingSellRequestId = java.util.UUID.randomUUID();
                     ShopPackets.CHANNEL.sendToServer(new C2SSellRequestPacket(
                             ShopClientState.getActiveShopId(), item.listingId(),
-                            qty, pendingSellRequestId));
+                            qty, pendingSellRequestId,
+                            ShopClientState.getSnapshotRevision(),
+                            ShopClientState.getSessionId()));
                 },
                 () -> confirmationModal = null
         );

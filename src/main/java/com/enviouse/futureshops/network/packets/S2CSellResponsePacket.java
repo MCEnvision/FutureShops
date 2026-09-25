@@ -20,7 +20,11 @@ public record S2CSellResponsePacket(
         long resultingBalanceMinorUnits,
         int quantity,
         long totalMinorUnits,
-        UUID requestId) {
+        UUID requestId,
+        long snapshotRevision,
+        String responseReason) {
+
+    private static final int MAX_RESPONSE_REASON_LENGTH = 32;
 
     public S2CSellResponsePacket {
         requestId = Objects.requireNonNull(requestId, "requestId");
@@ -28,6 +32,28 @@ public record S2CSellResponsePacket(
             throw new IllegalArgumentException(
                     "Sell response identity is invalid");
         }
+        if (snapshotRevision < 0L) {
+            throw new IllegalArgumentException("snapshotRevision is invalid");
+        }
+        responseReason = responseReason == null ? "" : responseReason;
+        if (responseReason.length() > MAX_RESPONSE_REASON_LENGTH
+                || !responseReason.matches("[a-z_]*")) {
+            throw new IllegalArgumentException("responseReason is invalid");
+        }
+    }
+
+    public S2CSellResponsePacket(
+            boolean success,
+            String shopId,
+            String itemId,
+            ShopResultCode errorCode,
+            long resultingBalanceMinorUnits,
+            int quantity,
+            long totalMinorUnits,
+            UUID requestId
+    ) {
+        this(success, shopId, itemId, errorCode, resultingBalanceMinorUnits,
+                quantity, totalMinorUnits, requestId, 0L, "");
     }
 
     public static void encode(S2CSellResponsePacket packet, FriendlyByteBuf buffer) {
@@ -40,6 +66,8 @@ public record S2CSellResponsePacket(
         buffer.writeVarInt(packet.quantity);
         buffer.writeLong(packet.totalMinorUnits);
         buffer.writeUUID(packet.requestId);
+        buffer.writeLong(packet.snapshotRevision);
+        buffer.writeUtf(packet.responseReason);
     }
 
     public static S2CSellResponsePacket decode(FriendlyByteBuf buffer) {
@@ -57,7 +85,8 @@ public record S2CSellResponsePacket(
         int qty = buffer.readVarInt();
         long totalMu = buffer.readLong();
         return new S2CSellResponsePacket(success, shopId, itemId, code,
-                bal, qty, totalMu, buffer.readUUID());
+                bal, qty, totalMu, buffer.readUUID(), buffer.readLong(),
+                buffer.readUtf(MAX_RESPONSE_REASON_LENGTH));
     }
 
     public static void handle(S2CSellResponsePacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
