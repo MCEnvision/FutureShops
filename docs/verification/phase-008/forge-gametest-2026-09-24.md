@@ -22,5 +22,13 @@ dedicated stale request ordering fixture or laptop client rendering and input ga
 ## cleanup
 
 The server process exited normally. The runtime is removed after this evidence is
-committed. The preexisting repository `run` directory and Gradle caches are not test
-owned and remain untouched.
+committed. A later bounded rerun exposed that the ForgeGradle `MinecraftRunTask`
+ignored the temporary init script working directory override and resolved
+`FMLPaths GAMEDIR` to the preexisting repository `run` directory. That owned
+process was stopped as soon as the mismatch was confirmed. The exact temporary
+`.phase008-gametest-20260924` directory and init script were removed. The
+preexisting `run` directory was preserved and not reverted or deleted, but its
+logs, configuration, world data, and FutureShops state may have been refreshed
+by that failed attempt. This leaves the rerun cleanup and disposable directory
+gate open until a task configuration that proves the exact game directory is
+used.
