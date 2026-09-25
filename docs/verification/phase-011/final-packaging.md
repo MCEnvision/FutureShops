@@ -54,6 +54,11 @@ NVIDIA RTX 5090 Laptop GPU, loaded FutureShops client setup, connected to the pr
 server, and received the modded server handshake. The server log recorded the authenticated
 profile joining the intended world.
 
+The retained client and server pair did not execute the scripted stale buy scenario from core
+requirement 015 during this acceptance window. The matching client join and handshake prove the
+pair is runnable, but the stale buy transaction remains a required follow up before core
+requirement 015 can be marked passed.
+
 The client window was identified through `hyprctl clients -j` by its exact Minecraft class,
 title, workspace, and process id. Its PipeWire stream was correlated to that process and read
 back as `Volume: 0.00 [MUTED]` before the client assertion. No unrelated sink, stream, instance,

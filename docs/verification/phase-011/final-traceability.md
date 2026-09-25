@@ -22,7 +22,7 @@ receipts are recorded in `final-packaging.md`.
 | CORE-REQ-012 | CORE-AC-012 | `docs/verification/phase-006/backend-integration-2026-09-01.md` | inherited and rechecked |
 | CORE-REQ-013 | CORE-AC-013 | `docs/verification/phase-007/bazaar-auction-route-inventory-2026-09-24.md` | inherited and rechecked |
 | CORE-REQ-014 | CORE-AC-014 | `docs/verification/phase-005/shared-routes-2026-09-24.md` | inherited and rechecked |
-| CORE-REQ-015 | CORE-AC-015 | `docs/verification/phase-008/shop-snapshot-protocol-2026-09-24.md`, `docs/verification/phase-008/production-client-stale-buy-2026-09-24.md` | matching merged client joined the intended world |
+| CORE-REQ-015 | CORE-AC-015 | `docs/verification/phase-008/shop-snapshot-protocol-2026-09-24.md`, `docs/verification/phase-008/production-client-stale-buy-2026-09-24.md` | matching client joined the intended world, stale buy scenario recheck remains required |
 | CORE-REQ-016 | CORE-AC-016 | `docs/verification/phase-008/donor-ledger-closure-2026-09-24.md`, `docs/verification/phase-008/preservation-matrix-2026-09-24.md` | inherited and rechecked |
 | CORE-REQ-017 | CORE-AC-017 | `docs/verification/phase-009/security-route-map-2026-09-24.md`, `docs/verification/phase-009/dependency-and-persistence-audit-2026-09-24.md` | current source and archive scan passed |
 | CORE-REQ-018 | CORE-AC-018 | `docs/verification/phase-009/gametest-isolation-2026-09-24.md`, `docs/verification/phase-009/dependency-and-persistence-audit-2026-09-24.md` | recovery gates retained and merged packaging gate passed |
