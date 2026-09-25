@@ -64,6 +64,7 @@
 * [Phase 008 donor ledger closure](verification/phase-008/donor-ledger-closure-2026-09-24.md)
 * [Phase 008 server startup attempt](verification/phase-008/server-startup-attempt-2026-09-24.md)
 * [Phase 008 Forge GameTest startup](verification/phase-008/forge-gametest-2026-09-24.md)
+* [Phase 008 stale packet handler](verification/phase-008/stale-handler-2026-09-24.md)
 * [Phase 008 Forge preservation matrix](verification/phase-008/preservation-matrix-2026-09-24.md)
 * [Phase 004 provider conformance](verification/phase-004/)
 * [Phase 004 provider conformance evidence](verification/phase-004/provider-conformance-2026-09-24.md)

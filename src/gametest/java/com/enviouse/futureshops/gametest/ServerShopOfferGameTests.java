@@ -28,7 +28,10 @@ import com.enviouse.futureshops.server.escrow.stock.migration.CatalogStockSeedSn
 import com.enviouse.futureshops.server.debug.DebugDiagnostics;
 import com.enviouse.futureshops.server.debug.DebugModule;
 import com.enviouse.futureshops.server.debug.DebugSelector;
+import com.enviouse.futureshops.server.session.ShopSession;
 import com.enviouse.futureshops.server.session.ShopSessionManager;
+import com.enviouse.futureshops.network.packets.C2SBuyRequestPacket;
+import com.enviouse.futureshops.money.PaymentSource;
 import com.mojang.authlib.GameProfile;
 import io.netty.channel.embedded.EmbeddedChannel;
 import net.minecraft.gametest.framework.AfterBatch;
@@ -44,8 +47,11 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraftforge.gametest.GameTestHolder;
 import net.minecraftforge.gametest.PrefixGameTestTemplate;
+import net.minecraftforge.network.NetworkDirection;
+import net.minecraftforge.network.NetworkEvent;
 
 import java.time.Instant;
+import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -62,6 +68,7 @@ public final class ServerShopOfferGameTests {
     private static final String BARTER_OPTION = "iron_trade";
     private static final String FINITE_LISTING = "finite_diamond";
     private static final String CLAIM_LISTING = "pending_claim";
+    private static final String STALE_LISTING = "stale_apple";
     private static final String BATCH = "futureshops.offer_service";
     private static List<ShopDefinition> originalDefinitions = List.of();
 
@@ -427,6 +434,57 @@ public final class ServerShopOfferGameTests {
         }
     }
 
+    @GameTest(
+            templateNamespace = "minecraft",
+            template = "bastion/mobs/empty",
+            batch = BATCH,
+            timeoutTicks = 100
+    )
+    public static void staleBuyPacketIsRefusedBeforeValueEffects(
+            GameTestHelper helper
+    ) {
+        ConnectedPlayer connected = connectPlayer(helper, "stale_buy");
+        try {
+            ServerPlayer player = connected.player();
+            ShopSession session = ShopSessionManager.open(
+                    player.getUUID(), SHOP_ID);
+            ShopSessionManager.advanceSnapshotRevision(
+                    player.getUUID(), SHOP_ID);
+            long stockBefore = EscrowRuntimeManager.requireReady()
+                    .stockListing(new StockKey(SHOP_ID, STALE_LISTING))
+                    .orElseThrow().availableQuantity();
+            int inventoryBefore = player.getInventory().countItem(Items.APPLE);
+
+            C2SBuyRequestPacket packet = C2SBuyRequestPacket.single(
+                    SHOP_ID, STALE_LISTING, 1, PaymentSource.WALLET,
+                    session.snapshotRevision(), session.sessionId());
+            Constructor<NetworkEvent.Context> constructor =
+                    NetworkEvent.Context.class.getDeclaredConstructor(
+                            Connection.class, NetworkDirection.class, int.class);
+            constructor.setAccessible(true);
+            NetworkEvent.Context context = constructor.newInstance(
+                    connected.connection(), NetworkDirection.PLAY_TO_SERVER, 0);
+            C2SBuyRequestPacket.handle(packet, () -> context);
+
+            long stockAfter = EscrowRuntimeManager.requireReady()
+                    .stockListing(new StockKey(SHOP_ID, STALE_LISTING))
+                    .orElseThrow().availableQuantity();
+            helper.assertTrue(context.getPacketHandled(),
+                    "stale buy packet was not marked handled");
+            helper.assertTrue(stockAfter == stockBefore,
+                    "stale buy packet changed stock before refusal");
+            helper.assertTrue(player.getInventory().countItem(Items.APPLE)
+                            == inventoryBefore,
+                    "stale buy packet changed inventory before refusal");
+            helper.succeed();
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("could not construct packet context",
+                    exception);
+        } finally {
+            disconnect(helper, connected);
+        }
+    }
+
     private static ShopDefinition fixtureShop() {
         List<ServerShopOfferListing> offers = List.of(
                 offer(FREE_LISTING, "Free Apple", "minecraft:apple",
@@ -455,7 +513,9 @@ public final class ServerShopOfferGameTests {
                 item(FREE_LISTING, "minecraft:apple", -1),
                 item(BARTER_LISTING, "minecraft:emerald", -1),
                 item(FINITE_LISTING, "minecraft:diamond", 2),
-                item(CLAIM_LISTING, "minecraft:gold_ingot", -1));
+                item(CLAIM_LISTING, "minecraft:gold_ingot", -1),
+                new ItemDef(STALE_LISTING, "minecraft:apple", "Stale Apple",
+                        10L, 5L, 1, false, "all", 0, "", 0L));
         return new ShopDefinition(
                 2, SHOP_ID, "GameTest Offers",
                 List.of(new CategoryDef("all", "All", 0)),
@@ -569,7 +629,7 @@ public final class ServerShopOfferGameTests {
         Connection connection = new Connection(PacketFlow.SERVERBOUND);
         EmbeddedChannel channel = new EmbeddedChannel(connection);
         server.getPlayerList().placeNewPlayer(connection, player);
-        return new ConnectedPlayer(player, channel);
+        return new ConnectedPlayer(player, connection, channel);
     }
 
     private static void disconnect(
@@ -584,6 +644,7 @@ public final class ServerShopOfferGameTests {
 
     private record ConnectedPlayer(
             ServerPlayer player,
+            Connection connection,
             EmbeddedChannel channel
     ) {
     }
