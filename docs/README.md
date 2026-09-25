@@ -1,6 +1,6 @@
 # Documentation index
 
-FutureShops documentation is organized by topic. The 2.5.0 dynamic pricing candidate remains unmerged and unpublished pending local client acceptance. Historical phase packets describe the earlier external economy implementation and its evidence, not a fresh compatibility validation of this candidate.
+FutureShops documentation is organized by topic. Version 2.5.0 adds dynamic pricing for admin shops. Historical phase packets describe the earlier external economy implementation and do not provide new provider compatibility evidence for this release.
 
 ## General
 
@@ -26,7 +26,7 @@ FutureShops documentation is organized by topic. The 2.5.0 dynamic pricing candi
 
 ## Verification
 
-* [2.5.0 candidate changes](release/2.5.0.md)
+* [2.5.0 release changes](release/2.5.0.md)
 * [2.5.0 pricing verification](verification/dynamic-pricing-2.5.0.md)
 * [Phase 000 API and selection verification](verification/phase-000/api-selection-2026-09-02.md)
 * [Phase 000 baseline evidence](verification/phase-000/baseline-2026-09-02.md)

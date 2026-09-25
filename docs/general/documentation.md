@@ -1,6 +1,6 @@
 # FutureShops technical documentation
 
-This document is the maintainer overview for the FutureShops 2.5.0 NeoForge 1.21.1 candidate line. This focused patch repairs dynamic pricing and remains unmerged and unpublished pending local client acceptance. The public provider details are in [the economy provider API guide](../api/economy-provider.md), and historical phase evidence is indexed from [the documentation index](../README.md). Previous external economy work is recorded in [the external economy plan](plan.md). Its compatibility evidence is not a new validation of the 2.5.0 candidate.
+This document is the maintainer overview for FutureShops 2.5.0 on NeoForge 1.21.1. This release repairs dynamic pricing. The public provider details are in [the economy provider API guide](../api/economy-provider.md), and historical phase evidence is indexed from [the documentation index](../README.md). Previous external economy work is recorded in [the external economy plan](plan.md). Its compatibility evidence does not establish new provider validation for 2.5.0.
 
 ## Runtime and build
 

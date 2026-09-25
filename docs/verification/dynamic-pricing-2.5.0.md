@@ -1,4 +1,4 @@
-# Dynamic pricing candidate verification
+# Dynamic pricing verification for 2.5.0
 
 Date: 2026-09-24. Target: FutureShops 2.5.0, Minecraft 1.21.1, NeoForge 21.1.248, Java 21, GeckoLib 4.8.4. Base: `cc2d69425beea2c93a4000e44d49381deba8eed2` on `1.21.1/2.4.1`. Implementation branch: `envy/2.5.0-dynamic-pricing`.
 
@@ -20,8 +20,8 @@ The task graph launches `GameTestServer`, with no client or renderer. Runs occur
 
 Covered behavior includes buy and cart debits, sell payouts, inventory effects, catalog values, cart price warnings, promotion ordering, the 400 tick recalculation interval, activity counters, affected session refresh, stale snapshot refusal, distinct listing keys, sell only listings, disabled pricing, rounding, overflow, configured bounds, nonmutating queries, persistence, and catalog packet round trips. Source guards also require confirmation dialogs to retain the quoted revision and cart contents.
 
-## Remaining acceptance
+## Owner acceptance
 
-Client rendering, mouse interaction, live multiplayer synchronization, reconnect, and full process restart acceptance remain pending. Existing external economy integrations were not revalidated with optional mods. Keep the pull request in draft and do not enable automatic merge. The exact procedure is in [local acceptance](../test/dynamic-pricing-2.5.0.md#required-local-acceptance-before-merge).
+Client rendering, mouse interaction, live multiplayer synchronization, reconnect, and full process restart acceptance were still pending when the repository controlled tests above ran. On 2026-09-25, EnVy reported that they had personally verified 2.5.0 and approved its merge. No client logs, screenshots, or exact runtime hashes from that personal check were added to this repository. The recorded GameTests did not revalidate optional external economy integrations. The local procedure remains in [local acceptance](../test/dynamic-pricing-2.5.0.md#required-local-acceptance-before-merge).
 
-The temporary checkout, build output, worlds, raw logs, and index are disposable after the signed branch is pushed and the candidate jar and checksum are preserved for local testing. Historical branches and tags and the owner's active 1.20.1 checkout must remain untouched.
+Temporary acceptance resources are disposable after their final consumers finish. The owner's active 1.20.1 checkout and historical tags remain separate from this verification.
