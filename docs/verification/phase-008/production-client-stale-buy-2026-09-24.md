@@ -67,16 +67,49 @@ to 5.02 and continued to show the existing diamond without closing the screen,
 disconnecting, or changing the wallet. This is direct visual proof of the
 authoritative refresh path after a session revision change.
 
+The deliberate stale-input check then used the real multiplayer workflow. The
+client opened the Diamond detail at 5.06 coins and selected Wallet Balance in
+the purchase confirmation. The isolated server reloaded the same listing to
+5.07 coins before the existing confirmation was submitted. The client rejected
+the old request and displayed `The offer changed. Review the refreshed details.`
+The refreshed detail then showed 5.07 coins and still showed three owned
+diamonds. The server console independently reported exactly three
+`minecraft:diamond` items after the rejection, proving that no item or wallet
+mutation occurred. The captured stale rejection is
+`docs/verification/phase-008/stale-buy-rejection-2026-09-24.png` with SHA256
+`0147e65236bf7e625d186337214ad1887f092e0091843c43f34710b69c3014bd`.
+
+The client then opened the real cart with three Diamond entries at 5.07 coins
+each and selected Wallet Balance in the checkout confirmation. The isolated
+server reloaded the listing to 5.09 coins before the existing checkout was
+submitted. The client rejected the stale cart request with the same localized
+offer changed message. The cart remained open with all three entries and the
+refreshed 15.27 coin total after the modal was dismissed. The rejection capture
+is `docs/verification/phase-008/stale-cart-rejection-2026-09-24.png` with
+SHA256 `af4d1712ee7e3581e0f218375dbeb1415242bd35e2cb473d8e9e789d6c6fee74`.
+The preserved cart capture is
+`docs/verification/phase-008/stale-cart-preserved-2026-09-24.png` with SHA256
+`ec2e2f02b509418729019c1800cc7e454acca94e8310630814f533573eb47772`.
+
+The same client was then kicked by the disposable server with a controlled
+reconnect reason. It returned to the server list, joined the exact private
+endpoint again through Direct Connection, and reached the multiplayer world
+without a client crash or registry mismatch. The server recorded the matching
+player login and independently reported the conserved three Diamond inventory
+after reconnect. The rendered reconnect capture is
+`docs/verification/phase-008/reconnect-after-kick-2026-09-24.png` with SHA256
+`a25262394baea619fc20c453adf4e290c2d07cb82af435de5216c5d6da5a4cc6`.
+
 ## boundaries
 
-This is production-artifact multiplayer and rendering evidence for a current
-buy after authoritative refresh. The completed click was intentionally made
-after the refreshed 5.02 price was visible, so it does not by itself prove a
-deliberately stale click, response reordering, reconnect, or cart preservation.
-Those negative and ordering cases remain covered by the server GameTest and
-focused client-state tests. A deliberately stale input scenario, response
-reordering, reconnect, and cart preservation still require explicit client
-evidence before this phase can close.
+This is production-artifact multiplayer and rendering evidence for the
+current-buy path, a deliberately stale buy, and a deliberately stale cart.
+Both stale requests were rejected before settlement, the client received
+refreshed authoritative details, the cart remained intact, and inventory
+remained conserved. A controlled disconnect and reconnect also returned the
+same signed-in player to the multiplayer world with the same inventory.
+Response reordering still requires explicit client evidence before this phase
+can close.
 
 ## cleanup
 
